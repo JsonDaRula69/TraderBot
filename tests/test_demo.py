@@ -99,6 +99,25 @@ class TestDemoAdapterProperties:
         adapter = self._make_adapter()
         assert "demo-api" in adapter.base_url
 
+    def test_accepts_config_with_demo_mode_true(self) -> None:
+        demo_config = _mock_demo_config()
+        mock_client = _mock_demo_client(demo_config)
+
+        config = MagicMock()
+        config.demo_mode = True
+
+        with (
+            patch("traderbot.kalshi.demo.KalshiConfig", return_value=demo_config),
+            patch("traderbot.kalshi.demo.KalshiClient", return_value=mock_client),
+        ):
+            adapter = DemoAdapter(config=config)
+
+        assert adapter.is_demo is True
+
+    def test_client_property_returns_kalshi_client(self) -> None:
+        adapter = self._make_adapter()
+        assert adapter.client is not None
+
 
 class TestDemoAdapterServices:
     def _make_adapter_with_client(self) -> tuple[DemoAdapter, MagicMock]:

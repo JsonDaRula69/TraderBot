@@ -17,7 +17,7 @@ from traderbot.kalshi.client import (
     RateLimitError,
     _normalize_api_response,
 )
-from traderbot.kalshi.models import Market, MarketListResponse
+from traderbot.kalshi.models import Decision, Market, MarketListResponse
 
 
 def _make_config(demo_mode: bool = False) -> KalshiConfig:
@@ -325,3 +325,42 @@ class TestDemoMode:
         async with KalshiClient(cfg) as client:
             await client.login()
         assert "demo-api" not in str(route.calls[0].request.url)
+
+
+class TestDeepNormalizeStringCents:
+    """Cover line 78: _deep_normalize converts string cents fields to int."""
+
+    def test_string_cents_converted_to_int(self) -> None:
+        ts = datetime(2026, 1, 15, 10, 30, tzinfo=UTC)
+        raw = {
+            "timestamp": int(ts.timestamp()),
+            "ticker": "KX-TEST",
+            "direction": "yes",
+            "quantity": 10,
+            "price": "65",
+            "signal_strength": 0.8,
+            "confidence": 0.75,
+            "edge_estimate": 5.0,
+            "risk_checks": {"position_limit": True},
+            "outcome": "executed",
+        }
+        result = _normalize_api_response(raw, Decision)
+        assert isinstance(result.price, int)
+        assert result.price == 65
+
+
+class TestHTTPErrorsInRetry:
+    """Cover lines 167-168: httpx.HTTPError caught in retry loop."""
+
+    @pytest.mark.asyncio
+    async def test_connect_error_raises_after_retries(self) -> None:
+        cfg = _make_config()
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            with (
+                patch.object(
+                    client._client, "request", side_effect=httpx.ConnectError("refused")
+                ),
+                pytest.raises(httpx.ConnectError, match="refused"),
+            ):
+                await client.get("/markets")
