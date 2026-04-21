@@ -22,7 +22,7 @@ class TestMainHelp:
         assert "traderbot" in result.output.lower() or "prediction" in result.output.lower()
 
     def test_subcommand_help(self):
-        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare"]:
+        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare", "bootstrap"]:
             result = runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
@@ -980,3 +980,91 @@ class TestCompareCommand:
             assert len(data) == 1
             assert data[0]["profile_name"] == "Moderate"
             assert data[0]["trade_count"] == 10
+
+
+class TestBootstrapCommand:
+    def test_bootstrap_help(self):
+        result = runner.invoke(app, ["bootstrap", "--help"])
+        assert result.exit_code == 0
+        assert "--dry-run" in result.output
+        assert "--json" in result.output
+
+    def test_bootstrap_dry_run(self):
+        """Bootstrap --dry-run validates without side effects."""
+        mock_status = {
+            "kalshi": {"api_key": True, "api_secret": False},
+            "voyage": {"api_key": True},
+            "newsapi": {"api_key": False},
+            "twitter": {"api_key": False},
+            "reddit": {"client_id": False, "client_secret": False},
+        }
+        with (
+            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
+            patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+        ):
+            result = runner.invoke(app, ["bootstrap", "--dry-run"])
+            assert result.exit_code == 0
+            assert "Python" in result.output
+            assert "Bootstrap" in result.output
+
+    def test_bootstrap_dry_run_json(self):
+        """Bootstrap --dry-run --json returns structured JSON."""
+        mock_status = {
+            "kalshi": {"api_key": True, "api_secret": False},
+            "voyage": {"api_key": False},
+            "newsapi": {"api_key": False},
+            "twitter": {"api_key": False},
+            "reddit": {"client_id": False, "client_secret": False},
+        }
+        with (
+            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
+            patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+        ):
+            result = runner.invoke(app, ["bootstrap", "--dry-run", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "python_version" in data
+            assert data["python_version_ok"] is True
+            assert "config_dir" in data
+            assert "keyring_available" in data
+            assert "credentials_ok" in data
+            assert data["credentials_ok"] is False
+            assert "missing_credentials" in data
+            assert "kalshi.api_secret" in data["missing_credentials"]
+
+    def test_bootstrap_json_with_all_credentials_ok(self, tmp_path):
+        """Bootstrap with all credentials configured shows success."""
+        mock_status = {
+            "kalshi": {"api_key": True, "api_secret": True},
+            "voyage": {"api_key": True},
+            "newsapi": {"api_key": True},
+            "twitter": {"api_key": True},
+            "reddit": {"client_id": True, "client_secret": True},
+        }
+        with (
+            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
+            patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+            patch("traderbot.auth.AuthManager.set_credential"),
+        ):
+            result = runner.invoke(app, ["bootstrap", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["credentials_ok"] is True
+            assert data["missing_credentials"] == []
+
+    def test_bootstrap_dry_run_no_keyring(self):
+        """Bootstrap with keyring unavailable reports it clearly."""
+        mock_status = {
+            "kalshi": {"api_key": False, "api_secret": False},
+            "voyage": {"api_key": False},
+            "newsapi": {"api_key": False},
+            "twitter": {"api_key": False},
+            "reddit": {"client_id": False, "client_secret": False},
+        }
+        with (
+            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: False)),
+            patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+        ):
+            result = runner.invoke(app, ["bootstrap", "--dry-run"])
+            assert result.exit_code == 0
+            assert "Keyring unavailable" in result.output

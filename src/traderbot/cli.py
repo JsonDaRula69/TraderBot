@@ -381,6 +381,141 @@ def audit(
 
 
 @app.command()
+def bootstrap(
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Validate without writing to DB or keyring")
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+) -> None:
+    """One-time setup wizard for new users."""
+    import platform
+
+    from traderbot.auth import AuthManager
+    from traderbot.db import DB_PATH, get_connection, init_schema
+
+    console = Console()
+    steps: dict[str, str | bool] = {}
+
+    # Step 1: Check Python version (3.12+)
+    py_version = (sys.version_info.major, sys.version_info.minor)
+    py_ok = py_version >= (3, 12)
+    steps["python_version"] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    steps["python_version_ok"] = py_ok
+
+    if not py_ok:
+        if json_output:
+            json_lib.dump({"error": f"Python {steps['python_version']} < 3.12 required", "steps": steps}, sys.stdout)
+            raise typer.Exit(code=1)
+        console.print(f"[red]Python {steps['python_version']} found, but 3.12+ is required.[/red]")
+        raise typer.Exit(code=1)
+
+    # Step 2: Create default config directory
+    config_dir = Path.home() / ".traderbot"
+    config_dir_exists = config_dir.exists()
+    steps["config_dir"] = str(config_dir)
+    if not dry_run and not config_dir_exists:
+        config_dir.mkdir(parents=True, exist_ok=True)
+    steps["config_dir_created"] = not config_dir_exists and not dry_run
+
+    # Step 3: Verify keyring access
+    mgr = AuthManager()
+    keyring_ok = mgr.keyring_available
+    steps["keyring_available"] = keyring_ok
+
+    # Step 4: Run auth login flow (interactive — skipped in dry-run/JSON mode)
+    if not dry_run and not json_output and keyring_ok:
+        console.print("\n[bold]Credential Setup[/bold]")
+        console.print("Enter your API credentials (press Enter to skip any field):")
+        from traderbot.auth import _ALL_SERVICES, KeyringUnavailableError
+
+        for service_name, keys in _ALL_SERVICES.items():
+            for key in keys:
+                value = typer.prompt(f"  {service_name}.{key}", default="", show_default=False)
+                if value:
+                    try:
+                        mgr.set_credential(service_name, key, value)
+                        console.print(f"[green]Stored[/green] {service_name}.{key}")
+                    except KeyringUnavailableError as exc:
+                        console.print(f"[red]Failed:[/red] {exc}")
+
+    # Step 5: Create SQLite DB at configured path
+    db_path = DB_PATH
+    steps["db_path"] = str(db_path)
+    if not dry_run:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with get_connection(db_path) as conn:
+            init_schema(conn)
+    steps["db_created"] = not dry_run
+
+    # Step 6: Run auth check to verify all credentials
+    status = mgr.check_credentials()
+    all_ok = all(ok for keys in status.values() for ok in keys.values())
+    steps["credentials_ok"] = all_ok
+    steps["credential_status"] = {
+        s: {k: v for k, v in keys.items()} for s, keys in sorted(status.items())
+    }
+
+    missing = [
+        f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok
+    ]
+    steps["missing_credentials"] = missing
+
+    # Step 7: Platform info
+    steps["platform"] = platform.platform()
+
+    if json_output:
+        json_lib.dump(steps, sys.stdout, default=str)
+        return
+
+    console.print("\n[bold]TraderBot Bootstrap[/bold]")
+    console.print("=" * 40)
+
+    console.print("\n[bold]1. Python Version[/bold]")
+    if py_ok:
+        console.print(f"  [green]✓[/green] Python {steps['python_version']} (≥ 3.12)")
+    else:
+        console.print(f"  [red]✗[/red] Python {steps['python_version']} (requires ≥ 3.12)")
+
+    console.print("\n[bold]2. Config Directory[/bold]")
+    if config_dir_exists or dry_run:
+        console.print(f"  [green]✓[/green] {config_dir}")
+    else:
+        console.print(f"  [green]✓[/green] Created {config_dir}")
+
+    console.print("\n[bold]3. Keyring Access[/bold]")
+    if keyring_ok:
+        console.print("  [green]✓[/green] OS keyring available")
+    else:
+        console.print("  [red]✗[/red] Keyring unavailable — use .env fallback")
+
+    console.print("\n[bold]4. Credentials[/bold]")
+    for service_name, keys in sorted(status.items()):
+        for key, ok in keys.items():
+            mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
+            console.print(f"  {mark} {service_name}.{key}")
+
+    console.print("\n[bold]5. Database[/bold]")
+    if dry_run:
+        console.print(f"  (dry-run) {db_path}")
+    else:
+        console.print(f"  [green]✓[/green] {db_path}")
+
+    console.print("\n" + "=" * 40)
+    if all_ok:
+        console.print("[bold green]Bootstrap complete![/bold green]")
+        console.print("\nNext steps:")
+        console.print("  [cyan]traderbot scan[/cyan]               — list open markets")
+        console.print("  [cyan]traderbot backtest --strategy momentum[/cyan] — run a backtest")
+    else:
+        console.print("[bold yellow]Bootstrap partially complete.[/bold yellow]")
+        if missing:
+            console.print(f"  Missing credentials: {', '.join(missing)}")
+            console.print("  Run [bold]traderbot auth login[/bold] to configure missing credentials.")
+
+
+@app.command()
 def heartbeat() -> None:
     """Print status summary."""
     Console().print("Heartbeat: system operational. No active positions.")
