@@ -229,10 +229,12 @@ Expected Severity: [P0/P1/P2 if found]
 
 | Discrepancy | Doc Says | Code Reality | Severity | Action |
 |-------------|---------|-------------|----------|--------|
-| `docs/risk.md` Decision model | `price: float` | `price_cents: int` (cents as int per AGENTS.md) | P1 | Doc needs update to use `price_cents: int` |
-| `docs/risk.md` project name | "BetBot" | "TraderBot" (renamed) | P3 | Doc needs rename |
-| `docs/risk.md` Human Override | Duplicate section (lines 142-150) | Should appear once | P3 | Remove duplicate |
-| `docs/architecture.md` `kalshi/trading` | Listed in component map | Not yet implemented (Phase 3 partial) | P2 | Mark as pending in doc or note |
+| `docs/risk.md` Decision model | ~~`price: float`~~ → fixed to `price: int` | `price: int` (cents) | ~~P1~~ ✅ Fixed | Updated in v0.04.06 |
+| `docs/risk.md` project name | ~~"BetBot"~~ → fixed to "TraderBot" | "TraderBot" | ~~P3~~ ✅ Fixed | Updated in v0.04.06 |
+| `docs/risk.md` Human Override | ~~Duplicate section~~ → removed | Single section | ~~P3~~ ✅ Fixed | Updated in v0.04.06 |
+| `docs/architecture.md` `kalshi/trading` | Listed in component map | `kalshi/trading.py` now implemented | ~~P2~~ ✅ Fixed | Implemented in v0.04.06 |
+| `docs/architecture.md` sentiment placement | ~~`sentim.` in analysis column~~ → moved to news | `news/sentiment_scorer.py` (Phase 7) | ~~P2~~ ✅ Fixed | Updated in v0.04.06 |
+| `docs/kalshi.md` import example | ~~`from betbot.kalshi`~~ → fixed to `from traderbot.kalshi` | `from traderbot.kalshi` | ~~P3~~ ✅ Fixed | Updated in v0.04.06 |
 | `VERSION` file staleness | May lag behind git tags | Actual version is in git tags | P2 | Verify `VERSION` matches latest tag |
 
 **Phase 0 Gate Addition:** Before proceeding to Phase 1, ALL documentation discrepancies must be documented and classified. P0/P1 discrepancies (wrong financial types, missing modules, incorrect thresholds) must be flagged for human review. P2/P3 discrepancies (stale names, duplicate sections) should be noted but don't block review.

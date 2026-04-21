@@ -73,7 +73,7 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
-  │  traderbot scan | analyze | trade | positions | backtest | ...  │
+   │  traderbot scan | analyze | trade | positions | backtest | ...  │
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
@@ -82,9 +82,9 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
   │        │ │        │ │        │ │        │ │        │
   │ client │ │indic.  │ │limits  │ │engine  │ │sources │
   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
-  │ markets│ │signals │ │breaker │ │adapt.  │ │scorer  │
+  │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-  │ history│ │sentim. │ │        │ │        │ │        │
+  │ history│ │        │ │        │ │        │ │        │
   │ ws     │ │        │ │        │ │        │ │        │
   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
       │                      │
