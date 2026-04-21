@@ -1,7 +1,7 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.05.00 (2026-04-21)
-**Current focus**: Phase 6 — Decision Logging & Self-Learning
+**Last updated**: v0.06.00 (2026-04-21)
+**Current focus**: Phase 7 — News & Sentiment Pipeline
 
 ---
 
@@ -118,16 +118,30 @@
 
 ---
 
-## Phase 6: Decision Logging & Self-Learning — 🔲 NOT STARTED
+## Phase 6: Decision Logging & Self-Learning — ✅ COMPLETE
 
-| Component | File | Status |
-|---|---|---|
-| Decision DB | `db/decisions.py` | ✅ Done (in Phase 3) |
-| Learnings | `db/learnings.py` | 🔲 Pending |
-| WAL protocol | (in Decision Loop) | 🔲 Pending |
-| Workspace files | `.openclaw/workspace/` | ✅ Done (in Phase 3) |
+| Component | File | Status | Notes |
+|---|---|---|---|
+| Learnings DB | `db/learnings.py` | ✅ Done | Pattern tracking with 5 categories, promotion, feature requests |
+| Vector store | `db/vectors.py` | ✅ Done | ChromaDB wrapper with optional dependency, 3 collections |
+| Adaptation models | `simulation/adaptation.py` | ✅ Done | Prior, Posterior, AdaptationConfig, StrategyAdjustment |
+| WAL protocol | `wal.py` | ✅ Done | Write-ahead log with concurrent write rejection |
+| Pattern promotion | `learning.py` | ✅ Done | scan_for_promotions, promote_learning, run_promotion_cycle |
+| Feature requests | `db/learnings.py` + `learning.py` | ✅ Done | FEATURE_REQUESTS.md flow, PENDING_REVIEW status |
+| Learnings CLI | `cli.py` | ✅ Done | traderbot learnings with filters, --promote, --json |
+| Integration tests | `tests/test_learning_integration.py` | ✅ Done | 32 tests — lifecycle, crash recovery, criteria enforcement |
 
-**Version target**: v0.06.00 | **Dependencies**: Phase 2, 3
+**Version**: v0.06.00 | **Tests**: 910 total | **Coverage**: 99%
+
+**Success criteria met**:
+- [x] `traderbot learnings` shows pattern tracking with filters
+- [x] `traderbot learnings --status active` filters by status
+- [x] `traderbot learnings --category risk` filters by category
+- [x] `traderbot learnings --promote <key>` triggers manual promotion
+- [x] WAL protocol writes before trade execution, updates after
+- [x] Pattern promotion: recurrence >= 3, 2+ tasks, 30-day window
+- [x] Feature requests promoted to PENDING_REVIEW (never auto-committed)
+- [x] All Pydantic models use ConfigDict(strict=True, extra="forbid")
 
 ---
 
@@ -176,10 +190,10 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.05.00 |
-| Total tests | 685 |
+| Version | 0.06.00 |
+| Total tests | 910 |
 | Coverage | 99% |
 | Ruff errors | 0 |
-| Pydantic models | 18 (all strict=True, extra=forbid) |
-| CLI commands | 20 |
-| Simulation modules | 7 |
+| Pydantic models | 22 (all strict=True, extra=forbid) |
+| CLI commands | 22 |
+| Self-learning modules | 3 (learnings, wal, learning) |
