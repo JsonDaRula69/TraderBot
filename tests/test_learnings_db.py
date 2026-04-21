@@ -287,7 +287,7 @@ class TestCount:
 
 class TestCategoryEnum:
     def test_all_categories_valid(self) -> None:
-        expected = {"MarketBehavior", "RiskSignal", "Timing", "Strategy", "Execution"}
+        expected = {"MarketBehavior", "RiskSignal", "Timing", "Strategy", "Execution", "FeatureRequest"}
         assert {c.value for c in LearningCategory} == expected
 
     def test_str_enum_behavior(self) -> None:
@@ -297,7 +297,7 @@ class TestCategoryEnum:
 
 class TestStatusEnum:
     def test_all_statuses_valid(self) -> None:
-        expected = {"active", "deprecated"}
+        expected = {"active", "deprecated", "pending_review"}
         assert {s.value for s in LearningStatus} == expected
 
     def test_str_enum_behavior(self) -> None:

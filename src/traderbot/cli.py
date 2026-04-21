@@ -235,6 +235,7 @@ def trade(
     from traderbot.kalshi.models import PortfolioState, TradeRequest
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
+    from traderbot.wal import WalAction, WalStatus, write_intent, update_status, DEFAULT_SESSION_STATE_PATH
 
     console = Console()
     trade_request = TradeRequest(
@@ -257,23 +258,41 @@ def trade(
         open_positions_count=0,
     )
     breaker = CircuitBreaker()
+
+    wal_action = WalAction.BUY if direction.lower() == "yes" else WalAction.SELL
+    wal_entry = write_intent(
+        DEFAULT_SESSION_STATE_PATH,
+        action=wal_action,
+        ticker=ticker,
+        direction=direction.lower(),
+        quantity=quantity,
+        price_cents=price,
+        reason=f"CLI trade: {ticker} {direction}",
+        risk_checks="pending evaluation",
+        confidence=0.5,
+    )
+
     sized = evaluate_trade(trade_request, portfolio, breaker)
 
     if sized == 0:
         state = breaker.get_state()
+        update_status(DEFAULT_SESSION_STATE_PATH, wal_entry.intent_id, WalStatus.CANCELLED)
         result = {
             "ticker": ticker,
             "direction": direction,
             "outcome": "rejected",
             "sized_position_cents": 0,
             "reason": state.reason or "Risk check failed",
+            "wal_intent_id": wal_entry.intent_id,
         }
     else:
+        update_status(DEFAULT_SESSION_STATE_PATH, wal_entry.intent_id, WalStatus.COMPLETED)
         result = {
             "ticker": ticker,
             "direction": direction,
             "outcome": "executed",
             "sized_position_cents": sized,
+            "wal_intent_id": wal_entry.intent_id,
         }
 
     if json_output:
