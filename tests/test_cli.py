@@ -22,7 +22,7 @@ class TestMainHelp:
         assert "traderbot" in result.output.lower() or "prediction" in result.output.lower()
 
     def test_subcommand_help(self):
-        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance"]:
+        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare"]:
             result = runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
@@ -31,7 +31,6 @@ class TestStubCommands:
     STUB_COMMANDS: ClassVar[list[tuple[str, str]]] = [
         ("news", "Phase 7"),
         ("sentiment", "Phase 7"),
-        ("compare", "Phase 5"),
         ("learnings", "Phase 6"),
     ]
 
@@ -861,3 +860,123 @@ class TestPerformanceCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["trade_count"] == 3
+
+
+class TestCompareCommand:
+    def test_compare_help(self):
+        result = runner.invoke(app, ["compare", "--help"])
+        assert result.exit_code == 0
+        assert "--profiles" in result.output
+        assert "--strategy" in result.output
+        assert "--from" in result.output
+        assert "--to" in result.output
+        assert "--bankroll" in result.output
+        assert "--db" in result.output
+        assert "--json" in result.output
+
+    def test_compare_no_api(self):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
+            result = runner.invoke(app, ["compare"])
+            assert result.exit_code == 0
+            assert "API connection required" in result.output
+
+    def test_compare_no_api_json(self):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
+            result = runner.invoke(app, ["compare", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "error" in data
+
+    def test_compare_unknown_profile(self):
+        result = runner.invoke(app, ["compare", "--profiles", "Unknown"])
+        assert result.exit_code == 1
+        assert "Unknown profile" in result.output
+
+    @pytest.mark.unit
+    def test_compare_with_mock_profiles(self, tmp_path):
+        from traderbot.simulation.engine import BacktestResult
+
+        conservative_result = BacktestResult(
+            trade_count=8,
+            total_pnl_cents=1200_00,
+            winning_trades=5,
+            losing_trades=3,
+            win_rate=0.625,
+            sharpe_ratio=1.2,
+            max_drawdown_pct=0.05,
+            brier_score=0.18,
+            edge_capture=0.42,
+            fill_rate=0.9,
+            trades=[],
+        )
+        aggressive_result = BacktestResult(
+            trade_count=15,
+            total_pnl_cents=3500_00,
+            winning_trades=9,
+            losing_trades=6,
+            win_rate=0.6,
+            sharpe_ratio=0.9,
+            max_drawdown_pct=0.12,
+            brier_score=0.25,
+            edge_capture=0.35,
+            fill_rate=0.85,
+            trades=[],
+        )
+
+        async def fake_run_profiles(engine, profiles, start, end):
+            from traderbot.simulation.profiles import PRESETS
+
+            results = {}
+            for p in profiles:
+                if p.name == "Conservative":
+                    results[p.name] = conservative_result
+                else:
+                    results[p.name] = aggressive_result
+            return results
+
+        with (
+            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.history.HistoryService"),
+            patch("traderbot.simulation.profiles.run_profiles", side_effect=fake_run_profiles),
+        ):
+            result = runner.invoke(
+                app, ["compare", "--profiles", "Conservative,Aggressive", "--db", str(tmp_path / "test.db")]
+            )
+            assert result.exit_code == 0
+            assert "Profile Comparison" in result.output
+
+    @pytest.mark.unit
+    def test_compare_json_with_mock_profiles(self, tmp_path):
+        from traderbot.simulation.engine import BacktestResult
+
+        moderate_result = BacktestResult(
+            trade_count=10,
+            total_pnl_cents=2000_00,
+            winning_trades=6,
+            losing_trades=4,
+            win_rate=0.6,
+            sharpe_ratio=1.0,
+            max_drawdown_pct=0.07,
+            brier_score=0.22,
+            edge_capture=0.38,
+            fill_rate=0.88,
+            trades=[],
+        )
+
+        async def fake_run_profiles(engine, profiles, start, end):
+            return {p.name: moderate_result for p in profiles}
+
+        with (
+            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.history.HistoryService"),
+            patch("traderbot.simulation.profiles.run_profiles", side_effect=fake_run_profiles),
+        ):
+            result = runner.invoke(
+                app, ["compare", "--profiles", "Moderate", "--db", str(tmp_path / "test.db"), "--json"]
+            )
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert isinstance(data, list)
+            assert len(data) == 1
+            assert data[0]["profile_name"] == "Moderate"
+            assert data[0]["trade_count"] == 10

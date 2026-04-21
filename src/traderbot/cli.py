@@ -573,10 +573,99 @@ def paper(
 
 @app.command()
 def compare(
+    profiles: Annotated[
+        str,
+        typer.Option("--profiles", help="Comma-separated profile names from PRESETS"),
+    ] = "Conservative,Moderate,Aggressive",
+    strategy: Annotated[str, typer.Option("--strategy", help="Strategy name")] = "momentum",
+    from_date: Annotated[str, typer.Option("--from", help="Start date (YYYY-MM-DD)")] = "2025-01-01",
+    to_date: Annotated[str, typer.Option("--to", help="End date (YYYY-MM-DD)")] = "2025-03-01",
+    bankroll: Annotated[int, typer.Option("--bankroll", help="Initial bankroll in cents")] = 100000,
+    db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Compare strategy performance across markets. (Phase 5)"""
-    Console().print("Not yet implemented \u2014 coming in Phase 5.")
+    """Compare strategy performance across risk profiles."""
+    from datetime import date as date_type
+
+    from traderbot.simulation.profiles import PRESETS, compare_profiles, run_profiles
+
+    console = Console()
+    start = date_type.fromisoformat(from_date)
+    end = date_type.fromisoformat(to_date)
+
+    profile_names = [n.strip() for n in profiles.split(",")]
+    unknown = [n for n in profile_names if n not in PRESETS]
+    if unknown:
+        console.print(f"[red]Unknown profile(s): {', '.join(unknown)}[/red]")
+        console.print(f"Available: {', '.join(PRESETS.keys())}")
+        raise typer.Exit(code=1)
+
+    selected_profiles = [PRESETS[n] for n in profile_names]
+
+    try:
+        from traderbot.kalshi.client import KalshiClient
+        from traderbot.kalshi.history import HistoryService
+
+        client = KalshiClient()
+        history = HistoryService(client)
+    except Exception:
+        if json_output:
+            json_lib.dump({"error": "API connection required for compare"}, sys.stdout)
+        else:
+            console.print("[red]API connection required for compare.[/red]")
+        return
+
+    from traderbot.db import get_connection, init_schema
+    from traderbot.simulation.data_loader import DataLoader, init_cache_tables
+    from traderbot.simulation.engine import BacktestEngine
+
+    with get_connection(db_path) as conn:
+        init_schema(conn)
+        init_cache_tables(conn)
+        loader = DataLoader(conn, history)
+        engine = BacktestEngine(loader, _get_strategy(strategy), initial_bankroll_cents=bankroll)
+
+        profile_results = asyncio.run(run_profiles(engine, selected_profiles, start, end))
+
+    comparisons = compare_profiles(profile_results, initial_bankroll_cents=bankroll)
+
+    if json_output:
+        json_lib.dump(comparisons, sys.stdout, default=str)
+        return
+
+    table = Table(title="Profile Comparison")
+    table.add_column("Metric", style="cyan")
+
+    for comp in comparisons:
+        table.add_column(comp["profile_name"], justify="right")
+
+    metric_keys = ["trade_count", "total_pnl_cents", "win_rate", "sharpe_ratio", "max_drawdown", "brier_score", "edge_capture"]
+    metric_labels = {
+        "trade_count": "Trades",
+        "total_pnl_cents": "Total P&L",
+        "win_rate": "Win Rate",
+        "sharpe_ratio": "Sharpe Ratio",
+        "max_drawdown": "Max Drawdown",
+        "brier_score": "Brier Score",
+        "edge_capture": "Edge Capture",
+    }
+    metric_formatters = {
+        "trade_count": lambda v: str(v),
+        "total_pnl_cents": lambda v: f"${v / 100:.2f}",
+        "win_rate": lambda v: f"{v:.1%}" if v is not None else "\u2014",
+        "sharpe_ratio": lambda v: f"{v:.2f}" if v is not None else "\u2014",
+        "max_drawdown": lambda v: f"{v:.1%}" if v is not None else "\u2014",
+        "brier_score": lambda v: f"{v:.4f}" if v is not None else "\u2014",
+        "edge_capture": lambda v: f"{v:.1%}" if v is not None else "\u2014",
+    }
+
+    for key in metric_keys:
+        label = metric_labels[key]
+        fmt = metric_formatters[key]
+        row_values = [fmt(comp.get(key)) for comp in comparisons]
+        table.add_row(label, *row_values)
+
+    console.print(table)
 
 
 @app.command()
