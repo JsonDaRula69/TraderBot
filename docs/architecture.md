@@ -77,24 +77,25 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
-  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-  │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
-  │        │ │        │ │        │ │        │ │        │
-  │ client │ │indic.  │ │limits  │ │engine  │ │sources │
-  │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
-  │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
-  │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-  │ history│ │        │ │        │ │        │ │        │
-  │ ws     │ │        │ │        │ │        │ │        │
-  └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
-      │                      │
-      ▼                      ▼
-  ┌────────┐            ┌────────┐
-  │ Kalshi │            │  db    │
-  │   API  │            │positions│
-  │        │            │decisions│
-  └────────┘            │learnings│
-                        └────────┘
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
+   │        │ │        │ │        │ │        │ │        │
+   │ client │ │indic.  │ │limits  │ │engine  │ │sources │
+   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
+   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
+   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
+   │ history│ │        │ │        │ │        │ │embed.  │
+   │ ws     │ │        │ │        │ │        │ │vector  │
+   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
+       │                      │
+       ▼                      ▼
+   ┌────────┐            ┌────────┐
+   │ Kalshi │            │  db    │
+   │   API  │            │positions│
+   │        │            │decisions│
+   └────────┘            │learnings│
+                         │ chroma  │
+                         └────────┘
 ```
 
 ## Toolkit vs. Agent Boundary
@@ -111,6 +112,7 @@ The critical design boundary. Crossing it means the toolkit is making decisions 
 | Statistical computation (indicators, probability) | ✅ | |
 | Position tracking & P&L sync | ✅ | |
 | Audit trail (logging decisions with context) | ✅ | |
+| **Semantic embedding & similarity computation** | ✅ | |
 | **Strategy selection** (what approach to use) | | ✅ |
 | **Market interpretation** (why this market is attractive) | | ✅ |
 | **Position sizing** (how much to risk) | | ✅ (within guard rails) |
@@ -118,6 +120,48 @@ The critical design boundary. Crossing it means the toolkit is making decisions 
 | **Entry/exit timing** | | ✅ |
 
 The toolkit computes, enforces, and executes. The agent decides, interprets, and sizes. Risk guards sit between them — the agent can request any trade, but the toolkit has veto power.
+
+## Semantic Layer (Voyage AI + ChromaDB)
+> Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
+
+The semantic layer provides search-optimized index capabilities. It is NOT the authoritative store — that role belongs to SQLite.
+
+### Role
+
+- Search-optimized index layer for semantic similarity and retrieval
+- Enables pattern matching across decision logs, news, and heartbeat histories
+- ChromaDB stores embeddings; Voyage AI generates them
+
+### Models
+
+| Model | Purpose | Dimensions | Use Case |
+|---|---|---|---|
+| `voyage-finance-2` | Financial text embeddings | 1024 | News articles, market commentary, sentiment signals |
+| `voyage-4-large` | General-purpose embeddings | 256/512/1024/2048 | Decision logs, heartbeat patterns, strategy fingerprints |
+| `voyage-multimodal-3.5` | Text + image embeddings | 1024 (256/512/2048 configurable) | Chart analysis, visual market patterns |
+| `rerank-2.5` | Reranking ambiguous classification results | N/A | Disambiguating borderline sentiment or category assignments |
+
+### ChromaDB
+
+- Persistent vector store with metadata filtering (ticker, category, date range)
+- TTL policy: embeddings auto-expire after configurable window (default 90 days)
+- Async support: embedding generation and querying run without blocking the hot path
+- Collections: `decisions`, `heartbeats`, `news_signals`, `chart_embeddings`
+
+### Architecture Constraint
+
+**SQLite remains the authoritative write store.** ChromaDB is read-optimized index only. Every write goes to SQLite first; ChromaDB is updated asynchronously from the SQLite audit trail. If ChromaDB is unavailable, the system continues operating without semantic search — it is a performance enhancement, not a dependency.
+
+### Slow-Path Constraint
+
+Voyage API calls take ~200–500ms and must never appear on the hot path.
+
+| Path | Mechanism |
+|---|---|
+| Fast path | VADER/TextBlob/keywords (<10ms response) |
+| Slow path | Voyage API calls (~200–500ms), triggered asynchronously after primary response is returned |
+
+Slow-path embeddings are queued and processed in background tasks. The heartbeat loop uses the batch API (33% discount, 12h window) for population-scale pattern analysis.
 
 ## Data Flow
 
@@ -142,8 +186,9 @@ Agent → "traderbot analyze KXBTCD-26MAR31-T55000"
   → kalshi/markets fetches market details + orderbook
   → kalshi/history fetches historical trades for this ticker
   → analysis/indicators computes technical indicators
-  → analysis/odds computes implied probability + edge estimate
+   → analysis/odds computes implied probability + edge estimate
   → news/sentiment_scorer fetches related news sentiment
+  → Voyage semantic enrichment (slow path, optional)
   → analysis/signals combines all signals into unified view
   → returns structured analysis to agent
 ```
@@ -157,6 +202,7 @@ Cron trigger → "traderbot heartbeat"
   → Bayesian update: adjust prior distributions based on evidence
   → If Recurrence-Count >= 3 for any pattern → promote to .learnings/
   → Check circuit breaker conditions
+  → Query ChromaDB for similar past patterns via `voyage-4-large` embeddings
   → Update HEARTBEAT.md
 ```
 
@@ -168,8 +214,10 @@ Internal dependency rules prevent circularity and maintain the enforcement bound
 - `analysis/` depends on: `kalshi/models` (Pydantic types only)
 - `risk/` depends on: `kalshi/models`, `db/positions` (to check current exposure)
 - `simulation/` depends on: `kalshi/history`, `analysis/`, `risk/`
-- `news/` depends on: `kalshi/models` (for market category mapping)
+- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings)
 - `db/` depends on: `kalshi/models`
+- `db/chroma` depends on: `kalshi/models` (for metadata), `voyageai` (for embedding generation)
+- `db/chroma` never depends on: `risk/` (search index has no enforcement role)
 - `cli.py` depends on: all modules (orchestration layer)
 
 **Strict rule**: `risk/` never depends on `analysis/` or `news/`. Risk guards must be enforceable without understanding strategy signals. A signal can suggest "buy everything" — the risk module checks exposure regardless of signal quality.

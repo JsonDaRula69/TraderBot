@@ -115,7 +115,8 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Component | Files | Description |
 |---|---|---|
 | Decision DB | `db/decisions.py` | Every trade decision with reasoning, signals, risk params |
-| Learnings | `db/learnings.py` | Pattern tracking with recurrence counts |
+| Learnings | `db/learnings.py` | Pattern tracking with recurrence counts, semantic search, clustering |
+| Vector store | `db/vectors.py` | ChromaDB interface for embedding storage and retrieval |
 | WAL protocol | (in Decision Loop) | Write-to-SESSION-STATE before executing |
 | Workspace files | `.openclaw/workspace/` | LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md |
 
@@ -127,6 +128,8 @@ Implementation phases, dependencies between them, success criteria, and future e
 - WAL: pending actions written to SESSION-STATE before execution
 - Learning entries support Pattern-Key and Recurrence-Count
 - Pattern promotion works (3+ recurrences → AGENTS.md)
+- Decision log supports semantic search via natural language queries
+- Heartbeat clusters semantically similar decision patterns
 
 ## Phase 7: News & Sentiment Pipeline
 
@@ -135,9 +138,13 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Component | Files | Description |
 |---|---|---|
 | Sources | `news/sources.py` | Unified interface for NewsAPI, Twitter, Reddit |
-| Classifier | `news/classifier.py` | Map news to Kalshi categories |
-| Sentiment | `news/sentiment_scorer.py` | VADER + TextBlob scoring |
-| Impact | `news/impact_assessor.py` | Filter noise from signal |
+| Classifier | `news/classifier.py` | Map news to Kalshi categories (Voyage-enhanced semantic classification) |
+| Sentiment | `news/sentiment_scorer.py` | VADER + TextBlob scoring with Voyage semantic enrichment |
+| Impact | `news/impact_assessor.py` | Filter noise from signal (Voyage-boosted relevance scoring) |
+| Embedding client | `news/embeddings.py` | Voyage API client (`voyage-finance-2` embeddings) |
+| ChromaDB integration | `db/vectors.py` | Vector storage and similarity search for news embeddings |
+| Semantic classification | (in `news/classifier.py`) | Embedding-based category matching with `voyage-finance-2` |
+| Reranker fallback | `news/embeddings.py` | `rerank-2.5` for ambiguous classifications |
 
 **Dependencies**: Phase 1 (market category mapping).
 **Version target**: v0.07.00
@@ -145,9 +152,13 @@ Implementation phases, dependencies between them, success criteria, and future e
 **Success criteria**:
 - `traderbot news` returns recent news relevant to tracked markets
 - `traderbot sentiment <ticker>` returns sentiment score with confidence
-- News classified to correct Kalshi category >80% of the time
+- News classified to correct Kalshi category >90% of the time (with Voyage semantic classification)
 - Sentiment scoring completes in <10ms per item (VADER)
 - Impact assessor filters out >70% of irrelevant news
+- Voyage-enhanced classification degrades gracefully when API unavailable
+
+> **Note**: Voyage AI integration requires `VOYAGE_API_KEY` environment variable. Pipeline degrades to VADER/TextBlob/keyword-only mode without it.
+> For model selection rationale and constraints, see [ADR-001](decisions/voyage-ai-adoption.md).
 
 ## Phase 8: Adaptation Engine & Full Autonomy
 
@@ -188,7 +199,9 @@ Each new market type follows the same adapter pattern: `client.py`, `models.py`,
 |---|---|---|
 | **Cross-exchange arbitrage** | Detect price discrepancies between Kalshi and Polymarket for the same event | Post-8 |
 | **Portfolio optimization** | Correlation-aware position sizing across markets | Post-8 |
-| **Transformer sentiment** | BERT/RoBERTa for higher accuracy sentiment at the cost of latency | Post-7 |
+| **Voyage AI semantic pipeline** | `voyage-finance-2` embeddings + `rerank-2.5` for classification and sentiment | 7 |
+| **Market chart analysis** | `voyage-multimodal-3.5` for visual chart pattern recognition | 7 |
+| **Decision log semantic search** | Natural language queries over decision history via `voyage-4-large` + ChromaDB | 6 |
 | **Multi-agent trading** | Multiple specialized agents (one per category) coordinating portfolio | Post-8 |
 | **Market making** | Provide liquidity for edge on bid-ask spread | Post-8 |
 

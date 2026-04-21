@@ -127,6 +127,52 @@ Kalshi partitions data into live and historical tiers:
 - No shorting: buy Yes or No contracts only
 - Categories: Economics, Politics, Weather, Culture, Technology, Science
 
+## Voyage AI Research
+> Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
+
+### Voyage AI Embedding Models
+
+| Model | Dimensions | Context | Best For | Pricing |
+|-------|-----------|---------|----------|---------|
+| `voyage-finance-2` | 1024 | 32K tokens | Financial text (FOMC, CPI, earnings) | $0.12/M tokens |
+| `voyage-4-large` | 256/512/1024/2048 (configurable) | 32K tokens | General text, decision logs, heartbeat patterns | $0.12/M tokens |
+| `voyage-multimodal-3.5` | 1024 (256/512/2048 configurable) | 32K tokens | Text+image embeddings (chart screenshots) | $0.12/M tokens + $0.60/B pixels |
+
+### Voyage AI Reranker
+
+| Model | Context | Best For | Pricing |
+|-------|---------|----------|---------|
+| `rerank-2.5` | 32K tokens | Ambiguous classification fallback, instruction-following reranking | $0.05/M tokens |
+
+### ChromaDB (Vector Store)
+
+- Purpose-built vector DB with native metadata filtering
+- Python-native async support
+- Persistent collections with TTL policy
+- vs sqlite-vss: ChromaDB has richer features (metadata filtering, async, TTL); sqlite-vss is extension-based, less mature
+- Architecture: search-optimized index only, SQLite remains authoritative write store
+
+### Batch API
+
+- 33% discount on all models
+- 12-hour completion window
+- Safe uses: heartbeat clustering (6h cycle), initial ChromaDB population, model upgrade re-embedding
+- NOT for real-time: news classification, sentiment scoring, impact assessment
+
+### Free Tier Analysis
+
+- Voyage-finance-2: 200M tokens free tier
+- Voyage-4-large: 200M tokens free tier
+- Estimated FREE for single-user bot for ~1 year
+
+### Key Findings
+
+1. Voyage-finance-2 significantly outperforms generic embeddings (OpenAI, Cohere, sentence-transformers) on financial domain text — understands FOMC, quantitative easing, federal funds rate jargon
+2. Rerank-2.5 provides instruction-following reranking — perfect for 0.5–0.7 confidence range where classifier is uncertain
+3. Configurable dimensions on voyage-4-large allow storage/cost/quality tradeoff
+4. Multimodal support eliminates need for separate vision provider
+5. Generous free tiers make this viable for single-user deployment
+
 ## News & Sentiment Research
 
 ### Available Sources
@@ -144,8 +190,9 @@ Kalshi partitions data into live and historical tiers:
 | **VADER** | <1ms | Yes (pure Python) | Social media short text |
 | **TextBlob** | ~5ms | Yes | Longer articles, formal text |
 | **spaCy + transformers** | ~100ms+ | Yes (GPU recommended) | Deep analysis, ambiguous text |
+| **Voyage AI** | ~200-500ms | API (cloud) | Financial domain text, ambiguous classification |
 
-For prediction market trading where latency matters, VADER is the practical choice for real-time scoring. Transformer-based analysis is reserved for periodic deep analysis, not the Decision Loop.
+For prediction market trading where latency matters, VADER is the practical choice for real-time scoring. Voyage AI is invoked on the slow path for ambiguous cases and domain-specific enrichment.
 
 ### Key Insight: News Moves Markets in Seconds
 
@@ -186,6 +233,8 @@ All three assume the core trading unit is a stock with a continuous price curve.
 | TextBlob | Fallback sentiment | Better for formal text, also lightweight |
 | OpenClaw proactive-agent patterns | WAL, heartbeat, cron | Already built, just need to apply |
 | OpenClaw self-improving-agent patterns | Learning logs, pattern promotion | Already built, just need to apply |
+| `voyageai` SDK | Embedding & reranking API | Official client, async support, stays current |
+| `chromadb` | Vector store | Purpose-built, async, metadata filtering, TTL |
 
 ### Build Ourselves
 
@@ -197,6 +246,8 @@ All three assume the core trading unit is a stock with a continuous price curve.
 | News classification → Kalshi category mapping | No one has built this mapping |
 | Bayesian adaptation engine | Needs to work with our strategy parameters |
 | OpenClaw skill bridge (SKILL.md + CLI) | Novel — no existing finance skill on ClawHub |
+| Embedding pipeline orchestration | Trigger conditions, fallback logic, rate limiting |
+| ChromaDB collection management | TTL policy, metadata schema, index lifecycle |
 
 ### Explicitly NOT Building
 
@@ -207,3 +258,5 @@ All three assume the core trading unit is a stock with a continuous price curve.
 | Web UI | OpenClaw's Canvas handles display |
 | Transformer-based sentiment (for now) | Too slow for real-time trading loop |
 | Reinforcement learning agent | Too unstable for real money |
+| Custom embedding model | Voyage provides best-in-class |
+| Custom vector DB | ChromaDB is purpose-built |

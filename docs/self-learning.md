@@ -149,6 +149,47 @@ Resolved errors include the fix:
 **Fix**: Added 100ms delay between paginated historical requests in data_loader.py
 ```
 
+## Semantic Decision Search
+> Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
+
+Store decision embeddings in ChromaDB for natural language retrieval. Instead of filtering decisions by date or ticker with SQL, agents query with questions like "what happened last time the Fed raised rates?"
+
+### Design
+
+- **Embedding model**: `voyage-4-large` (general-purpose, 1024 dimensions default)
+- **Why not finance-specific**: Decision context spans multiple categories (macro, sector, event) — a general-purpose model handles mixed-domain text better
+- **Scope**: Last 90 days, max 1000 results per query
+- **Embed on write**: Decisions are embedded when logged, not on read
+- **Storage hierarchy**: ChromaDB stores embedding + `decision_id` (foreign key to SQLite); SQLite is authoritative; ChromaDB is the search index only
+
+### Query Flow
+
+1. Agent asks: "what happened to energy markets when the Fed raised rates?"
+2. Query embedding generated with `voyage-4-large`
+3. ChromaDB returns semantically similar decision IDs ranked by cosine similarity
+4. Agent retrieves full decision records from SQLite via `decision_id`
+5. Agent reviews historical decisions, forms hypothesis, decides action
+
+### ChromaDB Collections
+
+**`decision_embeddings`**
+| Field | Type | Description |
+|---|---|---|
+| `embedding` | float[1024] | `voyage-4-large` output |
+| `decision_id` | TEXT | FK to SQLite decisions table |
+| `ticker` | TEXT | Market ticker |
+| `category` | TEXT | Macro / sector / event |
+| `timestamp` | ISO8601 | When decision was made |
+| `outcome` | TEXT | closed / correct / incorrect / open |
+
+**`cluster_results`**
+| Field | Type | Description |
+|---|---|---|
+| `cluster_id` | TEXT | Unique cluster identifier |
+| `decisions_count` | int | Number of decisions in cluster |
+| `pattern_key` | TEXT | Human-readable pattern label |
+| `created_at` | ISO8601 | When clustering was computed |
+
 ## WAL Protocol (Write-Ahead Log)
 
 Borrowed from `halthelobster/proactive-agent`. Ensures no decision is lost to context overflow or crashes.
@@ -190,6 +231,45 @@ The WAL Protocol scans every outgoing action for these triggers:
 | **Decision with reasoning** | Write full reasoning to audit trail |
 | **Risk limit check** | Log result (pass/fail) regardless of outcome |
 
+## Heartbeat Pattern Clustering
+
+During the heartbeat cycle, group closed-market decisions by semantic similarity of market conditions.
+
+### Design
+
+- **Embedding model**: `voyage-4-large` (general-purpose, same model as decision search)
+- **Why not finance-specific**: Clusters span multiple market categories; a general-purpose model avoids category-specific bias
+- **Timing**: Runs every 6 hours during heartbeat, not on every decision
+- **What is clustered**: Decision outcome sequences grouped by market condition similarity
+
+### Clustering Flow
+
+1. Heartbeat collects all closed-market decisions since last cycle
+2. Each decision's market context text is embedded with `voyage-4-large`
+3. Decisions are grouped by cosine similarity of their embeddings
+4. Cluster labels and similarity scores are written to `cluster_results` collection
+5. Agent reviews clusters and decides whether to act — no automatic strategy changes
+
+### Clustering Input and Output
+
+**Input**: Decision outcome sequences grouped by market semantic similarity
+
+**Output**: Grouping labels + similarity scores stored in ChromaDB `cluster_results` collection
+
+### Empty Clusters
+
+If no significant clusters are found, log "no significant clusters found" and exit gracefully. This is not an error — it simply means recent decisions do not share enough semantic similarity to form meaningful groups.
+
+## Degraded Mode (No Voyage API / ChromaDB)
+
+When `VOYAGE_API_KEY` is unset or the Voyage API is unreachable, or when ChromaDB is unavailable:
+
+1. **Semantic Decision Search**: Falls back to SQL queries filtered by date, ticker, and category. No semantic similarity — results are chronological and categorical rather than conceptually relevant.
+2. **Heartbeat Pattern Clustering**: Skips the semantic clustering step entirely. Heartbeat completes with Bayesian adaptation and learning promotion only.
+3. **Decision Embedding Queue**: Embedding generation is queued and retried on next heartbeat cycle. If the queue exceeds 24 hours, oldest embeddings are dropped.
+
+The system continues operating without semantic search — it is a performance enhancement, not a dependency.
+
 ## Heartbeat System
 
 The heartbeat is the periodic self-review mechanism. It combines Bayesian adaptation, learning promotion, and system health checks.
@@ -215,6 +295,11 @@ The heartbeat is the periodic self-review mechanism. It combines Bayesian adapta
    - Scan `.learnings/` for entries with Recurrence-Count >= 3
    - Promote qualifying entries to AGENTS.md
    - Mark promoted entries as `Status: promoted`
+
+4b. **Semantic clustering**
+   - Query ChromaDB for semantically similar past decisions
+   - Group by `voyage-4-large` embedding similarity
+   - Log clusters for agent review (agent decides, no automatic action)
 
 5. **Circuit breaker check**
    - Is daily loss within limits?
@@ -255,7 +340,7 @@ The heartbeat is the periodic self-review mechanism. It combines Bayesian adapta
 
 ## Self-Improvement Anti-Patterns
 
-| Anti-Pattern | What It Looks Like | How BetBot Prevents It |
+| Anti-Pattern | What It Looks Like | How TraderBot Prevents It |
 |---|---|---|
 | **Over-fitting** | Parameters adjusted to match recent history too closely | Minimum 10 observations; 20% max change per update |
 | **Parameter drift** | Gradual shift away from sensible values without noticing | Guardrails on parameter bounds; reset trigger on low variance |
