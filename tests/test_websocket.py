@@ -70,8 +70,8 @@ def _make_mock_ws(auth_response: dict[str, Any] | None = None) -> AsyncMock:
     ws.recv = fake_recv
     ws.send = fake_send
     ws.close = AsyncMock()
-    ws.recv_responses = recv_responses  # type: ignore[attr-defined]
-    ws.sent_messages = sent_messages  # type: ignore[attr-defined]
+    object.__setattr__(ws, "recv_responses", recv_responses)
+    object.__setattr__(ws, "sent_messages", sent_messages)
     return ws
 
 

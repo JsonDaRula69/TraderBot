@@ -84,7 +84,9 @@ class KalshiClient:
     """Async Kalshi API client with auth, retries, rate limiting, and normalization."""
 
     def __init__(self, config: KalshiConfig | None = None) -> None:
-        self._config = config or KalshiConfig()  # type: ignore[call-arg]
+        if config is None:
+            config = KalshiConfig()  # loads from KALSHI_ env vars
+        self._config = config
         self._session_token: str | None = None
         self._semaphore = asyncio.Semaphore(int(self._config.rate_limit_rps))
         self._client = httpx.AsyncClient(base_url=self._config.active_url)
