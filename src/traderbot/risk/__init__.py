@@ -1,0 +1,1 @@
+"""Risk enforcement layer — immutable limits, sizing, circuit breaker, and audit."""
