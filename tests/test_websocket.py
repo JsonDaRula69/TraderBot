@@ -320,3 +320,29 @@ class TestMarketStreamContextManager:
             await stream.subscribe(["TICKER"])
         with pytest.raises(RuntimeError, match="Not connected"):
             await stream.unsubscribe(["TICKER"])
+        with pytest.raises(RuntimeError, match="Not connected"):
+            await stream._authenticate()
+
+
+class TestResubscribe:
+    @pytest.mark.asyncio
+    async def test_resubscribe_sends_subscriptions(self) -> None:
+        config = _make_config()
+        stream = MarketStream(config)
+        stream._subscribed_tickers = {"TICKER_A", "TICKER_B"}
+
+        with patch.object(stream, "subscribe", new_callable=AsyncMock) as mock_sub:
+            await stream._resubscribe()
+            mock_sub.assert_awaited_once()
+            called_tickers = list(mock_sub.call_args[0][0])
+            assert set(called_tickers) == {"TICKER_A", "TICKER_B"}
+
+    @pytest.mark.asyncio
+    async def test_resubscribe_noop_when_no_subscriptions(self) -> None:
+        config = _make_config()
+        stream = MarketStream(config)
+        stream._subscribed_tickers = set()
+
+        with patch.object(stream, "subscribe", new_callable=AsyncMock) as mock_sub:
+            await stream._resubscribe()
+            mock_sub.assert_not_awaited()

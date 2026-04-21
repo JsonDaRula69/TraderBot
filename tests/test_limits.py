@@ -85,6 +85,15 @@ class TestCheckDrawdown:
         result = check_drawdown(peak, 100_000_00)
         assert result.passed
 
+    def test_zero_peak_value_passes(self):
+        result = check_drawdown(0, 0)
+        assert result.passed
+        assert result.current_value == 0.0
+
+    def test_negative_peak_value_passes(self):
+        result = check_drawdown(-1, 0)
+        assert result.passed
+
 
 class TestCheckLiquidity:
     def test_passes_at_threshold(self):

@@ -232,6 +232,38 @@ class TestGetSettledMarkets:
 
         assert len(result.markets) == 0
 
+    @respx.mock
+    async def test_get_settled_markets_with_cursor(self) -> None:
+        cfg = _make_config()
+        route = respx.get(f"{cfg.active_url}/markets").mock(
+            return_value=httpx.Response(
+                200, json={"markets": [SAMPLE_SETTLED_MARKET_RAW]}
+            )
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = HistoryService(client)
+            await service.get_settled_markets(cursor="page2")
+
+        assert route.called
+        assert "cursor=page2" in str(route.calls[0].request.url)
+
+    @respx.mock
+    async def test_get_historical_trades_with_cursor(self) -> None:
+        cfg = _make_config()
+        route = respx.get(f"{cfg.active_url}/markets/KX-TEST/trades").mock(
+            return_value=httpx.Response(
+                200, json={"trades": [SAMPLE_TRADE_RAW]}
+            )
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = HistoryService(client)
+            await service.get_historical_trades("KX-TEST", cursor="abc123")
+
+        assert route.called
+        assert "cursor=abc123" in str(route.calls[0].request.url)
+
 
 class TestGetMarketSeries:
     @respx.mock
