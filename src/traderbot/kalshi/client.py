@@ -26,7 +26,11 @@ class KalshiConfig(BaseSettings):
     """Configuration for Kalshi API client, loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_prefix="KALSHI_", env_file=".env", env_file_encoding="utf-8"
+        strict=True,
+        extra="forbid",
+        env_prefix="KALSHI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
     api_key: str
