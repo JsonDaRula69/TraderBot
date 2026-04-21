@@ -10,7 +10,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.0.01
+- **Current version**: v0.00.09
 
 ## Versioning Scheme
 
@@ -31,12 +31,29 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Never commit** `.env`, credentials, or API keys
 - **Traceability**: every change is recoverable; rollback is always one `git revert` away
 
+## Source of Truth
+
+- **`docs/` is the authoritative source** for architecture, API specs, risk design, and roadmap — NEVER edit files in `docs/` without explicit human approval
+- **`ROADMAP_PROGRESS.md`** (repo root) tracks implementation progress across all 8 phases — update it when completing phase components or fixing bugs that affect the taxonomy
+- **CTX memories** store cross-session context (version, phase status, bug classes, architecture decisions) — keep them current after every significant change
+- **`VERSION`** file is the single source of truth for the current version number
+- When in doubt about intended behavior, consult `docs/` first, then memories, then code
+
+## Progress Tracking Protocol
+
+1. After completing a component or fixing a bug, update `ROADMAP_PROGRESS.md` with the new status
+2. After committing, update CTX memories to reflect the current version and completed work
+3. When new bug classes are discovered, add them to both `ROADMAP_PROGRESS.md` (Bug Class Taxonomy section) and CTX CONSTRAINTS memory
+4. Before starting work on a new phase, verify prerequisites in `ROADMAP_PROGRESS.md`
+
 ## Architecture Constraints
 
 - The **risk module is immutable** — never modify hard limits without explicit human approval
 - The **toolkit never decides strategy** — it computes, enforces, and executes, but the agent decides
 - No API keys in code — use environment variables or `.env` files (never committed)
 - All trade decisions must be logged with full reasoning in the audit trail
+- All Pydantic models MUST use `ConfigDict(strict=True, extra="forbid")` — including `BaseSettings` subclasses
+- All monetary values in cents as `int` — never `float`
 
 ## Code Style
 
