@@ -1,6 +1,6 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.04.06 (2026-04-21)
+**Last updated**: v0.04.08 (2026-04-21)
 **Current focus**: Phase 5 — Simulation Engine
 
 ---
@@ -162,8 +162,8 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.04.06 |
-| Total tests | 430 |
+| Version | 0.04.08 |
+| Total tests | 435 |
 | Coverage | 98% |
 | Ruff errors | 0 |
 | Pydantic models | 18 (all strict=True, extra=forbid) |

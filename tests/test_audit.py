@@ -150,3 +150,67 @@ class TestGetAllDecisions:
         logger.log_decision(d2)
         results = logger.get_all_decisions()
         assert len(results) == 2
+
+    def test_skips_blank_lines(self, log_dir: Path) -> None:
+        d = make_decision()
+        json_line = d.model_dump_json()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "2026-01-15.jsonl"
+        log_file.write_text(f"\n{json_line}\n\n", encoding="utf-8")
+        logger = AuditLogger(log_dir=log_dir)
+        results = logger.get_all_decisions()
+        assert len(results) == 1
+
+
+class TestBlankLinesInQuery:
+    def test_query_skips_blank_lines(self, log_dir: Path) -> None:
+        d = make_decision()
+        json_line = d.model_dump_json()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "2026-01-15.jsonl"
+        log_file.write_text(f"{json_line}\n\n{json_line}\n", encoding="utf-8")
+        logger = AuditLogger(log_dir=log_dir)
+        results = logger.get_decisions()
+        assert len(results) == 2
+
+
+class TestTimestampFilterInFile:
+    def test_query_skips_entries_before_start(self, log_dir: Path) -> None:
+        early = make_decision(ts=datetime(2026, 1, 15, 8, 0, tzinfo=UTC))
+        late = make_decision(ts=datetime(2026, 1, 15, 16, 0, tzinfo=UTC))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "2026-01-15.jsonl"
+        log_file.write_text(
+            early.model_dump_json() + "\n" + late.model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+        logger = AuditLogger(log_dir=log_dir)
+        results = logger.get_decisions(start=datetime(2026, 1, 15, 12, 0, tzinfo=UTC))
+        assert len(results) == 1
+        assert results[0].timestamp == late.timestamp
+
+    def test_query_skips_entries_after_end(self, log_dir: Path) -> None:
+        early = make_decision(ts=datetime(2026, 1, 15, 8, 0, tzinfo=UTC))
+        late = make_decision(ts=datetime(2026, 1, 15, 16, 0, tzinfo=UTC))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "2026-01-15.jsonl"
+        log_file.write_text(
+            early.model_dump_json() + "\n" + late.model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+        logger = AuditLogger(log_dir=log_dir)
+        results = logger.get_decisions(end=datetime(2026, 1, 15, 12, 0, tzinfo=UTC))
+        assert len(results) == 1
+        assert results[0].timestamp == early.timestamp
+
+
+class TestBadFilenameFilter:
+    def test_skips_files_with_bad_date_names(self, log_dir: Path) -> None:
+        d = make_decision(ts=datetime(2026, 1, 15, 12, 0, tzinfo=UTC))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / "not-a-date.jsonl").write_text(d.model_dump_json() + "\n", encoding="utf-8")
+        valid_file = log_dir / "2026-01-15.jsonl"
+        valid_file.write_text(d.model_dump_json() + "\n", encoding="utf-8")
+        logger = AuditLogger(log_dir=log_dir)
+        results = logger.get_decisions(start=datetime(2026, 1, 1, tzinfo=UTC))
+        assert len(results) == 1
