@@ -190,3 +190,14 @@ class TestGetState:
         s1.level = BreakerLevel.NORMAL
         s2 = cb.get_state()
         assert s2.level == BreakerLevel.SLOW
+
+
+class TestCircuitBreakerStateExtraForbidden:
+    def test_extra_field_rejected(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from traderbot.risk.circuit_breaker import CircuitBreakerState
+
+        with pytest.raises(ValidationError):
+            CircuitBreakerState(level=BreakerLevel.NORMAL, extra_field=True)

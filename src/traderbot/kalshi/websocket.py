@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import websockets
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 from websockets import ConnectionClosed
 
 if TYPE_CHECKING:
@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 class WebSocketConfig(BaseModel):
     """Configuration for Kalshi WebSocket connections."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     api_key: str
     api_secret: SecretStr

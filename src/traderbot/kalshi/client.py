@@ -25,7 +25,9 @@ class AuthenticationError(Exception):
 class KalshiConfig(BaseSettings):
     """Configuration for Kalshi API client, loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_prefix="KALSHI_", env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_prefix="KALSHI_", env_file=".env", env_file_encoding="utf-8"
+    )
 
     api_key: str
     api_secret: SecretStr
@@ -133,9 +135,7 @@ class KalshiClient:
             async with self._semaphore:
                 try:
                     if method.upper() == "GET":
-                        response = await self._client.get(
-                            path, params=params, headers=headers
-                        )
+                        response = await self._client.get(path, params=params, headers=headers)
                     else:
                         response = await self._client.request(
                             method, path, json=params, headers=headers
