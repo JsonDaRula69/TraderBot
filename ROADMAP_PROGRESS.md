@@ -18,7 +18,7 @@
 | Shared helpers | `kalshi/_normalize.py` | ✅ Done | Extracted from markets.py/history.py (DRY) |
 | Order placement | `kalshi/trading.py` | ✅ Done | place_order, cancel_order, get_order, list_orders via TradingService |
 
-**Tests**: 430 total (all phases), 98% coverage
+**Tests**: 445 total (all phases), 99% coverage
 
 **Success criteria met**:
 - [x] All API responses parsed into validated Pydantic models
@@ -39,7 +39,7 @@
 | Audit trail | `risk/audit.py` | ✅ Done | JSONL append-only, filtering by date/ticker/outcome |
 | Risk gate | `risk/__init__.py` | ✅ Done | evaluate_trade(): breaker → limits → sizing pipeline |
 
-**Tests**: 430 total (all phases), circuit_breaker 100%, limits 97%, sizing 100%
+**Tests**: 445 total (all phases), circuit_breaker 100%, limits 97%, sizing 100%
 
 **Success criteria met**:
 - [x] Risk module rejects trades that violate any hard limit
@@ -60,7 +60,7 @@
 | DB positions | `db/positions.py` | ✅ Done | SQLite position tracking with upsert/query |
 | DB decisions | `db/decisions.py` | ✅ Done | SQLite decision audit with filtering |
 
-**Version**: v0.04.xx | **Tests**: 41 CLI tests + 77 analysis + 17 trading passing
+**Version**: v0.04.09 | **Tests**: 41 CLI tests + 77 analysis + 17 trading passing
 
 **Success criteria met**:
 - [x] `traderbot scan`, `traderbot analyze`, `traderbot positions` work from CLI
@@ -81,7 +81,7 @@
 | Signal combining | `analysis/signals.py` | ✅ Done | combine_signals, generate_signal, default_weights |
 | CLI integration | `cli.py` | ✅ Done | analyze shows implied prob/spread; signals command added |
 
-**Version**: v0.04.xx | **Tests**: 77 analysis tests + 41 CLI tests + 17 trading passing
+**Version**: v0.04.09 | **Tests**: 77 analysis tests + 41 CLI tests + 17 trading passing
 
 **Success criteria met**:
 - [x] `traderbot analyze <ticker>` returns statistical indicators and edge estimate

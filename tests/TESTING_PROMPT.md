@@ -203,7 +203,7 @@ Expected Severity: [P0/P1/P2 if found]
 | `docs/architecture.md` | Component map (module names, file names) | Verify each module and file listed actually exists |
 | `docs/architecture.md` | Toolkit vs. Agent boundary table | Verify no toolkit function makes strategy decisions (returns buy/sell/hold) |
 | `docs/risk.md` | `HARD_LIMITS` values (5%, 2%, 10%, 1000, 20, 3%) | Read `risk/limits.py` and compare actual values against docs |
-| `docs/risk.md` | Circuit breaker thresholds (1% Slow, 2% Halt, 10% FULL_STOP) | Read `risk/breaker.py` and compare thresholds |
+| `docs/risk.md` | Circuit breaker thresholds (1% Slow, 2% Halt, 10% FULL_STOP) | Read `risk/circuit_breaker.py` and compare thresholds |
 | `docs/risk.md` | Decision model schema (`price: float` or `price: int`) | Read `db/decisions.py` and `kalshi/models.py` — verify monetary fields are `int` cents, NOT `float` |
 | `docs/risk.md` | Kelly fraction range [0.1, 0.5] | Read `risk/sizing.py` and verify clamping bounds |
 | `docs/risk.md` | Audit trail fields match actual Decision model | Compare doc's Decision fields against `db/decisions.py` model |
@@ -304,7 +304,7 @@ Check every file in `src/traderbot/risk/` for imports:
 src/traderbot/risk/__init__.py
 src/traderbot/risk/limits.py
 src/traderbot/risk/sizing.py
-src/traderbot/risk/breaker.py
+src/traderbot/risk/circuit_breaker.py
 src/traderbot/risk/audit.py
 ```
 
@@ -366,7 +366,7 @@ For each trading-related function:
 2. Is the audit entry written BEFORE the function returns?
 3. Does the audit entry include: timestamp, ticker, direction, quantity, price, signal_strength, risk_checks, outcome, rejection_reason?
 
-Verify `risk/breaker.py` logs when circuit breaker activates.
+Verify `risk/circuit_breaker.py` logs when circuit breaker activates.
 
 Verify `risk/limits.py` logs each limit check result.
 
@@ -582,7 +582,7 @@ sized_position = kelly_fraction * confidence * bankroll
 
 ### 2.6 Circuit Breaker Tests
 
-Test `risk/breaker.py`:
+Test `risk/circuit_breaker.py`:
 
 **Level 1 (Slow — 1% daily loss):**
 - Daily loss crosses 1% threshold: position sizes reduced 50%
