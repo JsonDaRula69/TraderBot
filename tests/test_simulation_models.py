@@ -2,6 +2,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 from traderbot.simulation.models import BacktestConfig, BacktestTrade, BacktestResult, Context
+from traderbot.kalshi.models import Market, PortfolioState
 
 
 def test_backtest_config_valid():
@@ -165,9 +166,9 @@ def test_context_valid():
 def test_context_extra_field():
     with pytest.raises(ValidationError):
         Context(
-            portfolio={{"portfolio_value_cents": 1000000}},
+            portfolio=PortfolioState(portfolio_value_cents=1000000),
             market_data=[],
-            sentiment={{"sentiment_score": 0.8}},
-            risk_state={{"position_limit": 10000}},
+            sentiment={"sentiment_score": 0.8},
+            risk_state={"position_limit": 10000},
             extra_field=123
         )

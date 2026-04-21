@@ -26,7 +26,7 @@ class BacktestTrade(BaseModel):
 class BacktestResult(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     total_pnl: Annotated[int, Field(description="Total PnL in cents")]
-    win_rate: float
+    win_rate: Annotated[float, Field(ge=0.0, le=1.0)]
     trade_count: int
     sharpe_ratio: float
     max_drawdown: float
