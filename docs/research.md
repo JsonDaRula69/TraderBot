@@ -14,7 +14,7 @@ Findings from our investigation of existing prediction market tools, trading age
 - `is_tradeable_market()` liquidity/volume checks before entering positions
 - Pandas DataFrames as universal cross-exchange data format
 
-**Key differences from BetBot**:
+**Key differences from TraderBot**:
 - Monolithic — not designed as an agent toolkit/skill
 - No OpenClaw integration
 - Risk limits are configurable (agent could override) — ours are immutable
@@ -90,7 +90,7 @@ Findings from our investigation of existing prediction market tools, trading age
 
 ### ClawHub (clawhub.ai)
 
-OpenClaw's skill marketplace. We searched for existing finance/trading/investment skills — **none found** as of April 2026. BetBot would be the first.
+OpenClaw's skill marketplace. We searched for existing finance/trading/investment skills — **none found** as of April 2026. TraderBot would be the first.
 
 **Skill format**: SKILL.md with YAML frontmatter (name, version, description, author)
 **Installation**: `openclaw skills install <slug>` or manual clone to `~/.openclaw/skills/`

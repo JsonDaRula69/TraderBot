@@ -16,10 +16,11 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Demo adapter | `kalshi/demo.py` | Demo API for paper trading |
 
 **Dependencies**: None — this is the foundation.
+**Version target**: v0.01.00
 
 **Success criteria**:
-- `betbot scan` returns a list of open markets from production API
-- `betbot analyze KXBTCD-26MAR31-T55000` returns market details + orderbook
+- `traderbot scan` returns a list of open markets from production API
+- `traderbot analyze KXBTCD-26MAR31-T55000` returns market details + orderbook
 - WebSocket maintains persistent connection and receives real-time updates
 - Demo mode works against `demo-api.kalshi.co`
 - All API responses parsed into validated Pydantic models
@@ -36,6 +37,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Audit trail | `risk/audit.py` | Decision logging with full context |
 
 **Dependencies**: Phase 1 (needs Pydantic models from `kalshi/models`).
+**Version target**: v0.02.00
 
 **Success criteria**:
 - Risk module rejects trades that violate any hard limit
@@ -51,18 +53,19 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Component | Files | Description |
 |---|---|---|
 | CLI entry point | `cli.py` | argparse/typer CLI for all commands |
-| Skill definition | `skills/betbot/SKILL.md` | OpenClaw skill with commands, triggers, env |
+| Skill definition | `skills/traderbot/SKILL.md` | OpenClaw skill with commands, triggers, env |
 | Workspace setup | `.openclaw/workspace/` | AGENTS.md, SESSION-STATE.md, HEARTBEAT.md templates |
 | DB layer | `db/positions.py`, `db/decisions.py` | SQLite for position tracking and decision audit |
 
 **Dependencies**: Phase 1, Phase 2.
+**Version target**: v0.03.00
 
 **Success criteria**:
-- `betbot scan`, `betbot analyze`, `betbot positions` work from CLI
-- `betbot trade` places orders (through risk checks)
+- `traderbot scan`, `traderbot analyze`, `traderbot positions` work from CLI
+- `traderbot trade` places orders (through risk checks)
 - OpenClaw can load the skill and execute commands
 - Position state persists across CLI invocations (SQLite)
-- `betbot audit` shows full decision history
+- `traderbot audit` shows full decision history
 
 ## Phase 4: Analysis Engine
 
@@ -76,10 +79,11 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Signal combining | `analysis/signals.py` | Merge statistical + sentiment signals |
 
 **Dependencies**: Phase 1 (market data models).
+**Version target**: v0.04.00
 
 **Success criteria**:
-- `betbot analyze <ticker>` returns statistical indicators and edge estimate
-- `betbot signals` shows active signals across tracked markets
+- `traderbot analyze <ticker>` returns statistical indicators and edge estimate
+- `traderbot signals` shows active signals across tracked markets
 - Brier score computed for historical prediction accuracy
 - Indicators work correctly for binary/fixed-expiry instruments
 
@@ -95,12 +99,13 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Performance | `simulation/performance.py` | Strategy metrics and comparison |
 
 **Dependencies**: Phase 1 (historical data), Phase 2 (risk checks), Phase 4 (signals).
+**Version target**: v0.05.00
 
 **Success criteria**:
-- `betbot backtest <strategy> 2026-01-01 2026-03-01` produces valid performance metrics
+- `traderbot backtest <strategy> 2026-01-01 2026-03-01` produces valid performance metrics
 - Paper trading executes against demo API with realistic fills
 - Slippage modeled in backtests (worst-case fill within spread)
-- `betbot compare strategy_a strategy_b` produces side-by-side metrics
+- `traderbot compare strategy_a strategy_b` produces side-by-side metrics
 - Historical data cached locally to avoid re-fetching
 
 ## Phase 6: Decision Logging & Self-Learning Foundation
@@ -115,6 +120,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Workspace files | `.openclaw/workspace/` | LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md |
 
 **Dependencies**: Phase 2 (audit trail), Phase 3 (CLI, DB).
+**Version target**: v0.06.00
 
 **Success criteria**:
 - Every trade decision logged with full reasoning
@@ -134,10 +140,11 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Impact | `news/impact_assessor.py` | Filter noise from signal |
 
 **Dependencies**: Phase 1 (market category mapping).
+**Version target**: v0.07.00
 
 **Success criteria**:
-- `betbot news` returns recent news relevant to tracked markets
-- `betbot sentiment <ticker>` returns sentiment score with confidence
+- `traderbot news` returns recent news relevant to tracked markets
+- `traderbot sentiment <ticker>` returns sentiment score with confidence
 - News classified to correct Kalshi category >80% of the time
 - Sentiment scoring completes in <10ms per item (VADER)
 - Impact assessor filters out >70% of irrelevant news
@@ -153,6 +160,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Three-loop | (OpenClaw crons) | Decision + Heartbeat + News loops via agentTurn/systemEvent |
 
 **Dependencies**: Phases 5-7.
+**Version target**: v0.08.00
 
 **Success criteria**:
 - Bayesian updates produce mathematically correct posteriors

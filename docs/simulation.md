@@ -1,6 +1,6 @@
 # Simulation & Backtesting
 
-How BetBot tests strategies before risking real money — and how it learns from results.
+How TraderBot tests strategies before risking real money — and how it learns from results.
 
 ## Why Custom Backtesting?
 
@@ -168,7 +168,7 @@ When a strategy passes paper trading validation:
 
 ### Strategy Comparison
 
-`betbot compare strategy_a strategy_b` runs both strategies on the same historical data and produces a side-by-side comparison across all metrics.
+`traderbot compare strategy_a strategy_b` runs both strategies on the same historical data and produces a side-by-side comparison across all metrics.
 
 ## Backtesting Limitations
 

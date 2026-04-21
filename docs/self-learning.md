@@ -1,6 +1,6 @@
 # Self-Learning & Adaptation
 
-How BetBot improves over time without human intervention — Bayesian parameter updating, learning logs, heartbeat reviews, and the WAL protocol.
+How TraderBot improves over time without human intervention — Bayesian parameter updating, learning logs, heartbeat reviews, and the WAL protocol.
 
 ## Design Philosophy
 
