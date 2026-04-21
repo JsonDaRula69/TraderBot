@@ -1,7 +1,7 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.04.09 (2026-04-21)
-**Current focus**: Phase 5 — Simulation Engine
+**Last updated**: v0.05.00 (2026-04-21)
+**Current focus**: Phase 6 — Decision Logging & Self-Learning
 
 ---
 
@@ -91,16 +91,30 @@
 
 ---
 
-## Phase 5: Simulation Engine — 🔲 NOT STARTED
+## Phase 5: Simulation Engine — ✅ COMPLETE
 
-| Component | File | Status |
-|---|---|---|
-| Backtest engine | `simulation/engine.py` | 🔲 Pending |
-| Data loader | `simulation/data_loader.py` | 🔲 Pending |
-| Paper trader | `simulation/paper_trader.py` | 🔲 Pending |
-| Performance | `simulation/performance.py` | 🔲 Pending |
+| Component | File | Status | Notes |
+|---|---|---|---|
+| Backtest engine | `simulation/engine.py` | ✅ Done | BacktestEngine with Strategy Protocol, risk gate integration |
+| Data loader | `simulation/data_loader.py` | ✅ Done | DataLoader with caching, quality metrics, retry |
+| Models | `simulation/models.py` | ✅ Done | BacktestConfig, BacktestTrade, BacktestResult, Context, Strategy Protocol |
+| Paper trader | `simulation/paper_trader.py` | ✅ Done | PaperTrader composing with DemoAdapter, slippage model |
+| Performance | `simulation/performance.py` | ✅ Done | Portfolio metrics + prediction-market metrics, compare_strategies |
+| Strategy profiles | `simulation/profiles.py` | ✅ Done | StrategyProfile, PRESETS, run_profiles, multi-profile backtest |
+| Auth management | `auth.py`, `kalshi/config.py` | ✅ Done | AuthManager + keyring, traderbot auth CLI |
+| CLI commands | `cli.py` | ✅ Done | backtest, paper, performance, compare, bootstrap commands |
+| Integration tests | `tests/test_simulation_integration.py` | ✅ Done | 35 tests — E2E pipeline, CLI, risk, edge cases |
 
-**Version target**: v0.05.00 | **Dependencies**: Phase 1, 2, 4
+**Version**: v0.05.00 | **Tests**: 685 total | **Coverage**: 99%
+
+**Success criteria met**:
+- [x] `traderbot backtest --strategy momentum` runs historical backtest
+- [x] `traderbot paper --strategy momentum` runs paper trading with DemoAdapter
+- [x] `traderbot performance` shows metrics with Rich table
+- [x] `traderbot compare --profiles Conservative,Moderate,Aggressive` compares profiles
+- [x] `traderbot bootstrap` sets up new user environment
+- [x] All profiles respect HARD_LIMITS (risk_multiplier scales within, never overrides)
+- [x] StrategyProfile with Conservative/Moderate/Aggressive presets
 
 ---
 
@@ -162,9 +176,10 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.04.09 |
-| Total tests | 445 |
+| Version | 0.05.00 |
+| Total tests | 685 |
 | Coverage | 99% |
 | Ruff errors | 0 |
 | Pydantic models | 18 (all strict=True, extra=forbid) |
-| CLI commands | 15 |
+| CLI commands | 20 |
+| Simulation modules | 7 |
