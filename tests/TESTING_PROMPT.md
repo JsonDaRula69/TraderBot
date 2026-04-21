@@ -167,6 +167,7 @@ For EACH bug found since the last review cycle:
 | Pydantic strict mode violation | A Pydantic model accepts fields not defined in the model type, or coerces types that should be rejected (e.g., string "123" to int 123). | Verify all models have `ConfigDict(strict=True, extra="forbid")`. Test with `model.model_validate` using wrong types. |
 | Audit trail gap | A trade decision is made without a corresponding audit log entry. The decision/rejection is not recorded. | Trace every trade execution and rejection path. Verify each path calls the audit logger before returning. |
 | Circuit breaker not persistent | Circuit breaker state is held in memory only, lost on restart. A halted system can restart and resume trading without human intervention. | Verify circuit breaker state is written to `SESSION-STATE.md` or equivalent persistent store. Verify on startup the state is read and respected. |
+| Enum strict deserialization (IntEnum + StrEnum) | JSON stores enum values as raw int/str, but strict Pydantic mode rejects implicit coercion. Both `IntEnum(int_val)` and `StrEnum(str_val)` must be explicitly constructed before `model_validate`. | For every `_parse_*` or `_row_to_model` helper that converts API/DB data to Pydantic models, verify enum fields are wrapped: `OrderSide(raw_str)`, `BreakerLevel(raw_int)`. Grep for `model_validate` call sites and trace enum-typed fields. |
 
 **Custom check generation template:**
 ```
@@ -224,6 +225,25 @@ Expected Severity: [P0/P1/P2 if found]
 | Version number in header matches `VERSION` file | Read `VERSION` file and compare |
 | Success criteria checkboxes | For each checked item, verify the feature actually works (run relevant tests) |
 | Bug class taxonomy entries | Spot-check 2-3 entries against actual code (e.g., verify HARD_LIMITS is still frozen) |
+| Class/function names in Notes column | Parse actual source with `ast` to get real class/function names; compare against roadmap notes |
+| CLI command count | Parse `cli.py` for `@app.command()` decorated functions; verify count matches roadmap claim |
+
+**Naming consistency check (NEW):**
+
+Docs and ROADMAP_PROGRESS.md may reference class/function names that differ from actual code. Divergence happens silently as code evolves. For each component in the roadmap, verify the names listed in the "Notes" column match the actual source:
+
+```bash
+# Example: verify class names in a module
+python3 -c "
+import ast
+with open('src/traderbot/kalshi/demo.py') as f:
+    tree = ast.parse(f.read())
+names = sorted({n.name for n in ast.walk(tree) if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and not n.name.startswith('_')})
+print(names)
+"
+```
+
+Flag any name in ROADMAP that doesn't match source as P3 (stale docs).
 
 **Known discrepancies from v0.04.04 review (example — re-verify each cycle):**
 
@@ -878,6 +898,25 @@ pytest --cov=traderbot --cov-report=term-missing tests/
 ```
 
 Review coverage report. Identify any modules with coverage below 80% and add tests.
+
+**Coverage gap remediation protocol:**
+
+When coverage report shows missing lines (e.g., `risk/audit.py   60      6    90%   36,41,43,54,67-68`):
+
+1. **Classify the gap**: Is it an error path, an edge case, or dead code?
+   - **Error path** (e.g., `except SomeError:` catch blocks) → Add test that triggers the error
+   - **Edge case** (e.g., None returns, zero-length input) → Add test with edge-case input
+   - **Dead code** (unreachable branch) → Remove the dead code; don't add tests for unreachable paths
+
+2. **Prioritize by module criticality**:
+   - `risk/` gaps (money at stake) → P1, must fix before any release
+   - `kalshi/trading.py` (order placement) → P1, wrong order = real money loss
+   - `analysis/` gaps → P2, wrong signal = bad decisions but no direct money handling
+   - `cli.py` gaps → P3, UX only (no financial impact from missing CLI test)
+
+3. **Write targeted tests**: One test per uncovered branch. Do NOT write catch-all tests that cover multiple branches incidentally — each test should target a specific uncovered line.
+
+4. **Verify**: Re-run `pytest --cov=traderbot --cov-report=term-missing tests/` and confirm the specific lines are now covered.
 
 ### 5.5 Fix and Re-run
 
