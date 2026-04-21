@@ -1,8 +1,8 @@
-# BetBot
+# TraderBot
 
 Autonomous prediction market investment toolkit for [OpenClaw](https://github.com/openclaw/openclaw) agents.
 
-BetBot provides the data pipeline, statistical analysis, risk enforcement, simulation, and execution layer that an AI agent needs to trade prediction markets — starting with [Kalshi](https://kalshi.com), expanding to stocks and other instruments.
+TraderBot provides the data pipeline, statistical analysis, risk enforcement, simulation, and execution layer that an AI agent needs to trade prediction markets — starting with [Kalshi](https://kalshi.com), expanding to stocks and other instruments.
 
 ## Core Principle
 
@@ -12,7 +12,7 @@ This separation is deliberate: it eliminates emotional bias from the execution l
 
 ## Architecture at a Glance
 
-BetBot runs three autonomous loops via OpenClaw:
+TraderBot runs three autonomous loops via OpenClaw:
 
 | Loop | Frequency | Purpose |
 |---|---|---|
@@ -25,8 +25,8 @@ See [docs/architecture.md](docs/architecture.md) for the full system design.
 ## Project Structure
 
 ```
-betbot/
-├── src/betbot/
+traderbot/
+├── src/traderbot/
 │   ├── kalshi/              # Kalshi exchange adapter
 │   ├── analysis/            # Statistical computation engine
 │   ├── risk/                 # Immutable risk enforcement
@@ -34,7 +34,7 @@ betbot/
 │   ├── news/                # News & social media pipeline
 │   ├── db/                  # State persistence (SQLite)
 │   └── cli.py               # CLI entry point
-├── skills/betbot/
+├── skills/traderbot/
 │   └── SKILL.md             # OpenClaw skill definition
 ├── .openclaw/workspace/     # Agent workspace files
 │   ├── AGENTS.md
@@ -67,23 +67,23 @@ betbot/
 
 ```bash
 # Install (future)
-pip install betbot
+pip install traderbot
 
 # Configure
 export KALSHI_API_KEY=your_key_id
 export KALSHI_PRIVATE_KEY=path/to/private_key.pem
 
 # Scan markets
-betbot scan
+traderbot scan
 
 # Deep analysis
-betbot analyze KXBTCD-26MAR31-T55000
+traderbot analyze KXBTCD-26MAR31-T55000
 
 # Paper trade a strategy
-betbot paper momentum
+traderbot paper momentum
 
 # Run heartbeat (self-review)
-betbot heartbeat
+traderbot heartbeat
 ```
 
 ## License

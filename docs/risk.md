@@ -139,7 +139,12 @@ This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, d
 ## Human Override
 
 The human can:
-- **Halt trading** at any time via `betbot halt` — sets the Level 3 breaker
+- **Halt trading** at any time via `traderbot halt` — sets the Level 3 breaker
+
+## Human Override
+
+The human can:
+- **Halt trading** at any time via `traderbot halt` — sets the Level 3 breaker
 - **Adjust risk appetite** via `USER.md` — changes what the agent considers, not hard limits
 - **Approve specific trades** above a threshold — agent can be configured to ask for human approval on positions above a certain size
 - **Clear the full-stop breaker** — the only way to resume trading after 10% drawdown

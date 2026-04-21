@@ -1,6 +1,6 @@
 # Architecture
 
-BetBot's architecture is built around one principle: **the toolkit is a dumb pipe with smart guards.** It handles execution correctness and risk enforcement, but the agent decides strategy.
+TraderBot's architecture is built around one principle: **the toolkit is a dumb pipe with smart guards.** It handles execution correctness and risk enforcement, but the agent decides strategy.
 
 ## Three-Loop Autonomous System
 
@@ -73,7 +73,7 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
-│  betbot scan | analyze | trade | positions | backtest | ...  │
+  │  traderbot scan | analyze | trade | positions | backtest | ...  │
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
@@ -124,7 +124,7 @@ The toolkit computes, enforces, and executes. The agent decides, interprets, and
 ### Trade Execution Flow
 
 ```
-Agent → "betbot trade KXBTCD-26MAR31-T55000 yes 10"
+Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
   → cli.py parses command
   → risk/limits checks: position size, exposure cap, daily loss, market liquidity
   → risk/sizing validates: does this quantity make sense given edge and bankroll?
@@ -138,7 +138,7 @@ Agent → "betbot trade KXBTCD-26MAR31-T55000 yes 10"
 ### Analysis Flow
 
 ```
-Agent → "betbot analyze KXBTCD-26MAR31-T55000"
+Agent → "traderbot analyze KXBTCD-26MAR31-T55000"
   → kalshi/markets fetches market details + orderbook
   → kalshi/history fetches historical trades for this ticker
   → analysis/indicators computes technical indicators
@@ -151,7 +151,7 @@ Agent → "betbot analyze KXBTCD-26MAR31-T55000"
 ### Heartbeat Flow
 
 ```
-Cron trigger → "betbot heartbeat"
+Cron trigger → "traderbot heartbeat"
   → simulation/adaptation reviews recent decisions
   → For each closed market: compare predicted outcome vs. actual
   → Bayesian update: adjust prior distributions based on evidence

@@ -1,6 +1,6 @@
 # News & Sentiment Pipeline
 
-How BetBot ingests real-world events and converts them into actionable market signals.
+How TraderBot ingests real-world events and converts them into actionable market signals.
 
 ## Why This Matters
 

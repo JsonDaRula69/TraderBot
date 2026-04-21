@@ -1,14 +1,35 @@
-# BetBot — AI Agent Conventions
+# TraderBot — AI Agent Conventions
 
 This file defines conventions for AI-assisted development of this project. All AI agents working on this codebase must follow these rules.
 
 ## Project Identity
 
+- **Name**: TraderBot
 - **Language**: Python 3.12+
 - **Package manager**: uv (preferred) or pip
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
+- **Current version**: v0.0.01
+
+## Versioning Scheme
+
+- **Format**: `MAJOR.MINOR.PATCH` (zero-padded: `0.00.01`)
+- **Every commit** increments the patch version by 1 (0.00.01 → 0.00.02 → 0.00.03 …)
+- **Milestone releases** increment the minor version and reset patch to 00 (0.00.99 → 0.01.00)
+- **Major releases** increment the major version and reset minor/patch (1.00.00)
+- **Tags**: Every commit must be tagged with its version (`git tag v0.00.0N`)
+- **Version file**: `VERSION` file at repo root contains the current version string
+
+## Git Discipline
+
+- **Commit early and often** — every code change gets its own commit and push
+- **One concern per commit** — no mixing features, fixes, and docs in one commit
+- **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`
+- **Always tag**: `git tag v0.00.0N` after every commit
+- **Always push**: commit + tag + push in one step: `git add . && git commit -m "type: msg" && git tag v0.00.0N && git push && git push --tags`
+- **Never commit** `.env`, credentials, or API keys
+- **Traceability**: every change is recoverable; rollback is always one `git revert` away
 
 ## Architecture Constraints
 
@@ -27,19 +48,12 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## File Organization
 
-- `src/betbot/kalshi/` — exchange adapter (API-specific code)
-- `src/betbot/analysis/` — pure computation (no I/O)
-- `src/betbot/risk/` — enforcement layer (no strategy logic)
-- `src/betbot/simulation/` — backtesting engine
-- `src/betbot/news/` — external data pipeline
-- `src/betbot/db/` — persistence layer
-
-## Git Conventions
-
-- Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`
-- One concern per commit
-- Never commit `.env`, credentials, or API keys
-- Semantic versioning on tags
+- `src/traderbot/kalshi/` — exchange adapter (API-specific code)
+- `src/traderbot/analysis/` — pure computation (no I/O)
+- `src/traderbot/risk/` — enforcement layer (no strategy logic)
+- `src/traderbot/simulation/` — backtesting engine
+- `src/traderbot/news/` — external data pipeline
+- `src/traderbot/db/` — persistence layer
 
 ## Decision Records
 

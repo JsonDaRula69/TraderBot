@@ -1,16 +1,16 @@
 # OpenClaw Integration
 
-How BetBot integrates with the OpenClaw agent framework — skill definition, workspace files, cron architectures, and proactive agent patterns.
+How TraderBot integrates with the OpenClaw agent framework — skill definition, workspace files, cron architectures, and proactive agent patterns.
 
 ## OpenClaw Overview
 
 [OpenClaw](https://github.com/openclaw/openclaw) is a self-hosted personal AI assistant with a skill system. Skills are defined by `SKILL.md` files that tell the agent what tools are available, how to call them, and when to use them.
 
-The agent consumes BetBot via **exec** calls — it shells out to our CLI commands and interprets the structured output.
+The agent consumes TraderBot via **exec** calls — it shells out to our CLI commands and interprets the structured output.
 
 ## Skill Definition
 
-The `skills/betbot/SKILL.md` file is the integration contract. It defines:
+The `skills/traderbot/SKILL.md` file is the integration contract. It defines:
 
 - **Available commands** and their arguments
 - **When the agent should use each command** (trigger phrases)
@@ -19,7 +19,7 @@ The `skills/betbot/SKILL.md` file is the integration contract. It defines:
 
 ```yaml
 ---
-name: betbot
+name: traderbot
 description: Autonomous prediction market investment toolkit for Kalshi
 metadata:
   openclaw:
@@ -42,7 +42,7 @@ metadata:
 
 ## Three-Loop Cron Architecture
 
-OpenClaw supports two cron execution modes. BetBot uses both intentionally:
+OpenClaw supports two cron execution modes. TraderBot uses both intentionally:
 
 ### `isolated agentTurn` — Autonomous Background Work
 
@@ -55,7 +55,7 @@ The agent spawns a sub-agent that executes independently. No human attention is 
   "sessionTarget": "isolated",
   "payload": {
     "kind": "agentTurn",
-    "message": "AUTONOMOUS: Run betbot decision loop. Read SESSION-STATE.md for tracked markets. Execute analysis, risk-check, and trades within guard rails. Log all decisions."
+    "message": "AUTONOMOUS: Run traderbot decision loop. Read SESSION-STATE.md for tracked markets. Execute analysis, risk-check, and trades within guard rails. Log all decisions."
   }
 }
 ```
@@ -74,18 +74,18 @@ When the news pipeline detects a high-impact event, it surfaces to the main sess
   "sessionTarget": "main",
   "payload": {
     "kind": "systemEvent",
-    "message": "ALERT: Fed emergency rate cut detected. This may affect 8 tracked markets. Run `betbot sentiment rate-cut` for analysis."
+    "message": "ALERT: Fed emergency rate cut detected. This may affect 8 tracked markets. Run `traderbot sentiment rate-cut` for analysis."
   }
 }
 ```
 
 ## Workspace Files
 
-OpenClaw uses a file-based memory system. BetBot's workspace mirrors the proactive-agent pattern (inspired by `halthelobster/proactive-agent`):
+OpenClaw uses a file-based memory system. TraderBot's workspace mirrors the proactive-agent pattern (inspired by `halthelobster/proactive-agent`):
 
 ### AGENTS.md
 
-Operating rules and constraints for the BetBot agent. Includes:
+Operating rules and constraints for the TraderBot agent. Includes:
 - Risk guard rails (immutable limits)
 - Trading constraints (no shorting, binary outcomes)
 - Market categories to track
@@ -171,7 +171,7 @@ OpenClaw loads skills in this order (later overrides earlier):
 3. User-installed skills (ClawHub or manual)
 4. Project-level skills (in workspace)
 
-BetBot is installed at the project level: `skills/betbot/SKILL.md`. This means it takes highest precedence and can override generic financial skills if any exist.
+TraderBot is installed at the project level: `skills/traderbot/SKILL.md`. This means it takes highest precedence and can override generic financial skills if any exist.
 
 ## Demo Mode for Development
 
