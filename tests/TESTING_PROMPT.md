@@ -179,6 +179,64 @@ Expected Severity: [P0/P1/P2 if found]
 
 **Phase 0 Gate Addition:** Before proceeding to Phase 1, ALL bugs found since the last review cycle (both during-review AND manual/outside) must have their bug class extracted, generalized, and custom checks inserted into the appropriate phase sections.
 
+### 0.7 Documentation vs. Code Validation
+
+**Purpose:** Docs are the source of truth (per AGENTS.md: "When in doubt about intended behavior, consult `docs/` first"). If docs say one thing and code does another, either the doc is wrong (needs updating) or the code is wrong (bug). This section ensures docs match reality BEFORE code review begins.
+
+**Critical principle:** The reviewer MUST NOT assume docs are accurate. Every specification in docs must be validated against the actual codebase. Never infer or hallucinate — read the code, compare line-by-line, and flag discrepancies.
+
+**Process:**
+
+1. **Read every doc file** in `docs/` and compare each specification against the corresponding source code
+2. **Read `ROADMAP_PROGRESS.md`** and verify every claim against actual test runs and file existence
+3. **Flag every discrepancy** with severity classification
+4. **For each discrepancy**, determine: is the doc wrong, or is the code wrong?
+5. **Never edit `docs/`** without explicit human approval (per AGENTS.md source-of-truth rule)
+
+**Doc files to validate and what to check:**
+
+| Doc File | What to Validate | How to Verify |
+|----------|-----------------|---------------|
+| `docs/architecture.md` | Module dependency rules | Grep imports in each module; verify no forbidden dependencies (e.g., `risk/` importing from `analysis/`) |
+| `docs/architecture.md` | Data flow descriptions | Trace each described flow against actual `cli.py` command implementations |
+| `docs/architecture.md` | Component map (module names, file names) | Verify each module and file listed actually exists |
+| `docs/architecture.md` | Toolkit vs. Agent boundary table | Verify no toolkit function makes strategy decisions (returns buy/sell/hold) |
+| `docs/risk.md` | `HARD_LIMITS` values (5%, 2%, 10%, 1000, 20, 3%) | Read `risk/limits.py` and compare actual values against docs |
+| `docs/risk.md` | Circuit breaker thresholds (1% Slow, 2% Halt, 10% FULL_STOP) | Read `risk/breaker.py` and compare thresholds |
+| `docs/risk.md` | Decision model schema (`price: float` or `price: int`) | Read `db/decisions.py` and `kalshi/models.py` — verify monetary fields are `int` cents, NOT `float` |
+| `docs/risk.md` | Kelly fraction range [0.1, 0.5] | Read `risk/sizing.py` and verify clamping bounds |
+| `docs/risk.md` | Audit trail fields match actual Decision model | Compare doc's Decision fields against `db/decisions.py` model |
+| `docs/kalshi.md` | API endpoints and response shapes | Read `kalshi/client.py` and `kalshi/models.py` and verify each documented endpoint |
+| `docs/openclaw-integration.md` | SKILL.md command names match `cli.py` commands | Read `skills/traderbot/SKILL.md` and compare command list against `typer` app commands |
+| `docs/simulation.md` | Module and function names for Phase 5 (not yet built) | Verify `simulation/` directory does NOT exist yet (unbuilt phase) |
+| `docs/news-sentiment.md` | Module and function names for Phase 7 (not yet built) | Verify `news/` directory does NOT exist yet (unbuilt phase) |
+| `docs/self-learning.md` | Module and function names for Phase 6 (not yet built) | Verify `db/learnings.py` does NOT exist yet (unbuilt phase) |
+| `docs/decisions/` | ADR records match current architecture | Verify each ADR's decision is still reflected in current code |
+
+**ROADMAP_PROGRESS.md validation checklist:**
+
+| Claim in ROADMAP | How to Verify |
+|-----------------|---------------|
+| Phase status (✅ COMPLETE, 🔲 NOT STARTED) | Verify each component file exists and has real implementation (not just stubs) |
+| Test count ("X tests passing") | Run `pytest tests/ --co -q` and compare actual count |
+| Coverage percentage | Run `pytest --cov=traderbot --cov-report=term-missing tests/` and compare |
+| "strict=True, extra=forbid" on all models | Grep for `ConfigDict` in all model files; verify each has `strict=True, extra="forbid"` |
+| Version number in header matches `VERSION` file | Read `VERSION` file and compare |
+| Success criteria checkboxes | For each checked item, verify the feature actually works (run relevant tests) |
+| Bug class taxonomy entries | Spot-check 2-3 entries against actual code (e.g., verify HARD_LIMITS is still frozen) |
+
+**Known discrepancies from v0.04.04 review (example — re-verify each cycle):**
+
+| Discrepancy | Doc Says | Code Reality | Severity | Action |
+|-------------|---------|-------------|----------|--------|
+| `docs/risk.md` Decision model | `price: float` | `price_cents: int` (cents as int per AGENTS.md) | P1 | Doc needs update to use `price_cents: int` |
+| `docs/risk.md` project name | "BetBot" | "TraderBot" (renamed) | P3 | Doc needs rename |
+| `docs/risk.md` Human Override | Duplicate section (lines 142-150) | Should appear once | P3 | Remove duplicate |
+| `docs/architecture.md` `kalshi/trading` | Listed in component map | Not yet implemented (Phase 3 partial) | P2 | Mark as pending in doc or note |
+| `VERSION` file staleness | May lag behind git tags | Actual version is in git tags | P2 | Verify `VERSION` matches latest tag |
+
+**Phase 0 Gate Addition:** Before proceeding to Phase 1, ALL documentation discrepancies must be documented and classified. P0/P1 discrepancies (wrong financial types, missing modules, incorrect thresholds) must be flagged for human review. P2/P3 discrepancies (stale names, duplicate sections) should be noted but don't block review.
+
 ---
 
 ## PHASE 1: STATIC CODE ANALYSIS
