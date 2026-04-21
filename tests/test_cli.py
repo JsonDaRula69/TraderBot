@@ -22,7 +22,7 @@ class TestMainHelp:
         assert "traderbot" in result.output.lower() or "prediction" in result.output.lower()
 
     def test_subcommand_help(self):
-        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt"]:
+        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance"]:
             result = runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
@@ -31,10 +31,7 @@ class TestStubCommands:
     STUB_COMMANDS: ClassVar[list[tuple[str, str]]] = [
         ("news", "Phase 7"),
         ("sentiment", "Phase 7"),
-        ("backtest", "Phase 5"),
-        ("paper", "Phase 5"),
         ("compare", "Phase 5"),
-        ("performance", "Phase 5"),
         ("learnings", "Phase 6"),
     ]
 
@@ -616,3 +613,251 @@ class TestHalt:
             result = runner.invoke(app, ["halt"])
             assert result.exit_code == 0
             assert "Test reason" in result.output
+
+
+class TestBacktestCommand:
+    def test_backtest_help(self):
+        result = runner.invoke(app, ["backtest", "--help"])
+        assert result.exit_code == 0
+        assert "--strategy" in result.output
+        assert "--from" in result.output
+        assert "--to" in result.output
+        assert "--bankroll" in result.output
+        assert "--db" in result.output
+        assert "--json" in result.output
+
+    def test_backtest_no_api(self):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
+            result = runner.invoke(app, ["backtest"])
+            assert result.exit_code == 0
+            assert "API connection required" in result.output
+
+    def test_backtest_no_api_json(self):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
+            result = runner.invoke(app, ["backtest", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "error" in data
+
+    @pytest.mark.unit
+    def test_backtest_with_mock_engine(self, tmp_path):
+        from traderbot.simulation.engine import BacktestResult
+
+        mock_result = BacktestResult(
+            trade_count=5,
+            total_pnl_cents=2500_00,
+            winning_trades=3,
+            losing_trades=2,
+            win_rate=0.6,
+            sharpe_ratio=1.5,
+            max_drawdown_pct=0.08,
+            brier_score=0.22,
+            edge_capture=0.35,
+            fill_rate=0.8,
+            trades=[],
+        )
+
+        with (
+            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.history.HistoryService"),
+            patch("traderbot.simulation.engine.BacktestEngine.run", return_value=mock_result),
+        ):
+            result = runner.invoke(app, ["backtest", "--db", str(tmp_path / "test.db")])
+            assert result.exit_code == 0
+            assert "Backtest Results" in result.output
+
+    @pytest.mark.unit
+    def test_backtest_json_with_mock(self, tmp_path):
+        from traderbot.simulation.engine import BacktestResult
+
+        mock_result = BacktestResult(
+            trade_count=5,
+            total_pnl_cents=2500_00,
+            winning_trades=3,
+            losing_trades=2,
+            win_rate=0.6,
+            sharpe_ratio=1.5,
+            max_drawdown_pct=0.08,
+            brier_score=0.22,
+            edge_capture=0.35,
+            fill_rate=0.8,
+            trades=[],
+        )
+
+        with (
+            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.history.HistoryService"),
+            patch("traderbot.simulation.engine.BacktestEngine.run", return_value=mock_result),
+        ):
+            result = runner.invoke(app, ["backtest", "--db", str(tmp_path / "test.db"), "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "metrics" in data
+            assert data["trade_count"] == 5
+
+
+class TestPaperCommand:
+    def test_paper_help(self):
+        result = runner.invoke(app, ["paper", "--help"])
+        assert result.exit_code == 0
+        assert "--strategy" in result.output
+        assert "--duration" in result.output
+        assert "--db" in result.output
+        assert "--json" in result.output
+
+    def test_paper_no_api(self):
+        with patch("traderbot.kalshi.demo.DemoAdapter", side_effect=Exception("no demo")):
+            result = runner.invoke(app, ["paper"])
+            assert result.exit_code == 0
+            assert "Demo API connection required" in result.output
+
+    def test_paper_no_api_json(self):
+        with patch("traderbot.kalshi.demo.DemoAdapter", side_effect=Exception("no demo")):
+            result = runner.invoke(app, ["paper", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "error" in data
+
+    @pytest.mark.unit
+    def test_paper_with_mock(self, tmp_path):
+        from traderbot.simulation.paper_trader import PaperPortfolio, PaperPosition
+
+        mock_portfolio = PaperPortfolio(
+            cash_cents=99_500_00,
+            positions=[
+                PaperPosition(ticker="KXBTCD-26MAR31-T55000", side="yes", avg_price_cents=55, quantity=10),
+            ],
+        )
+
+        with (
+            patch("traderbot.kalshi.demo.DemoAdapter"),
+            patch(
+                "traderbot.simulation.paper_trader.PaperTrader.get_portfolio",
+                return_value=mock_portfolio,
+            ),
+            patch(
+                "traderbot.simulation.paper_trader.PaperTrader.get_pnl",
+                return_value=-500_00,
+            ),
+        ):
+            result = runner.invoke(app, ["paper", "--db", str(tmp_path / "test.db")])
+            assert result.exit_code == 0
+            assert "Paper Trading" in result.output
+            assert "KXBTCD-26MAR31-T55000" in result.output
+
+    @pytest.mark.unit
+    def test_paper_json_with_mock(self, tmp_path):
+        from traderbot.simulation.paper_trader import PaperPortfolio, PaperPosition
+
+        mock_portfolio = PaperPortfolio(
+            cash_cents=99_500_00,
+            positions=[
+                PaperPosition(ticker="KXBTCD-26MAR31-T55000", side="yes", avg_price_cents=55, quantity=10),
+            ],
+        )
+
+        with (
+            patch("traderbot.kalshi.demo.DemoAdapter"),
+            patch(
+                "traderbot.simulation.paper_trader.PaperTrader.get_portfolio",
+                return_value=mock_portfolio,
+            ),
+            patch(
+                "traderbot.simulation.paper_trader.PaperTrader.get_pnl",
+                return_value=-500_00,
+            ),
+        ):
+            result = runner.invoke(app, ["paper", "--db", str(tmp_path / "test.db"), "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["cash_cents"] == 99_500_00
+            assert len(data["positions"]) == 1
+
+
+class TestPerformanceCommand:
+    def test_performance_help(self):
+        result = runner.invoke(app, ["performance", "--help"])
+        assert result.exit_code == 0
+        assert "--db" in result.output
+        assert "--from" in result.output
+        assert "--to" in result.output
+        assert "--json" in result.output
+
+    def test_performance_empty_db(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["performance", "--db", str(db)])
+        assert result.exit_code == 0
+        assert "Performance Summary" in result.output
+
+    def test_performance_empty_db_json(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["performance", "--db", str(db), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["trade_count"] == 0
+
+    @pytest.mark.unit
+    def test_performance_with_decisions(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.kalshi.models import Decision
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            from traderbot.db.decisions import init_table, insert
+
+            init_table(conn)
+            for i in range(3):
+                insert(
+                    conn,
+                    Decision(
+                        timestamp=datetime(2026, 1, 15 + i, 12, 0, 0, tzinfo=UTC),
+                        ticker=f"TEST-MKT-{i}",
+                        direction="yes",
+                        quantity=5,
+                        price=55 + i * 10,
+                        signal_strength=0.7,
+                        confidence=0.8,
+                        edge_estimate=0.15,
+                        risk_checks={"max_position": True},
+                        outcome="executed",
+                    ),
+                )
+
+        result = runner.invoke(app, ["performance", "--db", str(db)])
+        assert result.exit_code == 0
+        assert "Performance Summary" in result.output
+        assert "3" in result.output
+
+    @pytest.mark.unit
+    def test_performance_with_decisions_json(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.kalshi.models import Decision
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            from traderbot.db.decisions import init_table, insert
+
+            init_table(conn)
+            for i in range(3):
+                insert(
+                    conn,
+                    Decision(
+                        timestamp=datetime(2026, 1, 15 + i, 12, 0, 0, tzinfo=UTC),
+                        ticker=f"TEST-MKT-{i}",
+                        direction="yes",
+                        quantity=5,
+                        price=55 + i * 10,
+                        signal_strength=0.7,
+                        confidence=0.8,
+                        edge_estimate=0.15,
+                        risk_checks={"max_position": True},
+                        outcome="executed",
+                    ),
+                )
+
+        result = runner.invoke(app, ["performance", "--db", str(db), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["trade_count"] == 3
