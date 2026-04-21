@@ -536,8 +536,13 @@ def bootstrap(
 
 @app.command()
 def heartbeat() -> None:
-    """Print status summary."""
-    Console().print("Heartbeat: system operational. No active positions.")
+    """Periodic self-review: performance, risk state, and learning promotion."""
+    from traderbot.learning import HEARTBEAT_INTERVAL_HOURS
+
+    Console().print(
+        f"Heartbeat: system operational. No active positions.\n"
+        f"Learning promotion scan runs every {HEARTBEAT_INTERVAL_HOURS}h (full implementation: Phase 8)."
+    )
 
 
 @app.command()
@@ -877,10 +882,128 @@ def performance(
 
 @app.command()
 def learnings(
-    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    status: Annotated[
+        str | None,
+        typer.Option("--status", help="Filter by status: active, deprecated, pending_review"),
+    ] = "active",
+    category: Annotated[
+        str | None,
+        typer.Option("--category", help="Filter by category: MarketBehavior, RiskSignal, Timing, Strategy, Execution, FeatureRequest"),
+    ] = None,
+    promote: Annotated[
+        str | None,
+        typer.Option("--promote", help="Manually promote a pattern by pattern-key"),
+    ] = None,
+    db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
 ) -> None:
-    """Review and export self-learning adjustments. (Phase 6)"""
-    Console().print("Not yet implemented \u2014 coming in Phase 6.")
+    """List learned patterns and trigger promotions."""
+    from traderbot.db.learnings import LearningCategory, LearningStatus, find_by_pattern_key, get_patterns, init_table
+    from traderbot.learning import HEARTBEAT_INTERVAL_HOURS, promote_learning
+
+    console = Console()
+
+    def _run(conn):
+        init_table(conn)
+
+        if promote is not None:
+            entries = find_by_pattern_key(conn, promote)
+            active_entries = [e for e in entries if e.status != LearningStatus.DEPRECATED]
+            if not active_entries:
+                if json_output:
+                    json_lib.dump({"error": f"No active learning found for pattern-key: {promote}"}, sys.stdout)
+                else:
+                    err_console.print(f"[red]No active learning found for pattern-key:[/red] {promote}")
+                raise typer.Exit(code=1)
+
+            learning_id = active_entries[0].id
+            result_path = promote_learning(conn, learning_id)
+            if result_path is None:
+                if json_output:
+                    json_lib.dump({"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout)
+                else:
+                    err_console.print(f"[red]Promotion failed for learning[/red] #{learning_id}")
+                raise typer.Exit(code=1)
+
+            promoted_entry = {
+                "learning_id": learning_id,
+                "pattern_key": promote,
+                "promoted_to": str(result_path),
+            }
+            if json_output:
+                json_lib.dump(promoted_entry, sys.stdout, default=str)
+            else:
+                console.print(f"[green]Promoted[/green] pattern [cyan]{promote}[/cyan] (learning #{learning_id})")
+                console.print(f"  Written to: {result_path}")
+            return
+
+        cat_enum = None
+        if category is not None:
+            try:
+                cat_enum = LearningCategory(category)
+            except ValueError:
+                valid = ", ".join(c.value for c in LearningCategory)
+                if json_output:
+                    json_lib.dump({"error": f"Unknown category: {category}. Valid: {valid}"}, sys.stdout)
+                else:
+                    err_console.print(f"[red]Unknown category:[/red] {category}. Valid: {valid}")
+                raise typer.Exit(code=1)
+
+        patterns = get_patterns(conn, category=cat_enum)
+
+        status_enum = None
+        if status is not None:
+            try:
+                status_enum = LearningStatus(status)
+            except ValueError:
+                valid = ", ".join(s.value for s in LearningStatus)
+                if json_output:
+                    json_lib.dump({"error": f"Unknown status: {status}. Valid: {valid}"}, sys.stdout)
+                else:
+                    err_console.print(f"[red]Unknown status:[/red] {status}. Valid: {valid}")
+                raise typer.Exit(code=1)
+
+        if status_enum is not None:
+            patterns = [p for p in patterns if p.status == status_enum]
+
+        if json_output:
+            json_lib.dump([p.model_dump(mode="json") for p in patterns], sys.stdout, default=str)
+            return
+
+        if not patterns:
+            console.print("No learnings found.")
+            return
+
+        table = Table(title="Learned Patterns")
+        table.add_column("ID", justify="right")
+        table.add_column("Category", style="cyan")
+        table.add_column("Summary")
+        table.add_column("Confidence", justify="right")
+        table.add_column("Status")
+        table.add_column("Updated", style="dim")
+
+        status_styles = {
+            LearningStatus.ACTIVE: "[green]active[/green]",
+            LearningStatus.DEPRECATED: "[dim]deprecated[/dim]",
+            LearningStatus.PENDING_REVIEW: "[yellow]pending_review[/yellow]",
+        }
+
+        for p in patterns:
+            badge = status_styles.get(p.status, p.status.value)
+            updated = p.updated_at.strftime("%Y-%m-%d") if p.updated_at else "\u2014"
+            table.add_row(
+                str(p.id),
+                p.category.value,
+                p.summary[:60],
+                f"{p.confidence:.0%}",
+                badge,
+                updated,
+            )
+        console.print(table)
+
+    _with_db(db_path, _run)
 
 
 @auth_app.command("login")

@@ -22,7 +22,7 @@ class TestMainHelp:
         assert "traderbot" in result.output.lower() or "prediction" in result.output.lower()
 
     def test_subcommand_help(self):
-        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare", "bootstrap"]:
+        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare", "bootstrap", "learnings"]:
             result = runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
@@ -31,7 +31,6 @@ class TestStubCommands:
     STUB_COMMANDS: ClassVar[list[tuple[str, str]]] = [
         ("news", "Phase 7"),
         ("sentiment", "Phase 7"),
-        ("learnings", "Phase 6"),
     ]
 
     @pytest.mark.parametrize("cmd,phase", STUB_COMMANDS)
@@ -508,10 +507,10 @@ class TestHeartbeat:
         result = runner.invoke(app, ["heartbeat"])
         assert result.exit_code == 0
         assert "Heartbeat" in result.output
+        assert "6h" in result.output or "promotion" in result.output.lower()
 
     @pytest.mark.unit
     def test_heartbeat_json(self):
-        """The current heartbeat command doesn't have --json, but test it still works."""
         result = runner.invoke(app, ["heartbeat"])
         assert result.exit_code == 0
 
@@ -1065,6 +1064,127 @@ class TestBootstrapCommand:
             patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: False)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
         ):
-            result = runner.invoke(app, ["bootstrap", "--dry-run"])
-            assert result.exit_code == 0
-            assert "Keyring unavailable" in result.output
+             result = runner.invoke(app, ["bootstrap", "--dry-run"])
+             assert result.exit_code == 0
+             assert "Keyring unavailable" in result.output
+
+
+class TestLearnings:
+    def test_learnings_help(self):
+        result = runner.invoke(app, ["learnings", "--help"])
+        assert result.exit_code == 0
+        assert "--status" in result.output
+        assert "--category" in result.output
+        assert "--promote" in result.output
+        assert "--db" in result.output
+        assert "--json" in result.output
+
+    def test_learnings_empty_db(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db)])
+        assert result.exit_code == 0
+        assert "No learnings found" in result.output
+
+    def test_learnings_empty_db_json(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 0
+
+    @pytest.mark.unit
+    def test_learnings_with_patterns(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.learnings import LearningCategory, init_table, record_pattern
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            init_table(conn)
+            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "High volume precedes reversal", "Observed 15 times", 0.85)
+            record_pattern(conn, LearningCategory.RISK_SIGNAL, "Drawdown > 5% triggers panic sells", "3 events", 0.7)
+
+        result = runner.invoke(app, ["learnings", "--db", str(db)])
+        assert result.exit_code == 0
+        assert "High volume" in result.output
+        assert "MarketBehavior" in result.output
+        assert "Learned Patterns" in result.output
+
+    @pytest.mark.unit
+    def test_learnings_with_patterns_json(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.learnings import LearningCategory, init_table, record_pattern
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            init_table(conn)
+            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "High volume precedes reversal", "Observed 15 times", 0.85)
+
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["category"] == "MarketBehavior"
+        assert data[0]["confidence"] == 0.85
+
+    @pytest.mark.unit
+    def test_learnings_filter_by_category(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.learnings import LearningCategory, init_table, record_pattern
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            init_table(conn)
+            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "Market pattern", "evidence", 0.8)
+            record_pattern(conn, LearningCategory.RISK_SIGNAL, "Risk pattern", "evidence", 0.7)
+
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--category", "RiskSignal"])
+        assert result.exit_code == 0
+        assert "Risk pattern" in result.output
+        assert "MarketBehavior" not in result.output
+
+    @pytest.mark.unit
+    def test_learnings_filter_by_deprecated_status(self, tmp_path):
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.learnings import LearningCategory, LearningStatus, init_table, record_pattern, set_status
+
+        db = tmp_path / "test.db"
+        with get_connection(db) as conn:
+            init_schema(conn)
+            init_table(conn)
+            lid = record_pattern(conn, LearningCategory.TIMING, "Old pattern", "evidence", 0.5)
+            set_status(conn, lid, LearningStatus.DEPRECATED)
+
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--status", "deprecated"])
+        assert result.exit_code == 0
+        assert "Old pattern" in result.output
+
+    @pytest.mark.unit
+    def test_learnings_promote_not_found(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--promote", "nonexistent-key"])
+        assert result.exit_code == 1
+
+    @pytest.mark.unit
+    def test_learnings_promote_json_not_found(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--promote", "nonexistent-key", "--json"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "error" in data
+
+    @pytest.mark.unit
+    def test_learnings_invalid_category(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--category", "InvalidCat"])
+        assert result.exit_code == 1
+
+    @pytest.mark.unit
+    def test_learnings_invalid_status(self, tmp_path):
+        db = tmp_path / "test.db"
+        result = runner.invoke(app, ["learnings", "--db", str(db), "--status", "invalid"])
+        assert result.exit_code == 1
