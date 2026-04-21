@@ -76,6 +76,11 @@ Identify which modules use async I/O and which use sync computation.
 - `simulation/` depends on: `kalshi/history`, `analysis/`, `risk/`
 - `news/` depends on: `kalshi/models` (for market category mapping)
 - `db/` depends on: `kalshi/models`
+- `cli.py` depends on: `kalshi/`, `analysis/`, `risk/`, `db/` (orchestrates all modules)
+
+**CLI entry point**: `cli.py` → Typer app with 14 commands. Each command lazily imports its dependencies. `scan`/`analyze` use `kalshi/` (async calls wrapped in `asyncio.run()`). `trade` uses `risk/` gate. `positions`/`audit` use `db/` layer. `halt` uses `risk/circuit_breaker`. `signals` uses `analysis/signals`.
+
+**Dependency rule**: `analysis/` never imports from `risk/`, `db/`, or `news/`. `db/` never imports from `analysis/` or `risk/`. `cli.py` is the only module that imports across all domain boundaries.
 
 **CRITICAL ARCHITECTURE RULE**: `risk/` never depends on `analysis/` or `news/`. Risk guards must be enforceable without understanding strategy signals. A signal can suggest "buy everything" — the risk module checks exposure regardless of signal quality.
 
@@ -542,6 +547,126 @@ Test `risk/audit.py` and `db/decisions.py`:
 **JSONL format:**
 - Each line is valid JSON
 - No malformed lines in log file
+
+### 2.8 CLI Command Tests
+
+Test all CLI commands via `typer.testing.CliRunner`:
+
+**scan command:**
+- `traderbot scan` returns list of open markets (mock MarketService)
+- `traderbot scan --json` returns JSON array of markets
+- `traderbot scan --category FED` filters by category
+- `traderbot scan --limit 5` limits results
+- API failure: graceful error message, no crash
+
+**analyze command:**
+- `traderbot analyze KXBTCD-26MAR31-T55000` returns market details + indicators
+- `traderbot analyze TICKER --json` returns JSON with market + orderbook + implied_prob
+- API failure: graceful error message
+- Implied probability displayed even when API succeeds (computed from orderbook)
+
+**trade command:**
+- `traderbot trade TICKER --direction yes --quantity 1 --price 50` through risk gate
+- Rejected trade: reason displayed (risk check failed)
+- Executed trade: sized amount shown
+- `--json` output includes outcome and reason
+
+**positions command:**
+- `traderbot positions --db path` lists positions from SQLite
+- `traderbot positions --json` outputs JSON array
+- No positions: "No open positions" message
+- DB failure: graceful error
+
+**audit command:**
+- `traderbot audit --ticker TICKER` filters by ticker
+- `traderbot audit --start 2026-01-01 --end 2026-04-01` filters by date
+- `traderbot audit --outcome executed` filters by outcome
+- `traderbot audit --json` outputs JSON array
+- No decisions: "No decisions found" message
+
+**halt command:**
+- `traderbot halt` shows current circuit breaker state
+- `traderbot halt --force` sets FULL_STOP level
+- `traderbot halt --force --json` outputs JSON with level/multiplier/reason
+- `traderbot halt --json` shows state as JSON
+
+**heartbeat command:**
+- `traderbot heartbeat` prints status message
+
+**signals command:**
+- `traderbot signals` displays signal generation placeholder
+- `traderbot signals --json` outputs JSON placeholder
+
+### 2.9 DB Layer Tests
+
+Test `db/__init__.py`, `db/positions.py`, `db/decisions.py`:
+
+**Connection management:**
+- `get_connection()` creates SQLite in-memory or file DB
+- Schema initialization creates tables on first connection
+- Context manager ensures connection is closed after use
+- Concurrent access: `OperationalError` on write conflicts handled gracefully
+
+**Positions (CRUD):**
+- `upsert()` creates new position
+- `upsert()` updates existing position (quantity, avg_price change)
+- `list_all()` returns all positions
+- `get_by_ticker()` returns specific position or None
+- `delete()` removes a position
+- All monetary values stored/retrieved as int cents
+- Invalid ticker raises appropriate error
+
+**Decisions (CRUD):**
+- `insert()` creates new decision entry
+- `list_by_ticker()` returns decisions filtered by ticker
+- `list_by_date_range()` returns decisions in date window
+- `list_by_outcome()` returns decisions filtered by outcome ("executed"|"rejected"|"held")
+- All fields present in retrieved records
+- Timestamps stored in ISO format, parsed correctly on retrieval
+
+### 2.10 Analysis Engine Tests
+
+Test all `analysis/` modules:
+
+**indicators.py:**
+- `sma(data, window)` returns correct simple moving average
+- `ema(data, span)` returns correct exponential moving average
+- `rsi(data, periods)` returns correct relative strength index
+- `bollinger_bands(data, window, num_std)` returns upper, middle, lower bands
+- `volume_weighted_price(prices, volumes)` returns VWAP
+- Edge cases: empty data, data shorter than window, single-element data
+- All functions are sync (no async)
+
+**odds.py:**
+- `implied_probability(orderbook)` computes yes/no probabilities from bids
+- `detect_edge(estimated_prob, orderbook)` identifies edge direction and size
+- `compute_kelly_inputs(estimated_prob, orderbook)` returns Kelly-relevant metrics
+- `expected_value(prob, price_cents)` computes EV correctly
+- Edge cases: empty orderbook, zero spread, equal yes/no bids
+- All monetary values as int cents
+
+**portfolio.py:**
+- `win_rate(predictions, outcomes)` computes correct win rate
+- `brier_score(predictions, outcomes)` computes correct Brier score
+- `sharpe_ratio(returns, risk_free_rate)` computes correct Sharpe
+- `max_drawdown(values)` computes correct max drawdown
+- `calmar_ratio(returns, max_dd)` computes correct Calmar
+- `calibration_curve(predictions, outcomes, n_bins)` bins predictions
+- `edge_realization(edges, outcomes)` computes realized edge
+- Edge cases: empty inputs, single prediction, constant predictions
+
+**signals.py:**
+- `combine_signals(sources)` computes weighted direction + confidence
+- `combine_signals([])` returns ("neutral", 0.0)
+- `default_weights()` returns expected weight dict
+- `generate_signal(ticker, prices, trades, orderbook, estimated_prob)` builds CombinedSignal
+- CombinedSignal model validates: confidence in [0,1], edge_cents as int
+- Toolkit computes direction+confidence, NEVER returns "buy"|"sell"|"hold"
+
+**Analysis dependency rule:**
+- Verify `analysis/` never imports from `risk/`, `db/`, or `news/`
+- All functions in `analysis/` are sync (no async)
+- All monetary values use int cents
 
 ---
 

@@ -193,21 +193,21 @@ def test_calmar_ratio_normal() -> None:
 def test_calibration_curve_uniform() -> None:
     # 10 predictions, one per 0.05-wide range within each bucket
     predictions = [
-        (0.05, True),   # bucket 0
+        (0.05, True),  # bucket 0
         (0.15, False),  # bucket 1
-        (0.25, True),   # bucket 2
-        (0.35, True),   # bucket 3
+        (0.25, True),  # bucket 2
+        (0.35, True),  # bucket 3
         (0.45, False),  # bucket 4
-        (0.55, True),   # bucket 5
-        (0.65, True),   # bucket 6
+        (0.55, True),  # bucket 5
+        (0.65, True),  # bucket 6
         (0.75, False),  # bucket 7
-        (0.85, True),   # bucket 8
-        (0.95, True),   # bucket 9
+        (0.85, True),  # bucket 8
+        (0.95, True),  # bucket 9
     ]
     curve = calibration_curve(predictions)
     assert len(curve) == 10
     # Each bucket has one prediction
-    for mean_pred, obs_freq in curve:
+    for _mean_pred, obs_freq in curve:
         assert obs_freq in (0.0, 1.0)
 
 

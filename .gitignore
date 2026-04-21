@@ -42,4 +42,4 @@ credentials.json
 .openclaw/workspace/.learnings/
 
 # Logs
-*.log
+*.log.coverage
