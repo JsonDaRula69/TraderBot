@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets — NEVER commit
+*.pem
+*.key
+credentials.json
+
+# Database
+*.db
+*.sqlite3
+
+# OpenClaw local state
+.openclaw/workspace/SESSION-STATE.md
+.openclaw/workspace/.learnings/
+
+# Logs
+*.log
