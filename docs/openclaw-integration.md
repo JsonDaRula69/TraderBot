@@ -63,6 +63,8 @@ The agent spawns a sub-agent that executes independently. No human attention is 
 **Decision Loop cron**: Runs every 5 minutes during market hours.
 **Heartbeat Loop cron**: Runs every 6 hours.
 
+The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
+
 ### `systemEvent` — Interactive Alerts
 
 Used for: **News/Sentiment Loop** (actionable events only)
@@ -151,7 +153,34 @@ Markets with open_interest < 500 experience significant slippage on orders > 5 c
 Added liquidity threshold to risk/limits.py
 ```
 
-When Recurrence-Count >= 3 across 2+ tasks within 30 days, the agent promotes the learning to `AGENTS.md` as a permanent rule.
+When Recurrence-Count >= 3 across 2+ tasks within 30 days, the agent promotes the learning to PENDING_REVIEW status. PENDING_REVIEW entries are flagged for human review during heartbeat — they are never auto-committed to AGENTS.md.
+
+### Feature Requests (Capability Gaps)
+
+The `FEATURE_REQUESTS.md` file tracks capabilities the agent discovers it needs during operation. When the agent encounters a gap (e.g., no data feed for a market category, missing tool, insufficient signal), it logs a `feature_request` entry:
+
+```markdown
+## Entry: FEAT-001
+**Logged**: 2026-04-20T14:30:00Z
+**Category**: feature_request
+**Pattern-Key**: missing-sports-data
+**Recurrence-Count**: 5
+**Priority**: high
+**Status**: PENDING_REVIEW
+### Request
+The agent frequently encounters sports markets but lacks real-time sports data feeds.
+### Proposed Solution
+Add sports data integration to improve sports market classification.
+### Impact
+Improved classification accuracy for ~15% of tracked markets.
+```
+
+Feature requests follow the same recurrence-based promotion model:
+1. Each capability gap occurrence increments `Recurrence-Count`
+2. When count >= 3 across 2+ tasks within 30 days, status → `PENDING_REVIEW`
+3. PENDING_REVIEW entries surface in heartbeat reviews for human evaluation
+4. Humans approve (implement), defer (lower priority), or reject (close entry)
+5. Feature requests are NEVER auto-implemented
 
 ## WAL Protocol (Write-Ahead Log)
 
@@ -162,6 +191,20 @@ Borrowed from `proactive-agent`. Before the agent executes any trade:
 3. **THEN** — execute the order
 
 This ensures every action is recoverable. If the agent crashes mid-trade, `SESSION-STATE.md` contains the intent and can be reconciled with actual positions on restart.
+
+### WAL Promotion Flow
+
+When a learning entry meets promotion criteria (Recurrence-Count >= 3, seen across 2+ tasks, within 30 days):
+
+1. Entry status changes from `active` → `PENDING_REVIEW`
+2. PENDING_REVIEW entries are surfaced in the next heartbeat review
+3. Human reviews the proposed change and either:
+   - **Approves**: Implements the change (code, config, or operating rule)
+   - **Defers**: Lowers priority, keeps in PENDING_REVIEW
+   - **Rejects**: Closes the entry with a reason
+4. Auto-editing of AGENTS.md is NEVER performed — all promotions require explicit human approval
+
+This PENDING_REVIEW status replaces the previous pattern of auto-promoting learnings directly to AGENTS.md. The WAL protocol ensures human review for all operating rule changes.
 
 ## Skill Loading Precedence
 
