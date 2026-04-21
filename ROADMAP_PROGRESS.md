@@ -1,6 +1,6 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.04.04 (2026-04-21)
+**Last updated**: v0.04.06 (2026-04-21)
 **Current focus**: Phase 5 — Simulation Engine
 
 ---
@@ -9,16 +9,16 @@
 
 | Component | File | Status | Notes |
 |---|---|---|---|
-| Pydantic models | `kalshi/models.py` | ✅ Done | 20+ models, strict=True, extra=forbid |
+| Pydantic models | `kalshi/models.py` | ✅ Done | 18 models with model_config, all strict=True, extra=forbid |
 | SDK wrapper | `kalshi/client.py` | ✅ Done | JWT auth via cryptography+PyJWT, httpx async, retry+backoff, rate limiting |
 | Market data | `kalshi/markets.py` | ✅ Done | list_markets, get_market, get_orderbook, get_recent_trades |
 | Historical data | `kalshi/history.py` | ✅ Done | get_cutoffs, get_historical_trades, get_settled_markets |
-| WebSocket | `kalshi/websocket.py` | ✅ Done | auth, subscribe/unsubscribe, auto-reconnect with exponential backoff |
-| Demo adapter | `kalshi/demo.py` | ✅ Done | DemoAdapterFactory for demo API |
+| WebSocket | `kalshi/websocket.py` | ✅ Done | MarketStream with auth, subscribe/unsubscribe, auto-reconnect |
+| Demo adapter | `kalshi/demo.py` | ✅ Done | DemoAdapter for demo API |
 | Shared helpers | `kalshi/_normalize.py` | ✅ Done | Extracted from markets.py/history.py (DRY) |
 | Order placement | `kalshi/trading.py` | ✅ Done | place_order, cancel_order, get_order, list_orders via TradingService |
 
-**Tests**: 270 passing, 97% coverage
+**Tests**: 430 total (all phases), 98% coverage
 
 **Success criteria met**:
 - [x] All API responses parsed into validated Pydantic models
@@ -39,7 +39,7 @@
 | Audit trail | `risk/audit.py` | ✅ Done | JSONL append-only, filtering by date/ticker/outcome |
 | Risk gate | `risk/__init__.py` | ✅ Done | evaluate_trade(): breaker → limits → sizing pipeline |
 
-**Tests**: 270 passing, 100% coverage on risk modules
+**Tests**: 430 total (all phases), circuit_breaker 100%, limits 97%, sizing 100%
 
 **Success criteria met**:
 - [x] Risk module rejects trades that violate any hard limit
@@ -54,13 +54,13 @@
 
 | Component | File | Status | Notes |
 |---|---|---|---|
-| CLI entry point | `cli.py` | ✅ Done | Typer CLI with 14 commands, --json flag, Rich output |
+| CLI entry point | `cli.py` | ✅ Done | Typer CLI with 15 commands, --json flag, Rich output |
 | Skill definition | `skills/traderbot/SKILL.md` | ✅ Done | OpenClaw skill with commands, triggers, cron architecture |
 | Workspace setup | `.openclaw/workspace/` | ✅ Done | AGENTS.md, SESSION-STATE.md, HEARTBEAT.md, USER.md, .learnings/ |
 | DB positions | `db/positions.py` | ✅ Done | SQLite position tracking with upsert/query |
 | DB decisions | `db/decisions.py` | ✅ Done | SQLite decision audit with filtering |
 
-**Version**: v0.03.xx | **Tests**: 21 CLI tests passing
+**Version**: v0.04.xx | **Tests**: 41 CLI tests + 77 analysis + 17 trading passing
 
 **Success criteria met**:
 - [x] `traderbot scan`, `traderbot analyze`, `traderbot positions` work from CLI
@@ -81,7 +81,7 @@
 | Signal combining | `analysis/signals.py` | ✅ Done | combine_signals, generate_signal, default_weights |
 | CLI integration | `cli.py` | ✅ Done | analyze shows implied prob/spread; signals command added |
 
-**Version**: v0.04.xx | **Tests**: 77 analysis tests + 21 CLI tests passing
+**Version**: v0.04.xx | **Tests**: 77 analysis tests + 41 CLI tests + 17 trading passing
 
 **Success criteria met**:
 - [x] `traderbot analyze <ticker>` returns statistical indicators and edge estimate
@@ -154,6 +154,7 @@
 | Breaker multiplier ignored | evaluate_trade doesn't apply position_size_multiplier from SLOW level | Verify breaker multiplier applied to sized result |
 | Duplicate normalize functions | Copy-pasted helpers across modules will diverge | Verify shared helpers in single module |
 | IntEnum strict deserialization | JSON stores IntEnum as int, strict Pydantic rejects it | Verify _load_state converts int→IntEnum before model_validate |
+| StrEnum strict deserialization | JSON stores StrEnum as str, strict Pydantic rejects implicit coercion | Verify _parse_* helpers convert raw str→StrEnum before model_validate (e.g., OrderSide("yes")) |
 
 ---
 
@@ -161,12 +162,9 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.04.04 |
-| Total tests | 413 |
+| Version | 0.04.06 |
+| Total tests | 430 |
 | Coverage | 98% |
 | Ruff errors | 0 |
-| Pydantic models | 23+ (all strict=True, extra=forbid) |
-| Risk module lines | 198 |
-| Kalshi module lines | 463 |
-| Analysis module lines | ~400 |
-| CLI commands | 14 |
+| Pydantic models | 18 (all strict=True, extra=forbid) |
+| CLI commands | 15 |
