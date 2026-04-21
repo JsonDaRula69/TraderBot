@@ -112,21 +112,21 @@ class Decision(BaseModel):
     ticker: str
     direction: Literal["yes", "no", "hold"]
     quantity: int
-    price: float
-    signal_strength: float          # 0-1
-    confidence: float               # 0-1
-    edge_estimate: float            # estimated edge in cents
-    risk_checks: dict[str, bool]    # each limit check and its result
+    price: int                          # Price in cents (int, not float)
+    signal_strength: float             # 0-1
+    confidence: float                  # 0-1
+    edge_estimate: float               # estimated edge as probability difference
+    risk_checks: dict[str, bool]       # each limit check and its result
     outcome: Literal["executed", "rejected", "held"]
-    rejection_reason: str | None    # if rejected, which limit failed
-    actual_result: float | None     # filled after market settles
+    rejection_reason: str | None       # if rejected, which limit failed
+    actual_result: bool | None         # true/false for binary market settlement
 ```
 
 This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, driving the self-learning mechanism.
 
 ## Anti-Bias Design Decisions
 
-| Bias | How BetBot Prevents It |
+| Bias | How TraderBot Prevents It |
 |---|---|
 | **Overconfidence** | Hard position limits regardless of confidence score |
 | **Loss chasing** | Daily loss circuit breaker halts trading after 2% loss |
@@ -135,11 +135,6 @@ This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, d
 | **Gambler's fallacy** | Each market evaluated independently; no "due for a win" logic |
 | **Survivorship bias** | Audit trail includes rejected trades, not just executed ones |
 | **Anchoring** | Odds model computes fresh probability each cycle; doesn't anchor to prior estimate |
-
-## Human Override
-
-The human can:
-- **Halt trading** at any time via `traderbot halt` — sets the Level 3 breaker
 
 ## Human Override
 

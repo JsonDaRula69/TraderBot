@@ -9,13 +9,14 @@
 
 | Component | File | Status | Notes |
 |---|---|---|---|
-| Pydantic models | `kalshi/models.py` | ✅ Done | 14 models, strict=True, extra=forbid |
+| Pydantic models | `kalshi/models.py` | ✅ Done | 20+ models, strict=True, extra=forbid |
 | SDK wrapper | `kalshi/client.py` | ✅ Done | JWT auth via cryptography+PyJWT, httpx async, retry+backoff, rate limiting |
 | Market data | `kalshi/markets.py` | ✅ Done | list_markets, get_market, get_orderbook, get_recent_trades |
 | Historical data | `kalshi/history.py` | ✅ Done | get_cutoffs, get_historical_trades, get_settled_markets |
 | WebSocket | `kalshi/websocket.py` | ✅ Done | auth, subscribe/unsubscribe, auto-reconnect with exponential backoff |
 | Demo adapter | `kalshi/demo.py` | ✅ Done | DemoAdapterFactory for demo API |
 | Shared helpers | `kalshi/_normalize.py` | ✅ Done | Extracted from markets.py/history.py (DRY) |
+| Order placement | `kalshi/trading.py` | ✅ Done | place_order, cancel_order, get_order, list_orders via TradingService |
 
 **Tests**: 270 passing, 97% coverage
 

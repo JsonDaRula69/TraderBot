@@ -109,7 +109,7 @@ We use `kalshi_python_async` as the foundation. Our `kalshi/client.py` wraps it 
 
 ```python
 # Intended usage pattern
-from betbot.kalshi import KalshiClient
+from traderbot.kalshi import KalshiClient
 
 client = KalshiClient()  # reads env vars automatically
 markets = await client.list_markets(state="open")

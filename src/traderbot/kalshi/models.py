@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -161,3 +162,57 @@ class TradeRequest(BaseModel):
     @property
     def price_dollars(self) -> float:
         return self.price_cents / 100.0
+
+
+class OrderSide(StrEnum):
+    yes = "yes"
+    no = "no"
+
+
+class OrderType(StrEnum):
+    limit = "limit"
+    market = "market"
+
+
+class OrderRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    ticker: str
+    side: OrderSide
+    order_type: OrderType
+    quantity: Annotated[int, Field(ge=1)]
+    price: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
+
+
+class OrderStatus(StrEnum):
+    live = "live"
+    matched = "matched"
+    cancelled = "cancelled"
+    expired = "expired"
+
+
+class TradingOrder(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    order_id: str
+    ticker: str
+    side: OrderSide
+    order_type: OrderType
+    quantity: Annotated[int, Field(ge=0)]
+    price: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
+    status: OrderStatus
+    created_time: datetime
+    filled_quantity: Annotated[int, Field(ge=0)] = 0
+
+
+class OrderResponse(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    order: TradingOrder
+
+
+class CancelResponse(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    order_id: str
+    status: OrderStatus
