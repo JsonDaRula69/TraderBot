@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 
 @pytest.fixture
 def sample_market_data() -> dict:
-    """Raw Kalshi API response for a single market."""
+    """Kalshi-formatted market data for a single market."""
     return {
         "ticker": "KXBTCD-26MAR31-T55000",
         "question": "Will BTC touch $55,000 before March 31?",
         "outcome_prices": ["0.65", "0.35"],
         "volume": 15000,
         "open_interest": 2500,
-        "close_time": "2026-03-31T23:59:59Z",
+        "close_time": datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
         "state": "open",
         "event_ticker": "KXBTCD-26MAR31",
         "category": "crypto",
@@ -23,7 +25,7 @@ def sample_market_data() -> dict:
 
 @pytest.fixture
 def sample_orderbook_data() -> dict:
-    """Raw Kalshi API response for an orderbook."""
+    """Kalshi-formatted orderbook data."""
     return {
         "yes": [
             {"price": 64, "size": 100},
@@ -40,13 +42,13 @@ def sample_orderbook_data() -> dict:
 
 @pytest.fixture
 def sample_trade_data() -> dict:
-    """Raw Kalshi API response for a trade."""
+    """Kalshi-formatted trade data."""
     return {
         "ticker": "KXBTCD-26MAR31-T55000",
         "price": 65,
         "quantity": 10,
         "side": "yes",
-        "timestamp": 1745184000,
+        "timestamp": datetime(2025, 4, 20, 12, 0, 0, tzinfo=UTC),
     }
 
 
