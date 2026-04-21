@@ -65,3 +65,18 @@ class TestEvaluateTrade:
         portfolio = _make_portfolio(open_positions_count=100)
         size = evaluate_trade(trade, portfolio, breaker)
         assert size == 0
+
+    def test_slow_level_reduces_position_size(self, tmp_path: Path) -> None:
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+        trade = _make_trade()
+        portfolio = _make_portfolio()
+
+        normal_size = evaluate_trade(trade, portfolio, breaker)
+        assert normal_size > 0
+
+        slow_portfolio = _make_portfolio(today_realized_loss_cents=1_500_00)
+        slow_breaker = CircuitBreaker(state_file=tmp_path / "cb_slow.json")
+        slow_breaker.check(daily_loss_pct=0.015, drawdown_pct=0.0)
+
+        slow_size = evaluate_trade(trade, slow_portfolio, slow_breaker)
+        assert 0 < slow_size < normal_size

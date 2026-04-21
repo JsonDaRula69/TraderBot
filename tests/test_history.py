@@ -206,7 +206,9 @@ class TestGetSettledMarkets:
     async def test_get_settled_markets(self) -> None:
         cfg = _make_config()
         respx.get(f"{cfg.active_url}/markets").mock(
-            return_value=httpx.Response(200, json={"markets": [SAMPLE_SETTLED_MARKET_RAW], "cursor": "next"})
+            return_value=httpx.Response(
+                200, json={"markets": [SAMPLE_SETTLED_MARKET_RAW], "cursor": "next"}
+            )
         )
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"

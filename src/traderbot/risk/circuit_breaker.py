@@ -6,11 +6,7 @@ import enum
 import json
 from pathlib import Path
 
-from pydantic import BaseModel
-
-SLOW_THRESHOLD = 0.01
-HALT_THRESHOLD = 0.02
-FULL_STOP_THRESHOLD = 0.10
+from pydantic import BaseModel, ConfigDict
 
 
 class BreakerLevel(enum.IntEnum):
@@ -20,7 +16,14 @@ class BreakerLevel(enum.IntEnum):
     FULL_STOP = 3
 
 
+SLOW_THRESHOLD = 0.01
+HALT_THRESHOLD = 0.02
+FULL_STOP_THRESHOLD = 0.10
+
+
 class CircuitBreakerState(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
     level: BreakerLevel = BreakerLevel.NORMAL
     daily_loss_pct: float = 0.0
     drawdown_pct: float = 0.0
@@ -98,4 +101,6 @@ class CircuitBreaker:
     def _load_state(self) -> None:
         if self._state_file.exists():
             data = json.loads(self._state_file.read_text())
+            if isinstance(data.get("level"), int):
+                data["level"] = BreakerLevel(data["level"])
             self._state = CircuitBreakerState.model_validate(data)

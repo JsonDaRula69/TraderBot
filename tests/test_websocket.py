@@ -43,6 +43,14 @@ class TestWebSocketConfig:
         dumped = config.model_dump()
         assert dumped["api_secret"] != "test-secret"
 
+    def test_extra_field_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from traderbot.kalshi.websocket import WebSocketConfig
+
+        with pytest.raises(ValidationError):
+            WebSocketConfig(api_key="k", api_secret="s", extra_field=True)
+
 
 def _make_mock_ws(auth_response: dict[str, Any] | None = None) -> AsyncMock:
     ws = AsyncMock()
@@ -165,8 +173,12 @@ class TestMarketStreamListen:
     @pytest.mark.asyncio
     async def test_listen_yields_parsed_messages(self) -> None:
         mock_ws = _make_mock_ws()
-        mock_ws.recv_responses.append(json.dumps({"type": "ticker", "ticker": "KXBTCD", "price": 65}))
-        mock_ws.recv_responses.append(json.dumps({"type": "ticker", "ticker": "KXELEC", "price": 30}))
+        mock_ws.recv_responses.append(
+            json.dumps({"type": "ticker", "ticker": "KXBTCD", "price": 65})
+        )
+        mock_ws.recv_responses.append(
+            json.dumps({"type": "ticker", "ticker": "KXELEC", "price": 30})
+        )
 
         config = _make_config()
         stream = MarketStream(config)
@@ -222,7 +234,9 @@ class TestMarketStreamReconnect:
         config = _make_config(reconnect_delay=0.01, max_reconnect_attempts=5)
         stream = MarketStream(config)
 
-        with patch("traderbot.kalshi.websocket.websockets.connect", side_effect=connect_side_effect):
+        with patch(
+            "traderbot.kalshi.websocket.websockets.connect", side_effect=connect_side_effect
+        ):
             await stream.connect()
             assert connect_count == 1
             yielded: list[dict] = []

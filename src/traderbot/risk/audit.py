@@ -66,11 +66,17 @@ class AuditLogger:
                 file_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
             except ValueError:
                 continue
-            start_normalized = start.replace(tzinfo=UTC) if start and start.tzinfo is None else start
+            start_normalized = (
+                start.replace(tzinfo=UTC) if start and start.tzinfo is None else start
+            )
             end_normalized = end.replace(tzinfo=UTC) if end and end.tzinfo is None else end
-            if start_normalized and file_date < start_normalized.replace(hour=0, minute=0, second=0, microsecond=0):
+            if start_normalized and file_date < start_normalized.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ):
                 continue
-            if end_normalized and file_date > end_normalized.replace(hour=0, minute=0, second=0, microsecond=0):
+            if end_normalized and file_date > end_normalized.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ):
                 continue
             result.append(f)
         return result
