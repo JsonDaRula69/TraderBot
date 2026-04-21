@@ -63,6 +63,13 @@ class TestKalshiConfig:
             assert cfg.api_key == "env-key"
             assert cfg.api_secret.get_secret_value() == "env-secret"
 
+    def test_extra_field_rejected(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            KalshiConfig(api_key="k", api_secret="s", extra_field=True)
+
 
 class TestNormalizeApiResponse:
     def test_string_price_to_int(self) -> None:
