@@ -19,8 +19,8 @@ class AuditLogger:
         date_str = decision.timestamp.strftime("%Y-%m-%d")
         log_file = self._log_dir / f"{date_str}.jsonl"
         line = decision.model_dump_json() + "\n"
-        with self._lock:
-            log_file.open("a", encoding="utf-8").write(line)
+        with self._lock, log_file.open("a", encoding="utf-8") as f:
+            f.write(line)
 
     def get_decisions(
         self,
@@ -66,17 +66,11 @@ class AuditLogger:
                 file_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
             except ValueError:
                 continue
-            start_normalized = (
-                start.replace(tzinfo=UTC) if start and start.tzinfo is None else start
-            )
+            start_normalized = start.replace(tzinfo=UTC) if start and start.tzinfo is None else start
             end_normalized = end.replace(tzinfo=UTC) if end and end.tzinfo is None else end
-            if start_normalized and file_date < start_normalized.replace(
-                hour=0, minute=0, second=0, microsecond=0
-            ):
+            if start_normalized and file_date < start_normalized.replace(hour=0, minute=0, second=0, microsecond=0):
                 continue
-            if end_normalized and file_date > end_normalized.replace(
-                hour=0, minute=0, second=0, microsecond=0
-            ):
+            if end_normalized and file_date > end_normalized.replace(hour=0, minute=0, second=0, microsecond=0):
                 continue
             result.append(f)
         return result

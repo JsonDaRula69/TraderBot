@@ -1,14 +1,14 @@
 ---
 active: true
-iteration: 2
+iteration: 5
 max_iterations: 500
 completion_promise: "DONE"
 initial_completion_promise: "DONE"
-started_at: "2026-04-21T04:26:27.003Z"
+started_at: "2026-04-21T05:16:50.175Z"
 session_id: "ses_251b5df72ffesFdCicyoNnFt0F"
 ultrawork: true
 strategy: "continue"
-message_count_at_start: 0
+message_count_at_start: 91
 ---
 Alright, begin building Phase 1 and 2. Develop the required scaffolding As you build, and develop testing methology for yourself to comprehensively test every feature. save these into a new subdirectory /tests and a prompt including instructions on how to create a self looping testing protocol into /tests/TESTING_PROMPT.md. You may refer to @EXAMPLE_TESTING_PROMPT.md as for inspiration, but do not copy exactly. This is a prompt script used from an unrelated project and may contain a lot of information irrelevant to this project. It’s for reference and guidance only. Remember to reference documentation as your source of truth, and update your memories using CTX tools as you go.  Called the Read tool with the following input: {"filePath":"/Users/djtchill/Desktop/TraderBot/EXAMPLE_TESTING_PROMPT.md"} <path>/Users/djtchill/Desktop/TraderBot/EXAMPLE_TESTING_PROMPT.md</path>
 <type>file</type>
