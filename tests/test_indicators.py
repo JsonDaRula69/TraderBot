@@ -154,11 +154,17 @@ def test_bollinger_model_fields() -> None:
 @pytest.mark.unit
 def test_vwap_two_trades() -> None:
     t1 = Trade(
-        ticker="TEST", price=50, quantity=10, side="yes",
+        ticker="TEST",
+        price=50,
+        quantity=10,
+        side="yes",
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )
     t2 = Trade(
-        ticker="TEST", price=60, quantity=10, side="yes",
+        ticker="TEST",
+        price=60,
+        quantity=10,
+        side="yes",
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert volume_weighted_price([t1, t2]) == 55
@@ -173,11 +179,17 @@ def test_vwap_empty_raises() -> None:
 @pytest.mark.unit
 def test_vwap_weighted_by_quantity() -> None:
     t1 = Trade(
-        ticker="TEST", price=20, quantity=100, side="yes",
+        ticker="TEST",
+        price=20,
+        quantity=100,
+        side="yes",
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )
     t2 = Trade(
-        ticker="TEST", price=80, quantity=1, side="no",
+        ticker="TEST",
+        price=80,
+        quantity=1,
+        side="no",
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )
     result = volume_weighted_price([t1, t2])

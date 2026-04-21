@@ -51,7 +51,7 @@ def test_combine_signals_conflicting_neutral() -> None:
         SignalSource(name="a", weight=0.5, direction="yes", strength=0.6),
         SignalSource(name="b", weight=0.5, direction="no", strength=0.6),
     ]
-    direction, confidence = combine_signals(sources)
+    direction, _confidence = combine_signals(sources)
     assert direction == "neutral"
 
 
@@ -113,8 +113,28 @@ def test_generate_signal_declining_trend() -> None:
 @pytest.mark.unit
 def test_generate_signal_oversold_rsi() -> None:
     # Force low RSI by having many declining prices
-    low_prices = [90, 80, 70, 60, 50, 45, 40, 38, 36, 35,
-                  34, 33, 32, 31, 30, 29, 28, 27, 26, 25] + [25] * 10
+    low_prices = [
+        90,
+        80,
+        70,
+        60,
+        50,
+        45,
+        40,
+        38,
+        36,
+        35,
+        34,
+        33,
+        32,
+        31,
+        30,
+        29,
+        28,
+        27,
+        26,
+        25,
+    ] + [25] * 10
     ob = _make_orderbook(yes_price=30, no_price=65)
     signal = generate_signal(
         ticker="KX-OVERSOLD",
@@ -172,3 +192,102 @@ def test_generate_signal_edge_cents() -> None:
     )
     # edge = 0.75 - 0.50 = 0.25, edge_cents = round(0.25 * 100) = 25
     assert signal.edge_cents == 25
+
+
+@pytest.mark.unit
+def test_generate_signal_price_below_bollinger_lower() -> None:
+    # Oscillating prices with a crash at idx 6 → RSI ~37 (in 30-70 range)
+    # Last price=10 is well below BB lower=22 → hits line 88-90 branch
+    prices = [
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        10,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        10,
+    ]
+    ob = _make_orderbook(yes_price=55, no_price=40)
+    signal = generate_signal(
+        ticker="KX-BB-LOW",
+        prices=prices,
+        trades=[_make_trade(p, 1) for p in prices[-5:]],
+        orderbook=ob,
+        estimated_prob=0.55,
+    )
+    ind_src = next(s for s in signal.sources if s.name == "indicators")
+    assert ind_src.direction == "yes"
+    assert ind_src.strength == 0.7
+
+
+@pytest.mark.unit
+def test_generate_signal_price_above_bollinger_upper() -> None:
+    # Oscillating prices with a spike at idx 6 → RSI ~64 (in 30-70 range)
+    # Last price=90 is above BB upper=79 → hits line 91-93 branch
+    prices = [
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        90,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        50,
+        55,
+        90,
+    ]
+    ob = _make_orderbook(yes_price=55, no_price=40)
+    signal = generate_signal(
+        ticker="KX-BB-HIGH",
+        prices=prices,
+        trades=[_make_trade(p, 1) for p in prices[-5:]],
+        orderbook=ob,
+        estimated_prob=0.45,
+    )
+    ind_src = next(s for s in signal.sources if s.name == "indicators")
+    assert ind_src.direction == "no"
+    assert ind_src.strength == 0.7
+
+
+@pytest.mark.unit
+def test_generate_signal_momentum_bullish_ema() -> None:
+    # Rising prices → short EMA > long EMA → momentum direction="yes"
+    prices = list(range(30, 80))  # 50 rising prices
+    ob = _make_orderbook(yes_price=55, no_price=40)
+    signal = generate_signal(
+        ticker="KX-MOM-YES",
+        prices=prices,
+        trades=[_make_trade(p, 1) for p in prices[-5:]],
+        orderbook=ob,
+        estimated_prob=0.55,
+    )
+    mom_src = next(s for s in signal.sources if s.name == "momentum")
+    assert mom_src.direction == "yes"
+    assert mom_src.strength > 0
