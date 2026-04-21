@@ -73,7 +73,9 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
-   │  traderbot scan | analyze | trade | positions | backtest | ...  │
+│  traderbot scan | analyze | trade | positions | backtest |    │
+│  paper | compare | performance | news | sentiment |          │
+│  heartbeat | learnings | bootstrap | auth                     │
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
@@ -84,8 +86,8 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
    │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
    │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
    │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-   │ history│ │        │ │        │ │        │ │embed.  │
-   │ ws     │ │        │ │        │ │        │ │vector  │
+   │ history│ │        │ │        │ │profiles│ │embed.  │
+   │ ws     │ │        │ │        │ │data_ldr│ │vectors │
    └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
        │                      │
        ▼                      ▼
@@ -95,6 +97,7 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
    │        │            │decisions│
    └────────┘            │learnings│
                          │ chroma  │
+                         │ vectors │
                          └────────┘
 ```
 
@@ -169,42 +172,134 @@ Slow-path embeddings are queued and processed in background tasks. The heartbeat
 
 ```
 Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
-  → cli.py parses command
-  → risk/limits checks: position size, exposure cap, daily loss, market liquidity
-  → risk/sizing validates: does this quantity make sense given edge and bankroll?
-  → IF REJECTED → return rejection reason to agent (with audit log entry)
-  → IF APPROVED → kalshi/trading places order via official SDK
-  → db/decisions logs: ticker, direction, quantity, signal, risk params, timestamp
-  → kalshi/websocket listens for fill notification
-  → db/positions updates on fill
+   → cli.py parses command
+   → risk/limits checks: position size, exposure cap, daily loss, market liquidity
+   → risk/sizing validates: does this quantity make sense given edge and bankroll?
+   → IF REJECTED → return rejection reason to agent (with audit log entry)
+   → IF APPROVED → kalshi/trading places order via official SDK
+   → db/decisions logs: ticker, direction, quantity, signal, risk params, timestamp
+   → kalshi/websocket listens for fill notification
+   → db/positions updates on fill
+```
+
+### Bootstrap Flow
+
+```
+Agent → "traderbot bootstrap --from 2026-01-01 --to 2026-03-01 --profile Moderate"
+   → simulation/data_loader fetches historical data (cached in SQLite)
+   → simulation/engine replays events through StrategyProfile
+   → Warm-up period: first N data points skipped for indicator stability
+   → Calibration parameters fit per-horizon (daily, weekly, monthly)
+   → Report: fit quality, recommended parameters, data sufficiency warnings
+   → IF data < 30 days → WARNING logged, partial results returned (never crashes)
 ```
 
 ### Analysis Flow
 
 ```
 Agent → "traderbot analyze KXBTCD-26MAR31-T55000"
-  → kalshi/markets fetches market details + orderbook
-  → kalshi/history fetches historical trades for this ticker
-  → analysis/indicators computes technical indicators
+   → kalshi/markets fetches market details + orderbook
+   → kalshi/history fetches historical trades for this ticker
+   → analysis/indicators computes technical indicators
    → analysis/odds computes implied probability + edge estimate
-  → news/sentiment_scorer fetches related news sentiment
-  → Voyage semantic enrichment (slow path, optional)
-  → analysis/signals combines all signals into unified view
-  → returns structured analysis to agent
+   → news/sentiment_scorer fetches related news sentiment
+   → AnalysisRegistry dispatches to CategoryAnalyzer for market category
+   → Voyage semantic enrichment (slow path, optional)
+   → analysis/signals combines all signals into unified view
+   → returns structured analysis to agent
 ```
 
 ### Heartbeat Flow
 
 ```
 Cron trigger → "traderbot heartbeat"
-  → simulation/adaptation reviews recent decisions
-  → For each closed market: compare predicted outcome vs. actual
-  → Bayesian update: adjust prior distributions based on evidence
-  → If Recurrence-Count >= 3 for any pattern → promote to .learnings/
-  → Check circuit breaker conditions
-  → Query ChromaDB for similar past patterns via `voyage-4-large` embeddings
-  → Update HEARTBEAT.md
+   → simulation/adaptation reviews recent decisions
+   → For each closed market: compare predicted outcome vs. actual
+   → Bayesian update: adjust prior distributions based on evidence
+   → If Recurrence-Count >= 3 for any pattern → promote to .learnings/
+   → Capability gap detection: scan for feature_request patterns
+   → Promote recurring feature_request entries to PENDING_REVIEW status
+   → Check circuit breaker conditions
+   → Query ChromaDB for similar past patterns via `voyage-4-large` embeddings
+   → Update HEARTBEAT.md
 ```
+
+## Data Models
+
+### MarketCategory Enum
+
+The `MarketCategory` enum is defined in `news/` and used across the analysis, news, and classification layers:
+
+```python
+class MarketCategory(str, Enum):
+    ECONOMICS = "economics"
+    POLITICS = "politics"
+    WEATHER = "weather"
+    SPORTS = "sports"
+    CULTURE = "culture"
+    TECHNOLOGY = "technology"
+    SCIENCE = "science"
+```
+
+This enum replaces the previous string-based category labels, providing type safety and ensuring consistent category names across the pipeline.
+
+### StrategyProfile Model
+
+Defined in `simulation/profiles.py`:
+
+```python
+class StrategyProfile(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    name: str
+    risk_multiplier: float  # Scales within HARD_LIMITS, never overrides
+    signal_weights: dict[str, float]
+    category_focus: list[str]
+    description: str
+```
+
+The `risk_multiplier` scales risk limits proportionally but NEVER exceeds `HARD_LIMITS`: `effective_limit = risk_multiplier * HARD_LIMITS[key]`.
+
+### AnalysisRegistry
+
+The `AnalysisRegistry` in `news/` provides category-specific analysis dispatch:
+
+```python
+class AnalysisRegistry:
+    def register(category: MarketCategory, analyzer: CategoryAnalyzer) -> None: ...
+    def get(category: MarketCategory) -> CategoryAnalyzer | None: ...
+    def analyze(text: str, source: SourceType) -> CategorySignals: ...
+```
+
+## Security: Credential Management
+
+### Keyring-Based Credential Management
+
+TraderBot uses OS-native credential storage (Keychain on macOS, Secret Service on Linux, Credential Manager on Windows) via the `keyring` library:
+
+| Storage | Platform | Backend |
+|---|---|---|
+| **macOS Keychain** | macOS | `keyring.backends.macOS` |
+| **Linux Secret Service** | Linux | `keyring.backends.SecretService` |
+| **Windows Credential Manager** | Windows | `keyring.backends.Windows` |
+
+### `traderbot auth` CLI
+
+The `traderbot auth` command manages credentials:
+
+| Subcommand | Description |
+|---|---|
+| `traderbot auth login` | Interactive login — stores Kalshi API key/secret in keyring |
+| `traderbot auth set-key <name> <value>` | Store a specific credential in keyring |
+| `traderbot auth list-keys` | List stored credential names (values NOT shown) |
+| `traderbot auth rotate <name>` | Rotate a credential — prompts for new value |
+
+### Credential Resolution Order
+
+1. **Keyring** (preferred) — OS-native secure storage
+2. **`.env` file** (fallback) — for development and CI environments
+3. **Environment variables** (fallback) — for container deployments
+
+When keyring is unavailable or empty, the system falls back to `.env` with a WARNING log. All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
 
 ## Module Dependencies
 
@@ -214,7 +309,7 @@ Internal dependency rules prevent circularity and maintain the enforcement bound
 - `analysis/` depends on: `kalshi/models` (Pydantic types only)
 - `risk/` depends on: `kalshi/models`, `db/positions` (to check current exposure)
 - `simulation/` depends on: `kalshi/history`, `analysis/`, `risk/`
-- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings)
+- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings), `CategoryAnalyzer` Protocol and `AnalysisRegistry` pattern for category-specific analysis dispatch
 - `db/` depends on: `kalshi/models`
 - `db/chroma` depends on: `kalshi/models` (for metadata), `voyageai` (for embedding generation)
 - `db/chroma` never depends on: `risk/` (search index has no enforcement role)

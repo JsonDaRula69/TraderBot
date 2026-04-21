@@ -116,12 +116,47 @@ When a learning recurs enough, it gets promoted to permanent project memory:
 **Promotion criteria** (from self-improving-agent):
 - `Recurrence-Count >= 3`
 - Seen across at least 2 distinct tasks
-- Occurred within a 30-day window
+- Occurred within a 30-day window (`max_age_days=30`)
+- Pattern is not stale (patterns older than 30 days from last recurrence are NOT eligible)
+
+**Staleness constraint**: Patterns with `max_age_days > 30` are automatically excluded from promotion. This prevents promoting outdated observations that may no longer reflect current market conditions. The `max_age_days=30` limit is enforced in `db/learnings.py` and cannot be overridden at runtime.
 
 **Promotion targets**:
-- `AGENTS.md` — becomes a permanent operating rule
+- `AGENTS.md` — flagged for human review via PENDING_REVIEW status (never auto-committed)
 - `SESSION-STATE.md` — active context for the current session
 - Code changes — if the learning identifies a bug or improvement
+
+**Promotion is notification-only**: The agent NEVER auto-edits `AGENTS.md`. Pattern promotion creates a `PENDING_REVIEW` entry in `FEATURE_REQUESTS.md` that surfaces during heartbeat review. Human approval is required before any operating rule change.
+
+### FEATURE_REQUESTS.md Flow
+
+The `.learnings/FEATURE_REQUESTS.md` file tracks capability gaps discovered during operation:
+
+```markdown
+## Entry: FEAT-001
+**Logged**: 2026-04-20T14:30:00Z
+**Category**: feature_request
+**Pattern-Key**: missing-sports-data
+**Recurrence-Count**: 5
+**Priority**: high
+**Status**: PENDING_REVIEW
+### Request
+The agent frequently encounters sports markets but lacks real-time sports data feeds.
+Current keyword matching produces low-confidence classifications for sports events.
+### Proposed Solution
+Add sports data integration (e.g., ESPN API, sports scores) to improve sports market classification.
+### Impact
+Improved classification accuracy for ~15% of tracked markets.
+```
+
+**Capability gap logging** follows a recurrence-based promotion model:
+1. When the agent encounters a capability it doesn't have (e.g., no data feed for a category, missing tool), it logs a `feature_request` category entry in `FEATURE_REQUESTS.md`
+2. Each occurrence increments `Recurrence-Count` for that pattern
+3. When `Recurrence-Count >= 3` across 2+ tasks within 30 days, the entry is promoted to `PENDING_REVIEW` status
+4. `PENDING_REVIEW` entries surface in heartbeat reviews for human evaluation
+5. Humans can approve (implement the feature), defer (lower priority), or reject (close the entry)
+
+**Key constraint**: Feature requests are NOT auto-implemented. They require explicit human approval, consistent with the project principle that the toolkit never decides strategy or scope without human direction.
 
 ### Error Logging
 
@@ -269,6 +304,15 @@ When `VOYAGE_API_KEY` is unset or the Voyage API is unreachable, or when ChromaD
 3. **Decision Embedding Queue**: Embedding generation is queued and retried on next heartbeat cycle. If the queue exceeds 24 hours, oldest embeddings are dropped.
 
 The system continues operating without semantic search — it is a performance enhancement, not a dependency.
+
+**Graceful degradation logging requirement**: All fallback paths MUST log at WARNING level when degrading. This includes:
+- Voyage API unavailable → log WARNING with `"voyage_status": "unavailable"` and which component degraded
+- ChromaDB unavailable → log WARNING with which semantic features are disabled
+- NewsAPI unavailable → log WARNING and continue with available sources
+- Twitter API key unset → log WARNING and return empty results (stub behavior)
+- Any external API failure → log WARNING with error details and which fallback path was taken
+
+This ensures that degraded operation is always visible in logs, enabling heartbeat reviews to detect persistent degradation patterns.
 
 ## Heartbeat System
 

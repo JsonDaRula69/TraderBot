@@ -135,6 +135,75 @@ For latency-sensitive prediction market trading:
 
 `news/classifier.py` — maps raw news items to Kalshi market categories.
 
+### MarketCategory Enum
+
+The `MarketCategory` enum defines the supported news classification categories, mapping directly to Kalshi's market categories:
+
+```python
+class MarketCategory(str, Enum):
+    ECONOMICS = "economics"
+    POLITICS = "politics"
+    WEATHER = "weather"
+    SPORTS = "sports"
+    CULTURE = "culture"
+    TECHNOLOGY = "technology"
+    SCIENCE = "science"
+```
+
+Each category has:
+- Associated keyword lists for initial classification
+- Category-specific risk parameters (e.g., sports markets have tighter spread thresholds)
+- Priority mapping for the impact assessor
+
+### CategoryAnalyzer Protocol
+
+Each category has a specialized analyzer implementing the `CategoryAnalyzer` Protocol:
+
+```python
+class CategoryAnalyzer(Protocol):
+    def analyze(self, text: str, source: SourceType) -> CategorySignals:
+        """Analyze text for category-specific signals."""
+        ...
+```
+
+`CategorySignals` model:
+
+```python
+class CategorySignals(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    category: MarketCategory
+    confidence: float              # 0-1 confidence in classification
+    subcategories: list[str]        # E.g., ["monetary_policy", "fed"] for ECONOMICS
+    relevant_tickers: list[str]    # Kalshi tickers this may affect
+    authority_score: float          # 0-1 domain authority of the source
+    evidence_quality: float        # 0-1 quality of evidence for this category
+```
+
+### AnalysisRegistry
+
+The `AnalysisRegistry` provides a central dispatch for category-specific analysis:
+
+```python
+class AnalysisRegistry:
+    def register(self, category: MarketCategory, analyzer: CategoryAnalyzer) -> None:
+        """Register an analyzer for a category."""
+        ...
+
+    def get(self, category: MarketCategory) -> CategoryAnalyzer | None:
+        """Get the analyzer for a category. Returns None if unregistered."""
+        ...
+
+    def analyze(self, text: str, source: SourceType) -> CategorySignals:
+        """Classify text, then dispatch to the appropriate category analyzer."""
+        ...
+```
+
+The registry pattern allows:
+- Adding new categories without modifying existing code
+- Per-category analyzers with specialized logic
+- Clean fallback: if no analyzer is registered for a category, keyword matching is used
+
 ### Kalshi Market Categories
 
 Kalshi organizes markets into broad categories:
@@ -259,6 +328,39 @@ class SentimentResult(BaseModel):
 ### The Problem
 
 Most news is irrelevant to any given prediction market. A celebrity divorce doesn't affect Fed rate probabilities. Without filtering, the agent gets overwhelmed with noise.
+
+### Domain Authority Scoring
+
+Each news source has a domain authority score per category. Higher authority means the source is more reliable for that category:
+
+| Source | ECONOMICS | POLITICS | WEATHER | SPORTS | CULTURE | TECHNOLOGY | SCIENCE |
+|---|---|---|---|---|---|---|---|
+| **Federal Reserve** | 1.0 | 0.7 | 0.1 | 0.0 | 0.0 | 0.3 | 0.1 |
+| **Reuters/Bloomberg** | 0.9 | 0.8 | 0.3 | 0.2 | 0.3 | 0.7 | 0.5 |
+| **NWS/NOAA** | 0.1 | 0.0 | 1.0 | 0.1 | 0.0 | 0.1 | 0.7 |
+| **ESPN** | 0.0 | 0.1 | 0.0 | 1.0 | 0.3 | 0.1 | 0.0 |
+| **arXiv/Nature** | 0.3 | 0.1 | 0.2 | 0.0 | 0.1 | 0.6 | 1.0 |
+| **General News (NewsAPI)** | 0.5 | 0.5 | 0.3 | 0.3 | 0.4 | 0.4 | 0.3 |
+| **Twitter/X** | 0.3 | 0.6 | 0.2 | 0.5 | 0.5 | 0.4 | 0.1 |
+| **Reddit** | 0.2 | 0.3 | 0.2 | 0.4 | 0.5 | 0.3 | 0.1 |
+
+Domain authority is used as a multiplier in the impact score formula. A Fed statement scored at 0.8 impact with 1.0 economics authority gets 0.8 × 1.0 = 0.8 net impact. A random tweet scored at 0.8 impact with 0.3 economics authority gets 0.8 × 0.3 = 0.24 net impact.
+
+### Evidence Quality Thresholds Per Category
+
+Categories require different evidence quality levels to produce actionable signals:
+
+| Category | Minimum Evidence Quality | Minimum Authority Score | Rationale |
+|---|---|---|---|
+| **ECONOMICS** | 0.7 | 0.5 | Economic decisions need strong evidence |
+| **POLITICS** | 0.6 | 0.5 | Political news is noisy; requires corroboration |
+| **WEATHER** | 0.5 | 0.3 | NWS forecasts are inherently reliable |
+| **SPORTS** | 0.55 | 0.3 | Wide variance in sports predictions |
+| **CULTURE** | 0.5 | 0.3 | Entertainment outcomes are hard to predict |
+| **TECHNOLOGY** | 0.7 | 0.4 | Tech markets require strong signal-to-noise ratio |
+| **SCIENCE** | 0.7 | 0.5 | Requires authoritative sources (peer-reviewed, institutional) |
+
+Items below the threshold are still logged (for completeness) but their impact scores are reduced proportionally.
 
 ### Impact Assessment Criteria
 

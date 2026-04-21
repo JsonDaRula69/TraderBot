@@ -97,6 +97,13 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Data loader | `simulation/data_loader.py` | Historical data fetch + cache |
 | Paper trader | `simulation/paper_trader.py` | Demo API execution |
 | Performance | `simulation/performance.py` | Strategy metrics and comparison |
+| **StrategyProfile** | `simulation/profiles.py` | Preset risk/signal profiles for multi-profile backtesting |
+| **Bootstrap command** | CLI (`traderbot bootstrap`) | Calibrates strategy parameters against historical data |
+
+**Key enhancements** (from production implementation analysis):
+- **StrategyProfile**: Predefined risk profiles (Conservative 0.5x, Moderate 1.0x, Aggressive 0.8x) that scale within HARD_LIMITS — never override. Multi-profile backtesting via `BacktestEngine.run_profiles()`.
+- **Bootstrap calibration**: Per-horizon calibration fits for strategy parameters, with warm-up period handling for indicators on insufficient data.
+- **Explicit formula**: `effective_limit = risk_multiplier * HARD_LIMITS[key]` — profiles scale limits, never exceed them.
 
 **Dependencies**: Phase 1 (historical data), Phase 2 (risk checks), Phase 4 (signals).
 **Version target**: v0.05.00
@@ -119,6 +126,12 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Vector store | `db/vectors.py` | ChromaDB interface for embedding storage and retrieval |
 | WAL protocol | (in Decision Loop) | Write-to-SESSION-STATE before executing |
 | Workspace files | `.openclaw/workspace/` | LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md |
+
+**Key enhancements**:
+- **FEATURE_REQUESTS.md flow**: Capability gap logging with recurrence-based promotion. Feature requests follow the same 3+ recurrence / 2+ tasks / 30-day window criteria as learnings, but are promoted to PENDING_REVIEW status (never auto-committed).
+- **Pattern staleness constraint**: `max_age_days=30` enforced in `db/learnings.py` — patterns older than 30 days from last recurrence are not eligible for promotion.
+- **PENDING_REVIEW promotion**: Learnings and feature requests are promoted to PENDING_REVIEW status, surfaced in heartbeat reviews, and require explicit human approval before any operating rule changes.
+- **Graceful degradation logging**: All fallback paths (Voyage, ChromaDB, news sources) MUST log WARNING-level messages when degrading.
 
 **Dependencies**: Phase 2 (audit trail), Phase 3 (CLI, DB).
 **Version target**: v0.06.00
@@ -145,6 +158,17 @@ Implementation phases, dependencies between them, success criteria, and future e
 | ChromaDB integration | `db/vectors.py` | Vector storage and similarity search for news embeddings |
 | Semantic classification | (in `news/classifier.py`) | Embedding-based category matching with `voyage-finance-2` |
 | Reranker fallback | `news/embeddings.py` | `rerank-2.5` for ambiguous classifications |
+| **MarketCategory enum** | `news/models.py` | Type-safe category enum (ECONOMICS, POLITICS, WEATHER, SPORTS, CULTURE, TECHNOLOGY, SCIENCE) |
+| **CategoryAnalyzer Protocol** | `news/classifier.py` | Per-category analysis protocol with `analyze` method and `CategorySignals` model |
+| **AnalysisRegistry** | `news/classifier.py` | Central dispatch for `register`, `get`, `analyze` — enables per-category specialized analyzers |
+| **Domain authority scoring** | `news/impact_assessor.py` | Per-news-source authority scores per category, used as impact multiplier |
+| **Evidence quality thresholds** | `news/impact_assessor.py` | Per-category minimum evidence quality thresholds (ECONOMICS: 0.7, SPORTS: 0.55, etc.) |
+
+**Key enhancements**:
+- **MarketCategory enum**: Replaces string-based category labels with type-safe enum for consistent classification.
+- **CategoryAnalyzer Protocol and AnalysisRegistry**: Enable per-category specialized analyzers. New categories can be added without modifying existing code. If no analyzer is registered, keyword matching is used as fallback.
+- **Domain authority scoring**: Each news source has an authority score per category (e.g., Federal Reserve has 1.0 for ECONOMICS, 0.1 for WEATHER). Authority is used as a multiplier in the impact score formula.
+- **Evidence quality thresholds**: Different categories require different evidence quality levels for actionable signals (ECONOMICS: 0.7, SPORTS: 0.55, WEATHER: 0.5, etc.).
 
 **Dependencies**: Phase 1 (market category mapping).
 **Version target**: v0.07.00
@@ -204,6 +228,19 @@ Each new market type follows the same adapter pattern: `client.py`, `models.py`,
 | **Decision log semantic search** | Natural language queries over decision history via `voyage-4-large` + ChromaDB | 6 |
 | **Multi-agent trading** | Multiple specialized agents (one per category) coordinating portfolio | Post-8 |
 | **Market making** | Provide liquidity for edge on bid-ask spread | Post-8 |
+
+### Future Data Sources (Phase 9+)
+
+These data sources are explicitly out of scope for Phases 5-8 but are documented for future reference:
+
+| Source | Categories | Tier | API Limits |
+|---|---|---|---|
+| **SharpAPI/BetStack** | Sports | Free tier available | ~17,000 req/day |
+| **FRED/BLS** | Economics | Free tier | ~2,000 req/day (FRED), ~50/day (BLS) |
+| **NWS/OpenWeatherMap** | Weather | Free tier | Unlimited (NWS), 1,000/day (OWM free) |
+| **Polymarket/Metaculus** | Politics | Free | REST API |
+
+These would enable richer classification and impact assessment for sports, economics, and weather categories beyond what NewsAPI + keyword matching provides today.
 
 ## Implementation Principles
 

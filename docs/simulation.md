@@ -170,6 +170,122 @@ When a strategy passes paper trading validation:
 
 `traderbot compare strategy_a strategy_b` runs both strategies on the same historical data and produces a side-by-side comparison across all metrics.
 
+## Strategy Profiles
+
+`simulation/profiles.py` — predefined strategy profiles for multi-profile backtesting and comparison.
+
+### StrategyProfile Model
+
+Each profile defines how a strategy scales risk limits and weights different signal sources:
+
+```python
+class StrategyProfile(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    name: str                          # Human-readable profile name
+    risk_multiplier: float             # Scales within HARD_LIMITS, never overrides
+    signal_weights: dict[str, float]   # Weights for signal sources (statistical, sentiment, etc.)
+    category_focus: list[str]           # Market categories this profile prioritizes
+    description: str                   # What this profile is designed for
+```
+
+**Critical constraint**: `risk_multiplier` NEVER overrides `HARD_LIMITS`. The effective limit for any risk parameter is:
+
+```
+effective_limit = risk_multiplier * HARD_LIMITS[key]
+```
+
+This ensures the Conservative profile cannot exceed 50% of hard limits, the Moderate profile stays within hard limits (1.0x), and the Aggressive profile operates at 80% of hard limits — never above.
+
+### Preset Profiles
+
+| Profile | `risk_multiplier` | Signal Weights | Category Focus | Purpose |
+|---|---|---|---|---|
+| **Conservative** | 0.5x | statistical: 0.8, sentiment: 0.2 | economics, politics | Capital preservation; minimizes losses |
+| **Moderate** | 1.0x | statistical: 0.5, sentiment: 0.5 | economics, politics, technology | Balanced approach; default profile |
+| **Aggressive** | 0.8x | statistical: 0.3, sentiment: 0.7 | all categories | Seeks higher returns; tolerates more volatility |
+
+- **Conservative (0.5x)**: Halves all position sizes relative to hard limits. Heavy statistical signal weight. Designed for capital preservation.
+- **Moderate (1.0x)**: Operates at full hard limits. Equal signal weighting. The default profile.
+- **Aggressive (0.8x)**: Caps at 80% of hard limits (not above — the multiplier reduces, never exceeds). Higher sentiment weight. Designed for higher returns at controlled risk.
+
+### Validation
+
+`StrategyProfile` validates that:
+- `risk_multiplier` is in range (0, 1.0] — never exceeds 1.0
+- `signal_weights` has at least one non-zero weight
+- All weight values are non-negative
+- `category_focus` is non-empty
+
+### Multi-Profile Backtesting
+
+`BacktestEngine.run_profiles()` runs the same historical data through multiple profiles simultaneously:
+
+```python
+def run_profiles(
+    self,
+    profiles: list[StrategyProfile],
+    start: date,
+    end: date,
+) -> dict[str, BacktestResult]:
+    """Run multiple profiles on same historical period for comparison."""
+```
+
+Results are keyed by profile name, enabling side-by-side comparison:
+- Win rate by profile
+- Sharpe ratio by profile
+- Maximum drawdown by profile
+- Fill rate by profile
+
+The `traderbot compare` CLI command uses `run_profiles()` to produce comparison output.
+
+## Bootstrap Calibration
+
+`traderbot bootstrap` — calibrates strategy parameters against historical data before live trading.
+
+### Purpose
+
+Before running a strategy with real parameters, bootstrap calibration:
+1. Validates that historical data is sufficient for reliable backtesting
+2. Fits calibration parameters (e.g., probability thresholds, signal weights) to historical outcomes
+3. Produces a calibration report showing fit quality
+
+### Bootstrap Command Spec
+
+```
+traderbot bootstrap [--from DATE] [--to DATE] [--profile NAME] [--db-path PATH]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from` | 30 days ago | Start of calibration window |
+| `--to` | today | End of calibration window |
+| `--profile` | Moderate | Profile to calibrate |
+| `--db-path` | `.traderbot/db.sqlite` | Path to SQLite database |
+
+### Output
+
+- Calibration report with fit quality per parameter
+- Recommended parameter values based on historical fit
+- Warnings if data is insufficient (< 30 days)
+- Warm-up period indicator for indicator stability
+
+### Warm-Up Period Handling
+
+Indicators (SMA, EMA, RSI, Bollinger) require sufficient data points before producing stable values. The bootstrap engine handles this:
+
+- For SMA/EMA: uses `min(period, len(prices))` windows for shorter lookback when data is insufficient
+- For RSI: skips the first `period` data points (warm-up)
+- Bootstrap logs a WARNING when using partial data (date range < 30 days)
+- Bootstrap never crashes on insufficient data — it proceeds with what's available and reports the date range used
+
+### Per-Horizon Calibration
+
+Inspired by production implementations (cf. MarketRegimeNet's temperature scaling):
+- Calibration fits are computed per time horizon (daily, weekly, monthly)
+- Each horizon gets independent fit parameters (Brier score, calibration slope)
+- Calibration parameters are stored in `SESSION-STATE.md` for the heartbeat loop to review
+
 ## Backtesting Limitations
 
 | Limitation | Impact | Mitigation |

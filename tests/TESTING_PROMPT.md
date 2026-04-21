@@ -997,3 +997,160 @@ Before completion, verify:
 - [ ] All modules have at least 80% test coverage
 - [ ] Bug class taxonomy is up to date
 - [ ] All commits tagged with version numbers
+
+---
+
+## §2.11: Phase 5 — Simulation Test Patterns
+
+### Backtesting Tests
+
+- Verify `BacktestEngine.run()` replays events chronologically (monotonically non-decreasing timestamps)
+- Verify no look-ahead bias: strategy never receives `Market.settled_price` before market `close_time`
+- Verify risk limits are enforced during backtesting: oversize positions rejected, audit trail shows rejection reason
+- Verify `BacktestResult` returns `None` for `win_rate`, `sharpe_ratio`, `brier_score`, `edge_capture` when `trade_count == 0` (no division by zero)
+- Verify slippage model uses worst-case fill within spread
+- Verify `DataLoader` caches results in SQLite and reuses cache on second call
+- Verify `DataLoader` quality checks flag low-liquidity markets and incomplete trade data
+
+### Paper Trading Tests
+
+- Verify `PaperTrader` composes with `DemoAdapter` (imports it, does not redefine it)
+- Verify `PaperTrader` places orders against demo API, tracks fills and P&L in cents (int)
+- Verify `PaperTrader` handles `DemoAdapter` failures gracefully (logs error, holds position, does NOT crash)
+- Verify paper positions are stored separately from live positions in `db/positions`
+
+### StrategyProfile Tests
+
+- Verify `StrategyProfile` model validates `risk_multiplier` in range (0, 1.0]
+- Verify `StrategyProfile` rejects zero or negative `signal_weights`
+- Verify `StrategyProfile` validates at least one non-zero weight in `signal_weights`
+- Verify preset profiles (Conservative 0.5x, Moderate 1.0x, Aggressive 0.8x) produce expected `effective_limit` values
+- Verify `effective_limit = risk_multiplier * HARD_LIMITS[key]` never exceeds `HARD_LIMITS[key]`
+- Verify `BacktestEngine.run_profiles()` produces separate results for each profile
+- Verify `compare` CLI shows side-by-side metrics for multiple profiles
+
+### Bootstrap Tests
+
+- Verify `traderbot bootstrap` produces calibration report with per-horizon fit parameters
+- Verify warm-up period handling: SMA/EMA/RSI use `min(period, len(prices))` for shorter lookback on insufficient data
+- Verify insufficient data (< 30 days): proceeds with partial data and logs WARNING with date range used
+- Verify bootstrap never crashes on empty or sparse data (returns warning, partial results)
+
+---
+
+## §2.12: Phase 6 — Self-Learning Test Patterns
+
+### Learnings DB Tests
+
+- Verify `db/learnings.py` tracks pattern entries with `Pattern-Key`, `Recurrence-Count`, `Priority`, `Status`, `Category`
+- Verify pattern staleness: entries with `max_age_days > 30` from last recurrence are NOT eligible for promotion
+- Verify `max_age_days=30` constraint cannot be overridden at runtime
+- Verify pattern promotion requires `Recurrence-Count >= 3` across 2+ tasks within 30-day window
+
+### WAL Protocol Tests
+
+- Verify trade decisions are written to `SESSION-STATE.md` BEFORE execution
+- Verify WAL entries contain: action, reason, signal, risk params, confidence, status
+- Verify concurrent write attempts log ERROR and reject (single-agent constraint)
+- Verify crash recovery: on restart, `SESSION-STATE.md` pending actions are reconciled with actual positions
+
+### Feature Request Tests
+
+- Verify `FEATURE_REQUESTS.md` entries use `feature_request` category
+- Verify feature request entries have `Recurrence-Count` that increments per occurrence
+- Verify promotion to `PENDING_REVIEW` status when recurrence criteria met
+- Verify `PENDING_REVIEW` entries are NOT auto-implemented — they require human approval
+- Verify feature requests follow same staleness constraint (`max_age_days=30`)
+
+### Degradation Logging Tests
+
+- Verify all fallback paths log WARNING when degrading:
+  - Voyage API unavailable: log WARNING with `"voyage_status": "unavailable"` and component name
+  - ChromaDB unavailable: log WARNING with which semantic features are disabled
+  - NewsAPI unavailable: log WARNING and continue with available sources
+  - Twitter API key unset: log WARNING and return empty results (stub)
+- Verify degradation warnings are visible in heartbeat review logs
+
+---
+
+## §2.13: Phase 7 — News/Sentiment Test Patterns
+
+### Source Aggregation Tests
+
+- Verify `news/sources.py` aggregates from NewsAPI, Twitter, Reddit with unified interface
+- Verify each source degrades gracefully when API key is unset (WARNING logged)
+- Verify Twitter stub returns empty list with WARNING when `TWITTER_API_KEY` is unset (no OAuth flow attempted)
+- Verify source priority: Twitter (fastest) → NewsAPI → Reddit (deepest)
+
+### Classifier Tests
+
+- Verify `MarketCategory` enum covers: ECONOMICS, POLITICS, WEATHER, SPORTS, CULTURE, TECHNOLOGY, SCIENCE
+- Verify `CategoryAnalyzer` Protocol requires `analyze` method returning `CategorySignals`
+- Verify `AnalysisRegistry.register()` adds per-category analyzers
+- Verify `AnalysisRegistry.get()` returns `None` for unregistered categories
+- Verify `AnalysisRegistry.analyze()` dispatches to appropriate `CategoryAnalyzer` based on classification
+- Verify fallback to keyword matching when no analyzer registered for a category
+
+### Sentiment Scoring Tests
+
+- Verify VADER scores complete in <10ms per text
+- Verify TextBlob used for longer-form content (articles)
+- Verify Voyage uplift only invoked for VADER compound in [-0.3, +0.3] range
+- Verify `SentimentResult` model has: `compound`, `category`, `confidence`, `relevant_tickers`
+- Verify slow path (Voyage) is non-blocking — fast path returns immediately, Voyage updates asynchronously
+
+### Impact Assessment Tests
+
+- Verify domain authority scoring multiplies impact by source authority per category
+- Verify evidence quality thresholds per category:
+  - ECONOMICS: min evidence quality 0.7, min authority 0.5
+  - POLITICS: min evidence quality 0.6, min authority 0.5
+  - WEATHER: min evidence quality 0.5, min authority 0.3
+  - SPORTS: min evidence quality 0.55, min authority 0.3
+  - TECHNOLOGY: min evidence quality 0.7, min authority 0.4
+  - SCIENCE: min evidence quality 0.7, min authority 0.5
+- Verify items below threshold have proportionally reduced impact scores (still logged)
+- Verify corroboration boost: 1.3× multiplier when multiple independent sources report same event (capped at 1.0)
+
+---
+
+## §2.14: Phase 8 — Adaptation Test Patterns
+
+### Bayesian Update Tests
+
+- Verify `simulation/adaptation.py` produces mathematically correct posterior distributions
+- Verify conjugate prior updates for Beta, Dirichlet, Normal distributions
+- Verify parameter bounds: no parameter moves more than 20% in a single update
+- Verify minimum sample: no update with fewer than 10 observations
+- Verify cooldown: no more than 4 updates per 24 hours
+- Verify reset trigger: posterior distribution variance < 0.01 resets to weak prior
+- Verify human review flag: any parameter moving >10% for 3 consecutive updates triggers alert
+
+### Guardrails Tests
+
+- Verify adaptation guardrails prevent pathological behavior:
+  - Wild parameter swings from small sample sizes (bounded by 20% rule)
+  - Over-fitting to recent data (minimum 10 observations, cooldown)
+  - False convergence (variance reset trigger)
+- Verify all monetary values in adaptation are `int` cents
+- Verify all Pydantic models use `ConfigDict(strict=True, extra="forbid")`
+
+### Heartbeat Tests
+
+- Verify `traderbot heartbeat` runs the 6-hour self-review cycle:
+  1. Performance review (win rate, Sharpe, drawdown)
+  2. Decision review (predicted vs. actual outcomes)
+  3. Bayesian adaptation (parameter updates)
+  4. Learning promotion (recurrence check with staleness constraint)
+  5. Capability gap detection (scan FEATURE_REQUESTS.md)
+  6. Circuit breaker check
+  7. Update HEARTBEAT.md
+- Verify heartbeat logs all parameter changes with reasoning
+- Verify heartbeat promotes learnings to `PENDING_REVIEW` (not auto-committed to AGENTS.md)
+
+### Cron Architecture Tests
+
+- Verify three-loop cron definitions: Decision Loop (5 min), Heartbeat Loop (6 hr), News Loop (event-driven)
+- Verify `isolated agentTurn` for Decision and Heartbeat loops (no human attention needed)
+- Verify `systemEvent` for News Loop (surfaces actionable events to main session)
+- Verify WAL entry recovery on cron restart
