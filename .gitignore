@@ -42,4 +42,10 @@ credentials.json
 .openclaw/workspace/.learnings/
 
 # Logs
-*.log.coverage
+*.log
+
+# Coverage
+.coverage
+
+# Sisyphus agent state
+.sisyphus/.coverage
