@@ -31,27 +31,36 @@ from traderbot.analysis.portfolio import (
     sharpe_ratio,
     win_rate,
 )
+from traderbot.analysis.signals import (
+    CombinedSignal,
+    SignalSource,
+    combine_signals,
+    default_weights,
+    generate_signal,
+)
 
 __all__ = [
-    # indicators
     "BollingerBands",
-    # odds
+    "CombinedSignal",
     "EdgeEstimate",
     "ImpliedProb",
     "IndicatorResult",
     "KellyInputs",
     "MovingAverageResult",
-    # portfolio
     "PortfolioMetrics",
+    "SignalSource",
     "bollinger_bands",
     "brier_score",
     "calibration_curve",
     "calmar_ratio",
+    "combine_signals",
     "compute_kelly_inputs",
+    "default_weights",
     "detect_edge",
     "edge_realization",
     "ema",
     "expected_value",
+    "generate_signal",
     "implied_probability",
     "max_drawdown",
     "rsi",

@@ -108,6 +108,30 @@ def analyze(
     console.print(f"State: {market.state}  Volume: {market.volume}  OI: {market.open_interest}")
     console.print(f"YES bids: {len(orderbook.yes_bids)}  NO bids: {len(orderbook.no_bids)}")
 
+    from traderbot.analysis.odds import implied_probability
+
+    prob = implied_probability(orderbook)
+    console.print("\n[bold]Analysis[/bold]")
+    console.print(f"  Implied YES prob: {prob.yes_prob:.2%}")
+    console.print(f"  Implied NO prob:  {prob.no_prob:.2%}")
+    console.print(f"  Spread:           {prob.spread_cents}¢")
+    console.print(f"  Mid price:        {prob.mid_price_cents}¢")
+
+
+@app.command()
+def signals(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+) -> None:
+    """Show active signals across tracked markets. (Phase 4)"""
+    if json_output:
+        json_lib.dump(
+            {"note": "Signal generation requires tracked markets and price data"}, sys.stdout
+        )
+        return
+    Console().print("Signal generation requires tracked markets with price data.")
+
 
 @app.command()
 def trade(
