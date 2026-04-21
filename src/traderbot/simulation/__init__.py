@@ -1,5 +1,13 @@
 """Simulation engine — backtesting, paper trading, and performance metrics."""
 
+from traderbot.simulation.adaptation import (
+    AdaptationConfig,
+    AdaptationResult,
+    MarketCategory,
+    Posterior,
+    Prior,
+    StrategyAdjustment,
+)
 from traderbot.simulation.data_loader import DataLoader, DataQualityReport, QualityFlag
 from traderbot.simulation.engine import (
     BacktestEngine,
@@ -44,25 +52,31 @@ from traderbot.simulation.profiles import (
 
 __all__ = [
     "AGGRESSIVE",
+    "CONSERVATIVE",
+    "MODERATE",
+    "PRESETS",
+    "AdaptationConfig",
+    "AdaptationResult",
     "BacktestEngine",
     "BacktestResult",
     "BacktestTrade",
-    "CONSERVATIVE",
     "Context",
     "DataLoader",
     "DataQualityReport",
-    "MODERATE",
+    "MarketCategory",
     "MultiStrategyComparison",
     "PaperFill",
     "PaperPortfolio",
     "PaperPosition",
     "PaperSlippageModel",
     "PaperTrader",
-    "PRESETS",
+    "Posterior",
+    "Prior",
     "QualityFlag",
     "Signal",
     "SlippageModel",
     "Strategy",
+    "StrategyAdjustment",
     "StrategyComparison",
     "StrategyProfile",
     "compare_profiles",
