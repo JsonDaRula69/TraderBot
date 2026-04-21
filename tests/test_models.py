@@ -62,7 +62,7 @@ class TestOrderBookLevel:
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
-            OrderBookLevel(price=10, size=5, extra=1)  # type: ignore[call-arg]
+            OrderBookLevel(price=10, size=5, extra=1)
 
     def test_roundtrip(self) -> None:
         level = OrderBookLevel(price=64, size=100)
@@ -189,7 +189,7 @@ class TestOrderBook:
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
-            OrderBook(yes_bids=[], no_bids=[], extra=True)  # type: ignore[call-arg]
+            OrderBook(yes_bids=[], no_bids=[], extra=True)
 
 
 class TestTrade:
@@ -329,7 +329,7 @@ class TestPosition:
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
-            Position(ticker="KX-TEST", quantity=10, avg_price=55, extra=True)  # type: ignore[call-arg]
+            Position(ticker="KX-TEST", quantity=10, avg_price=55, extra=True)
 
     def test_roundtrip(self) -> None:
         p = Position(ticker="KX-TEST", quantity=10, avg_price=55)
@@ -628,7 +628,7 @@ class TestCutoffTimestamps:
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
-            CutoffTimestamps(extra=True)  # type: ignore[call-arg]
+            CutoffTimestamps(extra=True)
 
     def test_roundtrip(self) -> None:
         c = CutoffTimestamps(market_settled_ts=_ts())
