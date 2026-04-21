@@ -160,9 +160,9 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.04.01 |
-| Total tests | 390 |
-| Coverage | ~97% |
+| Version | 0.04.03 |
+| Total tests | 413 |
+| Coverage | 98% |
 | Ruff errors | 0 |
 | Pydantic models | 23+ (all strict=True, extra=forbid) |
 | Risk module lines | 198 |
