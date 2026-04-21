@@ -1,7 +1,7 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.00.08 (2026-04-21)
-**Current focus**: Phase 3 — CLI & OpenClaw Skill
+**Last updated**: v0.04.01 (2026-04-21)
+**Current focus**: Phase 5 — Simulation Engine
 
 ---
 
@@ -22,8 +22,8 @@
 **Success criteria met**:
 - [x] All API responses parsed into validated Pydantic models
 - [x] Demo mode works against demo-api.kalshi.co
-- [ ] `traderbot scan` returns open markets (CLI not wired yet)
-- [ ] `traderbot analyze <ticker>` returns details + orderbook (CLI not wired yet)
+- [x] `traderbot scan` returns open markets (CLI wired in Phase 3)
+- [x] `traderbot analyze <ticker>` returns details + orderbook + indicators (CLI wired in Phase 4)
 - [ ] WebSocket maintains persistent connection (tested with mocks only)
 
 ---
@@ -49,31 +49,44 @@
 
 ---
 
-## Phase 3: CLI & OpenClaw Skill — 🔲 NOT STARTED
+## Phase 3: CLI & OpenClaw Skill — ✅ COMPLETE
 
 | Component | File | Status | Notes |
 |---|---|---|---|
-| CLI entry point | `cli.py` | 🔲 Pending | argparse/typer CLI for all commands |
-| Skill definition | `skills/traderbot/SKILL.md` | 🔲 Pending | OpenClaw skill with commands, triggers, env |
-| Workspace setup | `.openclaw/workspace/` | 🔲 Pending | AGENTS.md, SESSION-STATE.md, HEARTBEAT.md templates |
-| DB positions | `db/positions.py` | 🔲 Pending | SQLite position tracking |
-| DB decisions | `db/decisions.py` | 🔲 Pending | SQLite decision audit |
+| CLI entry point | `cli.py` | ✅ Done | Typer CLI with 14 commands, --json flag, Rich output |
+| Skill definition | `skills/traderbot/SKILL.md` | ✅ Done | OpenClaw skill with commands, triggers, cron architecture |
+| Workspace setup | `.openclaw/workspace/` | ✅ Done | AGENTS.md, SESSION-STATE.md, HEARTBEAT.md, USER.md, .learnings/ |
+| DB positions | `db/positions.py` | ✅ Done | SQLite position tracking with upsert/query |
+| DB decisions | `db/decisions.py` | ✅ Done | SQLite decision audit with filtering |
 
-**Version target**: v0.03.00
-**Dependencies**: Phase 1, Phase 2
+**Version**: v0.03.xx | **Tests**: 21 CLI tests passing
+
+**Success criteria met**:
+- [x] `traderbot scan`, `traderbot analyze`, `traderbot positions` work from CLI
+- [x] `traderbot trade` places orders through risk checks
+- [x] OpenClaw skill definition with commands, triggers, env requirements
+- [x] Position state persists across CLI invocations (SQLite)
+- [x] `traderbot audit` shows full decision history with filters
 
 ---
 
-## Phase 4: Analysis Engine — 🔲 NOT STARTED
+## Phase 4: Analysis Engine — ✅ COMPLETE
 
-| Component | File | Status |
-|---|---|---|
-| Indicators | `analysis/indicators.py` | 🔲 Pending |
-| Probability/edge | `analysis/odds.py` | 🔲 Pending |
-| Portfolio analytics | `analysis/portfolio.py` | 🔲 Pending |
-| Signal combining | `analysis/signals.py` | 🔲 Pending |
+| Component | File | Status | Notes |
+|---|---|---|---|
+| Indicators | `analysis/indicators.py` | ✅ Done | sma, ema, rsi, bollinger_bands, volume_weighted_price |
+| Probability/edge | `analysis/odds.py` | ✅ Done | implied_probability, detect_edge, compute_kelly_inputs, expected_value |
+| Portfolio analytics | `analysis/portfolio.py` | ✅ Done | win_rate, brier_score, calibration_curve, sharpe_ratio, max_drawdown, calmar_ratio, edge_realization |
+| Signal combining | `analysis/signals.py` | ✅ Done | combine_signals, generate_signal, default_weights |
+| CLI integration | `cli.py` | ✅ Done | analyze shows implied prob/spread; signals command added |
 
-**Version target**: v0.04.00 | **Dependencies**: Phase 1
+**Version**: v0.04.xx | **Tests**: 77 analysis tests + 21 CLI tests passing
+
+**Success criteria met**:
+- [x] `traderbot analyze <ticker>` returns statistical indicators and edge estimate
+- [x] `traderbot signals` command available (requires tracked markets)
+- [x] Brier score computed for historical prediction accuracy
+- [x] Indicators work correctly for binary/fixed-expiry instruments
 
 ---
 
@@ -94,10 +107,10 @@
 
 | Component | File | Status |
 |---|---|---|
-| Decision DB | `db/decisions.py` | 🔲 Pending |
+| Decision DB | `db/decisions.py` | ✅ Done (in Phase 3) |
 | Learnings | `db/learnings.py` | 🔲 Pending |
 | WAL protocol | (in Decision Loop) | 🔲 Pending |
-| Workspace files | `.openclaw/workspace/` | 🔲 Pending |
+| Workspace files | `.openclaw/workspace/` | ✅ Done (in Phase 3) |
 
 **Version target**: v0.06.00 | **Dependencies**: Phase 2, 3
 
@@ -147,10 +160,12 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.00.08 |
-| Total tests | 270 |
-| Coverage | 97% |
+| Version | 0.04.01 |
+| Total tests | 390 |
+| Coverage | ~97% |
 | Ruff errors | 0 |
-| Pydantic models | 17 (all strict=True, extra=forbid) |
+| Pydantic models | 23+ (all strict=True, extra=forbid) |
 | Risk module lines | 198 |
 | Kalshi module lines | 463 |
+| Analysis module lines | ~400 |
+| CLI commands | 14 |
