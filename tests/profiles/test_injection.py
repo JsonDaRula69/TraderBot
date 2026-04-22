@@ -10,7 +10,7 @@ import pytest
 
 from traderbot.profiles.injection import (
     get_token_from_tools,
-    inject_token_into_tools,
+    inject_token,
     remove_token_from_tools,
 )
 
@@ -85,7 +85,7 @@ More content here.
 def test_inject_token_into_existing_env_section(tools_with_env_section: Path) -> None:
     """Inject token into TOOLS.md with existing environment variables section"""
     token = "test-token-12345"
-    inject_token_into_tools(str(tools_with_env_section), token)
+    inject_token(str(tools_with_env_section), token)
 
     tools_path = tools_with_env_section / "TOOLS.md"
     content = tools_path.read_text()
@@ -100,7 +100,7 @@ def test_inject_token_into_existing_env_section(tools_with_env_section: Path) ->
 def test_inject_token_creates_env_section(tools_without_env_section: Path) -> None:
     """Inject token into TOOLS.md without environment variables section"""
     token = "test-token-67890"
-    inject_token_into_tools(str(tools_without_env_section), token)
+    inject_token(str(tools_without_env_section), token)
 
     tools_path = tools_without_env_section / "TOOLS.md"
     content = tools_path.read_text()
@@ -132,7 +132,7 @@ def test_get_token_from_tools_returns_token(tools_with_token: Path) -> None:
     """Get token from TOOLS.md returns correct token"""
     # First inject a known token
     token = "known-token-abc123"
-    inject_token_into_tools(str(tools_with_token), token)
+    inject_token(str(tools_with_token), token)
 
     # Then retrieve it
     retrieved_token = get_token_from_tools(str(tools_with_token))
@@ -151,13 +151,13 @@ def test_inject_token_twice_is_idempotent(tools_with_env_section: Path) -> None:
     second_token = "second-token-222"
 
     # Inject first token
-    inject_token_into_tools(str(tools_with_env_section), first_token)
+    inject_token(str(tools_with_env_section), first_token)
     tools_path = tools_with_env_section / "TOOLS.md"
     content_after_first = tools_path.read_text()
     assert f"TRADERBOT_PROFILE_TOKEN={first_token}" in content_after_first
 
     # Inject second token
-    inject_token_into_tools(str(tools_with_env_section), second_token)
+    inject_token(str(tools_with_env_section), second_token)
     content_after_second = tools_path.read_text()
 
     # Second token should replace first
@@ -170,7 +170,7 @@ def test_inject_token_twice_is_idempotent(tools_with_env_section: Path) -> None:
 def test_inject_token_creates_tools_md_if_missing(temp_agent_dir: Path) -> None:
     """Inject token creates TOOLS.md if it doesn't exist"""
     token = "new-token-999"
-    inject_token_into_tools(str(temp_agent_dir), token)
+    inject_token(str(temp_agent_dir), token)
 
     tools_path = temp_agent_dir / "TOOLS.md"
     assert tools_path.exists()
@@ -183,7 +183,7 @@ def test_inject_token_creates_tools_md_if_missing(temp_agent_dir: Path) -> None:
 def test_inject_token_nonexistent_directory_raises_error() -> None:
     """Inject token into nonexistent directory raises FileNotFoundError"""
     with pytest.raises(FileNotFoundError):
-        inject_token_into_tools("/nonexistent/path", "token")
+        inject_token("/nonexistent/path", "token")
 
 
 def test_remove_token_from_nonexistent_tools_is_noop(temp_agent_dir: Path) -> None:

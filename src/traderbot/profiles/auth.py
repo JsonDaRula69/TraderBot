@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 _KEYRING_SERVICE_PREFIX = "traderbot.profiles."
 
 
-class ProfileAuthManager:
-    """Manage per-profile credentials via OS keyring.
+class ProfileAuthStore:
+    """Per-profile credential store via OS keyring.
     
     Each profile has isolated credential storage under:
     traderbot.profiles.{profile_name}.{service}
     """
 
     def __init__(self, profile: TradingProfile, keyring_module: Any = None) -> None:
-        """Initialize auth manager for a specific profile.
+        """Initialize auth store for a specific profile.
         
         Args:
             profile: TradingProfile to manage credentials for

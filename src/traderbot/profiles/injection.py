@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 
-def inject_token_into_tools(agent_path: str, token: str) -> None:
+def inject_token(agent_path: str, token: str) -> None:
     """Inject profile token into agent's TOOLS.md file
     
     Args:

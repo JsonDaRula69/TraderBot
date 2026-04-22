@@ -10,7 +10,7 @@ from pydantic import SecretStr
 
 from traderbot.kalshi.client import KalshiClient, KalshiConfig
 from traderbot.kalshi.models import MarketCategory
-from traderbot.profiles.auth import ProfileAuthManager
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.registry import ProfileRegistry
 from traderbot.profiles.runtime import get_current_profile
@@ -106,7 +106,7 @@ def test_kalshi_client_with_profile_uses_profile_credentials(mock_keyring, paper
     set_keyring(mock_keyring)
     
     # Store profile-specific credentials
-    auth_mgr = ProfileAuthManager(paper_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(paper_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "profile-key", "profile-secret")
     
     # Create KalshiClient with profile
@@ -153,7 +153,7 @@ def test_profile_with_demo_mode_true_creates_demo_client(mock_keyring, paper_pro
     set_keyring(mock_keyring)
     
     # Store credentials
-    auth_mgr = ProfileAuthManager(paper_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(paper_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "demo-key", "demo-secret")
     
     # Verify profile is in demo mode
@@ -177,7 +177,7 @@ def test_profile_with_demo_mode_false_creates_live_client(mock_keyring, live_pro
     set_keyring(mock_keyring)
     
     # Store credentials
-    auth_mgr = ProfileAuthManager(live_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(live_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "live-key", "live-secret")
     
     # Verify profile is in live mode
@@ -203,10 +203,10 @@ def test_multiple_profiles_with_different_credentials(
     set_keyring(mock_keyring)
     
     # Store different credentials for each profile
-    paper_auth = ProfileAuthManager(paper_profile, keyring_module=mock_keyring)
+    paper_auth = ProfileAuthStore(paper_profile, keyring_module=mock_keyring)
     paper_auth.set_credentials("kalshi", "paper-key", "paper-secret")
     
-    live_auth = ProfileAuthManager(live_profile, keyring_module=mock_keyring)
+    live_auth = ProfileAuthStore(live_profile, keyring_module=mock_keyring)
     live_auth.set_credentials("kalshi", "live-key", "live-secret")
     
     # Verify each profile has its own credentials
