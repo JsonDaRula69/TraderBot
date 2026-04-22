@@ -585,18 +585,328 @@ def halt(
 
 @app.command()
 def news(
+    category: Annotated[
+        str | None,
+        typer.Option("--category", help="Filter by category: Economics, Politics, Weather, Culture, Tech, Science"),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
+    source: Annotated[
+        str | None,
+        typer.Option("--source", help="Filter by source: newsapi, twitter, reddit"),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Fetch and display news for tracked markets. (Phase 7)"""
-    Console().print("Not yet implemented \u2014 coming in Phase 7.")
+    """Fetch and display news for tracked markets."""
+    from traderbot.news.classifier import NewsClassifier
+    from traderbot.news.models import NewsCategory, NewsItem as ModelsNewsItem, NewsSource as ModelsNewsSource
+    from traderbot.news.sentiment_scorer import SentimentScorer
+    from traderbot.news.sources import NewsAggregator, NewsSource as SourcesNewsSource
+
+    console = Console()
+
+    # Validate --category
+    category_enum: NewsCategory | None = None
+    if category is not None:
+        try:
+            category_enum = NewsCategory(category)
+        except ValueError:
+            valid = ", ".join(c.value for c in NewsCategory)
+            if json_output:
+                json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
+            else:
+                err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
+            raise typer.Exit(code=1)
+
+    # Validate --source
+    source_filter: SourcesNewsSource | None = None
+    if source is not None:
+        try:
+            source_filter = SourcesNewsSource(source.lower())
+        except ValueError:
+            valid = ", ".join(s.value for s in SourcesNewsSource)
+            if json_output:
+                json_lib.dump({"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout)
+            else:
+                err_console.print(f"[red]Invalid source:[/red] {source}. Valid: {valid}")
+            raise typer.Exit(code=1)
+
+    # Get API keys from environment
+    import os
+
+    newsapi_key = os.environ.get("NEWSAPI_KEY")
+    twitter_key = os.environ.get("TWITTER_API_KEY")
+
+    if not newsapi_key and not twitter_key:
+        if json_output:
+            json_lib.dump({"error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables."}, sys.stdout)
+        else:
+            console.print("[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables.")
+            console.print("Reddit RSS feeds work without keys — try [cyan]--source reddit[/cyan].")
+        return
+
+    # Map source filter for aggregator
+    source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
+        SourcesNewsSource.NEWSAPI: ModelsNewsSource.NEWSAPI,
+        SourcesNewsSource.TWITTER: ModelsNewsSource.TWITTER,
+        SourcesNewsSource.REDDIT: ModelsNewsSource.REDDIT,
+    }
+
+    async def _fetch() -> list[ModelsNewsItem]:
+        async with NewsAggregator(newsapi_key=newsapi_key, twitter_api_key=twitter_key) as aggregator:
+            if source_filter is not None:
+                raw_items = await aggregator.fetch_recent(source_filter, limit=limit)
+            else:
+                raw_items = await aggregator.fetch_all(limit=limit)
+
+        # Convert sources.NewsItem → models.NewsItem
+        models_items: list[ModelsNewsItem] = []
+        for item in raw_items:
+            try:
+                models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
+                try:
+                    cat = NewsCategory(item.category)
+                except ValueError:
+                    cat = NewsCategory.ECONOMICS
+                models_items.append(ModelsNewsItem(
+                    id=item.id,
+                    title=item.title,
+                    body=item.body,
+                    source=models_source,
+                    url=item.url,
+                    published_at=item.published_at,
+                    ticker_refs=item.ticker_refs,
+                    category=cat,
+                ))
+            except Exception:
+                continue
+        return models_items
+
+    try:
+        items = asyncio.run(_fetch())
+    except Exception:
+        if json_output:
+            json_lib.dump([], sys.stdout)
+        else:
+            console.print("[red]Failed to fetch news.[/red]")
+        return
+
+    # Classify items
+    classifier = NewsClassifier()
+    scorer = SentimentScorer()
+    classified_items: list[dict] = []
+    for item in items:
+        classified = classifier.classify(item)
+        # Filter by category if specified
+        if category_enum is not None and classified.category != category_enum:
+            continue
+        sentiment = scorer.score(item.title, item.source, item.id)
+        classified_items.append({
+            "classified": classified,
+            "sentiment": sentiment,
+        })
+
+    if json_output:
+        output = []
+        for entry in classified_items:
+            c = entry["classified"]
+            s = entry["sentiment"]
+            item = c.news_item
+            output.append({
+                "id": item.id,
+                "title": item.title,
+                "source": item.source.value,
+                "category": c.category.value,
+                "published_at": item.published_at.isoformat(),
+                "sentiment_score": s.score,
+                "sentiment_confidence": s.confidence,
+                "sentiment_model": s.model,
+                "url": item.url,
+                "ticker_refs": item.ticker_refs,
+            })
+        json_lib.dump(output, sys.stdout, default=str)
+        return
+
+    if not classified_items:
+        console.print("No news items found.")
+        return
+
+    table = Table(title="News Feed")
+    table.add_column("Title", style="white", max_width=50)
+    table.add_column("Source", style="cyan")
+    table.add_column("Category", style="green")
+    table.add_column("Published", style="dim")
+    table.add_column("Sentiment", justify="right")
+
+    for entry in classified_items:
+        c = entry["classified"]
+        s = entry["sentiment"]
+        item = c.news_item
+        title = item.title[:50] + "\u2026" if len(item.title) > 50 else item.title
+        published = item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "\u2014"
+        score_str = f"{s.score:+.2f}"
+        table.add_row(title, item.source.value, c.category.value, published, score_str)
+    console.print(table)
 
 
 @app.command()
 def sentiment(
+    ticker: Annotated[str, typer.Argument(help="Ticker symbol (e.g. BTC, SPX)")],
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Analyze market sentiment from news and social. (Phase 7)"""
-    Console().print("Not yet implemented \u2014 coming in Phase 7.")
+    """Analyze market sentiment from news and social for a ticker."""
+    from traderbot.news.classifier import NewsClassifier
+    from traderbot.news.impact_assessor import ImpactAssessor
+    from traderbot.news.models import NewsCategory, NewsItem as ModelsNewsItem, NewsSource as ModelsNewsSource
+    from traderbot.news.sentiment_scorer import SentimentScorer
+    from traderbot.news.sources import NewsAggregator, NewsSource as SourcesNewsSource
+
+    console = Console()
+
+    import os
+
+    newsapi_key = os.environ.get("NEWSAPI_KEY")
+    twitter_key = os.environ.get("TWITTER_API_KEY")
+
+    source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
+        SourcesNewsSource.NEWSAPI: ModelsNewsSource.NEWSAPI,
+        SourcesNewsSource.TWITTER: ModelsNewsSource.TWITTER,
+        SourcesNewsSource.REDDIT: ModelsNewsSource.REDDIT,
+    }
+
+    async def _fetch() -> list[ModelsNewsItem]:
+        async with NewsAggregator(newsapi_key=newsapi_key, twitter_api_key=twitter_key) as aggregator:
+            raw_items = await aggregator.fetch_all(limit=50)
+
+        models_items: list[ModelsNewsItem] = []
+        for item in raw_items:
+            try:
+                models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
+                try:
+                    cat = NewsCategory(item.category)
+                except ValueError:
+                    cat = NewsCategory.ECONOMICS
+                models_items.append(ModelsNewsItem(
+                    id=item.id,
+                    title=item.title,
+                    body=item.body,
+                    source=models_source,
+                    url=item.url,
+                    published_at=item.published_at,
+                    ticker_refs=item.ticker_refs,
+                    category=cat,
+                ))
+            except Exception:
+                continue
+        return models_items
+
+    try:
+        items = asyncio.run(_fetch())
+    except Exception:
+        if json_output:
+            json_lib.dump({"error": "Failed to fetch news"}, sys.stdout)
+        else:
+            console.print("[red]Failed to fetch news.[/red]")
+        return
+
+    # Filter items that reference the ticker (case-insensitive)
+    ticker_upper = ticker.upper()
+    ticker_refs_items = [
+        item for item in items
+        if any(t.upper() == ticker_upper for t in item.ticker_refs) or ticker_upper in item.title.upper()
+    ]
+
+    if not ticker_refs_items and not items:
+        if json_output:
+            json_lib.dump({"ticker": ticker_upper, "error": "No news found"}, sys.stdout)
+        else:
+            console.print(f"[yellow]No news found for [/yellow]{ticker_upper}[yellow]. Check API keys.[/yellow]")
+        return
+
+    # Fall back to all items if none have ticker refs
+    items_to_analyze = ticker_refs_items if ticker_refs_items else items[:10]
+
+    classifier = NewsClassifier()
+    scorer = SentimentScorer()
+    assessor = ImpactAssessor()
+
+    results: list[dict] = []
+    for item in items_to_analyze:
+        classified = classifier.classify(item)
+        sentiment = scorer.score(item.title, item.source, item.id)
+        impact = assessor.assess(item, classified, sentiment)
+        results.append({
+            "classified": classified,
+            "sentiment": sentiment,
+            "impact": impact,
+        })
+
+    if not results:
+        if json_output:
+            json_lib.dump({"ticker": ticker_upper, "items_analyzed": 0}, sys.stdout)
+        else:
+            console.print(f"[yellow]No relevant news found for {ticker_upper}.[/yellow]")
+        return
+
+    # Compute aggregate sentiment
+    scores = [r["sentiment"].score for r in results]
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    confidences = [r["sentiment"].confidence for r in results]
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+    direction = "bullish" if avg_score > 0.1 else "bearish" if avg_score < -0.1 else "neutral"
+
+    if json_output:
+        output = {
+            "ticker": ticker_upper,
+            "items_analyzed": len(results),
+            "sentiment": {
+                "score": round(avg_score, 4),
+                "direction": direction,
+                "confidence": round(avg_confidence, 4),
+            },
+            "impacts": [
+                {
+                    "news_id": r["impact"].news_id,
+                    "ticker": r["impact"].ticker,
+                    "direction": r["impact"].direction,
+                    "magnitude": r["impact"].magnitude,
+                    "confidence": r["impact"].confidence,
+                    "timeframe": r["impact"].timeframe,
+                    "reasoning": r["impact"].reasoning,
+                }
+                for r in results
+            ],
+        }
+        json_lib.dump(output, sys.stdout, default=str)
+        return
+
+    # Rich output
+    console.print(f"\n[bold]Sentiment Analysis: {ticker_upper}[/bold]")
+    console.print(f"  Items analyzed: {len(results)}")
+    console.print(f"  Sentiment score: {avg_score:+.4f}")
+    direction_style = "green" if direction == "bullish" else "red" if direction == "bearish" else "yellow"
+    console.print(f"  Direction: [{direction_style}]{direction}[/{direction_style}]")
+    console.print(f"  Confidence: {avg_confidence:.1%}")
+
+    if results:
+        table = Table(title=f"Impact Assessments \u2014 {ticker_upper}")
+        table.add_column("Title", style="white", max_width=40)
+        table.add_column("Dir", style="bold")
+        table.add_column("Magnitude", justify="right")
+        table.add_column("Timeframe")
+        table.add_column("Confidence", justify="right")
+        for r in results:
+            impact = r["impact"]
+            title = r["classified"].news_item.title[:40] + "\u2026" if len(r["classified"].news_item.title) > 40 else r["classified"].news_item.title
+            dir_color = "green" if impact.direction == "bullish" else "red" if impact.direction == "bearish" else "yellow"
+            table.add_row(
+                title,
+                f"[{dir_color}]{impact.direction}[/{dir_color}]",
+                f"{impact.magnitude:.2f}",
+                impact.timeframe,
+                f"{impact.confidence:.1%}",
+            )
+        console.print(table)
 
 
 @app.command()

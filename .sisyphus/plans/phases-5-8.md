@@ -1709,7 +1709,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   - Files: `VERSION`, `ROADMAP_PROGRESS.md`, `pyproject.toml`
   - Pre-commit: `pytest -q`
 
-- [ ] 17. Create news/ package + news/sources.py
+- [x] 17. Create news/ package + news/sources.py
 
   **What to do**:
   - Create `src/traderbot/news/__init__.py` with module exports
@@ -1762,7 +1762,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   **Commit**: YES - Message: `feat(news): add unified news source aggregator`
   Files: `src/traderbot/news/__init__.py`, `src/traderbot/news/sources.py`, `tests/test_news_sources.py`, `pyproject.toml`
 
-- [ ] 18. Create news/embeddings.py — Voyage AI client
+- [x] 18. Create news/embeddings.py — Voyage AI client
 
   **What to do**:
   - Create `src/traderbot/news/embeddings.py` with Voyage AI client
@@ -1820,7 +1820,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   **Commit**: YES - Message: `feat(news): add Voyage AI embedding client with graceful degradation`
   Files: `src/traderbot/news/embeddings.py`, `tests/test_news_embeddings.py`, `pyproject.toml`
 
-- [ ] 19. Create news Pydantic models + ChromaDB collections
+- [x] 19. Create news Pydantic models + ChromaDB collections
 
   **What to do**:
   - Create `src/traderbot/news/models.py` with all news Pydantic models
@@ -1841,7 +1841,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   **Commit**: YES - Message: `feat(news): add Pydantic models and ChromaDB collections`
   Files: `src/traderbot/news/models.py`, `tests/test_news_models.py`, `src/traderbot/db/vectors.py`
 
-- [ ] 20. Create news/classifier.py
+- [x] 20. Create news/classifier.py
 
   **What to do**:
   - Create `src/traderbot/news/classifier.py` with hybrid Kalshi category classifier
@@ -1863,7 +1863,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `feat(news): add hybrid classifier with keyword and Voyage semantic classification`
 
-- [ ] 21. Create news/sentiment_scorer.py
+- [x] 21. Create news/sentiment_scorer.py
 
   **What to do**:
   - Create `src/traderbot/news/sentiment_scorer.py` with VADER + TextBlob + Voyage uplift
@@ -1887,7 +1887,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   **Commit**: YES - Message: `feat(news): add sentiment scorer with VADER, TextBlob, and Voyage uplift`
   - Files: `src/traderbot/news/sentiment_scorer.py`, `tests/test_sentiment_scorer.py`, `pyproject.toml`
 
-- [ ] 22. Create news/impact_assessor.py
+- [x] 22. Create news/impact_assessor.py
 
   **What to do**:
   - Create `src/traderbot/news/impact_assessor.py`
