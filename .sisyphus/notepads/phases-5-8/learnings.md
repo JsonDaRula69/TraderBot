@@ -411,3 +411,14 @@
 - `NEWS_LOOP_CRON = None` signals event-driven execution (not cron) — loop config's `cron_expression: str | None` handles both modes
 - `build_payload()` factory dispatches by loop_type string — returns typed Pydantic model instances
 - Heartbeat loop includes capability gap detection per docs/openclaw-integration.md line 66: scan FEATURE_REQUESTS.md for Recurrence-Count >= 3, promote to PENDING_REVIEW
+
+## Task 30 Learnings (E2E Integration Tests)
+
+- **DbDecision model requires signal_strength and edge_estimate fields**: The model uses `ConfigDict(strict=True, extra="forbid")` which rejects extra fields. Must provide `signal_strength` (float 0-1), `edge_estimate` (float), and `risk_checks` as `dict[str, bool]` (not nested objects). `signal_data` is not a valid field.
+- **AdaptationResult has no `updated` field**: The `updated` field is on `AdaptationReview` (from heartbeat.py), not `AdaptationResult` (from adaptation.py). `AdaptationResult` has `method`, `direction`, `magnitude`, `confidence`, `human_review`, `variance_reset`, `update_count`, `cooldown_remaining`.
+- **BayesianAdapter drift detection tests**: `_check_drift` compares old_value vs *clamped* new_value, not raw posterior. When variance reset fires, `_check_drift` is skipped entirely. Tests for drift must use `variance_reset_threshold` low enough (e.g., 0.0001) to prevent spurious resets that zero out drift counts.
+- **step_bayesian_adaptation uses default GuardrailConfig**: Default `min_observations=10` means tests with fewer than 10 decisions need to pass a custom `BayesianAdapter(config=GuardrailConfig(min_observations=1))` to the `adapter` parameter.
+- **Heartbeat integration tests need DB init**: `_init_db(conn)` must call `init_schema(conn)` + `init_learnings_table(conn)` + `init_task_observations_table(conn)` — not just `init_schema`.
+- **WAL tests use tmp_path fixtures**: Session-STATE.md files created in `tmp_path` with the `(none)` placeholder pattern. Tests verify WAL intent lifecycle (write → complete → scan).
+- **E2E test count**: 45 tests across 8 test classes covering all 4 required scenarios plus cross-module integration (Bayesian+heartbeat, circuit breaker+heartbeat, impact assessor pipeline, performance review edge cases).
+- **Full suite**: 1379 tests passing, 0 failures after E2E addition.

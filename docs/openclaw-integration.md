@@ -83,7 +83,7 @@ When the news pipeline detects a high-impact event, it surfaces to the main sess
 
 ## Workspace Files
 
-OpenClaw uses a file-based memory system. TraderBot's workspace mirrors the proactive-agent pattern (inspired by `halthelobster/proactive-agent`):
+OpenClaw uses a file-based memory system. These workspace files are injected into every session by the Gateway:
 
 ### AGENTS.md
 
@@ -93,6 +93,20 @@ Operating rules and constraints for the TraderBot agent. Includes:
 - Market categories to track
 - Preferred analysis approaches
 - What requires human approval vs. what's autonomous
+- Session startup instructions and memory management
+- Self-learning protocol with human approval gates
+
+### IDENTITY.md
+
+Agent name, role, and vibe. Short and declarative.
+
+### SOUL.md
+
+Persona, boundaries, and behavioral principles. Defines how the agent communicates, what it values, and what it never does. TraderBot-specific principles include data-driven decisions, risk discipline, and transparency.
+
+### TOOLS.md
+
+Environment-specific tool notes — local paths, gotchas, CLI command reference, setup specifics. Skills define _how_ tools work; this file captures _our_ specifics.
 
 ### SESSION-STATE.md (WAL Protocol target)
 
@@ -106,30 +120,54 @@ Updated by the Decision Loop with:
 
 ### HEARTBEAT.md
 
-Periodic self-improvement checklist. Updated every 6 hours by the Heartbeat Loop:
+Agent checklist — **instructions** for the OpenClaw agent to follow during heartbeat runs. The Gateway reads this file and injects it into the heartbeat prompt. The agent follows the checklist and either surfaces alerts or replies `HEARTBEAT_OK`.
+
+Per the OpenClaw spec, HEARTBEAT.md is a **prompt file** (agent instructions), NOT a data output file. It supports `tasks:` blocks with per-task intervals for structured periodic checks.
+
+Example:
+
+```markdown
+tasks:
+
+- name: circuit-breaker-check
+  interval: 30m
+  prompt: "Run `traderbot halt` to check circuit breaker status."
+- name: performance-review
+  interval: 6h
+  prompt: "Run `traderbot heartbeat --json` for the 7-step self-review cycle."
+
+## General Instructions
+
+- If circuit breaker is HALT or FULL_STOP, do NOT place new trades.
+- If nothing needs attention, reply HEARTBEAT_OK.
+```
+
+### HEARTBEAT_DATA.md
+
+7-step self-review output written by `traderbot heartbeat`. Contains performance metrics, adaptation results, circuit breaker state, system health, and alerts. This is the data file — separate from the instruction file (HEARTBEAT.md).
 
 ```markdown
 ## Last Heartbeat: 2026-04-20T12:00:00Z
-## Markets Tracked: 47
-## Open Positions: 12
-## Daily P&L: +2.3%
 
-### Proactive Behaviors
-- [x] Check circuit breaker conditions
-- [x] Review recent decisions for pattern detection
-- [x] Bayesian parameter updates applied (3 parameters adjusted)
-- [x] Promoted 1 learning to permanent memory
+### Performance
+- Win rate: 64% (45 trades)
+- Daily P&L: +23.00 USD
 
-### Self-Healing
-- [x] No errors since last heartbeat
+### Adaptation
+- Edge threshold: increase (magnitude 0.0234, confidence 0.78)
 
-### Pending Actions
-- [ ] Review low-liquidity position in KXBTCD-26MAR31-T55000
+### Circuit Breaker
+- Level: NORMAL
+- Daily loss: 0.45%
+
+### System Health
+- API: available
+- DB: ok
 ```
 
 ### USER.md
 
-Human preferences — risk tolerance, market interests, notification preferences. This is where the human encodes their strategy appetite without the agent having to guess.
+Human profile — name, preferred address, timezone, and personal context. Trading preferences (risk tolerance, market interests) are included as a subsection since they are specific to this human's trading style.
 
 ### .learnings/ Directory
 
