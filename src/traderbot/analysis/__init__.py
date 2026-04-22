@@ -31,6 +31,12 @@ from traderbot.analysis.portfolio import (
     sharpe_ratio,
     win_rate,
 )
+from traderbot.analysis.registry import (
+    AnalysisRegistry,
+    CategoryAnalyzer,
+    CategorySignals,
+    GenericAnalyzer,
+)
 from traderbot.analysis.signals import (
     CombinedSignal,
     SignalSource,
@@ -40,9 +46,13 @@ from traderbot.analysis.signals import (
 )
 
 __all__ = [
+    "AnalysisRegistry",
     "BollingerBands",
+    "CategoryAnalyzer",
+    "CategorySignals",
     "CombinedSignal",
     "EdgeEstimate",
+    "GenericAnalyzer",
     "ImpliedProb",
     "IndicatorResult",
     "KellyInputs",
