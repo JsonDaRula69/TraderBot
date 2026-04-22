@@ -6,7 +6,7 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 
 | Detail | Value |
 |---|---|
-| **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
+| **Base URL (production)** | `https://api.kalshi.co/trade-api/v2` |
 | **Base URL (demo)** | `https://demo-api.kalshi.co/trade-api/v2` |
 | **Auth method** | RSA-PSS signed JWT headers |
 | **Rate limit** | ~10 requests/second |

@@ -355,8 +355,8 @@ The heartbeat is the periodic self-review mechanism. It combines Bayesian adapta
    - WebSocket health: is the stream active?
    - Data freshness: when did we last receive market data?
 
-7. **Update HEARTBEAT.md**
-   - Write checklist results
+7. **Update HEARTBEAT_DATA.md**
+   - Write 7-step review results (performance, adaptation, circuit breaker, health, alerts)
    - Flag any items requiring human attention
 
 ### Heartbeat Output

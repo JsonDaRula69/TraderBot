@@ -51,7 +51,7 @@ class HeartbeatLoopPayload(BaseModel):
         "HEARTBEAT: Run traderbot self-improvement cycle. "
         "Check circuit breaker, review recent decisions, "
         "update Bayesian parameters, promote learnings. "
-        "Write HEARTBEAT.md."
+        "Write HEARTBEAT_DATA.md."
     )
 
 
