@@ -247,9 +247,245 @@ sudo rm /etc/systemd/system/traderbot-agent@.service
 sudo systemctl daemon-reload
 ```
 
-## macOS Support (launchd)
+## Launchd Service Template (macOS)
 
-macOS support via launchd will be added in a future release. See Task 13 in the roadmap.
+The `services/com.traderbot.agent.plist` file is a launchd property list template that allows you to run TraderBot agents as persistent user services on macOS.
+
+### Understanding Launchd Agents
+
+Launchd is macOS's service management framework. User agents run in the user's session and start automatically when the user logs in. Each agent instance requires its own plist file with a unique label.
+
+For example:
+- `com.traderbot.agent.molty.plist` → runs the molty agent
+- `com.traderbot.agent.alice.plist` → runs the alice agent
+
+### Prerequisites
+
+1. **TraderBot installed**: The `traderbot` command must be available in `/usr/local/bin/` (or adjust the `ProgramArguments` path in the plist file)
+2. **Profile token**: Each agent needs a valid profile token
+3. **Working directory**: Ensure the working directory exists and is writable by your user
+4. **Logs directory**: The `~/Library/Logs/` directory is used for agent logs
+
+### Installation Steps
+
+#### 1. Prepare the Plist File
+
+Copy the template and customize it for your agent:
+
+```bash
+# Copy template for agent "molty"
+cp install/services/com.traderbot.agent.plist ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+```
+
+#### 2. Customize for Your Agent
+
+Edit the plist file to replace placeholders:
+
+```bash
+nano ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+```
+
+Replace these placeholders:
+- **AGENT_ID**: Replace with your agent ID (e.g., `molty`)
+- **TOKEN_PLACEHOLDER**: Replace with your actual profile token
+- **USERNAME**: Replace with your macOS username (e.g., `djtchill`)
+
+Example replacements:
+```xml
+<!-- Before -->
+<key>Label</key>
+<string>com.traderbot.agent.AGENT_ID</string>
+
+<!-- After -->
+<key>Label</key>
+<string>com.traderbot.agent.molty</string>
+```
+
+**Important**: Future versions will include an installer script that automates this step.
+
+#### 3. Adjust Paths (if needed)
+
+If your installation differs from the defaults, adjust these settings:
+
+- **ProgramArguments**: Change `/usr/local/bin/traderbot` if installed elsewhere
+- **WorkingDirectory**: Change `/Users/USERNAME/traderbot` to your installation path
+- **StandardOutPath/StandardErrorPath**: Adjust log paths if desired
+
+#### 4. Load the Service
+
+Load the service into launchd:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+```
+
+The service will start automatically and run continuously.
+
+### Managing Services
+
+#### Load a Service (Enable and Start)
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+```
+
+#### Start a Service (if loaded but stopped)
+
+```bash
+launchctl start com.traderbot.agent.molty
+```
+
+#### Stop a Service
+
+```bash
+launchctl stop com.traderbot.agent.molty
+```
+
+#### Unload a Service (Disable)
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+```
+
+#### Check Service Status
+
+```bash
+launchctl list | grep traderbot
+```
+
+Example output:
+```
+12345   0   com.traderbot.agent.molty
+```
+
+The first column is the PID (process ID), the second is the exit status (0 = running), and the third is the label.
+
+#### Get Detailed Service Info
+
+```bash
+launchctl print gui/$(id -u)/com.traderbot.agent.molty
+```
+
+### Viewing Logs
+
+#### Follow Live Logs (Standard Output)
+
+```bash
+tail -f ~/Library/Logs/traderbot-molty.log
+```
+
+#### Follow Live Logs (Errors)
+
+```bash
+tail -f ~/Library/Logs/traderbot-molty-error.log
+```
+
+#### View Recent Logs
+
+```bash
+# Last 100 lines of standard output
+tail -n 100 ~/Library/Logs/traderbot-molty.log
+
+# Last 100 lines of errors
+tail -n 100 ~/Library/Logs/traderbot-molty-error.log
+```
+
+#### Search Logs
+
+```bash
+# Search for specific text
+grep "market scan" ~/Library/Logs/traderbot-molty.log
+
+# Search with context
+grep -C 5 "error" ~/Library/Logs/traderbot-molty-error.log
+```
+
+### Running Multiple Agents
+
+To run multiple agents, create and load multiple plist files:
+
+```bash
+# Agent 1: molty
+cp install/services/com.traderbot.agent.plist ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+# Edit molty plist with agent-specific settings
+launchctl load ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+
+# Agent 2: alice
+cp install/services/com.traderbot.agent.plist ~/Library/LaunchAgents/com.traderbot.agent.alice.plist
+# Edit alice plist with agent-specific settings
+launchctl load ~/Library/LaunchAgents/com.traderbot.agent.alice.plist
+
+# Agent 3: bob
+cp install/services/com.traderbot.agent.plist ~/Library/LaunchAgents/com.traderbot.agent.bob.plist
+# Edit bob plist with agent-specific settings
+launchctl load ~/Library/LaunchAgents/com.traderbot.agent.bob.plist
+```
+
+Each agent runs independently with its own:
+- Profile token
+- Working directory
+- Log files
+- Process ID
+
+### Troubleshooting
+
+#### Service Won't Start
+
+1. Check if the service is loaded:
+   ```bash
+   launchctl list | grep traderbot
+   ```
+
+2. Check the error log:
+   ```bash
+   tail -n 50 ~/Library/Logs/traderbot-molty-error.log
+   ```
+
+3. Verify the plist file is valid XML:
+   ```bash
+   plutil -lint ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+   ```
+
+4. Verify the profile token is correct
+5. Verify the working directory exists and is writable
+6. Verify the `traderbot` binary is executable
+
+#### Service Keeps Restarting
+
+The service is configured to restart on failure (KeepAlive with SuccessfulExit=false). If it keeps restarting:
+
+1. Check error logs for the crash reason
+2. Verify the profile token is valid
+3. Check network connectivity
+4. Verify Kalshi API credentials
+
+#### Permission Denied Errors
+
+1. Verify you own the working directory: `ls -la ~/traderbot`
+2. Verify log directory is writable: `ls -la ~/Library/Logs/`
+3. Check file permissions on the plist: `ls -la ~/Library/LaunchAgents/com.traderbot.agent.molty.plist`
+
+#### Service Not Starting on Login
+
+1. Verify the plist is in `~/Library/LaunchAgents/` (not `/Library/LaunchAgents/`)
+2. Verify `RunAtLoad` is set to `true` in the plist
+3. Check Console.app for launchd errors (filter by "launchd")
+
+### Uninstallation
+
+To remove a service:
+
+```bash
+# Unload the service
+launchctl unload ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+
+# Remove the plist file
+rm ~/Library/LaunchAgents/com.traderbot.agent.molty.plist
+
+# Remove log files (optional)
+rm ~/Library/Logs/traderbot-molty.log
+rm ~/Library/Logs/traderbot-molty-error.log
+```
 
 ## Future Enhancements
 
