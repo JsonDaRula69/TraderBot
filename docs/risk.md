@@ -136,6 +136,76 @@ This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, d
 | **Survivorship bias** | Audit trail includes rejected trades, not just executed ones |
 | **Anchoring** | Odds model computes fresh probability each cycle; doesn't anchor to prior estimate |
 
+## AgentRiskLimits
+
+Per-agent risk limits wrap a `TradingProfile` and enforce `HARD_LIMITS` as an absolute ceiling. For maximum thresholds (position size, daily loss, drawdown, open positions), the effective limit is `min(profile_param, HARD_LIMITS[key])`. For minimum thresholds (liquidity, edge), the effective limit is `max(profile_param, HARD_LIMITS[key])`. The more restrictive value always wins.
+
+```python
+class AgentRiskLimits:
+    def __init__(self, profile: TradingProfile) -> None:
+        self._profile = profile
+
+    @property
+    def max_position_per_market_pct(self) -> float: ...
+    @property
+    def max_daily_loss_pct(self) -> float: ...
+    @property
+    def max_drawdown_pct(self) -> float: ...
+    @property
+    def max_open_positions(self) -> int: ...
+    @property
+    def min_liquidity_threshold(self) -> int: ...
+    @property
+    def min_edge_pct(self) -> float: ...
+```
+
+The ceiling enforcement is the core security guarantee: an agent cannot exceed `HARD_LIMITS` by setting aggressive profile parameters.
+
+## Profile-Aware evaluate_trade()
+
+The central risk gate `evaluate_trade()` accepts an optional `profile: TradingProfile` parameter. When provided, two additional checks are applied before the standard risk checks:
+
+### Category Filtering
+
+```python
+if profile is not None:
+    if trade_request.market_category is not None:
+        if not profile.is_category_enabled(trade_request.market_category):
+            return 0  # Rejected — category not enabled
+```
+
+If the profile's `enabled_categories` list is non-empty and the trade's market category is not in it, the trade is rejected immediately.
+
+### Risk Multiplier and Profile Limits
+
+```python
+if profile is not None:
+    agent_limits = AgentRiskLimits(profile)
+    max_position_pct = agent_limits.max_position_per_market_pct
+    risk_multiplier = profile.risk_multiplier
+else:
+    max_position_pct = float(HARD_LIMITS["max_position_per_market_pct"])
+    risk_multiplier = 1.0
+```
+
+When a profile is active, the effective position limit is the more restrictive of the profile limit and `HARD_LIMITS`. The `risk_multiplier` scales the final position size downward.
+
+### Complete Gate Ordering
+
+```
+evaluate_trade(trade_request, portfolio, breaker, profile=None)
+├── Category filter (profile-aware)
+│   └── Reject if category not in enabled_categories
+├── Circuit breaker check
+│   └── Reject if breaker.can_trade == False
+├── Limit checks (run_all_checks)
+│   └── Reject if any check fails
+├── Profile limits (AgentRiskLimits) — applied after checks
+│   └── Position cap = min(profile_limit, HARD_LIMITS)
+└── Position sizing with risk_multiplier
+    └── final_size = raw_size * breaker.multiplier * profile.risk_multiplier
+```
+
 ## Human Override
 
 The human can:
