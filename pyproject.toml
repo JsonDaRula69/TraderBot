@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "traderbot"
-version = "0.04.11"
+version = "0.06.01"
 description = "Autonomous prediction market investment toolkit for Kalshi"
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,9 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.0",
     "keyring>=25.0",
+    "feedparser>=6.0",
+    "vaderSentiment>=3.3",
+    "textblob>=0.18",
 ]
 
 [project.optional-dependencies]

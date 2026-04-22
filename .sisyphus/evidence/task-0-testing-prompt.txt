@@ -1,0 +1,8 @@
+=== TESTING_PROMPT Phase 5-8 sections ===
+1003:## §2.11: Phase 5 — Simulation Test Patterns
+---
+1041:## §2.12: Phase 6 — Self-Learning Test Patterns
+---
+1076:## §2.13: Phase 7 — News/Sentiment Test Patterns
+---
+1117:## §2.14: Phase 8 — Adaptation Test Patterns

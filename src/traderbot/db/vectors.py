@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_DIMENSION: int = 1024
 DEFAULT_PERSIST_DIR: Path = Path.home() / ".traderbot" / "chromadb"
-DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns")
+DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns", "news_signals", "market_conditions")
 
 SearchResult = tuple[str, str, dict[str, str], float]
 """(doc_id, text, metadata, distance)"""

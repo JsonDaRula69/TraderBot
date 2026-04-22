@@ -308,9 +308,9 @@ class TestEmbeddingDimension:
 
 class TestDefaultCollections:
     def test_default_collections_tuple(self) -> None:
-        assert DEFAULT_COLLECTIONS == ("decisions", "news", "market_patterns")
+        assert DEFAULT_COLLECTIONS == ("decisions", "news", "market_patterns", "news_signals", "market_conditions")
 
-    def test_init_collections_creates_three(self) -> None:
+    def test_init_collections_creates_five(self) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=Path("/tmp/test"))
         store._client = mock_client
@@ -318,5 +318,5 @@ class TestDefaultCollections:
 
         store.init_collections()
 
-        assert len(store._collections) == 3
-        assert set(store._collections.keys()) == {"decisions", "news", "market_patterns"}
+        assert len(store._collections) == 5
+        assert set(store._collections.keys()) == {"decisions", "news", "market_patterns", "news_signals", "market_conditions"}
