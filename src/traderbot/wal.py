@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import logging
 import re
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SESSION_STATE_PATH = Path(".openclaw/workspace/SESSION-STATE.md")
 
 
-class WalStatus(str, Enum):
+class WalStatus(StrEnum):
     """Status values for WAL entries."""
 
     PENDING = "PENDING"
@@ -27,7 +28,7 @@ class WalStatus(str, Enum):
     EXPIRED = "EXPIRED"
 
 
-class WalAction(str, Enum):
+class WalAction(StrEnum):
     """Trade action types."""
 
     BUY = "BUY"
@@ -216,18 +217,18 @@ def write_intent(
         entry = entry.model_copy(update={"timestamp": datetime.now(UTC)})
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = open(path, "a+" if path.exists() else "w+")
+    fd = open(path, "a+" if path.exists() else "w+")  # noqa: SIM115 - fcntl.flock requires manual fd
     fd_closed = False
     try:
         try:
             fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+        except OSError as err:
             fd.close()
             fd_closed = True
             logger.error("Concurrent WAL writer detected — rejecting write for %s", entry.intent_id)
             raise ConcurrentWriteError(
                 f"Another writer is actively writing to {path}. Write rejected for {entry.intent_id}"
-            )
+            ) from err
 
         fd.seek(0)
         content = fd.read()
@@ -289,14 +290,14 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         logger.warning("SESSION-STATE.md not found at %s", path)
         return False
 
-    fd = open(path, "r+")
+    fd = open(path, "r+")  # noqa: SIM115 - fcntl.flock requires manual fd
     try:
         try:
             fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+        except OSError as err:
             fd.close()
             logger.error("Concurrent WAL writer during status update for %s", intent_id)
-            raise ConcurrentWriteError(f"Another writer is active, cannot update {intent_id}")
+            raise ConcurrentWriteError(f"Another writer is active, cannot update {intent_id}") from err
 
         content = fd.read()
 
@@ -321,10 +322,8 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
         fd.close()
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-        except OSError:
-            pass
         fd.close()
         raise
 

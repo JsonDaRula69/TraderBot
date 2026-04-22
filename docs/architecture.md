@@ -40,7 +40,7 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 4. Adjust strategy parameters via Bayesian updating (`simulation/adaptation`)
 5. Promote recurring learnings to `.learnings/LEARNINGS.md`
 6. Check circuit breaker conditions
-7. Update `HEARTBEAT.md` with status
+7. Update `HEARTBEAT_DATA.md` with status
 
 The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy emotionally — it adjusts mathematical parameters (prior distributions, confidence thresholds) based on observed evidence.
 
@@ -221,7 +221,7 @@ Cron trigger → "traderbot heartbeat"
    → Promote recurring feature_request entries to PENDING_REVIEW status
    → Check circuit breaker conditions
    → Query ChromaDB for similar past patterns via `voyage-4-large` embeddings
-   → Update HEARTBEAT.md
+   → Update HEARTBEAT_DATA.md
 ```
 
 ## Data Models
