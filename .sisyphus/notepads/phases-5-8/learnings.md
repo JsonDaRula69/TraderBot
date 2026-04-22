@@ -377,3 +377,20 @@
 - **Backward compatibility preserved**: `Prior`, `Posterior`, `AdaptationConfig`, `AdaptationResult`, `StrategyAdjustment` all still work. New fields on `AdaptationResult` (`method`, `human_review`, `variance_reset`, `update_count`, `cooldown_remaining`) have sensible defaults. `test_adaptation.py` updated only for the `confidence` field change (0 is now valid).
 - **zip() with strict=True**: Ruff B905 rule requires `strict=True` on `zip()` calls. All zip calls in adaptation.py use `strict=True` since the dimensions are guaranteed to match (enforced by Dirichlet update's dimension check).
 - **Beta-Binomial direction**: `Beta(2,8)` mean=0.2 with high success data → posterior means higher → direction="increase". After clamping at 20%, can still be "increase" but bounded.
+
+## Task 27 Learnings (Heartbeat CLI Command)
+
+- **Heartbeat 7-step cycle implemented as `src/traderbot/heartbeat.py`** — separate module from CLI for testability
+  - Steps: performance_review → decision_review → bayesian_adaptation → learning_promotion → circuit_breaker_check → system_health → update_heartbeat_md
+  - Each step is a standalone function that can be tested independently
+- **Pydantic output models**: PerformanceReview, DecisionReview, AdaptationReview, LearningPromotionReview, CircuitBreakerReview, SystemHealthReview, HeartbeatResult — all use ConfigDict(strict=True, extra="forbid")
+- **`deviation_flag` field** on PerformanceReview: "win_rate_above_expected" (>0.7), "win_rate_below_expected" (<0.3 with ≥5 trades), or "" — matches docs spec for "significant deviations"
+- **CLI flags**: `--json` for JSON output, `--dry-run` for report-only mode (no state mutations including no HEARTBEAT.md write)
+- **Bayesian adaptation step** uses Beta-Binomial (WEAK_BETA prior with BinomialObservations from win/loss counts). GuardrailConfig with min_observations=1 is needed for tests to succeed with small datasets
+- **Learning promotion step** uses `scan_for_promotions()` from learning.py, then `promote_learning()` per candidate. Also uses `_get_db_pattern_key()` from learning.py (NOT db/learnings.py)
+- **`_get_db_pattern_key` is in `learning.py`**, not `db/learnings.py` — important import distinction
+- **`record_pattern()` in db/learnings.py** takes `(conn, category, summary, evidence, confidence)` — no `pattern_key` parameter (pattern_key is set via separate `update`)
+- **GuardrailConfig.min_observations defaults to 10** — tests need `min_observations=1` to work with small datasets
+- **GuardrailConfig.max_updates_per_day minimum is 1** (ge=1) — cannot use 0 to force cooldown. Instead, fill adapter._update_timestamps with recent timestamps to trigger cooldown
+- **HEARTBEAT.md written to `.openclaw/workspace/HEARTBEAT.md`** — DEFAULT_HEARTBEAT_PATH constant with structured markdown output matching docs spec format
+- **Floating point: `avg_confidence` uses `abs(result - 0.6) < 1e-9`** rather than exact `==` comparison due to IEEE 754 representation issues

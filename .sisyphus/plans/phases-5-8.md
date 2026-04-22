@@ -1989,7 +1989,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   **Commit**: YES - Message: `feat(adaptation): implement Bayesian adaptation engine with guardrails`
   - Files: `src/traderbot/simulation/adaptation.py`, `tests/test_bayesian_adapter.py`, `pyproject.toml`
 
-- [ ] 27. Implement heartbeat self-review cycle
+- [x] 27. Implement heartbeat self-review cycle
 
   **What to do**:
   - Implement full `traderbot heartbeat` CLI command (replace stub)
