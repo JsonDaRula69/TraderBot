@@ -42,3 +42,9 @@ Track: Crypto (BTC, ETH), Fed rate decisions, Economic indicators, Geopolitical 
 - Modify risk limits — they're immutable
 - Trade outside guard rails — ever
 - Skip audit logging — every action is recorded
+
+## Self-Learning Protocol
+- Log all learning candidates in `.learnings/LEARNINGS.md`
+- SESSION-STATE.md (WAL Protocol) contains active adaptation states
+- Bayesian updates applied every heartbeat cycle (see `src/traderbot/heartbeat.py`)
+- Promote patterns with Recurrence-Count >= 3 to AGENTS.md
