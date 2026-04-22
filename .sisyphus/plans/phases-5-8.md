@@ -1932,7 +1932,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `feat(news): wire news and sentiment CLI commands`
 
-- [ ] 24. Integration tests for news pipeline
+- [x] 24. Integration tests for news pipeline
 
   **What to do**:
   - Create `tests/test_news_integration.py`

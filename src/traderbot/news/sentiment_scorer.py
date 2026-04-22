@@ -2,7 +2,7 @@
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
@@ -28,7 +28,7 @@ _NEGATIVE_ANCHOR = "severe bearish pessimism terrible decline negative outlook"
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     mag_a = math.sqrt(sum(x * x for x in a))
     mag_b = math.sqrt(sum(x * x for x in b))
     if mag_a == 0.0 or mag_b == 0.0:
@@ -77,7 +77,7 @@ class SentimentScorer(BaseModel):
             score=final_score,
             confidence=confidence,
             model=final_model,
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
         )
 
     def _score_vader(self, text: str) -> tuple[float, float, str]:

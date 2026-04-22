@@ -6,15 +6,16 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from traderbot.news.classifier import (
+    _CATEGORY_DESCRIPTIONS,
+    _EMBED,
+    _KALSHI_CATEGORIES,
+    _KEYWORD,
+    _RERANK,
     ClassificationResult,
     NewsClassifier,
-    _KEYWORD,
-    _EMBED,
-    _RERANK,
-    _KALSHI_CATEGORIES,
-    _CATEGORY_DESCRIPTIONS,
     _cosine_similarity,
 )
 from traderbot.news.models import ClassifiedNews, NewsCategory, NewsItem, NewsSource
@@ -327,7 +328,7 @@ class TestClassificationResult:
         assert result.category == NewsCategory.ECONOMICS
 
     def test_model_config_forbids_extra(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ClassificationResult(
                 category=NewsCategory.ECONOMICS,
                 confidence=0.9,

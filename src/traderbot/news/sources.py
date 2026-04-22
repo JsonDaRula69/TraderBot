@@ -7,12 +7,11 @@ import logging
 import random
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
+import feedparser
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
-
-import feedparser  # noqa: TCH002
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class NewsAggregator:
     """Fetch and aggregate news from multiple sources with graceful degradation."""
 
     # Source fetch priority order (fastest/breaking → slowest/analysis)
-    _SOURCE_PRIORITY: list[NewsSource] = [
+    _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
         NewsSource.TWITTER,
         NewsSource.NEWSAPI,
         NewsSource.REDDIT,

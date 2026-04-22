@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import math
 import re
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
-from traderbot.news.embeddings import VoyageClient
+if TYPE_CHECKING:
+    from traderbot.news.embeddings import VoyageClient
+
 from traderbot.news.models import ClassifiedNews, NewsCategory, NewsItem
 
 # ── Confidence thresholds ───────────────────────────────────────────────
@@ -146,7 +149,7 @@ _CATEGORY_DESCRIPTIONS: dict[NewsCategory, str] = {
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0.0 or norm_b == 0.0:
@@ -345,7 +348,6 @@ class NewsClassifier:
         cat_hits = self._keyword_cat_hits(text)
         if cat_hits:
             best_cat = max(cat_hits, key=lambda c: cat_hits[c])
-            confidence = min(0.3 + 0.05 * cat_hits[best_cat], 0.45)
             return ClassifiedNews(
                 news_item=news_item,
                 category=best_cat,
