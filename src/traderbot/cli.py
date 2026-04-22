@@ -1751,6 +1751,9 @@ def profile_assign(
     agent_id: str,
 ) -> None:
     """Assign a token to an agent for profile access."""
+    from pathlib import Path
+
+    from traderbot.profiles.injection import inject_token_into_tools
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
 
@@ -1768,7 +1771,22 @@ def profile_assign(
         assign_token(profile_name, agent_id, token)
         console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
         console.print(f"Token: [bold]{token}[/bold]")
-        console.print("\n[yellow]Note:[/yellow] Token injection into TOOLS.md is not yet implemented (T10)")
+        
+        # Inject token into agent's TOOLS.md
+        try:
+            agent_path = Path(".openclaw") / "workspace" / agent_id
+            if not agent_path.exists():
+                console.print(f"[yellow]Warning:[/yellow] Agent directory not found at {agent_path}")
+                console.print("Token assigned but not injected into TOOLS.md")
+            else:
+                inject_token_into_tools(str(agent_path), token)
+                console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
+        except FileNotFoundError:
+            console.print(f"[yellow]Warning:[/yellow] Agent directory not found")
+            console.print("Token assigned but not injected into TOOLS.md")
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
+            console.print("Token assigned but not injected")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -1779,7 +1797,10 @@ def profile_revoke(
     profile_name: str,
 ) -> None:
     """Revoke token assignment for a profile."""
-    from traderbot.profiles.tokens import get_profile_token, revoke_token
+    from pathlib import Path
+
+    from traderbot.profiles.injection import remove_token_from_tools
+    from traderbot.profiles.tokens import get_profile_token, resolve_token, revoke_token
 
     console = Console()
 
@@ -1789,9 +1810,23 @@ def profile_revoke(
         console.print(f"[yellow]Warning:[/yellow] No token assigned to profile '{profile_name}'")
         return
 
+    # Get agent ID before revoking
+    resolved = resolve_token(token)
+    agent_id = resolved[1] if resolved else None
+
     # Revoke token
     revoke_token(token)
     console.print(f"[green]✓[/green] Revoked token for profile '{profile_name}'")
+
+    # Remove token from agent's TOOLS.md
+    if agent_id:
+        try:
+            agent_path = Path(".openclaw") / "workspace" / agent_id
+            if agent_path.exists():
+                remove_token_from_tools(str(agent_path))
+                console.print(f"[green]✓[/green] Token removed from {agent_id}/TOOLS.md")
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Failed to remove token from TOOLS.md: {e}")
 
 
 @profile_app.command("assignments")
