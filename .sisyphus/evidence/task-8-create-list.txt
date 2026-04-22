@@ -1,0 +1,9 @@
+✓ Created profile 'qa-test-profile' in paper mode
+                          Trading Profiles                          
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ Name            ┃ Mode  ┃ Description          ┃ Risk Multiplier ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ duplicate       │ paper │ First                │            1.00 │
+│ qa-test-profile │ paper │ QA test profile      │            1.00 │
+│ test-profile    │ paper │ Test profile for CLI │            1.00 │
+└─────────────────┴───────┴──────────────────────┴─────────────────┘
