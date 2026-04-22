@@ -72,7 +72,18 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 
 ## Cron Architecture
 
+OpenClaw supports two cron execution modes. TraderBot uses both intentionally:
+
+- **`isolated agentTurn`** — Autonomous background work (Decision Loop, Heartbeat Loop)
+- **`systemEvent`** — Interactive alerts surfaced to main session (News Loop)
+
+Defined programmatically in `src/traderbot/cron_loops.py`.
+
 ### Decision Loop (every 5 minutes, market hours)
+
+- **Cron**: `*/5 9-15 * * 1-5` (9:30 AM–4:00 PM ET, Mon–Fri)
+- **Mode**: `isolated agentTurn`
+- **Impact threshold**: N/A (scheduled)
 
 ```json
 {
@@ -86,6 +97,11 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 
 ### Heartbeat Loop (every 6 hours)
 
+- **Cron**: `0 */6 * * *`
+- **Mode**: `isolated agentTurn`
+- **Impact threshold**: N/A (scheduled)
+- Includes capability gap detection — scans `.learnings/FEATURE_REQUESTS.md` for entries with `Recurrence-Count >= 3`, promotes to `PENDING_REVIEW`
+
 ```json
 {
   "sessionTarget": "isolated",
@@ -96,7 +112,11 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 }
 ```
 
-### News/Sentiment (on event)
+### News/Sentiment Loop (event-driven)
+
+- **Cron**: None (event-driven, not scheduled)
+- **Mode**: `systemEvent` (surfaces to main session for human intervention)
+- **Impact threshold**: `0.7` (only triggers on high-impact events)
 
 ```json
 {

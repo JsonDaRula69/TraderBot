@@ -64,13 +64,13 @@
 - `from __future__ import annotations` is project convention — makes all annotations strings, but `date` and `DataLoader` must still be importable for runtime use. TC003 lint rule is suppressed with `# noqa: TC003` for `date` since it's used in function signatures.
 - Strategy Protocol uses `@runtime_checkable` for `isinstance` checks — `on_market_open`, `on_trade`, `on_settle` methods.
 - Context dataclass is `frozen=True` to enforce read-only semantics — portfolio position data cannot be mutated through context.
-- BacktestResult has `None` for all ratio/rate metrics when `trade_count == 0` — never NaN or division by zero.
+- `BacktestResult` has `None` for all ratio/rate metrics when `trade_count == 0` — never NaN or division by zero.
 - `_Position` is a plain class (not Pydantic) for internal position tracking — no validation overhead needed for mutable state.
 
 ## Task 36 Learnings (Auth/Credential Management)
 
 - Keyring library: `keyring.set_password(service, username, password)`, `keyring.get_password(service, username)`, `keyring.delete_password(service, username)` — service is the namespace, username is the key name
-- Service namespaced as `"traderbot.{service_name}"` (e.g., `"traderbot.kalshi"`) to avoid collisions
+- Service namespaced as "traderbot.{service_name}" (e.g., "traderbot.kalshi") to avoid collisions
 - Keyring backend detection: check `type(kr.get_keyring()).__name__` for "Fail" or "Null" — these indicate unavailable backends
 - AuthManager accepts `keyring_module` kwarg for dependency injection — pass FakeKeyring directly since it duck-types to the keyring API
 - AuthManager also accepts `keyring_available` kwarg to bypass auto-detection — critical for testing
@@ -307,7 +307,7 @@
 
 ## Task 21 Learnings (Sentiment Scorer)
 
-- Pydantic `strict=True, extra="forbid"` + `from __future__ import annotations` breaks forward refs: VoyageClient in TYPE_CHECKING causes "not fully defined" error. Fix: import at runtime (it's local code), move `voyage_client` to PrivateAttr (`_voyage_client: object | None = PrivateAttr(default=None)`) for mock injection without Pydantic validation
+- Pydantic `strict=True, extra="forbid` + `from __future__ import annotations` breaks forward refs: VoyageClient in TYPE_CHECKING causes "not fully defined" error. Fix: import at runtime (it's local code), move `voyage_client` to PrivateAttr (`_voyage_client: object | None = PrivateAttr(default=None)`) for mock injection without Pydantic validation
 - `PrivateAttr` required for both `_vader` (SentimentIntensityAnalyzer) and `_voyage_client` — Pydantic strict mode rejects undeclared class attrs. Constructor sets them after `super().__init__()`
 - VADER compound score range is [-1, 1]; TextBlob polarity is [-1, 1] — both produce compatible scores for SentimentResult.score
 - TextBlob confidence combines polarity magnitude with subjectivity: `min(abs(polarity) * (0.5 + 0.5 * subjectivity), 1.0)` — high subjectivity amplifies confidence
@@ -394,3 +394,20 @@
 - **GuardrailConfig.max_updates_per_day minimum is 1** (ge=1) — cannot use 0 to force cooldown. Instead, fill adapter._update_timestamps with recent timestamps to trigger cooldown
 - **HEARTBEAT.md written to `.openclaw/workspace/HEARTBEAT.md`** — DEFAULT_HEARTBEAT_PATH constant with structured markdown output matching docs spec format
 - **Floating point: `avg_confidence` uses `abs(result - 0.6) < 1e-9`** rather than exact `==` comparison due to IEEE 754 representation issues
+
+## Task 29 Learnings (Workspace Files)
+- AGENTS.md: added "## Self-Learning Protocol" section with references to WAL, HEARTBEAT, and pattern promotion criteria (Recurrence-Count >= 3)
+- USER.md: existing structure validated against current requirements; no changes needed
+- HEARTBEAT.md: format matches exactly heartbeat.py code output; all sections present and structured correctly
+- .learnings/LEARNINGS.md: entries include Category field as per codebase requirements
+- Verified no modifications to docs/ directory or src/ code; all changes are within workspace templates
+## Task 28 Learnings (Three-Loop Cron Architecture)
+
+- **cron_loops.py** defines three loops programmatically: DecisionLoop, HeartbeatLoop, NewsLoop with Pydantic models
+- Pydantic v2 `model_dump(mode="json")` uses Python field names (snake_case), NOT camelCase aliases — `data["session_target"]` not `data["sessionTarget"]`. Only use `by_alias=True` if aliases are explicitly defined.
+- NewsLoopPayload uses `model_post_init` to auto-generate message from topic when message is empty — allows both explicit custom messages and sensible defaults
+- CronLoopConfig is the base model; DecisionLoopConfig/HeartbeatLoopConfig/NewsLoopConfig specialize with Literal-typed fields for stricter validation
+- SKILL.md already had the cron JSON payloads — task enhanced it with explicit cron expressions, mode descriptions, and impact threshold values
+- `NEWS_LOOP_CRON = None` signals event-driven execution (not cron) — loop config's `cron_expression: str | None` handles both modes
+- `build_payload()` factory dispatches by loop_type string — returns typed Pydantic model instances
+- Heartbeat loop includes capability gap detection per docs/openclaw-integration.md line 66: scan FEATURE_REQUESTS.md for Recurrence-Count >= 3, promote to PENDING_REVIEW

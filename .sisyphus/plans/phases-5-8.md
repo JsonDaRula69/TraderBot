@@ -2013,7 +2013,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `feat(adaptation): implement heartbeat self-review cycle`
 
-- [ ] 28. Define OpenClaw three-loop cron architecture
+- [x] 28. Define OpenClaw three-loop cron architecture
 
   **What to do**:
   - Update `skills/traderbot/SKILL.md` with three-loop cron definitions
@@ -2031,7 +2031,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   - Message: `feat(adaptation): define three-loop cron architecture for OpenClaw`
   - Files: `skills/traderbot/SKILL.md`, `.openclaw/workspace/SESSION-STATE.md`, `.openclaw/workspace/HEARTBEAT.md`, `tests/test_cron_architecture.py`, `pyproject.toml`
 
-- [ ] 29. Update .openclaw/ workspace files for heartbeat
+- [x] 29. Update .openclaw/ workspace files for heartbeat
 
   **What to do**:
   - Update workspace templates: AGENTS.md (risk rules), USER.md (risk tolerance), HEARTBEAT.md (format), .learnings/ templates
