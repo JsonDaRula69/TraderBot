@@ -1,30 +1,32 @@
-# TraderBot Heartbeat
+# Heartbeat Checklist
 
-## Heartbeat: 2026-04-22T02:59:37.639520+00:00
+_The Gateway wakes the agent on a cadence. Follow this checklist each time._
 
-### Performance
-- Win rate: 0% (0 trades)
-- Daily P&L: +0.00 USD
-- Avg confidence: 0.00
-- Open positions: 0
+tasks:
 
-### Adaptation
-- No update (no decisions to adapt from)
+- name: circuit-breaker-check
+  interval: 30m
+  prompt: "Run `traderbot halt` to check circuit breaker status. If SLOW or worse, report immediately."
+- name: performance-review
+  interval: 6h
+  prompt: "Run `traderbot heartbeat --json` to run the 7-step self-review cycle (performance → decision review → Bayesian adaptation → learning promotion → circuit breaker check → system health → update HEARTBEAT_DATA.md)."
+- name: learning-promotion
+  interval: 6h
+  prompt: "Review `.learnings/LEARNINGS.md` for entries with Recurrence-Count >= 3. Promote to PENDING_REVIEW status if not already. Never auto-commit to AGENTS.md."
+- name: news-scan
+  interval: 2h
+  prompt: "Run `traderbot news --json` to check for high-impact news. If any impact score > 0.7, surface alert to main session."
+- name: position-health
+  interval: 1h
+  prompt: "Run `traderbot positions --json` to check open positions. Flag any with drawdown > 5%."
 
-### Learnings
-- No promotions this cycle
+## General Instructions
 
-### Circuit Breaker
-- Level: NORMAL
-- Can trade: True
-- Daily loss: 0.00%
-- Drawdown: 0.00%
+- If circuit breaker is HALT or FULL_STOP, do NOT place new trades.
+- If Bayesian adaptation flags a drift (human_review: true), surface it.
+- Keep alerts short and actionable.
+- If nothing needs attention after all due tasks, reply HEARTBEAT_OK.
 
-### System Health
-- API: available
-- DB: ok
-- Freshness: no_decisions_yet
+## Data Output
 
-### Alerts
-- None
-
+The 7-step review data is written to `HEARTBEAT_DATA.md` by `traderbot heartbeat` (not this file).

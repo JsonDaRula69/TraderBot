@@ -107,7 +107,7 @@ Defined programmatically in `src/traderbot/cron_loops.py`.
   "sessionTarget": "isolated",
   "payload": {
     "kind": "agentTurn",
-    "message": "HEARTBEAT: Run traderbot self-improvement cycle. Check circuit breaker, review recent decisions, update Bayesian parameters, promote learnings. Write HEARTBEAT.md."
+    "message": "HEARTBEAT: Run traderbot self-improvement cycle. Check circuit breaker, review recent decisions, update Bayesian parameters, promote learnings. Write HEARTBEAT_DATA.md."
   }
 }
 ```
@@ -135,3 +135,24 @@ The agent MUST respect these immutable constraints enforced by the risk module:
 - Daily loss limit: 1% / 2% / 10% (SLOW / HALT / FULL_STOP circuit breaker)
 - No short selling (binary markets only)
 - All trades logged with full reasoning in audit trail
+
+## Workspace Files
+
+The OpenClaw Gateway injects these workspace files into every session:
+
+| File | Purpose |
+|---|---|
+| `AGENTS.md` | Operating rules, trading constraints, self-learning protocol |
+| `SOUL.md` | Persona, boundaries, behavioral principles |
+| `IDENTITY.md` | Agent name, role, vibe |
+| `TOOLS.md` | Local tool notes, gotchas, CLI reference |
+| `USER.md` | Human profile, trading preferences |
+| `HEARTBEAT.md` | Agent checklist — instructions for heartbeat runs (NOT data output) |
+| `SESSION-STATE.md` | WAL protocol — active positions, pending actions |
+| `HEARTBEAT_DATA.md` | 7-step review output from `traderbot heartbeat` |
+| `.learnings/` | Self-improvement logs (LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md) |
+
+### Key Distinction: HEARTBEAT.md vs HEARTBEAT_DATA.md
+
+- **HEARTBEAT.md** = Agent instructions (checklist with `tasks:` blocks). The Gateway reads this and injects it into heartbeat prompts. The agent follows it.
+- **HEARTBEAT_DATA.md** = Data output from `traderbot heartbeat`. Contains performance metrics, adaptation results, circuit breaker state. Written by the CLI, read by the agent for context.

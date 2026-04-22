@@ -448,7 +448,7 @@ class TestHeartbeatCycle:
         _insert_decision(conn, direction="yes", price=40, actual_result=1, hours_ago=2)
         _insert_decision(conn, direction="yes", price=60, actual_result=0, hours_ago=3)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         result = run_heartbeat_cycle(conn, heartbeat_path=hb_path)
         assert result.performance.trade_count == 3
         assert result.decisions.closed_count == 3
@@ -459,7 +459,7 @@ class TestHeartbeatCycle:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         run_heartbeat_cycle(conn, heartbeat_path=hb_path)
         assert hb_path.exists()
         content = hb_path.read_text()
@@ -475,14 +475,14 @@ class TestHeartbeatCycle:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         before = datetime.now(UTC)
         run_heartbeat_cycle(conn, heartbeat_path=hb_path)
         after = datetime.now(UTC)
 
         content = hb_path.read_text()
-        ts_line = next(line for line in content.split("\n") if line.startswith("## Heartbeat:"))
-        ts_str = ts_line.replace("## Heartbeat:", "").strip()
+        ts_line = next(line for line in content.split("\n") if line.startswith("## Last Heartbeat:"))
+        ts_str = ts_line.replace("## Last Heartbeat:", "").strip()
         ts = datetime.fromisoformat(ts_str)
         assert before <= ts <= after
         conn.close()
@@ -492,7 +492,7 @@ class TestHeartbeatCycle:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True)
         assert not hb_path.exists()
         conn.close()
@@ -642,7 +642,7 @@ class TestEdgeCases:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         run_heartbeat_cycle(conn, heartbeat_path=hb_path)
         content = hb_path.read_text()
         assert "NORMAL" in content
@@ -653,7 +653,7 @@ class TestEdgeCases:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
 
-        hb_path = tmp_path / "HEARTBEAT.md"
+        hb_path = tmp_path / "HEARTBEAT_DATA.md"
         run_heartbeat_cycle(conn, heartbeat_path=hb_path)
         content = hb_path.read_text()
         assert "Alerts" in content

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HEARTBEAT_PATH = Path(".openclaw/workspace/HEARTBEAT.md")
+DEFAULT_HEARTBEAT_PATH = Path(".openclaw/workspace/HEARTBEAT_DATA.md")
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +405,7 @@ def run_heartbeat_cycle(
         steps_completed=steps_completed,
     )
 
-    # Step 7: Write HEARTBEAT.md
+    # Step 7: Write HEARTBEAT_DATA.md
     hb_path = heartbeat_path or DEFAULT_HEARTBEAT_PATH
     if not dry_run:
         _write_heartbeat_md(hb_path, result)
@@ -433,7 +433,11 @@ def _get_decisions(conn: sqlite3.Connection, since: datetime) -> list[DbDecision
 
 
 def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
-    """Write structured heartbeat results to HEARTBEAT.md."""
+    """Write structured heartbeat results to HEARTBEAT_DATA.md.
+
+    Per OpenClaw spec, HEARTBEAT.md is an agent checklist (instructions),
+    NOT a data output file. Our 7-step review data goes to HEARTBEAT_DATA.md.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
 
     ts = result.timestamp.isoformat()
@@ -477,9 +481,12 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
         alert_lines = "- None\n"
 
     content = f"""\
-# TraderBot Heartbeat
+# TraderBot Heartbeat Data
 
-## Heartbeat: {ts}
+> 7-step self-review output. Written by `traderbot heartbeat`.
+> This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
+
+## Last Heartbeat: {ts}
 
 ### Performance
 - Win rate: {perf.win_rate:.0%} ({perf.trade_count} trades)
