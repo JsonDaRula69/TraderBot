@@ -23,13 +23,23 @@ metadata:
 | `traderbot signals` | `[--json]` | Active signals across tracked markets |
 | `traderbot heartbeat` | | System status summary |
 | `traderbot halt` | `[--force]` | Circuit breaker status or forced halt |
-| `traderbot news` | `[--source STR] [--json]` | Fetch recent news (Phase 7) |
-| `traderbot sentiment` | `[--ticker STR] [--json]` | Sentiment analysis (Phase 7) |
-| `traderbot backtest` | `STRATEGY [--json]` | Run backtest (Phase 5) |
-| `traderbot paper` | `[--json]` | Paper trading mode (Phase 5) |
-| `traderbot compare` | `STRATEGY_A STRATEGY_B [--json]` | Compare strategies (Phase 5) |
-| `traderbot performance` | `[--period STR] [--json]` | Portfolio performance (Phase 5) |
-| `traderbot learnings` | `[--json]` | Self-improvement log (Phase 6) |
+| `traderbot news` | `[--source STR] [--json]` | Fetch recent news |
+| `traderbot sentiment` | `[--ticker STR] [--json]` | Sentiment analysis |
+| `traderbot backtest` | `STRATEGY [--json]` | Run backtest |
+| `traderbot paper` | `[--json]` | Paper trading mode |
+| `traderbot compare` | `STRATEGY_A STRATEGY_B [--json]` | Compare strategies |
+| `traderbot performance` | `[--period STR] [--json]` | Portfolio performance |
+| `traderbot learnings` | `[--json]` | Self-improvement log |
+| `traderbot profile create` | `NAME --mode paper|live [--json]` | Create a trading profile |
+| `traderbot profile list` | `[--json]` | List all profiles |
+| `traderbot profile show` | `NAME [--json]` | Show profile details |
+| `traderbot profile delete` | `NAME [--keep-data]` | Delete a profile |
+| `traderbot profile assign` | `AGENT-ID PROFILE-NAME` | Assign agent to profile |
+| `traderbot profile revoke` | `PROFILE-NAME` | Revoke agent assignment |
+| `traderbot profile assignments` | `[--json]` | List token assignments |
+| `traderbot profile discover-agents` | `[--json]` | Discover OpenClaw agents |
+| `traderbot profile set-auth` | `PROFILE-NAME SERVICE` | Set profile credentials |
+| `traderbot profile auth` | `PROFILE-NAME [--json]` | Show profile credentials |
 
 ## Trigger Phrases
 
@@ -69,6 +79,15 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 | `KALSHI_API_KEY` | Yes | Kalshi API authentication key |
 | `KALSHI_PRIVATE_KEY` | Yes | RSA private key for JWT auth |
 | `KALSHI_DEMO` | No | Set to `true` to use demo API (`demo-api.kalshi.co`) |
+| `TRADERBOT_PROFILE_TOKEN` | No | Profile token for multi-agent deployment (auto-injected into TOOLS.md) |
+
+## Profile-Aware Trading
+
+When `TRADERBOT_PROFILE_TOKEN` is set, the CLI resolves it to a `TradingProfile` and applies:
+- Profile-specific risk limits (capped by HARD_LIMITS)
+- Category filtering (only enabled_categories permitted)
+- Per-profile API credentials from keyring namespace `traderbot.profiles.<name>`
+- Isolated data directories (`~/.traderbot-paper/` or `~/.traderbot-live/`)
 
 ## Cron Architecture
 

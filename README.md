@@ -29,11 +29,24 @@ traderbot/
 ├── src/traderbot/
 │   ├── kalshi/              # Kalshi exchange adapter
 │   ├── analysis/            # Statistical computation engine
-│   ├── risk/                 # Immutable risk enforcement
+│   ├── risk/                # Immutable risk enforcement
 │   ├── simulation/          # Backtesting & paper trading
 │   ├── news/                # News & social media pipeline
+│   ├── profiles/            # Multi-agent profile system
+│   │   ├── models.py        # TradingProfile model
+│   │   ├── registry.py      # ProfileRegistry (keyring CRUD)
+│   │   ├── tokens.py        # Token generation/resolution
+│   │   ├── auth.py          # Per-profile auth store
+│   │   ├── discovery.py     # OpenClaw agent discovery
+│   │   ├── injection.py     # Token injection into TOOLS.md
+│   │   ├── config.py        # Profile-aware credential resolution
+│   │   ├── isolation.py     # Per-profile data isolation
+│   │   └── runtime.py       # Runtime context resolution
 │   ├── db/                  # State persistence (SQLite)
 │   └── cli.py               # CLI entry point
+├── install/
+│   ├── traderbot-installer.sh  # OS detection, deps, config flow
+│   └── services/              # Systemd + launchd templates
 ├── skills/traderbot/
 │   └── SKILL.md             # OpenClaw skill definition
 ├── .openclaw/workspace/     # Agent workspace files
@@ -54,12 +67,16 @@ traderbot/
 | [docs/architecture.md](docs/architecture.md) | Three-loop system, components, data flow, toolkit vs. agent boundary |
 | [docs/kalshi.md](docs/kalshi.md) | Kalshi API reference: endpoints, auth, SDK, historical data, rate limits |
 | [docs/openclaw-integration.md](docs/openclaw-integration.md) | Skill system, workspace files, cron architectures, proactive patterns |
-| [docs/risk.md](docs/risk.md) | Hard risk guards, circuit breakers, position sizing, audit trail, anti-bias design |
+| [docs/risk.md](docs/risk.md) | Hard risk guards, AgentRiskLimits, circuit breakers, position sizing, audit trail, anti-bias design |
 | [docs/simulation.md](docs/simulation.md) | Backtest engine, data loading, paper trading, performance metrics |
 | [docs/news-sentiment.md](docs/news-sentiment.md) | Pipeline architecture, sources, classifiers, impact assessment |
 | [docs/self-learning.md](docs/self-learning.md) | Bayesian adaptation, learning logs, heartbeat, WAL protocol |
 | [docs/product-roadmap.md](docs/product-roadmap.md) | Implementation phases, dependencies, future expansion |
 | [docs/research.md](docs/research.md) | External references, existing projects, ecosystem analysis |
+| [docs/profiles.md](docs/profiles.md) | Profile system architecture, TradingProfile model, registry, token handshake |
+| [docs/deployment.md](docs/deployment.md) | Ubuntu + macOS installation, persistence setup, profile-agent flow |
+| [docs/security.md](docs/security.md) | Threat model, token handshake security, keyring encryption, enforcement layers |
+| [docs/api.md](docs/api.md) | CLI command reference including profile commands |
 
 ## Quick Start
 

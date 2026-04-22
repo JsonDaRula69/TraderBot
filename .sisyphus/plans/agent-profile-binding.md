@@ -1072,7 +1072,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/context.py, src/traderbot/kalshi/config.py, tests/profiles/test_config_loading.py`
   - Pre-commit: `pytest tests/profiles/test_config_loading.py`
 
-- [ ] 12. Systemd Service Template
+- [x] 12. Systemd Service Template
 
   **What to do**:
   - Create `install/services/traderbot-agent@.service` — systemd template unit:
@@ -1141,7 +1141,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `install/services/traderbot-agent@.service, install/services/install-service.sh`
   - Pre-commit: `shellcheck install/services/install-service.sh`
 
-- [ ] 13. Launchd Plist Template
+- [x] 13. Launchd Plist Template
 
   **What to do**:
   - Create `install/services/com.traderbot.agent.plist` — launchd template:
@@ -1206,7 +1206,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `install/services/com.traderbot.agent.plist, install/services/install-launchd.sh`
   - Pre-commit: `shellcheck install/services/install-launchd.sh`
 
-- [ ] 14. Installer: OS Detection + Dependency Installation
+- [x] 14. Installer: OS Detection + Dependency Installation
 
   **What to do**:
   - Create `install/traderbot-installer.sh` — lightweight shell script:
@@ -1284,7 +1284,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `install/traderbot-installer.sh`
   - Pre-commit: `shellcheck install/traderbot-installer.sh`
 
-- [ ] 15. Installer: Persistence Setup
+- [x] 15. Installer: Persistence Setup
 
   **What to do**:
   - Add persistence setup to `install/traderbot-installer.sh`:
@@ -1342,7 +1342,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `install/traderbot-installer.sh, tests/install/test_persistence.sh`
   - Pre-commit: `shellcheck install/traderbot-installer.sh`
 
-- [ ] 16. Installer: Config Flow + Token Injection
+- [x] 16. Installer: Config Flow + Token Injection
 
   **What to do**:
   - Add interactive config flow to `install/traderbot-installer.sh`:
