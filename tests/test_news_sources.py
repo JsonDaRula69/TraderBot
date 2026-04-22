@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from traderbot.news.sources import NewsAggregator, NewsItem, NewsSource
 
@@ -44,7 +45,7 @@ class _FeedEntry(dict):
         try:
             return self[name]
         except KeyError:
-            raise AttributeError(name)
+            raise AttributeError(name) from None
 
 def _reddit_rss_entry(
     title: str = "Reddit Post",
@@ -100,7 +101,7 @@ class TestNewsItem:
         assert item.ticker_refs == ["BTC", "ETH"]
 
     def test_strict_forbids_extra(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             NewsItem(
                 id="test-3",
                 title="Title",
@@ -389,7 +390,7 @@ class TestFetchRecent:
     async def test_dispatches_to_correct_source(self):
         agg = NewsAggregator()
         with patch.object(agg, "_fetch_newsapi", new_callable=AsyncMock, return_value=[]):
-            items = await agg.fetch_recent(NewsSource.NEWSAPI, limit=5)
+            await agg.fetch_recent(NewsSource.NEWSAPI, limit=5)
             agg._fetch_newsapi.assert_awaited_once_with(5)
 
     @pytest.mark.asyncio

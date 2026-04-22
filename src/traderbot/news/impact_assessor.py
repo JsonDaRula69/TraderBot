@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
@@ -199,9 +199,9 @@ class ImpactAssessor(BaseModel):
 
     def _compute_recency(self, published_at: datetime) -> float:
         """Exponential decay with 6-hour half-life."""
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         if published_at.tzinfo is None:
-            published_at = published_at.replace(tzinfo=timezone.utc)
+            published_at = published_at.replace(tzinfo=UTC)
         age_hours = max((now - published_at).total_seconds() / 3600.0, 0.0)
         decay = math.exp(-0.693 * age_hours / RECENCY_HALF_LIFE_HOURS)
         return min(decay, 1.0)
@@ -259,7 +259,7 @@ class ImpactAssessor(BaseModel):
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     mag_a = math.sqrt(sum(x * x for x in a))
     mag_b = math.sqrt(sum(x * x for x in b))
     if mag_a == 0.0 or mag_b == 0.0:

@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 

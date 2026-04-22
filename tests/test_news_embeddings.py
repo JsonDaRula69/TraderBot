@@ -6,12 +6,12 @@ import json
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest  # noqa: TC002
 
 from traderbot.news.embeddings import (
-    EMBED_DIMENSION,
     _RATE_LIMIT_MAX_CALLS,
     _RATE_LIMIT_WINDOW_SECS,
+    EMBED_DIMENSION,
     VoyageClient,
 )
 

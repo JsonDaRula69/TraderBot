@@ -22,8 +22,9 @@ from traderbot.news.models import (
     SentimentResult,
 )
 from traderbot.news.sentiment_scorer import SentimentScorer
-from traderbot.news.sources import NewsAggregator, NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
-
+from traderbot.news.sources import NewsAggregator
+from traderbot.news.sources import NewsItem as SourcesNewsItem
+from traderbot.news.sources import NewsSource as SourcesNewsSource
 
 
 def _sources_item(**overrides: object) -> SourcesNewsItem:
@@ -782,7 +783,7 @@ class TestVoyageIntegration:
 
         mock_voyage.embed.side_effect = embed_side_effect
         scorer = SentimentScorer(voyage_client=mock_voyage)
-        result = scorer.score("Market outlook uncertain", NewsSource.NEWSAPI, "voy-test")
+        scorer.score("Market outlook uncertain", NewsSource.NEWSAPI, "voy-test")
         assert mock_voyage.embed.called
 
     def test_impact_with_voyage_relevance(self):

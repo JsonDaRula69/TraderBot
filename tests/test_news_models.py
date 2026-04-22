@@ -1,6 +1,6 @@
 """Validation tests for news pipeline Pydantic models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -23,7 +23,7 @@ def _make_news_item(**overrides: object) -> dict[str, object]:
         "body": "The Federal Reserve raised interest rates by 25bps.",
         "source": NewsSource.NEWSAPI,
         "url": "https://example.com/fed-rates",
-        "published_at": datetime(2025, 1, 15, 14, 30, tzinfo=timezone.utc),
+        "published_at": datetime(2025, 1, 15, 14, 30, tzinfo=UTC),
         "ticker_refs": ["SPY", "TLT"],
         "category": NewsCategory.ECONOMICS,
     }
@@ -37,7 +37,7 @@ def _make_sentiment(**overrides: object) -> dict[str, object]:
         "score": -0.45,
         "confidence": 0.82,
         "model": "gpt-4o",
-        "timestamp": datetime(2025, 1, 15, 14, 35, tzinfo=timezone.utc),
+        "timestamp": datetime(2025, 1, 15, 14, 35, tzinfo=UTC),
     }
     base.update(overrides)
     return base
