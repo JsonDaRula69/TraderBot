@@ -158,6 +158,7 @@ class TradeRequest(BaseModel):
     edge_estimate: float
     market_price_cents: Annotated[int, Field(gt=0, description="Current market price in cents")]
     market_open_interest: Annotated[int, Field(ge=0)]
+    market_category: MarketCategory | None = None
 
     @computed_field
     @property
