@@ -28,6 +28,7 @@ class Market(BaseModel):
     state: Literal["open", "closed", "settled"]
     event_ticker: str
     category: str | None = None
+    market_category: MarketCategory | None = None
     settlement_result: bool | None = None
 
 
@@ -162,6 +163,23 @@ class TradeRequest(BaseModel):
     @property
     def price_dollars(self) -> float:
         return self.price_cents / 100.0
+
+
+class MarketCategory(StrEnum):
+    """Market categories for cross-module use (analysis, simulation, etc.).
+
+    Lives in kalshi/models.py to avoid circular dependencies.
+    The similar enum in simulation/adaptation.py is kept for backward compatibility
+    but code should prefer this version for cross-module use.
+    """
+
+    ECONOMICS = "Economics"
+    POLITICS = "Politics"
+    WEATHER = "Weather"
+    SPORTS = "Sports"
+    CULTURE = "Culture"
+    TECHNOLOGY = "Technology"
+    SCIENCE = "Science"
 
 
 class OrderSide(StrEnum):
