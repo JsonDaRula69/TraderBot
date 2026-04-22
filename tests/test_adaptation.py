@@ -198,9 +198,12 @@ class TestAdaptationResult:
             )
 
     def test_confidence_bounds(self):
+        AdaptationResult(
+            category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
+        )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
+                category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=-0.1, reasoning="neg"
             )
         with pytest.raises(ValidationError):
             AdaptationResult(
