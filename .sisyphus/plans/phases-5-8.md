@@ -1912,7 +1912,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `feat(news): add impact assessor with heuristic and Voyage relevance`
 
-- [ ] 23. Wire news + sentiment CLI commands
+- [x] 23. Wire news + sentiment CLI commands
 
   **What to do**:
   - Replace `news` and `sentiment` CLI stubs with real implementations

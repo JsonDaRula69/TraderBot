@@ -352,4 +352,13 @@
 - CLI `--source` validates against `SourcesNewsSource` (case-insensitive via `.lower()`), `--category` validates against `NewsCategory` (case-sensitive matching enum values)
 - Reddit RSS works without API keys — CLI suggests `--source reddit` when no keys configured
 - `asyncio.run()` creates a new event loop each time — cannot nest inside existing async context. CLI tests use `patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg)` to replace the class entirely, avoiding real async execution
+
+## Task 24 Learnings (News Integration Tests)
+
+- **Two NewsItem/NewsSource models require explicit conversion**: `sources.py.NewsSource` (lowercase: "newsapi", "twitter", "reddit") and `models.py.NewsSource` (capitalized: "NewsAPI", "Twitter", "Reddit") are different StrEnums. Integration tests must convert `sources.NewsItem` → `models.NewsItem` before passing to classifier/sentiment/impact. Category mapping also needed: sources uses bare str ("Economics", "uncategorized"), models uses `NewsCategory` enum.
+- **Default _models_item() body contains economics keywords**: The helper's default body "The Federal Reserve announced a 25 basis point rate hike." contains "Fed" and "rate" which are Economics keywords. This creates ambiguous keyword matches when testing other categories. Fix: pass explicit `body=""` for non-economics test items to avoid cross-category keyword collisions in the classifier.
+- **TextBlob sentiment on neutral-sounding weather text**: "Category 4 hurricane expected to make landfall tomorrow" scores near 0.0 on TextBlob polarity (it's factual, not emotionally negative). Don't assert `direction == "bearish"` for weather news using TextBlob — use `direction in ("bearish", "neutral")` instead.
+- **Voyage uplift mock pattern for SentimentScorer**: The `_voyage_uplift()` method calls `embed()` three times (text, positive anchor, negative anchor). Mock `side_effect` must provide all three embeddings. Use a closure with call counter to return different vectors per call.
+- **56 integration tests across 7 test classes**: TestFullPipeline (6), TestPipelineDegradation (10), TestCategoryClassification (13), TestSentimentScoringPipeline (7), TestImpactAssessmentPipeline (7), TestNewsItemConversion (8), TestVoyageIntegration (4). Plus 1 async test for aggregator fetch+convert pipeline.
+- **No real API calls in any test**: httpx.AsyncClient mocked for NewsAggregator, feedparser mocked for Reddit RSS, VoyageClient mocked with MagicMock. VADER and TextBlob run locally (deterministic, no mocking needed).
 - Rich table `max_width=50` truncates titles — test assertions must check for partial text or column values like "Economics" / "NewsAPI" rather than full title strings in Rich output
