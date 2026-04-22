@@ -1949,7 +1949,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `test(news): add integration tests for news pipeline`
 
-- [ ] 25. Phase 7 completion — version bump to v0.07.00
+- [x] 25. Phase 7 completion — version bump to v0.07.00
 
   **What to do**:
   - Update VERSION to `0.07.00`, ROADMAP_PROGRESS.md Phase 7 ✅, pyproject.toml version
@@ -1960,7 +1960,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `chore: bump version to v0.07.00 (Phase 7 complete)`
 
-- [ ] 26. Implement simulation/adaptation.py — Bayesian engine
+- [x] 26. Implement simulation/adaptation.py — Bayesian engine
 
   **What to do**:
   - Expand `src/traderbot/simulation/adaptation.py` with full conjugate prior updates
