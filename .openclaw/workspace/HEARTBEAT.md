@@ -1,19 +1,30 @@
 # TraderBot Heartbeat
 
-## Last Heartbeat: (not yet initialized)
-## Markets Tracked: 0
-## Open Positions: 0
-## Daily P&L: N/A
+## Heartbeat: 2026-04-22T02:45:52.851285+00:00
 
-### Proactive Behaviors
-- [ ] Check circuit breaker conditions
-- [ ] Review recent decisions for pattern detection
-- [ ] Bayesian parameter updates applied
-- [ ] Promote learnings to permanent memory
+### Performance
+- Win rate: 0% (0 trades)
+- Daily P&L: +0.00 USD
+- Avg confidence: 0.00
+- Open positions: 0
 
-### Self-Healing
-- [ ] Verify no errors since last heartbeat
-- [ ] Reconcile positions with exchange state
+### Adaptation
+- No update (no decisions to adapt from)
 
-### Pending Actions
-(none)
+### Learnings
+- No promotions this cycle
+
+### Circuit Breaker
+- Level: NORMAL
+- Can trade: True
+- Daily loss: 0.00%
+- Drawdown: 0.00%
+
+### System Health
+- API: available
+- DB: ok
+- Freshness: no_decisions_yet
+
+### Alerts
+- None
+

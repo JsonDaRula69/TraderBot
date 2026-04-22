@@ -235,7 +235,13 @@ def trade(
     from traderbot.kalshi.models import PortfolioState, TradeRequest
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
-    from traderbot.wal import WalAction, WalStatus, write_intent, update_status, DEFAULT_SESSION_STATE_PATH
+    from traderbot.wal import (
+        DEFAULT_SESSION_STATE_PATH,
+        WalAction,
+        WalStatus,
+        update_status,
+        write_intent,
+    )
 
     console = Console()
     trade_request = TradeRequest(
@@ -535,14 +541,107 @@ def bootstrap(
 
 
 @app.command()
-def heartbeat() -> None:
-    """Periodic self-review: performance, risk state, and learning promotion."""
-    from traderbot.learning import HEARTBEAT_INTERVAL_HOURS
+def heartbeat(
+    db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Report only — no state changes")
+    ] = False,
+) -> None:
+    """Periodic self-review: performance, adaptation, risk state, and learning promotion."""
+    from traderbot.db import init_schema
+    from traderbot.db.learnings import init_table as init_learnings_table
+    from traderbot.heartbeat import DEFAULT_HEARTBEAT_PATH, run_heartbeat_cycle
 
-    Console().print(
-        f"Heartbeat: system operational. No active positions.\n"
-        f"Learning promotion scan runs every {HEARTBEAT_INTERVAL_HOURS}h (full implementation: Phase 8)."
+    console = Console()
+
+    def _run(conn):
+        init_schema(conn)
+        init_learnings_table(conn)
+        from traderbot.learning import init_task_observations_table
+
+        init_task_observations_table(conn)
+        return run_heartbeat_cycle(conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, dry_run=dry_run)
+
+    try:
+        result = _with_db(db_path, _run)
+    except Exception as exc:
+        if json_output:
+            json_lib.dump({"error": str(exc)}, sys.stdout)
+        else:
+            console.print(f"[red]Heartbeat failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        json_lib.dump(result.model_dump(mode="json"), sys.stdout, default=str)
+        return
+
+    perf = result.performance
+    decision = result.decisions
+    adapt = result.adaptation
+    lrn = result.learning_promotion
+    cb = result.circuit_breaker
+    health = result.system_health
+
+    console.print(f"\n[bold]Heartbeat[/bold] — {result.timestamp.isoformat()}")
+    console.print(f"  Steps completed: {', '.join(result.steps_completed)}")
+
+    console.print("\n[bold]Performance[/bold]")
+    pnl_str = f"{perf.total_pnl_cents / 100:+.2f}"
+    console.print(
+        f"  Trades: {perf.trade_count}  "
+        f"Win rate: {perf.win_rate:.0%}  "
+        f"P&L: {pnl_str} USD"
     )
+    if perf.deviation_flag:
+        console.print(f"  [yellow]⚠[/yellow] {perf.deviation_flag}")
+
+    console.print("\n[bold]Decisions[/bold]")
+    console.print(
+        f"  Closed: {decision.closed_count}  "
+        f"Correct: {decision.correct_predictions}  "
+        f"Accuracy: {decision.prediction_accuracy:.0%}"
+    )
+    if decision.pending_review:
+        console.print(f"  Open: {decision.open_count} — {', '.join(decision.pending_review[:5])}")
+
+    console.print("\n[bold]Adaptation[/bold]")
+    if adapt.updated:
+        console.print(
+            f"  Edge threshold: {adapt.direction} "
+            f"(magnitude={adapt.magnitude:.4f}, "
+            f"confidence={adapt.confidence:.2f})"
+        )
+        console.print(f"  Method: {adapt.method}")
+    else:
+        console.print(f"  No update — {adapt.skipped_reason}")
+
+    console.print("\n[bold]Learnings[/bold]")
+    if lrn.promoted:
+        for key in lrn.promoted:
+            console.print(f"  [green]Promoted:[/green] {key}")
+    else:
+        console.print("  No promotions this cycle")
+
+    console.print("\n[bold]Circuit Breaker[/bold]")
+    level_style = "green" if cb.level == "NORMAL" else "red"
+    console.print(f"  Level: [{level_style}]{cb.level}[/{level_style}]  Can trade: {cb.can_trade}")
+
+    console.print("\n[bold]System Health[/bold]")
+    console.print(
+        f"  API: {health.api_connectivity}  "
+        f"DB: {health.db_integrity}  "
+        f"Freshness: {health.data_freshness}"
+    )
+
+    if health.alerts or cb.level != "NORMAL":
+        console.print("\n[bold yellow]Alerts[/bold yellow]")
+        for alert in health.alerts:
+            console.print(f"  [yellow]⚠[/yellow] {alert}")
+        if cb.level != "NORMAL":
+            console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
 
 
 @app.command()
@@ -598,9 +697,12 @@ def news(
 ) -> None:
     """Fetch and display news for tracked markets."""
     from traderbot.news.classifier import NewsClassifier
-    from traderbot.news.models import NewsCategory, NewsItem as ModelsNewsItem, NewsSource as ModelsNewsSource
+    from traderbot.news.models import NewsCategory
+    from traderbot.news.models import NewsItem as ModelsNewsItem
+    from traderbot.news.models import NewsSource as ModelsNewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
-    from traderbot.news.sources import NewsAggregator, NewsSource as SourcesNewsSource
+    from traderbot.news.sources import NewsAggregator
+    from traderbot.news.sources import NewsSource as SourcesNewsSource
 
     console = Console()
 
@@ -615,7 +717,7 @@ def news(
                 json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
             else:
                 err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # Validate --source
     source_filter: SourcesNewsSource | None = None
@@ -628,7 +730,7 @@ def news(
                 json_lib.dump({"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout)
             else:
                 err_console.print(f"[red]Invalid source:[/red] {source}. Valid: {valid}")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # Get API keys from environment
     import os
@@ -756,9 +858,12 @@ def sentiment(
     """Analyze market sentiment from news and social for a ticker."""
     from traderbot.news.classifier import NewsClassifier
     from traderbot.news.impact_assessor import ImpactAssessor
-    from traderbot.news.models import NewsCategory, NewsItem as ModelsNewsItem, NewsSource as ModelsNewsSource
+    from traderbot.news.models import NewsCategory
+    from traderbot.news.models import NewsItem as ModelsNewsItem
+    from traderbot.news.models import NewsSource as ModelsNewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
-    from traderbot.news.sources import NewsAggregator, NewsSource as SourcesNewsSource
+    from traderbot.news.sources import NewsAggregator
+    from traderbot.news.sources import NewsSource as SourcesNewsSource
 
     console = Console()
 
@@ -1210,8 +1315,14 @@ def learnings(
     ] = False,
 ) -> None:
     """List learned patterns and trigger promotions."""
-    from traderbot.db.learnings import LearningCategory, LearningStatus, find_by_pattern_key, get_patterns, init_table
-    from traderbot.learning import HEARTBEAT_INTERVAL_HOURS, promote_learning
+    from traderbot.db.learnings import (
+        LearningCategory,
+        LearningStatus,
+        find_by_pattern_key,
+        get_patterns,
+        init_table,
+    )
+    from traderbot.learning import promote_learning
 
     console = Console()
 
@@ -1259,7 +1370,7 @@ def learnings(
                     json_lib.dump({"error": f"Unknown category: {category}. Valid: {valid}"}, sys.stdout)
                 else:
                     err_console.print(f"[red]Unknown category:[/red] {category}. Valid: {valid}")
-                raise typer.Exit(code=1)
+                raise typer.Exit(code=1) from None
 
         patterns = get_patterns(conn, category=cat_enum)
 
@@ -1273,7 +1384,7 @@ def learnings(
                     json_lib.dump({"error": f"Unknown status: {status}. Valid: {valid}"}, sys.stdout)
                 else:
                     err_console.print(f"[red]Unknown status:[/red] {status}. Valid: {valid}")
-                raise typer.Exit(code=1)
+                raise typer.Exit(code=1) from None
 
         if status_enum is not None:
             patterns = [p for p in patterns if p.status == status_enum]
