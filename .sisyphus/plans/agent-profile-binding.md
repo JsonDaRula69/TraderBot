@@ -215,7 +215,7 @@ Max Concurrent: 6 (Wave 1)
 
 ## TODOs
 
-- [ ] 1. TradingProfile Model + Validation
+- [x] 1. TradingProfile Model + Validation
 
   **What to do**:
   - Create `src/traderbot/profiles/__init__.py` with package exports
@@ -305,7 +305,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/__init__.py, src/traderbot/profiles/models.py, tests/profiles/test_models.py`
   - Pre-commit: `pytest tests/profiles/test_models.py`
 
-- [ ] 2. Profile Registry (Encrypted Keyring Storage)
+- [x] 2. Profile Registry (Encrypted Keyring Storage)
 
   **What to do**:
   - Create `src/traderbot/profiles/registry.py` with `ProfileRegistry` class:
@@ -383,7 +383,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/registry.py, tests/profiles/test_registry.py`
   - Pre-commit: `pytest tests/profiles/test_registry.py`
 
-- [ ] 3. Token Module (Generation, Resolution, Revocation)
+- [x] 3. Token Module (Generation, Resolution, Revocation)
 
   **What to do**:
   - Create `src/traderbot/profiles/tokens.py`:
@@ -459,7 +459,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/tokens.py, tests/profiles/test_tokens.py`
   - Pre-commit: `pytest tests/profiles/test_tokens.py`
 
-- [ ] 4. AgentRiskLimits Model
+- [x] 4. AgentRiskLimits Model
 
   **What to do**:
   - Create `src/traderbot/risk/agent_limits.py`:
@@ -528,7 +528,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/risk/agent_limits.py, tests/risk/test_agent_limits.py`
   - Pre-commit: `pytest tests/risk/test_agent_limits.py`
 
-- [ ] 5. Per-Profile Auth Store
+- [x] 5. Per-Profile Auth Store
 
   **What to do**:
   - Create `src/traderbot/profiles/auth.py` with `ProfileAuthStore` class:
@@ -601,7 +601,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/auth.py, tests/profiles/test_auth.py`
   - Pre-commit: `pytest tests/profiles/test_auth.py`
 
-- [ ] 6. OpenClaw Agent Auto-Discovery
+- [x] 6. OpenClaw Agent Auto-Discovery
 
   **What to do**:
   - Create `src/traderbot/profiles/discovery.py`:
@@ -672,7 +672,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/discovery.py, tests/profiles/test_discovery.py`
   - Pre-commit: `pytest tests/profiles/test_discovery.py`
 
-- [ ] 7. Profile-Aware evaluate_trade()
+- [x] 7. Profile-Aware evaluate_trade()
 
   **What to do**:
   - Update `src/traderbot/risk/__init__.py:evaluate_trade()`:
@@ -749,7 +749,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/risk/__init__.py, src/traderbot/risk/limits.py, tests/risk/test_evaluate_trade_profile.py`
   - Pre-commit: `pytest tests/`
 
-- [ ] 8. Profile CLI Commands
+- [x] 8. Profile CLI Commands
 
   **What to do**:
   - Add `profile` command group to `src/traderbot/cli.py` using Typer subcommands:
@@ -840,7 +840,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/cli.py, tests/profiles/test_cli.py`
   - Pre-commit: `pytest tests/profiles/test_cli.py`
 
-- [ ] 9. Per-Profile Data Isolation Plumbing
+- [x] 9. Per-Profile Data Isolation Plumbing
 
   **What to do**:
   - Make all data paths profile-configurable instead of hardcoded:
@@ -914,7 +914,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/db/__init__.py, src/traderbot/db/vectors.py, src/traderbot/profiles/paths.py, tests/profiles/test_data_isolation.py`
   - Pre-commit: `pytest tests/profiles/test_data_isolation.py`
 
-- [ ] 10. Token Auto-Injection into OpenClaw Agent TOOLS.md
+- [x] 10. Token Auto-Injection into OpenClaw Agent TOOLS.md
 
   **What to do**:
   - Add injection logic to `src/traderbot/profiles/discovery.py` (or new `src/traderbot/profiles/injection.py`):
@@ -984,7 +984,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `src/traderbot/profiles/injection.py, tests/profiles/test_injection.py`
   - Pre-commit: `pytest tests/profiles/test_injection.py`
 
-- [ ] 11. Profile-Aware Config Loading
+- [x] 11. Profile-Aware Config Loading
 
   **What to do**:
   - Create profile-aware config initialization flow:
@@ -1413,7 +1413,7 @@ Max Concurrent: 6 (Wave 1)
   - Files: `install/traderbot-installer.sh, tests/install/test_config_flow.sh`
   - Pre-commit: `shellcheck install/traderbot-installer.sh`
 
-- [ ] 17. Full Documentation Rebuild
+- [x] 17. Full Documentation Rebuild
 
   **What to do**:
   - After ALL implementation tasks complete, conduct line-by-line code audit:
@@ -1489,19 +1489,23 @@ Max Concurrent: 6 (Wave 1)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present consolidated results to user and get explicit "okay" before completing.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
+  - VERDICT: APPROVE (naming fixes applied)
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
+  - Shellcheck PASS | Tests 103 PASS | Clean YES | VERDICT: APPROVE
   Run linter + pytest. Review all changed files for: type safety, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names.
   Output: `Build [PASS/FAIL] | Lint [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high`
+  - Doc coverage complete (revoke IS documented at api.md:163) | VERDICT: APPROVE
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration (profile + risk gate + data isolation together). Test edge cases: empty categories, revoked token, missing keyring.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
+  - Tasks compliant: 17/17 | Contamination: CLEAN | VERDICT: APPROVE
   For each task: read "What to do", read actual diff. Verify 1:1 — everything in spec was built, nothing beyond spec. Check "Must NOT do" compliance. Detect cross-task contamination. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
