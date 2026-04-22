@@ -6,7 +6,7 @@ import pytest
 
 from traderbot.auth import AuthManager
 from traderbot.profiles.config import resolve_kalshi_credentials
-from traderbot.profiles.auth import ProfileAuthManager
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.models import TradingProfile
 from traderbot.kalshi.models import MarketCategory
 
@@ -56,7 +56,7 @@ def test_profile(mock_keyring: MockKeyring) -> TradingProfile:
 def test_resolve_with_profile_credentials(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
     """Profile with credentials returns profile credentials."""
     # Set profile credentials
-    auth_mgr = ProfileAuthManager(test_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(test_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "profile-key", "profile-secret")
     
     # Resolve should return profile credentials
@@ -105,7 +105,7 @@ def test_resolve_profile_overrides_global(test_profile: TradingProfile, mock_key
     global_auth.set_credential("kalshi", "api_key", "global-key")
     global_auth.set_credential("kalshi", "api_secret", "global-secret")
     
-    profile_auth = ProfileAuthManager(test_profile, keyring_module=mock_keyring)
+    profile_auth = ProfileAuthStore(test_profile, keyring_module=mock_keyring)
     profile_auth.set_credentials("kalshi", "profile-key", "profile-secret")
     
     # Should prefer profile credentials

@@ -1753,7 +1753,7 @@ def profile_assign(
     """Assign a token to an agent for profile access."""
     from pathlib import Path
 
-    from traderbot.profiles.injection import inject_token_into_tools
+    from traderbot.profiles.injection import inject_token
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
 
@@ -1779,7 +1779,7 @@ def profile_assign(
                 console.print(f"[yellow]Warning:[/yellow] Agent directory not found at {agent_path}")
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
-                inject_token_into_tools(str(agent_path), token)
+                inject_token(str(agent_path), token)
                 console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
         except FileNotFoundError:
             console.print(f"[yellow]Warning:[/yellow] Agent directory not found")

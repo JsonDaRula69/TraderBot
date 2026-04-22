@@ -121,9 +121,9 @@ def test_load_profile_config(mock_keyring, sample_profile):
     set_keyring(mock_keyring)
     
     # Store credentials for the profile
-    from traderbot.profiles.auth import ProfileAuthManager
+    from traderbot.profiles.auth import ProfileAuthStore
     
-    auth_mgr = ProfileAuthManager(sample_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(sample_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "test-key", "test-secret")
     
     # Load config
@@ -195,9 +195,9 @@ def test_get_runtime_context(
     monkeypatch.setenv("TRADERBOT_PROFILE_TOKEN", token)
     
     # Store credentials
-    from traderbot.profiles.auth import ProfileAuthManager
+    from traderbot.profiles.auth import ProfileAuthStore
     
-    auth_mgr = ProfileAuthManager(sample_profile, keyring_module=mock_keyring)
+    auth_mgr = ProfileAuthStore(sample_profile, keyring_module=mock_keyring)
     auth_mgr.set_credentials("kalshi", "test-key", "test-secret")
     
     # Get runtime context

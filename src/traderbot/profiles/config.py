@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from traderbot.auth import AuthManager
-from traderbot.profiles.auth import ProfileAuthManager
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def resolve_kalshi_credentials(
     Args:
         profile: TradingProfile to check for credentials (optional)
         global_keyring: Optional keyring module for global AuthManager (testing)
-        profile_keyring: Optional keyring module for ProfileAuthManager (testing)
+        profile_keyring: Optional keyring module for ProfileAuthStore (testing)
         
     Returns:
         Tuple of (api_key, api_secret)
@@ -37,7 +37,7 @@ def resolve_kalshi_credentials(
     """
     # Try profile credentials first
     if profile is not None:
-        profile_auth = ProfileAuthManager(profile, keyring_module=profile_keyring)
+        profile_auth = ProfileAuthStore(profile, keyring_module=profile_keyring)
         profile_creds = profile_auth.get_credentials("kalshi")
         if profile_creds is not None:
             logger.info("Using Kalshi credentials from profile '%s'", profile.name)

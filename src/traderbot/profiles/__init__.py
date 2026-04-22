@@ -1,6 +1,6 @@
 """Multi-agent trading profiles — runtime configuration for OpenClaw agents."""
 
-from traderbot.profiles.auth import ProfileAuthManager
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.config import resolve_kalshi_credentials
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.registry import ProfileRegistry
@@ -13,7 +13,7 @@ from traderbot.profiles.runtime import (
 __all__ = [
     "TradingProfile",
     "ProfileRegistry",
-    "ProfileAuthManager",
+    "ProfileAuthStore",
     "resolve_kalshi_credentials",
     "get_current_profile",
     "get_runtime_context",

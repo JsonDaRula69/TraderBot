@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from traderbot.profiles.auth import ProfileAuthManager
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.models import TradingProfile
 from traderbot.kalshi.models import MarketCategory
 
@@ -55,12 +55,12 @@ def test_profile() -> TradingProfile:
 
 
 @pytest.fixture
-def auth_manager(test_profile: TradingProfile, mock_keyring: MockKeyring) -> ProfileAuthManager:
-    """Create a ProfileAuthManager with mock keyring."""
-    return ProfileAuthManager(test_profile, keyring_module=mock_keyring)
+def auth_manager(test_profile: TradingProfile, mock_keyring: MockKeyring) -> ProfileAuthStore:
+    """Create a ProfileAuthStore with mock keyring."""
+    return ProfileAuthStore(test_profile, keyring_module=mock_keyring)
 
 
-def test_set_and_retrieve_credentials(auth_manager: ProfileAuthManager, mock_keyring: MockKeyring) -> None:
+def test_set_and_retrieve_credentials(auth_manager: ProfileAuthStore, mock_keyring: MockKeyring) -> None:
     """Set credentials and retrieve them successfully."""
     # Set credentials
     auth_manager.set_credentials("kalshi", "test-key-123", "test-secret-456")
@@ -82,13 +82,13 @@ def test_set_and_retrieve_credentials(auth_manager: ProfileAuthManager, mock_key
     assert "created_at" in data
 
 
-def test_get_nonexistent_credentials(auth_manager: ProfileAuthManager) -> None:
+def test_get_nonexistent_credentials(auth_manager: ProfileAuthStore) -> None:
     """Get credentials that don't exist returns None."""
     result = auth_manager.get_credentials("kalshi")
     assert result is None
 
 
-def test_delete_credentials(auth_manager: ProfileAuthManager) -> None:
+def test_delete_credentials(auth_manager: ProfileAuthStore) -> None:
     """Delete credentials removes them from keyring."""
     # Set credentials
     auth_manager.set_credentials("kalshi", "key", "secret")
@@ -101,7 +101,7 @@ def test_delete_credentials(auth_manager: ProfileAuthManager) -> None:
     assert auth_manager.get_credentials("kalshi") is None
 
 
-def test_has_credentials(auth_manager: ProfileAuthManager) -> None:
+def test_has_credentials(auth_manager: ProfileAuthStore) -> None:
     """has_credentials returns correct boolean."""
     # Initially no credentials
     assert not auth_manager.has_credentials("kalshi")
@@ -115,7 +115,7 @@ def test_has_credentials(auth_manager: ProfileAuthManager) -> None:
     assert not auth_manager.has_credentials("kalshi")
 
 
-def test_list_services(auth_manager: ProfileAuthManager) -> None:
+def test_list_services(auth_manager: ProfileAuthStore) -> None:
     """list_services returns all configured services."""
     # Initially empty
     assert auth_manager.list_services() == []
@@ -159,8 +159,8 @@ def test_isolated_credentials_per_profile(mock_keyring: MockKeyring) -> None:
     )
     
     # Create auth managers
-    auth1 = ProfileAuthManager(profile1, keyring_module=mock_keyring)
-    auth2 = ProfileAuthManager(profile2, keyring_module=mock_keyring)
+    auth1 = ProfileAuthStore(profile1, keyring_module=mock_keyring)
+    auth2 = ProfileAuthStore(profile2, keyring_module=mock_keyring)
     
     # Set different credentials for each
     auth1.set_credentials("kalshi", "key1", "secret1")
@@ -178,7 +178,7 @@ def test_isolated_credentials_per_profile(mock_keyring: MockKeyring) -> None:
     assert creds2[1] == "secret2"
 
 
-def test_created_at_timestamp(auth_manager: ProfileAuthManager, mock_keyring: MockKeyring) -> None:
+def test_created_at_timestamp(auth_manager: ProfileAuthStore, mock_keyring: MockKeyring) -> None:
     """Stored credentials include ISO8601 timestamp."""
     auth_manager.set_credentials("kalshi", "key", "secret")
     
