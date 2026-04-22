@@ -1,0 +1,50 @@
+docs/architecture.md:   → simulation/engine replays events through StrategyProfile
+docs/architecture.md:### StrategyProfile Model
+docs/architecture.md:class StrategyProfile(BaseModel):
+docs/product-roadmap.md:| **StrategyProfile** | `simulation/profiles.py` | Preset risk/signal profiles for multi-profile backtesting |
+docs/product-roadmap.md:- **StrategyProfile**: Predefined risk profiles (Conservative 0.5x, Moderate 1.0x, Aggressive 0.8x) that scale within HARD_LIMITS — never override. Multi-profile backtesting via `BacktestEngine.run_profiles()`.
+docs/simulation.md:### StrategyProfile Model
+docs/simulation.md:class StrategyProfile(BaseModel):
+docs/simulation.md:`StrategyProfile` validates that:
+docs/simulation.md:    profiles: list[StrategyProfile],
+docs/architecture.md:### MarketCategory Enum
+docs/architecture.md:The `MarketCategory` enum is defined in `news/` and used across the analysis, news, and classification layers:
+docs/architecture.md:class MarketCategory(str, Enum):
+docs/architecture.md:    def register(category: MarketCategory, analyzer: CategoryAnalyzer) -> None: ...
+docs/architecture.md:    def get(category: MarketCategory) -> CategoryAnalyzer | None: ...
+docs/product-roadmap.md:| **MarketCategory enum** | `news/models.py` | Type-safe category enum (ECONOMICS, POLITICS, WEATHER, SPORTS, CULTURE, TECHNOLOGY, SCIENCE) |
+docs/product-roadmap.md:- **MarketCategory enum**: Replaces string-based category labels with type-safe enum for consistent classification.
+docs/news-sentiment.md:### MarketCategory Enum
+docs/news-sentiment.md:The `MarketCategory` enum defines the supported news classification categories, mapping directly to Kalshi's market categories:
+docs/news-sentiment.md:class MarketCategory(str, Enum):
+docs/news-sentiment.md:    category: MarketCategory
+docs/news-sentiment.md:    def register(self, category: MarketCategory, analyzer: CategoryAnalyzer) -> None:
+docs/news-sentiment.md:    def get(self, category: MarketCategory) -> CategoryAnalyzer | None:
+docs/openclaw-integration.md:The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
+docs/openclaw-integration.md:- **FEATURE_REQUESTS.md**: Capabilities the agent discovers it needs
+docs/openclaw-integration.md:The `FEATURE_REQUESTS.md` file tracks capabilities the agent discovers it needs during operation. When the agent encounters a gap (e.g., no data feed for a market category, missing tool, insufficient signal), it logs a `feature_request` entry:
+docs/self-learning.md:└── FEATURE_REQUESTS.md # Capabilities the agent discovers it needs
+docs/self-learning.md:**Promotion is notification-only**: The agent NEVER auto-edits `AGENTS.md`. Pattern promotion creates a `PENDING_REVIEW` entry in `FEATURE_REQUESTS.md` that surfaces during heartbeat review. Human approval is required before any operating rule change.
+docs/self-learning.md:### FEATURE_REQUESTS.md Flow
+docs/self-learning.md:The `.learnings/FEATURE_REQUESTS.md` file tracks capability gaps discovered during operation:
+docs/self-learning.md:1. When the agent encounters a capability it doesn't have (e.g., no data feed for a category, missing tool), it logs a `feature_request` category entry in `FEATURE_REQUESTS.md`
+docs/product-roadmap.md:| Workspace files | `.openclaw/workspace/` | LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md |
+docs/product-roadmap.md:- **FEATURE_REQUESTS.md flow**: Capability gap logging with recurrence-based promotion. Feature requests follow the same 3+ recurrence / 2+ tasks / 30-day window criteria as learnings, but are promoted to PENDING_REVIEW status (never auto-committed).
+docs/research.md:- `.learnings/` directory structure with LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md
+docs/architecture.md:   → AnalysisRegistry dispatches to CategoryAnalyzer for market category
+docs/architecture.md:### AnalysisRegistry
+docs/architecture.md:The `AnalysisRegistry` in `news/` provides category-specific analysis dispatch:
+docs/architecture.md:class AnalysisRegistry:
+docs/architecture.md:- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings), `CategoryAnalyzer` Protocol and `AnalysisRegistry` pattern for category-specific analysis dispatch
+docs/product-roadmap.md:| **AnalysisRegistry** | `news/classifier.py` | Central dispatch for `register`, `get`, `analyze` — enables per-category specialized analyzers |
+docs/product-roadmap.md:- **CategoryAnalyzer Protocol and AnalysisRegistry**: Enable per-category specialized analyzers. New categories can be added without modifying existing code. If no analyzer is registered, keyword matching is used as fallback.
+docs/news-sentiment.md:### AnalysisRegistry
+docs/news-sentiment.md:The `AnalysisRegistry` provides a central dispatch for category-specific analysis:
+docs/news-sentiment.md:class AnalysisRegistry:
+docs/architecture.md:│  heartbeat | learnings | bootstrap | auth                     │
+docs/architecture.md:Agent → "traderbot bootstrap --from 2026-01-01 --to 2026-03-01 --profile Moderate"
+docs/product-roadmap.md:| **Bootstrap command** | CLI (`traderbot bootstrap`) | Calibrates strategy parameters against historical data |
+docs/simulation.md:`traderbot bootstrap` — calibrates strategy parameters against historical data before live trading.
+docs/simulation.md:Before running a strategy with real parameters, bootstrap calibration:
+docs/simulation.md:traderbot bootstrap [--from DATE] [--to DATE] [--profile NAME] [--db-path PATH]
+docs/simulation.md:Indicators (SMA, EMA, RSI, Bollinger) require sufficient data points before producing stable values. The bootstrap engine handles this:

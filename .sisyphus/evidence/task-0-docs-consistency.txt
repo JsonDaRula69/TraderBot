@@ -1,0 +1,40 @@
+=== Cross-reference consistency ===
+--- CategoryAnalyzer ---
+docs/architecture.md:   → AnalysisRegistry dispatches to CategoryAnalyzer for market category
+docs/architecture.md:    def register(category: MarketCategory, analyzer: CategoryAnalyzer) -> None: ...
+docs/architecture.md:    def get(category: MarketCategory) -> CategoryAnalyzer | None: ...
+docs/architecture.md:- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings), `CategoryAnalyzer` Protocol and `AnalysisRegistry` pattern for category-specific analysis dispatch
+docs/product-roadmap.md:| **CategoryAnalyzer Protocol** | `news/classifier.py` | Per-category analysis protocol with `analyze` method and `CategorySignals` model |
+docs/product-roadmap.md:- **CategoryAnalyzer Protocol and AnalysisRegistry**: Enable per-category specialized analyzers. New categories can be added without modifying existing code. If no analyzer is registered, keyword matching is used as fallback.
+docs/news-sentiment.md:### CategoryAnalyzer Protocol
+docs/news-sentiment.md:Each category has a specialized analyzer implementing the `CategoryAnalyzer` Protocol:
+docs/news-sentiment.md:class CategoryAnalyzer(Protocol):
+docs/news-sentiment.md:    def register(self, category: MarketCategory, analyzer: CategoryAnalyzer) -> None:
+docs/news-sentiment.md:    def get(self, category: MarketCategory) -> CategoryAnalyzer | None:
+--- risk_multiplier ---
+docs/architecture.md:    risk_multiplier: float  # Scales within HARD_LIMITS, never overrides
+docs/architecture.md:The `risk_multiplier` scales risk limits proportionally but NEVER exceeds `HARD_LIMITS`: `effective_limit = risk_multiplier * HARD_LIMITS[key]`.
+docs/product-roadmap.md:- **Explicit formula**: `effective_limit = risk_multiplier * HARD_LIMITS[key]` — profiles scale limits, never exceed them.
+docs/simulation.md:    risk_multiplier: float             # Scales within HARD_LIMITS, never overrides
+docs/simulation.md:**Critical constraint**: `risk_multiplier` NEVER overrides `HARD_LIMITS`. The effective limit for any risk parameter is:
+docs/simulation.md:effective_limit = risk_multiplier * HARD_LIMITS[key]
+docs/simulation.md:| Profile | `risk_multiplier` | Signal Weights | Category Focus | Purpose |
+docs/simulation.md:- `risk_multiplier` is in range (0, 1.0] — never exceeds 1.0
+--- PENDING_REVIEW ---
+docs/architecture.md:   → Promote recurring feature_request entries to PENDING_REVIEW status
+docs/openclaw-integration.md:The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
+docs/openclaw-integration.md:When Recurrence-Count >= 3 across 2+ tasks within 30 days, the agent promotes the learning to PENDING_REVIEW status. PENDING_REVIEW entries are flagged for human review during heartbeat — they are never auto-committed to AGENTS.md.
+docs/openclaw-integration.md:**Status**: PENDING_REVIEW
+docs/openclaw-integration.md:2. When count >= 3 across 2+ tasks within 30 days, status → `PENDING_REVIEW`
+docs/openclaw-integration.md:3. PENDING_REVIEW entries surface in heartbeat reviews for human evaluation
+docs/openclaw-integration.md:1. Entry status changes from `active` → `PENDING_REVIEW`
+docs/openclaw-integration.md:2. PENDING_REVIEW entries are surfaced in the next heartbeat review
+docs/openclaw-integration.md:   - **Defers**: Lowers priority, keeps in PENDING_REVIEW
+docs/openclaw-integration.md:This PENDING_REVIEW status replaces the previous pattern of auto-promoting learnings directly to AGENTS.md. The WAL protocol ensures human review for all operating rule changes.
+docs/self-learning.md:- `AGENTS.md` — flagged for human review via PENDING_REVIEW status (never auto-committed)
+docs/self-learning.md:**Promotion is notification-only**: The agent NEVER auto-edits `AGENTS.md`. Pattern promotion creates a `PENDING_REVIEW` entry in `FEATURE_REQUESTS.md` that surfaces during heartbeat review. Human approval is required before any operating rule change.
+docs/self-learning.md:**Status**: PENDING_REVIEW
+docs/self-learning.md:3. When `Recurrence-Count >= 3` across 2+ tasks within 30 days, the entry is promoted to `PENDING_REVIEW` status
+docs/self-learning.md:4. `PENDING_REVIEW` entries surface in heartbeat reviews for human evaluation
+docs/product-roadmap.md:- **FEATURE_REQUESTS.md flow**: Capability gap logging with recurrence-based promotion. Feature requests follow the same 3+ recurrence / 2+ tasks / 30-day window criteria as learnings, but are promoted to PENDING_REVIEW status (never auto-committed).
+docs/product-roadmap.md:- **PENDING_REVIEW promotion**: Learnings and feature requests are promoted to PENDING_REVIEW status, surfaced in heartbeat reviews, and require explicit human approval before any operating rule changes.

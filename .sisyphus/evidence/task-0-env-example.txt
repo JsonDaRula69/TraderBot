@@ -1,0 +1,8 @@
+=== .env.example verification ===
+KALSHI_API_KEY=
+VOYAGE_API_KEY=
+NEWSAPI_KEY=
+# Prefer `traderbot auth` for credential management. .env is fallback only.
+# The `traderbot auth` command stores credentials in your OS keychain
+CHROMA_DB_PATH=.chroma/
+TWITTER_API_KEY=
