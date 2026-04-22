@@ -2061,7 +2061,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `test: add end-to-end integration tests across all phases`
 
-- [ ] 31. Phase 8 completion — version bump to v0.08.00
+- [x] 31. Phase 8 completion — version bump to v0.08.00
 
   **What to do**:
   - VERSION → `0.08.00`, ROADMAP_PROGRESS.md all phases ✅, pyproject.toml
