@@ -338,3 +338,18 @@
 - **`embed_batch_submit([])` returns None with warning**, not an empty list — this is deliberate: empty batch job has no meaning. `embed_batch([])` returns `[]` (valid no-op result).
 - **Batch retrieve NDJSON parsing**: `embed_batch_retrieve` parses line-delimited JSON where each line has `{"data": {"embedding": [...]}}` — mock `files.retrieve_content` with joined JSON lines.
 - **Rerank returns sorted desc by relevance_score**: the implementation sorts `result.results` internally, so test input order doesn't need to match output order.
+
+## Task 23 Learnings (News/Sentiment CLI Commands)
+
+- Two different `NewsSource` enums: `sources.py.NewsSource` (lowercase: "newsapi", "twitter", "reddit") used by `NewsAggregator`, and `models.py.NewsSource` (capitalized: "NewsAPI", "Twitter", "Reddit") used by `NewsItem`, `SentimentResult`, `ImpactAssessment` — must map between them in CLI
+- Two different `NewsItem` models: `sources.py.NewsItem` (category as bare str, default "uncategorized") vs `models.py.NewsItem` (category as `NewsCategory` enum, strict validation) — CLI must convert from sources format to models format before passing to classifier/sentiment/impact
+- `NewsAggregator` is an async context manager: `async with NewsAggregator(...) as aggregator:` — mocking requires `AsyncMock` with `__aenter__` returning the mock itself and `__aexit__` returning None
+- `NewsAggregator` constructor takes optional `newsapi_key`, `twitter_api_key`, `reddit_subreddits` — CLI reads from `os.environ` (`NEWSAPI_KEY`, `TWITTER_API_KEY`)
+- `NewsAggregator.fetch_all(limit)` and `fetch_recent(source, limit)` are async — CLI wraps in `asyncio.run()` matching existing pattern in `scan`, `analyze`, `backtest` commands
+- `NewsClassifier.classify()` takes `models.NewsItem` and returns `ClassifiedNews` — pure sync (no Voyage needed for keyword path)
+- `SentimentScorer.score(text, source, news_id)` is sync — uses VADER for social, TextBlob for articles
+- `ImpactAssessor.assess(news_item, classified_news, sentiment_result, corroborating_count, voyage_client)` — sync, returns `ImpactAssessment`
+- CLI `--source` validates against `SourcesNewsSource` (case-insensitive via `.lower()`), `--category` validates against `NewsCategory` (case-sensitive matching enum values)
+- Reddit RSS works without API keys — CLI suggests `--source reddit` when no keys configured
+- `asyncio.run()` creates a new event loop each time — cannot nest inside existing async context. CLI tests use `patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg)` to replace the class entirely, avoiding real async execution
+- Rich table `max_width=50` truncates titles — test assertions must check for partial text or column values like "Economics" / "NewsAPI" rather than full title strings in Rich output

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timezone
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -27,18 +27,278 @@ class TestMainHelp:
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
 
-class TestStubCommands:
-    STUB_COMMANDS: ClassVar[list[tuple[str, str]]] = [
-        ("news", "Phase 7"),
-        ("sentiment", "Phase 7"),
-    ]
+def _make_mock_aggregator(fake_items: list) -> AsyncMock:
+    mock_agg = AsyncMock()
+    mock_agg.fetch_all = AsyncMock(return_value=fake_items)
+    mock_agg.fetch_recent = AsyncMock(return_value=fake_items)
+    mock_agg.__aenter__ = AsyncMock(return_value=mock_agg)
+    mock_agg.__aexit__ = AsyncMock(return_value=None)
+    return mock_agg
 
-    @pytest.mark.parametrize("cmd,phase", STUB_COMMANDS)
-    def test_stub_not_yet_implemented(self, cmd, phase):
-        result = runner.invoke(app, [cmd])
+
+class TestNewsCommand:
+    def test_news_help(self):
+        result = runner.invoke(app, ["news", "--help"])
         assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
-        assert phase in result.output
+        assert "--category" in result.output
+        assert "--limit" in result.output
+        assert "--source" in result.output
+        assert "--json" in result.output
+
+    def test_news_no_api_keys_json(self):
+        with patch.dict("os.environ", {}, clear=True):
+            result = runner.invoke(app, ["news", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "error" in data
+            assert "API keys" in data["error"]
+
+    def test_news_no_api_keys_rich(self):
+        with patch.dict("os.environ", {}, clear=True):
+            result = runner.invoke(app, ["news"])
+            assert result.exit_code == 0
+            assert "No API keys" in result.output
+
+    def test_news_invalid_category_json(self):
+        result = runner.invoke(app, ["news", "--category", "InvalidCat", "--json"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "error" in data
+
+    def test_news_invalid_source_json(self):
+        result = runner.invoke(app, ["news", "--source", "invalidsrc", "--json"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "error" in data
+
+    @pytest.mark.unit
+    def test_news_with_mock_items_json(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="test-1",
+                title="Fed raises interest rates",
+                body="The Federal Reserve raised rates by 25bps",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/fed",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=["SPX"],
+                category="Economics",
+            )
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["news", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert isinstance(data, list)
+            assert len(data) == 1
+            assert data[0]["title"] == "Fed raises interest rates"
+            assert data[0]["category"] == "Economics"
+
+    @pytest.mark.unit
+    def test_news_with_category_filter_json(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="eco-1",
+                title="GDP growth slows",
+                body="Economic data shows slowdown",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/gdp",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=[],
+                category="Economics",
+            ),
+            SourcesNewsItem(
+                id="tech-1",
+                title="New AI chip released",
+                body="Tech company launches new chip",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/chip",
+                published_at=datetime(2026, 4, 15, 13, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=[],
+                category="Tech",
+            ),
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["news", "--category", "Economics", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert isinstance(data, list)
+            assert all(item["category"] == "Economics" for item in data)
+
+    @pytest.mark.unit
+    def test_news_with_source_filter_json(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="reddit-1",
+                title="Fed discussion on r/economics",
+                body="Reddit discussion about rates",
+                source=SourcesNewsSource.REDDIT,
+                url="https://reddit.com/r/economics",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=[],
+                category="Economics",
+            )
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["news", "--source", "reddit", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert isinstance(data, list)
+
+    @pytest.mark.unit
+    def test_news_rich_output(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="test-1",
+                title="Fed raises interest rates",
+                body="The Federal Reserve raised rates by 25bps",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/fed",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=["SPX"],
+                category="Economics",
+            )
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["news"])
+            assert result.exit_code == 0
+            assert "News Feed" in result.output
+            assert "Economics" in result.output
+            assert "NewsAPI" in result.output
+
+    @pytest.mark.unit
+    def test_news_empty_items(self):
+        mock_agg = _make_mock_aggregator([])
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["news"])
+            assert result.exit_code == 0
+            assert "No news items found" in result.output
+
+
+class TestSentimentCommand:
+    def test_sentiment_help(self):
+        result = runner.invoke(app, ["sentiment", "--help"])
+        assert result.exit_code == 0
+        assert "TICKER" in result.output
+        assert "--json" in result.output
+
+    @pytest.mark.unit
+    def test_sentiment_with_mock_items_json(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="test-1",
+                title="BTC surges past 100k",
+                body="Bitcoin hits all-time high",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/btc",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=["BTC"],
+                category="Economics",
+            )
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["sentiment", "BTC", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["ticker"] == "BTC"
+            assert "sentiment" in data
+            assert "score" in data["sentiment"]
+            assert "direction" in data["sentiment"]
+            assert "confidence" in data["sentiment"]
+            assert "impacts" in data
+            assert isinstance(data["impacts"], list)
+
+    @pytest.mark.unit
+    def test_sentiment_with_mock_items_rich(self):
+        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+
+        fake_items = [
+            SourcesNewsItem(
+                id="test-1",
+                title="BTC surges past 100k",
+                body="Bitcoin hits all-time high",
+                source=SourcesNewsSource.NEWSAPI,
+                url="https://example.com/btc",
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                ticker_refs=["BTC"],
+                category="Economics",
+            )
+        ]
+
+        mock_agg = _make_mock_aggregator(fake_items)
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["sentiment", "BTC"])
+            assert result.exit_code == 0
+            assert "BTC" in result.output
+            assert "Sentiment" in result.output
+
+    @pytest.mark.unit
+    def test_sentiment_no_news_found_json(self):
+        mock_agg = _make_mock_aggregator([])
+
+        with (
+            patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
+            result = runner.invoke(app, ["sentiment", "SPX", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["ticker"] == "SPX"
+            assert "error" in data or "items_analyzed" in data
+
+    @pytest.mark.unit
+    def test_sentiment_no_api_keys_json(self):
+        with patch.dict("os.environ", {}, clear=True):
+            result = runner.invoke(app, ["sentiment", "SPX", "--json"])
+            assert result.exit_code == 0
 
 
 class TestScan:
