@@ -10,7 +10,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.00.09
+- **Current version**: v0.08.21
 
 ## Versioning Scheme
 
