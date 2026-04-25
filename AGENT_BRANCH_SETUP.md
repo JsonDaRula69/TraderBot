@@ -34,8 +34,7 @@ gh auth login
 
 ## Branch Protection (IMPORTANT)
 - **main**: Requires 1 approval via Pull Request to merge
-- **You (owner/admin)**: Can push directly to main without PR
-- **Others**: Must create PR, get approval, then merge
+- All work must go through a PR before merging to main
 
 ## Workflow
 1. Clone the repo (or pull latest if already cloned)
