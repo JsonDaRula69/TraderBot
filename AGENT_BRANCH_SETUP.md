@@ -46,10 +46,6 @@ gh auth login
 7. Wait for approval (or approve yourself if you're the owner)
 8. Merge the PR
 
-## Credentials
-- GitHub account: `JsonDaRula69`
-- Authentication: Use `gh auth` or SSH key
-
 ## Quick Start
 ```bash
 # Clone (if first time)
