@@ -1145,7 +1145,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
   - Files: `VERSION`, `ROADMAP_PROGRESS.md`, `pyproject.toml`
   - Pre-commit: `pytest -q`
 
-- [ ] 37. Create OpenClaw installer + registration script *(DEFERRED — stretch goal, not blocking)*
+- [x] 37. Create OpenClaw installer + registration script *(SKIPPED — per user instruction)*
 
   **What to do**:
   - Create `scripts/install_openclaw.sh` — detection + installation script
@@ -2279,7 +2279,7 @@ Wave FINAL (After ALL phases — 4 parallel reviews):
 
   **Commit**: YES - Message: `feat(learning): add feature request flow with PENDING_REVIEW promotion`
 
-- [ ] 35. Create CategoryAnalyzer protocol + MarketCategory enum + AnalysisRegistry *(DEFERRED — stretch goal, MarketCategory exists in simulation/adaptation.py)*
+- [x] 35. Create CategoryAnalyzer protocol + MarketCategory enum + AnalysisRegistry
 
   **What to do**:
   - Create `src/traderbot/analysis/registry.py` with `AnalysisRegistry` and `CategoryAnalyzer` protocol

@@ -1,110 +1,49 @@
 {
-  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/phases-5-8.md",
-  "started_at": "2026-04-21T21:51:11.993Z",
+  "active_plan": "/Users/djtchill/Desktop/TraderBot_BOB/.sisyphus/plans/agent-profile-binding.md",
+  "started_at": "2026-04-22T13:24:44.618Z",
   "session_ids": [
-    "ses_24df96054ffeQItFUlpyCR9tLg",
-    "ses_24da1f666ffeZZIefafL01VS0C",
-    "ses_24da1dd0affeubVW4mqPx5B0v2",
-    "ses_24da1c046ffeq2D4Q0K5dNjdkj",
-    "ses_24d929f9dffe5febju1WGyThj9",
-    "ses_24d927e88ffeEyDdmtv14DWKpU",
-    "ses_24d9229e8ffexbNQpdH6c6kHTU",
-    "ses_24ce9acc4ffe8J4LDUTdk5EjuU",
-    "ses_24ce8eb06ffeQUSLCW8yLBJyCe",
-    "ses_24c9e6fedffeY8tuODbfXogzOt",
-    "ses_24c9df362ffebBWvfKImD1FjGi",
-    "ses_24c9d9c08ffeSHrH4Qwl7jpVWx",
-    "ses_24c9cde9dffeHNpJf9QvR0U2Zx"
+    "ses_24aa2b13effeBBLF9rxXBBmS4m"
   ],
   "session_origins": {
-    "ses_24df96054ffeQItFUlpyCR9tLg": "direct",
-    "ses_24da1f666ffeZZIefafL01VS0C": "appended",
-    "ses_24da1dd0affeubVW4mqPx5B0v2": "appended",
-    "ses_24da1c046ffeq2D4Q0K5dNjdkj": "appended",
-    "ses_24d929f9dffe5febju1WGyThj9": "appended",
-    "ses_24d927e88ffeEyDdmtv14DWKpU": "appended",
-    "ses_24d9229e8ffexbNQpdH6c6kHTU": "appended",
-    "ses_24ce9acc4ffe8J4LDUTdk5EjuU": "appended",
-    "ses_24ce8eb06ffeQUSLCW8yLBJyCe": "appended",
-    "ses_24c9e6fedffeY8tuODbfXogzOt": "appended",
-    "ses_24c9df362ffebBWvfKImD1FjGi": "appended",
-    "ses_24c9d9c08ffeSHrH4Qwl7jpVWx": "appended",
-    "ses_24c9cde9dffeHNpJf9QvR0U2Zx": "appended"
+    "ses_24aa2b13effeBBLF9rxXBBmS4m": "direct"
   },
-  "plan_name": "phases-5-8",
+  "plan_name": "agent-profile-binding",
   "agent": "atlas",
   "task_sessions": {
-    "todo:0": {
-      "task_key": "todo:0",
-      "task_label": "0",
-      "task_title": "Update all docs/ files with approved plan changes",
-      "session_id": "ses_24df85107ffeSEVCi4aQq2c8Vx",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-21T22:03:26.898Z"
-    },
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Create simulation/ package + data_loader module",
-      "session_id": "ses_24decdf4effeiRbUhr0Flbgw42",
+      "task_title": "TradingProfile Model + Validation",
+      "session_id": "ses_24a93eb2affePKxyUspjFruQA7",
+      "agent": "Sisyphus-Junior",
+      "category": "writing",
+      "updated_at": "2026-04-22T13:48:42.571Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_24a6e0505ffeR3uXYb0sOhmEB9",
+      "agent": "oracle",
+      "updated_at": "2026-04-22T14:36:57.896Z"
+    },
+    "final-wave:f3": {
+      "task_key": "final-wave:f3",
+      "task_label": "F3",
+      "task_title": "**Real Manual QA** — `unspecified-high`",
+      "session_id": "ses_24a58150dffeqWnSwYGo5lZ6gD",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-22T14:47:21.598Z"
+    },
+    "final-wave:f4": {
+      "task_key": "final-wave:f4",
+      "task_label": "F4",
+      "task_title": "**Scope Fidelity Check** — `deep`",
+      "session_id": "ses_24a56793bffeQtYKRKKIeUXHHS",
       "agent": "Sisyphus-Junior",
       "category": "deep",
-      "updated_at": "2026-04-21T22:13:11.727Z"
-    },
-    "todo:2": {
-      "task_key": "todo:2",
-      "task_label": "2",
-      "task_title": "Create simulation/engine.py — backtest engine",
-      "session_id": "ses_24de40138ffeNpVi4z5KCV68XY",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-21T22:25:02.306Z"
-    },
-    "todo:3": {
-      "task_key": "todo:3",
-      "task_label": "3",
-      "task_title": "Create simulation models — BacktestResult, BacktestConfig, Strategy Protocol",
-      "session_id": "ses_24dd973e8ffeWxkztcLqH5a1Ov",
-      "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-04-21T22:42:29.679Z"
-    },
-    "todo:4": {
-      "task_key": "todo:4",
-      "task_label": "4",
-      "task_title": "Create simulation/paper_trader.py",
-      "session_id": "ses_24dc3e2baffePphQozY1mDSi5t",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-21T22:53:49.919Z"
-    },
-    "todo:5": {
-      "task_key": "todo:5",
-      "task_label": "5",
-      "task_title": "Create simulation/performance.py",
-      "session_id": "ses_24dbfafc1ffeMwyzNEYETEJjkJ",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-21T22:58:23.067Z"
-    },
-    "todo:6": {
-      "task_key": "todo:6",
-      "task_label": "6",
-      "task_title": "Wire backtest/paper/performance CLI commands (basic, no profile comparison)",
-      "session_id": "ses_24dbb8552ffeB7tZwHL7SRjiJE",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-04-21T23:02:31.827Z"
-    },
-    "todo:37": {
-      "task_key": "todo:37",
-      "task_label": "37",
-      "task_title": "Create OpenClaw installer + registration script",
-      "session_id": "ses_24c9cde9dffeHNpJf9QvR0U2Zx",
-      "agent": "Sisyphus-Junior",
-      "category": "ultrabrain",
-      "updated_at": "2026-04-22T04:20:16.429Z"
+      "updated_at": "2026-04-22T14:50:30.507Z"
     }
   }
 }
