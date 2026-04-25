@@ -197,3 +197,47 @@
 | Pydantic models | 22 (all strict=True, extra=forbid) |
 | CLI commands | 22 |
 | Self-learning modules | 3 (learnings, wal, learning) |
+
+---
+
+## Agent Profile Binding (Phase 9) — ✅ COMPLETE
+
+Multi-agent deployment with token-based profile binding, per-profile data isolation, risk limits, and market category filtering.
+
+| Component | File | Status | Notes |
+|---|---|---|---|
+| TradingProfile model | `profiles/models.py` | ✅ Done | Pydantic model with HARD_LIMITS validation, category filtering |
+| ProfileRegistry | `profiles/registry.py` | ✅ Done | Keyring CRUD with encrypted storage |
+| Token module | `profiles/tokens.py` | ✅ Done | 72-bit entropy tokens, assign/resolve/revoke |
+| AgentRiskLimits | `risk/agent_limits.py` | ✅ Done | HARD_LIMITS ceiling enforcement at runtime |
+| ProfileAuthStore | `profiles/auth.py` | ✅ Done | Per-profile keyring namespace with fallback chain |
+| Agent discovery | `profiles/discovery.py` | ✅ Done | OpenClaw workspace scanning from IDENTITY.md |
+| Token injection | `profiles/injection.py` | ✅ Done | Atomic TOOLS.md injection, backup on write |
+| Profile-aware config | `profiles/config.py` | ✅ Done | Credential resolution chain: profile → global → env |
+| Profile-aware evaluate_trade | `risk/__init__.py` | ✅ Done | Category filter + AgentRiskLimits in risk gate |
+| Profile CLI | `cli.py` (profile cmds) | ✅ Done | create/list/show/delete/assign/revoke/discover-agents/set-auth |
+| Data isolation | `profiles/isolation.py` | ✅ Done | Per-profile paths for DB, ChromaDB, audit |
+| Runtime resolution | `profiles/runtime.py` | ✅ Done | get_current_profile(), load_profile_config(), get_runtime_context() |
+| Systemd template | `services/traderbot-agent@.service` | ✅ Done | User-level systemd service template |
+| Launchd plist | `services/com.traderbot.agent.plist` | ✅ Done | User-level launchd plist template |
+| Installer | `traderbot-installer.sh` | ✅ Done | OS detection, dependency install, persistence setup, config flow |
+| docs/profiles.md | `docs/profiles.md` | ✅ Done | Profile system architecture, TradingProfile, registry, token handshake |
+| docs/risk.md update | `docs/risk.md` | ✅ Done | AgentRiskLimits, profile-aware evaluate_trade(), category filtering |
+| docs/deployment.md | `docs/deployment.md` | ✅ Done | Ubuntu + macOS install, persistence, profile-agent flow |
+| docs/security.md | `docs/security.md` | ✅ Done | Threat model, token security, keyring encryption, enforcement layers |
+| docs/api.md update | `docs/api.md` | ✅ Done | CLI profile commands reference |
+| README.md update | `README.md` | ✅ Done | Multi-agent deployment section, project structure |
+| AGENTS.md update | `AGENTS.md` | ✅ Done | Profile-aware trading rules, TRADERBOT_PROFILE_TOKEN |
+| SKILL.md update | `skills/traderbot/SKILL.md` | ✅ Done | Profile commands, TRADERBOT_PROFILE_TOKEN env var |
+
+**Version**: v0.07.00 | **Tests**: Additional tests in `tests/profiles/`, `tests/risk/`
+
+**Success criteria met**:
+- [x] `traderbot profile create/list/show/delete/assign/revoke` all work
+- [x] Agent with token resolves to correct profile, isolated data dirs
+- [x] Profile with risk_multiplier 0.5 → trades sized at 50% of HARD_LIMITS
+- [x] Profile with categories [Economics, Politics] → Sports trade rejected
+- [x] Profile with own Kalshi API key → uses that instead of global
+- [x] Agent cannot change profile, token, or risk params at runtime
+- [x] Installer runs on Ubuntu + macOS, sets up persistence, injects tokens
+- [x] All docs rebuilt and accurate

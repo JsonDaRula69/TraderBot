@@ -1,0 +1,30 @@
+=== CLI Integration Test: Token Injection ===
+
+1. Creating test profile...
+Usage: python -m traderbot.cli profile create [OPTIONS] NAME
+Try 'python -m traderbot.cli profile create --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ No such option: --balance                                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+2. Assigning token to test-agent...
+list_assignments() not fully supported with real keyring backend
+✓ Assigned token to profile 'test-profile' for agent 'test-agent'
+Token: HX1r8HMn5CFz
+✓ Token injected into test-agent/TOOLS.md
+
+3. Verifying TOOLS.md was created and contains token...
+✓ TOOLS.md exists
+
+Content:
+# Agent Tools
+
+This file describes available tools.
+
+## Environment Variables
+
+The following environment variables are available:
+- `TRADERBOT_PROFILE_TOKEN=HX1r8HMn5CFz`: Your assigned profile token (do not modify)
+
+
+4. Cleaning up...

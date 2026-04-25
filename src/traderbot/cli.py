@@ -1564,6 +1564,309 @@ def auth_check() -> None:
         console.print("Run [bold]traderbot auth login[/bold] to configure.")
 
 
+# Profile management commands
+profile_app = typer.Typer(
+    name="profile",
+    help="Manage trading profiles for multi-agent deployment.",
+    rich_markup_mode="rich",
+)
+app.add_typer(profile_app, name="profile")
+
+
+@profile_app.command("create")
+def profile_create(
+    name: str,
+    mode: Annotated[str, typer.Option(help="Trading mode: paper or live")] = "paper",
+    description: Annotated[str, typer.Option(help="Profile description")] = "",
+    categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = "",
+    risk_multiplier: Annotated[float, typer.Option(help="Risk multiplier (0-1)")] = 1.0,
+    max_position_pct: Annotated[float, typer.Option(help="Max position per market %")] = None,
+    max_daily_loss_pct: Annotated[float, typer.Option(help="Max daily loss %")] = None,
+    max_drawdown_pct: Annotated[float, typer.Option(help="Max drawdown %")] = None,
+    max_open_positions: Annotated[int, typer.Option(help="Max open positions")] = None,
+    min_liquidity: Annotated[int, typer.Option(help="Min liquidity threshold")] = None,
+    min_edge_pct: Annotated[float, typer.Option(help="Min edge %")] = None,
+) -> None:
+    """Create a new trading profile with risk parameters."""
+    from traderbot.kalshi.models import MarketCategory
+    from traderbot.profiles.models import TradingProfile
+    from traderbot.profiles.registry import ProfileRegistry
+    from traderbot.risk.limits import HARD_LIMITS
+
+    console = Console()
+
+    # Validate mode
+    if mode not in ("paper", "live"):
+        console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
+        raise typer.Exit(1)
+
+    # Parse categories
+    enabled_categories = []
+    if categories:
+        try:
+            enabled_categories = [
+                MarketCategory(cat.strip().title())
+                for cat in categories.split(",")
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Invalid category: {e}")
+            raise typer.Exit(1)
+
+    # Use HARD_LIMITS as defaults for unspecified params
+    profile_data = {
+        "name": name,
+        "mode": mode,
+        "description": description or f"{name} trading profile",
+        "enabled_categories": enabled_categories,
+        "risk_multiplier": risk_multiplier,
+        "max_position_per_market_pct": max_position_pct or HARD_LIMITS["max_position_per_market_pct"],
+        "max_daily_loss_pct": max_daily_loss_pct or HARD_LIMITS["max_daily_loss_pct"],
+        "max_drawdown_pct": max_drawdown_pct or HARD_LIMITS["max_drawdown_pct"],
+        "max_open_positions": max_open_positions or int(HARD_LIMITS["max_open_positions"]),
+        "min_liquidity_threshold": min_liquidity or int(HARD_LIMITS["min_liquidity_threshold"]),
+        "min_edge_pct": min_edge_pct or HARD_LIMITS["min_edge_pct"],
+    }
+
+    try:
+        profile = TradingProfile(**profile_data)
+        registry = ProfileRegistry()
+        registry.create_profile(profile)
+        console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@profile_app.command("list")
+def profile_list(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """List all trading profiles."""
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+    profile_names = registry.list_profiles()
+
+    if not profile_names:
+        if not json_output:
+            console.print("[yellow]No profiles found[/yellow]")
+        else:
+            print("[]")
+        return
+
+    if json_output:
+        # Get full profile data for JSON output
+        profiles = []
+        for name in profile_names:
+            profile = registry.get_profile(name)
+            if profile:
+                profiles.append(profile.model_dump(mode="json"))
+        print(json_lib.dumps(profiles, indent=2))
+    else:
+        # Table output
+        table = Table(title="Trading Profiles")
+        table.add_column("Name", style="cyan")
+        table.add_column("Mode", style="magenta")
+        table.add_column("Description")
+        table.add_column("Risk Multiplier", justify="right")
+
+        for name in profile_names:
+            profile = registry.get_profile(name)
+            if profile:
+                table.add_row(
+                    profile.name,
+                    profile.mode,
+                    profile.description,
+                    f"{profile.risk_multiplier:.2f}",
+                )
+
+        console.print(table)
+
+
+@profile_app.command("show")
+def profile_show(
+    name: str,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Show details for a specific profile."""
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+    profile = registry.get_profile(name)
+
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        raise typer.Exit(1)
+
+    if json_output:
+        print(json_lib.dumps(profile.model_dump(mode="json"), indent=2))
+    else:
+        console.print(f"\n[bold cyan]Profile: {profile.name}[/bold cyan]")
+        console.print(f"Mode: {profile.mode}")
+        console.print(f"Description: {profile.description}")
+        console.print(f"\n[bold]Risk Parameters:[/bold]")
+        console.print(f"  Risk Multiplier: {profile.risk_multiplier}")
+        console.print(f"  Max Position per Market: {profile.max_position_per_market_pct}%")
+        console.print(f"  Max Daily Loss: {profile.max_daily_loss_pct}%")
+        console.print(f"  Max Drawdown: {profile.max_drawdown_pct}%")
+        console.print(f"  Max Open Positions: {profile.max_open_positions}")
+        console.print(f"  Min Liquidity: {profile.min_liquidity_threshold}")
+        console.print(f"  Min Edge: {profile.min_edge_pct}%")
+        
+        if profile.enabled_categories:
+            console.print(f"\n[bold]Enabled Categories:[/bold]")
+            for cat in profile.enabled_categories:
+                console.print(f"  • {cat.value}")
+        else:
+            console.print(f"\n[bold]Enabled Categories:[/bold] All")
+
+
+@profile_app.command("delete")
+def profile_delete(
+    name: str,
+    keep_data: Annotated[bool, typer.Option(help="Keep data directories")] = True,
+) -> None:
+    """Delete a trading profile."""
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    if not registry.profile_exists(name):
+        console.print(f"[yellow]Warning:[/yellow] Profile '{name}' does not exist")
+        return
+
+    registry.delete_profile(name, keep_data=keep_data)
+    console.print(f"[green]✓[/green] Deleted profile '{name}'")
+    
+    if not keep_data:
+        console.print("[yellow]Note:[/yellow] Data directories were also deleted")
+
+
+@profile_app.command("assign")
+def profile_assign(
+    profile_name: str,
+    agent_id: str,
+) -> None:
+    """Assign a token to an agent for profile access."""
+    from pathlib import Path
+
+    from traderbot.profiles.injection import inject_token
+    from traderbot.profiles.registry import ProfileRegistry
+    from traderbot.profiles.tokens import assign_token, generate_token
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    # Verify profile exists
+    if not registry.profile_exists(profile_name):
+        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
+        raise typer.Exit(1)
+
+    # Generate and assign token
+    try:
+        token = generate_token()
+        assign_token(profile_name, agent_id, token)
+        console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
+        console.print(f"Token: [bold]{token}[/bold]")
+        
+        # Inject token into agent's TOOLS.md
+        try:
+            agent_path = Path(".openclaw") / "workspace" / agent_id
+            if not agent_path.exists():
+                console.print(f"[yellow]Warning:[/yellow] Agent directory not found at {agent_path}")
+                console.print("Token assigned but not injected into TOOLS.md")
+            else:
+                inject_token(str(agent_path), token)
+                console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
+        except FileNotFoundError:
+            console.print(f"[yellow]Warning:[/yellow] Agent directory not found")
+            console.print("Token assigned but not injected into TOOLS.md")
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
+            console.print("Token assigned but not injected")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@profile_app.command("revoke")
+def profile_revoke(
+    profile_name: str,
+) -> None:
+    """Revoke token assignment for a profile."""
+    from pathlib import Path
+
+    from traderbot.profiles.injection import remove_token_from_tools
+    from traderbot.profiles.tokens import get_profile_token, resolve_token, revoke_token
+
+    console = Console()
+
+    # Get token for profile
+    token = get_profile_token(profile_name)
+    if token is None:
+        console.print(f"[yellow]Warning:[/yellow] No token assigned to profile '{profile_name}'")
+        return
+
+    # Get agent ID before revoking
+    resolved = resolve_token(token)
+    agent_id = resolved[1] if resolved else None
+
+    # Revoke token
+    revoke_token(token)
+    console.print(f"[green]✓[/green] Revoked token for profile '{profile_name}'")
+
+    # Remove token from agent's TOOLS.md
+    if agent_id:
+        try:
+            agent_path = Path(".openclaw") / "workspace" / agent_id
+            if agent_path.exists():
+                remove_token_from_tools(str(agent_path))
+                console.print(f"[green]✓[/green] Token removed from {agent_id}/TOOLS.md")
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Failed to remove token from TOOLS.md: {e}")
+
+
+@profile_app.command("assignments")
+def profile_assignments(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """List all token assignments."""
+    from traderbot.profiles.tokens import list_assignments
+
+    console = Console()
+    assignments = list_assignments()
+
+    if not assignments:
+        if not json_output:
+            console.print("[yellow]No token assignments found[/yellow]")
+        else:
+            print("[]")
+        return
+
+    if json_output:
+        print(json_lib.dumps(assignments, indent=2))
+    else:
+        table = Table(title="Token Assignments")
+        table.add_column("Profile", style="cyan")
+        table.add_column("Agent ID", style="magenta")
+        table.add_column("Token", style="yellow")
+        table.add_column("Created At")
+
+        for assignment in assignments:
+            table.add_row(
+                assignment["profile"],
+                assignment["agent"],
+                assignment["token"],
+                assignment["created_at"],
+            )
+
+        console.print(table)
+
+
+
 def main() -> None:
     """Entry point for the traderbot CLI."""
     app()

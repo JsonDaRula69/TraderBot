@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import random
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import BaseModel, SecretStr  # noqa: TC002
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
+
+if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
 
 
 class RateLimitError(Exception):
@@ -89,9 +92,38 @@ def _deep_normalize(obj: Any) -> Any:
 class KalshiClient:
     """Async Kalshi API client with auth, retries, rate limiting, and normalization."""
 
-    def __init__(self, config: KalshiConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: KalshiConfig | None = None,
+        profile: TradingProfile | None = None,
+    ) -> None:
+        """Initialize KalshiClient with optional profile-aware configuration.
+        
+        Args:
+            config: KalshiConfig to use (if None, loads from env vars or profile)
+            profile: TradingProfile to use for credentials and demo mode (optional)
+            
+        Note:
+            If both config and profile are None, attempts to load from KALSHI_* env vars.
+            If profile is provided but config is None, uses profile credentials and demo mode.
+            If config is provided, profile is ignored (explicit config takes precedence).
+        """
         if config is None:
-            config = KalshiConfig()  # loads from KALSHI_ env vars
+            if profile is not None:
+                # Use profile-aware credentials and demo mode
+                from traderbot.profiles.config import resolve_kalshi_credentials
+                
+                api_key, api_secret = resolve_kalshi_credentials(profile)
+                config = KalshiConfig(
+                    api_key=api_key,
+                    api_secret=SecretStr(api_secret),
+                    demo_mode=profile.demo_mode,
+                )
+            else:
+                # Fall back to env vars (backward compatibility)
+                # This will raise ValidationError if KALSHI_API_KEY/KALSHI_API_SECRET not set
+                config = KalshiConfig()  # type: ignore[call-arg]
+        
         self._config = config
         self._session_token: str | None = None
         self._semaphore = asyncio.Semaphore(int(self._config.rate_limit_rps))
@@ -100,8 +132,12 @@ class KalshiClient:
     async def login(self) -> str:
         """Authenticate with Kalshi and store the session token.
 
-        Raises AuthenticationError on 401/403 responses.
-        Raises httpx.HTTPStatusError on other non-2xx responses.
+        Returns:
+            Session token string
+
+        Raises:
+            AuthenticationError: On 401/403 responses
+            httpx.HTTPStatusError: On other non-2xx responses
         """
         response = await self._client.post(
             "/login",
@@ -114,8 +150,9 @@ class KalshiClient:
             raise AuthenticationError(f"Authentication failed: HTTP {response.status_code}")
         response.raise_for_status()
         body = response.json()
-        self._session_token = body["token"]
-        return self._session_token
+        token: str = body["token"]
+        self._session_token = token
+        return token
 
     async def _request(
         self,
