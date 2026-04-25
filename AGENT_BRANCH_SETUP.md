@@ -61,13 +61,13 @@ cd TraderBot
 git checkout main
 git pull origin main
 
-# Create and switch to new branch
-git checkout -b feature/your-feature-name
+# Create YOUR personal dev branch (use your username/agent name)
+git checkout -b dev/your-username
 
 # Make changes, commit, push
 git add .
 git commit -m "feat: description"
-git push -u origin feature/your-feature-name
+git push -u origin dev/your-username
 ```
 
-Then create a Pull Request from your branch to `main` on GitHub.
+Then create a Pull Request from `dev/your-username` to `main` on GitHub.
