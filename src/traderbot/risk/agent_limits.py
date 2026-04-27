@@ -15,13 +15,16 @@ class AgentRiskLimits:
     All properties are read-only to prevent runtime modification.
     """
 
-    def __init__(self, profile: "TradingProfile") -> None:
+    def __init__(self, profile: "TradingProfile") -> None:  # noqa: UP037
         """Initialize agent limits from a trading profile.
 
         Args:
             profile: TradingProfile with risk parameters
         """
-        self._profile = profile
+        from traderbot.profiles.models import TradingProfile
+    if not isinstance(profile, TradingProfile):
+        raise TypeError("profile must be a TradingProfile instance")
+    self._profile = profile
 
     @property
     def max_position_per_market_pct(self) -> float:
@@ -89,4 +92,4 @@ class AgentRiskLimits:
             float(HARD_LIMITS["min_edge_pct"]),
         )
 
-# Made with Bob
+
