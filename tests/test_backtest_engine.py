@@ -654,4 +654,4 @@ class TestBacktestEngine:
         from datetime import date
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
         # With very small bankroll, position limit (5%) = 50 cents, can't buy much
-        assert result is not None
+        assert isinstance(result, BacktestResult)

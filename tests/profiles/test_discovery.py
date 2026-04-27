@@ -86,7 +86,7 @@ def test_get_agent_identity_valid(agent_with_identity):
     """Test getting agent identity from valid IDENTITY.md."""
     result = get_agent_identity(str(agent_with_identity))
     
-    assert result is not None
+    assert isinstance(result, dict)
     assert result["agent_id"] == "molty"
     assert result["name"] == "Molty the Trader"
 
@@ -206,10 +206,9 @@ def test_get_agent_identity_with_extra_whitespace(workspace_dir):
     
     result = get_agent_identity(str(agent_dir))
     
-    assert result is not None
+    assert isinstance(result, dict)
     assert result["agent_id"] == "molty"
     assert result["name"] == "Molty the Trader"
-
 
 def test_get_agent_identity_case_insensitive_headers(workspace_dir):
     """Test parsing IDENTITY.md with different case headers."""
@@ -224,7 +223,7 @@ def test_get_agent_identity_case_insensitive_headers(workspace_dir):
     
     result = get_agent_identity(str(agent_dir))
     
-    assert result is not None
+    assert isinstance(result, dict)
     assert result["agent_id"] == "molty"
     assert result["name"] == "Molty the Trader"
 

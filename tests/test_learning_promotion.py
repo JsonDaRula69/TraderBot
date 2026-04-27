@@ -522,7 +522,7 @@ class TestPromoteLearning:
             _init_db(conn)
             learning_id = _seed_eligible_learning(conn)
             result = promote_learning(conn, learning_id, learnings_dir)
-            assert result is not None
+            assert isinstance(result, Path)
             assert result.exists()
             content = result.read_text()
             assert "promoted" in content

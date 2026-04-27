@@ -53,6 +53,8 @@ class TestGenerateSignalWithoutSentiment:
         ob = _make_orderbook()
         signal = generate_signal("KX_TEST", prices, trades, ob, 0.55)
         assert isinstance(signal, CombinedSignal)
+        assert signal.direction in ("yes", "no", "neutral")
+        assert 0.0 <= signal.confidence <= 1.0
         assert len(signal.sources) == 3
         names = [s.name for s in signal.sources]
         assert "sentiment" not in names

@@ -333,6 +333,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=None)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_assess_with_voyage_none_return(self):
         mock_client = MagicMock()
@@ -340,6 +343,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=mock_client)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_assess_with_voyage_exception(self):
         mock_client = MagicMock()
@@ -347,6 +353,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=mock_client)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
 
 class TestCosineSimilarity:
