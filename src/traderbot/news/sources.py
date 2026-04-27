@@ -42,8 +42,8 @@ class NewsItem(BaseModel):
 class NewsAggregator:
     """Fetch and aggregate news from multiple sources with graceful degradation."""
 
-    # Source fetch priority order (fastest/breaking → slowest/analysis)
-_SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
+        # Source fetch priority order (fastest/breaking → slowest/analysis)
+    _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
     NewsSource.NEWSAPI,
     NewsSource.REDDIT,
     NewsSource.TWITTER,

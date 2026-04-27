@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import math
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from traderbot.news.models import (
     ClassifiedNews,
@@ -23,12 +23,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── Weight configuration ──────────────────────────────────────────────
-WEIGHT_DIRECT_RELEVANCE: float = 0.3
-WEIGHT_SOURCE_AUTHORITY: float = 0.25
-WEIGHT_RECENCY: float = 0.2
-WEIGHT_MARKET_SENSITIVITY: float = 0.15
-WEIGHT_CORROBORATION: float = 0.1
+class ImpactWeights(BaseModel):
+    direct_relevance: Annotated[float, Field(gt=0, lt=1)]
+    source_authority: Annotated[float, Field(gt=0, lt=1)]
+    recency: Annotated[float, Field(gt=0, lt=1)]
+    market_sensitivity: Annotated[float, Field(gt=0, lt=1)]
+    corroboration: Annotated[float, Field(gt=0, lt=1)]
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_sum(self) -> ImpactWeights:
+        total = self.direct_relevance + self.source_authority + self.recency + self.market_sensitivity + self.corroboration
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError("Sum of impact weights must equal 1.0")
+        return self
+
+DEFAULT_IMPACT_WEIGHTS = ImpactWeights(
+    direct_relevance=0.3,
+    source_authority=0.25,
+    recency=0.2,
+    market_sensitivity=0.15,
+    corroboration=0.1
+)
 
 # ── Impact bands ──────────────────────────────────────────────────────
 HIGH_IMPACT_THRESHOLD: float = 0.7
@@ -80,7 +97,7 @@ class ImpactAssessor(BaseModel):
     similarity is used for relevance when available, falling back to
     keyword overlap otherwise.
     """
-
+    weights: ImpactWeights = DEFAULT_IMPACT_WEIGHTS
     model_config = ConfigDict(strict=True, extra="forbid", arbitrary_types_allowed=True)
 
     def assess(
@@ -109,11 +126,11 @@ class ImpactAssessor(BaseModel):
         sensitivity = self._compute_sensitivity(classified_news.category)
 
         raw_impact = (
-            WEIGHT_DIRECT_RELEVANCE * relevance
-            + WEIGHT_SOURCE_AUTHORITY * authority
-            + WEIGHT_RECENCY * recency
-            + WEIGHT_MARKET_SENSITIVITY * sensitivity
-            + WEIGHT_CORROBORATION * min(corroborating_count / 5.0, 1.0)
+            self.weights.direct_relevance * relevance
+            + self.weights.source_authority * authority
+            + self.weights.recency * recency
+            + self.weights.market_sensitivity * sensitivity
+            + self.weights.corroboration * min(corroborating_count / 5.0, 1.0)
         )
 
         # Apply corroboration boost when 2+ sources report the same event

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from traderbot.news.impact_assessor import (
+from traderbot.news.impact_assessor import ImpactWeights, ImpactAssessor
     CATEGORY_SENSITIVITY,
     CORROBORATION_MULTIPLIER,
     HIGH_IMPACT_THRESHOLD,
