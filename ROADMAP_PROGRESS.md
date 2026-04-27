@@ -1,7 +1,7 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.06.00 (2026-04-21)
-**Current focus**: Phase 7 — News & Sentiment Pipeline
+**Last updated**: v0.08.32 (2026-04-26)
+**Current focus**: All phases complete
 
 ---
 
@@ -145,28 +145,54 @@
 
 ---
 
-## Phase 7: News & Sentiment Pipeline — 🔲 NOT STARTED
+## Phase 7: News & Sentiment Pipeline — ✅ COMPLETE
 
-| Component | File | Status |
-|---|---|---|
-| Sources | `news/sources.py` | 🔲 Pending |
-| Classifier | `news/classifier.py` | 🔲 Pending |
-| Sentiment | `news/sentiment_scorer.py` | 🔲 Pending |
-| Impact | `news/impact_assessor.py` | 🔲 Pending |
+| Component | File | Status | Notes |
+|---|---|---|---|
+| Sources | `news/sources.py` | ✅ Done | NewsAPI (httpx+retry), Reddit RSS (feedparser), Twitter stub demoted |
+| Classifier | `news/classifier.py` | ✅ Done | Hybrid keyword + Voyage semantic, CategoryAnalyzer protocol |
+| Sentiment | `news/sentiment_scorer.py` | ✅ Done | VADER primary, TextBlob fallback, Voyage uplift |
+| Impact | `news/impact_assessor.py` | ✅ Done | 5-factor weighted scoring, ImpactWeights Pydantic model with sum=1.0 |
+| Embeddings | `news/embeddings.py` | ✅ Done | VoyageClient with lazy init, rate limiting, batch API |
+| Models | `news/models.py` | ✅ Done | NewsItem, ClassifiedNews, SentimentResult, ImpactAssessment |
+| CLI news | `cli.py` | ✅ Done | `traderbot news --json`, profile-aware API key resolution |
+| CLI sentiment | `cli.py` | ✅ Done | `traderbot sentiment --json`, category filtering |
+| Profile-aware | `news/` + `cli.py` | ✅ Done | ProfileAuthStore API keys, enabled_categories filtering |
+| News signal | `analysis/signals.py` | ✅ Done | Sentiment as 4th signal source in generate_signal() |
 
-**Version target**: v0.07.00 | **Dependencies**: Phase 1
+**Version**: v0.08.32 | **Tests**: 1544 total | **Dependencies**: Phase 1, 9
+
+**Success criteria met**:
+- [x] News pipeline aggregates from NewsAPI + Reddit RSS
+- [x] Twitter source demoted (stub, last priority)
+- [x] Sentiment scored via VADER + TextBlob + Voyage uplift
+- [x] Impact assessed with 5-factor weighted model (sum=1.0 validated)
+- [x] MarketCategory enum unified — single source in kalshi/models.py
+- [x] Profile-aware: API key resolution, category filtering, per-profile paths
+- [x] `traderbot news --category economics --json` works
+- [x] `generate_signal()` accepts optional `news_sentiment` as 4th source
 
 ---
 
-## Phase 8: Adaptation Engine & Full Autonomy — 🔲 NOT STARTED
+## Phase 8: Adaptation Engine & Full Autonomy — ✅ COMPLETE
 
-| Component | File | Status |
-|---|---|---|
-| Bayesian adapter | `simulation/adaptation.py` | 🔲 Pending |
-| Heartbeat | (in Decision Loop) | 🔲 Pending |
-| Three-loop system | (OpenClaw crons) | 🔲 Pending |
+| Component | File | Status | Notes |
+|---|---|---|---|
+| Bayesian adapter | `simulation/adaptation.py` | ✅ Done | Full BayesianAdapter with 7 guardrails |
+| Adapter persistence | `simulation/adapter_state.py` | ✅ Done | JSON persistence with atomic writes, schema versioning |
+| Heartbeat | `heartbeat.py` | ✅ Done | 7-step cycle, CLI `traderbot heartbeat --json` |
+| Learning | `learning.py` + `db/learnings.py` | ✅ Done | Pattern promotion, feature requests |
+| Heartbeat persistence | `heartbeat.py` | ✅ Done | state_path wiring, profile-aware paths |
+| Three-loop system | `.openclaw/` crons | ✅ Done | 5 cron tasks defined in HEARTBEAT.md |
 
-**Version target**: v0.08.00 | **Dependencies**: Phase 5, 6, 7
+**Version**: v0.08.32 | **Tests**: 1544 total | **Dependencies**: Phase 5, 6, 7, 9
+
+**Success criteria met**:
+- [x] BayesianAdapter persists state across restarts (atomic JSON writes)
+- [x] Heartbeat creates adapter with state_path
+- [x] Profile-aware state paths (profile.base_dir/adaptation_state.json)
+- [x] `traderbot heartbeat --json` reflects adaptation state
+- [x] Cooldown, drift detection, variance reset all work with persistence
 
 ---
 
@@ -183,6 +209,8 @@
 | Duplicate normalize functions | Copy-pasted helpers across modules will diverge | Verify shared helpers in single module |
 | IntEnum strict deserialization | JSON stores IntEnum as int, strict Pydantic rejects it | Verify _load_state converts int→IntEnum before model_validate |
 | StrEnum strict deserialization | JSON stores StrEnum as str, strict Pydantic rejects implicit coercion | Verify _parse_* helpers convert raw str→StrEnum before model_validate (e.g., OrderSide("yes")) |
+| Duplicate enum definitions | Multiple modules define same enum with different values | Verify single canonical enum in one module, all others import it |
+| Unvalidated float weights | Impact or scoring weights stored as bare floats, no sum constraint | Verify Pydantic model with model_validator enforcing sum=1.0 |
 
 ---
 
@@ -190,12 +218,12 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.06.00 |
-| Total tests | 910 |
+| Version | 0.08.32 |
+| Total tests | 1544 |
 | Coverage | 99% |
 | Ruff errors | 0 |
-| Pydantic models | 22 (all strict=True, extra=forbid) |
-| CLI commands | 22 |
+| Pydantic models | 30+ (all strict=True, extra=forbid) |
+| CLI commands | 24+ |
 | Self-learning modules | 3 (learnings, wal, learning) |
 
 ---
