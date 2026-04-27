@@ -189,6 +189,65 @@ class ProfileRegistry:
         except Exception:
             return False
 
+    def update_profile(self, name: str, **kwargs: Any) -> TradingProfile:
+        """Update specific fields of an existing profile.
+
+        Args:
+            name: Profile name to update
+            **kwargs: Fields to update (risk_multiplier, enabled_categories, etc.)
+
+        Returns:
+            Updated TradingProfile
+
+        Raises:
+            ValueError: If profile doesn't exist or validation fails
+        """
+        existing = self.get_profile(name)
+        if existing is None:
+            raise ValueError(f"Profile '{name}' not found")
+
+        profile_dict = existing.model_dump(
+            exclude={"demo_mode", "base_dir", "keyring_prefix", "env_file"},
+            mode="json"
+        )
+
+        if "enabled_categories" in profile_dict and profile_dict["enabled_categories"]:
+            from traderbot.kalshi.models import MarketCategory
+            profile_dict["enabled_categories"] = [
+                MarketCategory(cat) if isinstance(cat, str) else cat
+                for cat in profile_dict["enabled_categories"]
+            ]
+
+        if "enabled_categories" in kwargs:
+            from traderbot.kalshi.models import MarketCategory
+            cats = kwargs.pop("enabled_categories")
+            if isinstance(cats, list):
+                profile_dict["enabled_categories"] = [
+                    MarketCategory(cat) if isinstance(cat, str) else cat
+                    for cat in cats
+                ]
+            else:
+                profile_dict["enabled_categories"] = cats
+
+        for key, value in kwargs.items():
+            if value is not None:
+                profile_dict[key] = value
+
+        updated_profile = TradingProfile.model_validate(profile_dict)
+
+        # Re-store in keyring (delete old, create new)
+        kr = self._get_keyring()
+        service = self._service_name(name)
+        kr.delete_password(service, "profile")
+        profile_json = json.dumps(updated_profile.model_dump(
+            exclude={"demo_mode", "base_dir", "keyring_prefix", "env_file"},
+            mode="json"
+        ))
+        kr.set_password(service, "profile", profile_json)
+
+        logger.info("Updated profile '%s'", name)
+        return updated_profile
+
     def _update_index(self, name: str, add: bool = True) -> None:
         """Update profile index for real keyring (internal helper).
 

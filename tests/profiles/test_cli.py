@@ -11,6 +11,7 @@ from traderbot.cli import app
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.registry import ProfileRegistry
+from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles import tokens
 from traderbot.risk.limits import HARD_LIMITS
 
@@ -384,6 +385,267 @@ def test_profile_delete_nonexistent(runner, registry, mock_keyring):
     
     # Should succeed but warn
     assert result.exit_code == 0
+
+
+def test_profile_update(runner, registry, mock_keyring):
+    """Update profile → shows updated values."""
+    profile = TradingProfile(
+        name="update-test",
+        mode="paper",
+        description="Original description",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    result = runner.invoke(app, [
+        "profile", "update", "update-test",
+        "--risk-multiplier", "0.8",
+        "--description", "Updated description",
+    ])
+
+    assert result.exit_code == 0, f"Command failed: {result.stdout}"
+    assert "Updated profile 'update-test'" in result.stdout
+
+    updated = registry.get_profile("update-test")
+    assert updated.risk_multiplier == 0.8
+    assert updated.description == "Updated description"
+
+
+def test_profile_update_multiple_fields(runner, registry, mock_keyring):
+    """Update multiple fields at once."""
+    profile = TradingProfile(
+        name="multi-update-test",
+        mode="paper",
+        description="Original",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    result = runner.invoke(app, [
+        "profile", "update", "multi-update-test",
+        "--risk-multiplier", "0.9",
+        "--max-open-positions", "15",
+        "--categories", "Politics,Economics",
+    ])
+
+    assert result.exit_code == 0, f"Command failed: {result.stdout}"
+
+    updated = registry.get_profile("multi-update-test")
+    assert updated.risk_multiplier == 0.9
+    assert updated.max_open_positions == 15
+    assert MarketCategory.POLITICS in updated.enabled_categories
+    assert MarketCategory.ECONOMICS in updated.enabled_categories
+
+
+def test_profile_update_nonexistent(runner, registry, mock_keyring):
+    """Updating nonexistent profile should fail."""
+    result = runner.invoke(app, [
+        "profile", "update", "nonexistent",
+        "--risk-multiplier", "0.5",
+    ])
+
+    assert result.exit_code != 0
+    assert "not found" in result.stdout.lower()
+
+
+def test_profile_update_no_fields(runner, registry, mock_keyring):
+    """Updating with no fields should warn."""
+    profile = TradingProfile(
+        name="no-field-update",
+        mode="paper",
+        description="Test",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    result = runner.invoke(app, ["profile", "update", "no-field-update"])
+
+    assert result.exit_code == 0
+    assert "No fields to update" in result.stdout
+
+
+def test_profile_discover_agents_empty(runner, registry, mock_keyring, monkeypatch):
+    """Discover agents with no workspace should show empty."""
+    def mock_discover():
+        return []
+
+    monkeypatch.setattr("traderbot.profiles.discovery.discover_agents", mock_discover)
+
+    result = runner.invoke(app, ["profile", "discover-agents"])
+
+    assert result.exit_code == 0
+    assert "No agents found" in result.stdout
+
+
+def test_profile_discover_agents_with_agents(runner, registry, mock_keyring, monkeypatch):
+    """Discover agents with agents present."""
+    def mock_discover():
+        return [
+            {"agent_id": "agent1", "name": "Agent One", "path": "/path/to/agent1"},
+            {"agent_id": "agent2", "name": "Agent Two", "path": "/path/to/agent2"},
+        ]
+
+    monkeypatch.setattr("traderbot.profiles.discovery.discover_agents", mock_discover)
+
+    result = runner.invoke(app, ["profile", "discover-agents"])
+
+    assert result.exit_code == 0
+    assert "agent1" in result.stdout
+    assert "Agent One" in result.stdout
+    assert "agent2" in result.stdout
+    assert "Agent Two" in result.stdout
+
+
+def test_profile_discover_agents_json(runner, registry, mock_keyring, monkeypatch):
+    """Discover agents JSON output."""
+    def mock_discover():
+        return [
+            {"agent_id": "agent1", "name": "Agent One", "path": "/path/to/agent1"},
+        ]
+
+    monkeypatch.setattr("traderbot.profiles.discovery.discover_agents", mock_discover)
+
+    result = runner.invoke(app, ["profile", "discover-agents", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert len(data) == 1
+    assert data[0]["agent_id"] == "agent1"
+
+
+def test_profile_set_auth(runner, registry, mock_keyring):
+    """Set auth credentials for a profile."""
+    profile = TradingProfile(
+        name="auth-test",
+        mode="paper",
+        description="Auth test",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    result = runner.invoke(app, [
+        "profile", "set-auth", "auth-test", "kalshi", "my-key-id"
+    ], input="my-secret-value\n")
+
+    assert result.exit_code == 0, f"Command failed: {result.stdout}"
+    assert "Stored credentials" in result.stdout
+
+
+def test_profile_set_auth_nonexistent_profile(runner, registry, mock_keyring):
+    """Set auth for nonexistent profile should fail."""
+    result = runner.invoke(app, [
+        "profile", "set-auth", "nonexistent", "kalshi", "key"
+    ], input="secret\n")
+
+    assert result.exit_code != 0
+    assert "not found" in result.stdout.lower()
+
+
+def test_profile_auth(runner, registry, mock_keyring):
+    """Show auth credentials for a profile."""
+    profile = TradingProfile(
+        name="auth-show-test",
+        mode="paper",
+        description="Auth show test",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    auth_store = ProfileAuthStore(profile, keyring_module=mock_keyring)
+    auth_store.set_credentials("kalshi", "key-id-123", "secret-value")
+
+    result = runner.invoke(app, ["profile", "auth", "auth-show-test"])
+
+    assert result.exit_code == 0, f"Command failed: {result.stdout}"
+    assert "kalshi" in result.stdout
+
+
+def test_profile_auth_json(runner, registry, mock_keyring):
+    """Show auth credentials as JSON."""
+    profile = TradingProfile(
+        name="auth-json-test",
+        mode="paper",
+        description="Auth JSON test",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    auth_store = ProfileAuthStore(profile, keyring_module=mock_keyring)
+    auth_store.set_credentials("kalshi", "key-id-123", "secret-value")
+
+    result = runner.invoke(app, ["profile", "auth", "auth-json-test", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert len(data) == 1
+    assert data[0]["service"] == "kalshi"
+    assert data[0]["key"] == "key-id-123"
+
+
+def test_profile_auth_nonexistent_profile(runner, registry, mock_keyring):
+    """Show auth for nonexistent profile should fail."""
+    result = runner.invoke(app, ["profile", "auth", "nonexistent"])
+
+    assert result.exit_code != 0
+    assert "not found" in result.stdout.lower()
+
+
+def test_profile_auth_no_credentials(runner, registry, mock_keyring):
+    """Show auth when no credentials configured."""
+    profile = TradingProfile(
+        name="no-creds-test",
+        mode="paper",
+        description="No creds test",
+        risk_multiplier=0.5,
+        max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+        max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+        max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+        max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+        min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+        min_edge_pct=HARD_LIMITS["min_edge_pct"],
+    )
+    registry.create_profile(profile)
+
+    result = runner.invoke(app, ["profile", "auth", "no-creds-test"])
+
+    assert result.exit_code == 0
+    assert "No credentials configured" in result.stdout
 
 
 # Made with Bob

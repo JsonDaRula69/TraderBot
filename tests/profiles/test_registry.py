@@ -209,4 +209,80 @@ def test_list_profiles_empty(registry: ProfileRegistry) -> None:
     profiles = registry.list_profiles()
     assert profiles == []
 
+def test_update_profile_single_field(
+    registry: ProfileRegistry, sample_profile: TradingProfile
+) -> None:
+    """Update a single field of an existing profile."""
+    registry.create_profile(sample_profile)
+
+    updated = registry.update_profile("test-profile", risk_multiplier=0.75)
+
+    assert updated.risk_multiplier == 0.75
+    assert updated.description == sample_profile.description
+    assert updated.mode == sample_profile.mode
+
+
+def test_update_profile_multiple_fields(
+    registry: ProfileRegistry, sample_profile: TradingProfile
+) -> None:
+    """Update multiple fields of an existing profile."""
+    registry.create_profile(sample_profile)
+
+    updated = registry.update_profile(
+        "test-profile",
+        risk_multiplier=0.9,
+        max_open_positions=15,
+        description="Updated description",
+    )
+
+    assert updated.risk_multiplier == 0.9
+    assert updated.max_open_positions == 15
+    assert updated.description == "Updated description"
+    assert updated.enabled_categories == sample_profile.enabled_categories
+
+
+def test_update_profile_categories(
+    registry: ProfileRegistry, sample_profile: TradingProfile
+) -> None:
+    """Update enabled_categories with string list."""
+    registry.create_profile(sample_profile)
+
+    updated = registry.update_profile(
+        "test-profile",
+        enabled_categories=["Politics", "Economics", "Science"],
+    )
+
+    assert MarketCategory.POLITICS in updated.enabled_categories
+    assert MarketCategory.ECONOMICS in updated.enabled_categories
+    assert MarketCategory.SCIENCE in updated.enabled_categories
+    assert len(updated.enabled_categories) == 3
+
+
+def test_update_profile_nonexistent(registry: ProfileRegistry) -> None:
+    """Updating non-existent profile should raise ValueError."""
+    with pytest.raises(ValueError, match="Profile 'nonexistent' not found"):
+        registry.update_profile("nonexistent", risk_multiplier=0.5)
+
+
+def test_update_profile_preserves_unmodified_fields(
+    registry: ProfileRegistry, sample_profile: TradingProfile
+) -> None:
+    """Updating one field should not change other fields."""
+    registry.create_profile(sample_profile)
+    original_dict = sample_profile.model_dump(mode="json")
+
+    updated = registry.update_profile("test-profile", risk_multiplier=0.99)
+
+    assert updated.name == original_dict["name"]
+    assert updated.mode == original_dict["mode"]
+    assert updated.description == original_dict["description"]
+    assert updated.risk_multiplier == 0.99
+    assert updated.max_position_per_market_pct == original_dict["max_position_per_market_pct"]
+    assert updated.max_daily_loss_pct == original_dict["max_daily_loss_pct"]
+    assert updated.max_drawdown_pct == original_dict["max_drawdown_pct"]
+    assert updated.max_open_positions == original_dict["max_open_positions"]
+    assert updated.min_liquidity_threshold == original_dict["min_liquidity_threshold"]
+    assert updated.min_edge_pct == original_dict["min_edge_pct"]
+
+
 # Made with Bob
