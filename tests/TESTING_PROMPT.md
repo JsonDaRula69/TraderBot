@@ -216,9 +216,9 @@ Expected Severity: [P0/P1/P2 if found]
 | `docs/risk.md` | Audit trail fields match actual Decision model | Compare doc's Decision fields against `db/decisions.py` model |
 | `docs/kalshi.md` | API endpoints and response shapes | Read `kalshi/client.py` and `kalshi/models.py` and verify each documented endpoint |
 | `docs/openclaw-integration.md` | SKILL.md command names match `cli.py` commands | Read `skills/traderbot/SKILL.md` and compare command list against `typer` app commands |
-| `docs/simulation.md` | Module and function names for Phase 5 (not yet built) | Verify `simulation/` directory does NOT exist yet (unbuilt phase) |
-| `docs/news-sentiment.md` | Module and function names for Phase 7 (not yet built) | Verify `news/` directory does NOT exist yet (unbuilt phase) |
-| `docs/self-learning.md` | Module and function names for Phase 6 (not yet built) | Verify `db/learnings.py` does NOT exist yet (unbuilt phase) |
+| `docs/simulation.md` | Module and function names for Phase 5 (BUILT) | Verify `simulation/` directory exists with engine.py, models.py, adaptation.py, adapter_state.py, paper_trader.py, performance.py, profiles.py, data_loader.py |
+| `docs/news-sentiment.md` | Module and function names for Phase 7 (BUILT) | Verify `news/` directory exists with sources.py, classifier.py, sentiment_scorer.py, impact_assessor.py, embeddings.py, models.py, cache_paths.py |
+| `docs/self-learning.md` | Module and function names for Phase 6 (BUILT) | Verify `db/learnings.py` exists with LearningsDB, and `learning.py` exists with pattern promotion |
 | `docs/decisions/` | ADR records match current architecture | Verify each ADR's decision is still reflected in current code |
 
 **ROADMAP_PROGRESS.md validation checklist:**
@@ -252,7 +252,7 @@ print(names)
 
 Flag any name in ROADMAP that doesn't match source as P3 (stale docs).
 
-**Known discrepancies from v0.04.04 review (example — re-verify each cycle):**
+**Known discrepancies (re-verify each cycle):**
 
 | Discrepancy | Doc Says | Code Reality | Severity | Action |
 |-------------|---------|-------------|----------|--------|
