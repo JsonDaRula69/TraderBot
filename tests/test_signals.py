@@ -108,6 +108,7 @@ def test_generate_signal_declining_trend() -> None:
     assert signal.direction in ("yes", "no", "neutral")
     assert 0.0 <= signal.confidence <= 1.0
     assert signal.estimated_prob == 0.55
+    assert len(signal.sources) >= 2
 
 
 @pytest.mark.unit

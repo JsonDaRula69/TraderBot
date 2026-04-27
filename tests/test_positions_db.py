@@ -33,7 +33,6 @@ class TestCrud:
             pos = _make_position()
             upsert(conn, pos)
             result = get(conn, "KX-TEST")
-        assert result is not None
         assert result.ticker == "KX-TEST"
         assert result.quantity == 10
         assert result.avg_price == 50
@@ -72,7 +71,6 @@ class TestCrud:
             upsert(conn, _make_position(quantity=10, avg_price=50))
             upsert(conn, _make_position(quantity=20, avg_price=60))
             result = get(conn, "KX-TEST")
-        assert result is not None
         assert result.quantity == 20
         assert result.avg_price == 60
 
@@ -85,7 +83,6 @@ class TestUpdateAvgPrice:
             upsert(conn, _make_position(quantity=10, avg_price=50))
             update_avg_price(conn, "KX-TEST", additional_quantity=5, new_price_cents=60)
             result = get(conn, "KX-TEST")
-        assert result is not None
         assert result.quantity == 15
         assert result.avg_price == 53
 

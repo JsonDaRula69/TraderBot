@@ -8,6 +8,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.kalshi.models import MarketCategory
+
+NewsCategory = MarketCategory
+"""Backward-compatible alias — prefer MarketCategory from kalshi.models."""
+
 
 class NewsSource(StrEnum):
     """Supported news sources."""
@@ -15,19 +20,6 @@ class NewsSource(StrEnum):
     NEWSAPI = "NewsAPI"
     TWITTER = "Twitter"
     REDDIT = "Reddit"
-
-
-class NewsCategory(StrEnum):
-    """News classification categories — parallels MarketCategory for cross-module consistency."""
-
-    POLITICS = "Politics"
-    ECONOMICS = "Economics"
-    SCIENCE = "Science"
-    SPORTS = "Sports"
-    CRYPTO = "Crypto"
-    CULTURE = "Culture"
-    TECH = "Tech"
-    WEATHER = "Weather"
 
 
 class NewsItem(BaseModel):

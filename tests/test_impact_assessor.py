@@ -9,15 +9,11 @@ from traderbot.news.impact_assessor import (
     CATEGORY_SENSITIVITY,
     CORROBORATION_MULTIPLIER,
     HIGH_IMPACT_THRESHOLD,
+    ImpactAssessor,
+    ImpactWeights,
     LOW_IMPACT_THRESHOLD,
     SIMILARITY_THRESHOLD,
     SOURCE_AUTHORITY,
-    WEIGHT_CORROBORATION,
-    WEIGHT_DIRECT_RELEVANCE,
-    WEIGHT_MARKET_SENSITIVITY,
-    WEIGHT_RECENCY,
-    WEIGHT_SOURCE_AUTHORITY,
-    ImpactAssessor,
     _cosine_similarity,
 )
 from traderbot.news.models import (
@@ -90,6 +86,10 @@ class TestBasicAssess:
     def test_returns_impact_assessment(self):
         result = _assess()
         assert isinstance(result, ImpactAssessment)
+        assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_ticker_from_news_item(self):
         result = _assess()
@@ -299,7 +299,6 @@ class TestVoyageRelevance:
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, mock_client)
-        assert result is not None
         assert 0.0 <= result <= 1.0
 
     def test_voyage_exception_falls_back(self):
@@ -308,13 +307,13 @@ class TestVoyageRelevance:
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, mock_client)
-        assert result is not None
+        assert 0.0 <= result <= 1.0
 
     def test_no_voyage_uses_keyword_overlap(self):
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, None)
-        assert result is not None
+        assert 0.0 <= result <= 1.0
 
     def test_keyword_overlap_with_matching_refs(self):
         news = _news_item(title="SPY surges", body="SPY SPY", ticker_refs=["SPY"])
@@ -334,6 +333,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=None)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_assess_with_voyage_none_return(self):
         mock_client = MagicMock()
@@ -341,6 +343,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=mock_client)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_assess_with_voyage_exception(self):
         mock_client = MagicMock()
@@ -348,6 +353,9 @@ class TestDegradationWithoutVoyage:
         result = _assess(voyage_client=mock_client)
         assert isinstance(result, ImpactAssessment)
         assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
 
 class TestCosineSimilarity:
@@ -367,29 +375,35 @@ class TestCosineSimilarity:
 
 class TestWeights:
     def test_weights_sum_to_1(self):
+        weights = ImpactWeights()
         total = (
-            WEIGHT_DIRECT_RELEVANCE
-            + WEIGHT_SOURCE_AUTHORITY
-            + WEIGHT_RECENCY
-            + WEIGHT_MARKET_SENSITIVITY
-            + WEIGHT_CORROBORATION
+            weights.direct_relevance
+            + weights.source_authority
+            + weights.recency
+            + weights.market_sensitivity
+            + weights.corroboration
         )
         assert total == pytest.approx(1.0)
 
     def test_relevance_is_highest_weight(self):
-        assert WEIGHT_DIRECT_RELEVANCE == 0.3
+        weights = ImpactWeights()
+        assert weights.direct_relevance == 0.3
 
     def test_source_authority_second(self):
-        assert WEIGHT_SOURCE_AUTHORITY == 0.25
+        weights = ImpactWeights()
+        assert weights.source_authority == 0.25
 
     def test_recency_weight(self):
-        assert WEIGHT_RECENCY == 0.2
+        weights = ImpactWeights()
+        assert weights.recency == 0.2
 
     def test_sensitivity_weight(self):
-        assert WEIGHT_MARKET_SENSITIVITY == 0.15
+        weights = ImpactWeights()
+        assert weights.market_sensitivity == 0.15
 
     def test_corroboration_lowest_weight(self):
-        assert WEIGHT_CORROBORATION == 0.1
+        weights = ImpactWeights()
+        assert weights.corroboration == 0.1
 
 
 class TestReasoning:

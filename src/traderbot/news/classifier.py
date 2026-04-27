@@ -294,7 +294,11 @@ class NewsClassifier:
             method=_RERANK,
         )
 
-    def classify(self, news_item: NewsItem) -> ClassifiedNews:
+    def classify(
+        self,
+        news_item: NewsItem,
+        category_filter: list[NewsCategory] | None = None,
+    ) -> ClassifiedNews | None:
         """Classify a news item into a Kalshi market category.
 
         Pipeline:
@@ -302,12 +306,17 @@ class NewsClassifier:
         2. Voyage embed — ambiguous or no keyword match → cosine similarity
         3. Voyage rerank — if embed confidence in 0.5-0.7 → disambiguate
         4. Agent LLM flag — if confidence <0.5 → flag for future processing
+
+        When category_filter is set, returns None if the classified category
+        is not in the filter list. None filter = accept all categories.
         """
         text = f"{news_item.title} {news_item.body}"
 
         # Step 1: Keyword fast path
         kw_result = self._keyword_classify(text)
         if kw_result is not None:
+            if category_filter is not None and kw_result.category not in category_filter:
+                return None
             return ClassifiedNews(
                 news_item=news_item,
                 category=kw_result.category,
@@ -316,7 +325,8 @@ class NewsClassifier:
         # Step 2: Voyage embedding
         emb_result = self._embed_classify(text)
         if emb_result is not None and emb_result.confidence >= _CONFIDENCE_RERANK_HIGH:
-            # High enough confidence from embedding — done
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             return ClassifiedNews(
                 news_item=news_item,
                 category=emb_result.category,
@@ -326,11 +336,15 @@ class NewsClassifier:
             # Step 3: Use reranker for disambiguation
             rr_result = self._rerank_classify(text)
             if rr_result is not None:
+                if category_filter is not None and rr_result.category not in category_filter:
+                    return None
                 return ClassifiedNews(
                     news_item=news_item,
                     category=rr_result.category,
                 )
             # Rerank failed — use embed result as-is
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             return ClassifiedNews(
                 news_item=news_item,
                 category=emb_result.category,
@@ -338,7 +352,8 @@ class NewsClassifier:
 
         # Step 4: Low confidence or no Voyage — best guess + flag for LLM
         if emb_result is not None:
-            # Embed gave something but confidence <0.5
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             return ClassifiedNews(
                 news_item=news_item,
                 category=emb_result.category,
@@ -348,43 +363,63 @@ class NewsClassifier:
         cat_hits = self._keyword_cat_hits(text)
         if cat_hits:
             best_cat = max(cat_hits, key=lambda c: cat_hits[c])
+            if category_filter is not None and best_cat not in category_filter:
+                return None
             return ClassifiedNews(
                 news_item=news_item,
                 category=best_cat,
             )
 
         # No matches at all — default to Economics with very low confidence
+        default_cat = NewsCategory.ECONOMICS
+        if category_filter is not None and default_cat not in category_filter:
+            return None
         return ClassifiedNews(
             news_item=news_item,
-            category=NewsCategory.ECONOMICS,
+            category=default_cat,
         )
 
-    def classify_with_metadata(self, news_item: NewsItem) -> ClassificationResult:
+    def classify_with_metadata(
+        self,
+        news_item: NewsItem,
+        category_filter: list[NewsCategory] | None = None,
+    ) -> ClassificationResult | None:
         """Classify and return full metadata including method and confidence.
 
-        Useful for debugging and audit trails.
+        When category_filter is set, returns None if the classified category
+        is not in the filter list. None filter = accept all categories.
         """
         text = f"{news_item.title} {news_item.body}"
 
         # Step 1: Keyword fast path
         kw_result = self._keyword_classify(text)
         if kw_result is not None:
+            if category_filter is not None and kw_result.category not in category_filter:
+                return None
             return kw_result
 
         # Step 2: Voyage embedding
         emb_result = self._embed_classify(text)
         if emb_result is not None and emb_result.confidence >= _CONFIDENCE_RERANK_HIGH:
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             return emb_result
 
         if emb_result is not None and _CONFIDENCE_RERANK_LOW <= emb_result.confidence < _CONFIDENCE_RERANK_HIGH:
             # Step 3: Reranker
             rr_result = self._rerank_classify(text)
             if rr_result is not None:
+                if category_filter is not None and rr_result.category not in category_filter:
+                    return None
                 return rr_result
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             return emb_result
 
         # Step 4: Low confidence → flag for Agent LLM
         if emb_result is not None:
+            if category_filter is not None and emb_result.category not in category_filter:
+                return None
             emb_result.flagged_for_llm = True
             return emb_result
 
@@ -392,6 +427,8 @@ class NewsClassifier:
         cat_hits = self._keyword_cat_hits(text)
         if cat_hits:
             best_cat = max(cat_hits, key=lambda c: cat_hits[c])
+            if category_filter is not None and best_cat not in category_filter:
+                return None
             confidence = min(0.3 + 0.05 * cat_hits[best_cat], 0.45)
             return ClassificationResult(
                 category=best_cat,
@@ -401,8 +438,11 @@ class NewsClassifier:
             )
 
         # No matches — default to Economics
+        default_cat = NewsCategory.ECONOMICS
+        if category_filter is not None and default_cat not in category_filter:
+            return None
         return ClassificationResult(
-            category=NewsCategory.ECONOMICS,
+            category=default_cat,
             confidence=0.1,
             method="default_fallback",
             flagged_for_llm=True,

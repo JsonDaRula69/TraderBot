@@ -100,7 +100,7 @@ class TestNewsCommand:
             assert isinstance(data, list)
             assert len(data) == 1
             assert data[0]["title"] == "Fed raises interest rates"
-            assert data[0]["category"] == "Economics"
+            assert data[0]["category"] == "economics"
 
     @pytest.mark.unit
     def test_news_with_category_filter_json(self):
@@ -139,7 +139,7 @@ class TestNewsCommand:
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert isinstance(data, list)
-            assert all(item["category"] == "Economics" for item in data)
+            assert all(item["category"] == "economics" for item in data)
 
     @pytest.mark.unit
     def test_news_with_source_filter_json(self):
@@ -195,7 +195,7 @@ class TestNewsCommand:
             result = runner.invoke(app, ["news"])
             assert result.exit_code == 0
             assert "News Feed" in result.output
-            assert "Economics" in result.output
+            assert "economics" in result.output
             assert "NewsAPI" in result.output
 
     @pytest.mark.unit
