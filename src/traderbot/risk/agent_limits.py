@@ -1,10 +1,7 @@
 """AgentRiskLimits — per-agent risk limits with HARD_LIMITS ceiling enforcement."""
 
 from __future__ import annotations
-
-
 from traderbot.risk.limits import HARD_LIMITS
-
 
 class AgentRiskLimits:
     """Per-agent risk limits that enforce HARD_LIMITS as an absolute ceiling.
@@ -15,16 +12,16 @@ class AgentRiskLimits:
     All properties are read-only to prevent runtime modification.
     """
 
-    def __init__(self, profile: "TradingProfile") -> None:  # noqa: UP037
+    def __init__(self, profile: "TradingProfile") -> None:
         """Initialize agent limits from a trading profile.
 
         Args:
             profile: TradingProfile with risk parameters
         """
         from traderbot.profiles.models import TradingProfile
-    if not isinstance(profile, TradingProfile):
-        raise TypeError("profile must be a TradingProfile instance")
-    self._profile = profile
+        if not isinstance(profile, TradingProfile):
+            raise TypeError("profile must be a TradingProfile instance")
+        self._profile = profile
 
     @property
     def max_position_per_market_pct(self) -> float:
@@ -34,7 +31,7 @@ class AgentRiskLimits:
         """
         return min(
             self._profile.max_position_per_market_pct,
-            float(HARD_LIMITS["max_position_per_market_pct"]),
+            float(HARD_LIMITS["max_position_per_market_pct"])
         )
 
     @property
@@ -45,7 +42,7 @@ class AgentRiskLimits:
         """
         return min(
             self._profile.max_daily_loss_pct,
-            float(HARD_LIMITS["max_daily_loss_pct"]),
+            float(HARD_LIMITS["max_daily_loss_pct"])
         )
 
     @property
@@ -56,7 +53,7 @@ class AgentRiskLimits:
         """
         return min(
             self._profile.max_drawdown_pct,
-            float(HARD_LIMITS["max_drawdown_pct"]),
+            float(HARD_LIMITS["max_drawdown_pct"])
         )
 
     @property
@@ -67,7 +64,7 @@ class AgentRiskLimits:
         """
         return min(
             self._profile.max_open_positions,
-            int(HARD_LIMITS["max_open_positions"]),
+            int(HARD_LIMITS["max_open_positions"])
         )
 
     @property
@@ -78,7 +75,7 @@ class AgentRiskLimits:
         """
         return max(
             self._profile.min_liquidity_threshold,
-            int(HARD_LIMITS["min_liquidity_threshold"]),
+            int(HARD_LIMITS["min_liquidity_threshold"])
         )
 
     @property
@@ -89,7 +86,5 @@ class AgentRiskLimits:
         """
         return max(
             self._profile.min_edge_pct,
-            float(HARD_LIMITS["min_edge_pct"]),
+            float(HARD_LIMITS["min_edge_pct"])
         )
-
-
