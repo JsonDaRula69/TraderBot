@@ -2,6 +2,8 @@
 
 import asyncio
 import json as json_lib
+import logging
+import os
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +11,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="traderbot",
@@ -554,6 +558,8 @@ def heartbeat(
     from traderbot.db import init_schema
     from traderbot.db.learnings import init_table as init_learnings_table
     from traderbot.heartbeat import DEFAULT_HEARTBEAT_PATH, run_heartbeat_cycle
+    from traderbot.profiles.runtime import get_current_profile
+    from traderbot.simulation.adapter_state import resolve_state_path
 
     console = Console()
 
@@ -563,7 +569,16 @@ def heartbeat(
         from traderbot.learning import init_task_observations_table
 
         init_task_observations_table(conn)
-        return run_heartbeat_cycle(conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, dry_run=dry_run)
+
+        # Compute state path based on profile
+        profile = get_current_profile()
+        state_path = None
+        if profile:
+            state_path = resolve_state_path(profile_base_dir=profile.base_dir)
+        else:
+            state_path = resolve_state_path(state_path=Path('.traderbot/adaptation_state.json'))
+
+        return run_heartbeat_cycle(conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run)
 
     try:
         result = _with_db(db_path, _run)
@@ -696,6 +711,7 @@ def news(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Fetch and display news for tracked markets."""
+    from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
     from traderbot.news.models import NewsCategory
     from traderbot.news.models import NewsItem as ModelsNewsItem
@@ -703,14 +719,19 @@ def news(
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
     from traderbot.news.sources import NewsSource as SourcesNewsSource
+    from traderbot.profiles.config import resolve_newsapi_key
+    from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
+
+    # Resolve active profile
+    profile = get_current_profile()
 
     # Validate --category
     category_enum: NewsCategory | None = None
     if category is not None:
         try:
-            category_enum = NewsCategory(category)
+            category_enum = NewsCategory(category.lower())
         except ValueError:
             valid = ", ".join(c.value for c in NewsCategory)
             if json_output:
@@ -718,6 +739,25 @@ def news(
             else:
                 err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
             raise typer.Exit(code=1) from None
+
+    # Profile-aware category validation: --category must be in enabled_categories
+    if profile is not None and category_enum is not None and profile.enabled_categories and not profile.is_category_enabled(category_enum):
+        if json_output:
+            json_lib.dump(
+                {"error": f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"},
+                sys.stdout,
+            )
+        else:
+            err_console.print(
+                f"[red]Category '{category_enum.value}' not enabled for profile '{profile.name}'.[/red] "
+                f"Enabled: {', '.join(c.value for c in profile.enabled_categories)}"
+            )
+        raise typer.Exit(code=1) from None
+
+    # Build category filter from profile
+    category_filter: list[NewsCategory] | None = None
+    if profile is not None and profile.enabled_categories:
+        category_filter = profile.enabled_categories
 
     # Validate --source
     source_filter: SourcesNewsSource | None = None
@@ -732,19 +772,21 @@ def news(
                 err_console.print(f"[red]Invalid source:[/red] {source}. Valid: {valid}")
             raise typer.Exit(code=1) from None
 
-    # Get API keys from environment
-    import os
-
-    newsapi_key = os.environ.get("NEWSAPI_KEY")
+    # Resolve API keys via profile-aware chain
+    newsapi_key = resolve_newsapi_key(profile)
     twitter_key = os.environ.get("TWITTER_API_KEY")
 
     if not newsapi_key and not twitter_key:
         if json_output:
-            json_lib.dump({"error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables."}, sys.stdout)
+            json_lib.dump({"error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."}, sys.stdout)
         else:
-            console.print("[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables.")
+            console.print("[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials.")
             console.print("Reddit RSS feeds work without keys — try [cyan]--source reddit[/cyan].")
         return
+
+    # Profile-aware news cache path
+    cache_path = get_news_cache_path(profile)
+    logger.debug("News cache path: %s", cache_path)
 
     # Map source filter for aggregator
     source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
@@ -766,7 +808,7 @@ def news(
             try:
                 models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
                 try:
-                    cat = NewsCategory(item.category)
+                    cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
                 models_items.append(ModelsNewsItem(
@@ -797,8 +839,10 @@ def news(
     scorer = SentimentScorer()
     classified_items: list[dict] = []
     for item in items:
-        classified = classifier.classify(item)
-        # Filter by category if specified
+        classified = classifier.classify(item, category_filter=category_filter)
+        if classified is None:
+            continue
+        # Filter by --category flag if specified
         if category_enum is not None and classified.category != category_enum:
             continue
         sentiment = scorer.score(item.title, item.source, item.id)
@@ -856,6 +900,7 @@ def sentiment(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Analyze market sentiment from news and social for a ticker."""
+    from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
     from traderbot.news.impact_assessor import ImpactAssessor
     from traderbot.news.models import NewsCategory
@@ -864,13 +909,22 @@ def sentiment(
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
     from traderbot.news.sources import NewsSource as SourcesNewsSource
+    from traderbot.profiles.config import resolve_newsapi_key
+    from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
 
-    import os
+    profile = get_current_profile()
 
-    newsapi_key = os.environ.get("NEWSAPI_KEY")
+    newsapi_key = resolve_newsapi_key(profile)
     twitter_key = os.environ.get("TWITTER_API_KEY")
+
+    category_filter: list[NewsCategory] | None = None
+    if profile is not None and profile.enabled_categories:
+        category_filter = profile.enabled_categories
+
+    cache_path = get_news_cache_path(profile)
+    logger.debug("News cache path: %s", cache_path)
 
     source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
         SourcesNewsSource.NEWSAPI: ModelsNewsSource.NEWSAPI,
@@ -887,7 +941,7 @@ def sentiment(
             try:
                 models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
                 try:
-                    cat = NewsCategory(item.category)
+                    cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
                 models_items.append(ModelsNewsItem(
@@ -936,7 +990,9 @@ def sentiment(
 
     results: list[dict] = []
     for item in items_to_analyze:
-        classified = classifier.classify(item)
+        classified = classifier.classify(item, category_filter=category_filter)
+        if classified is None:
+            continue
         sentiment = scorer.score(item.title, item.source, item.id)
         impact = assessor.assess(item, classified, sentiment)
         results.append({
@@ -1605,7 +1661,11 @@ def profile_create(
     if categories:
         try:
             enabled_categories = [
+<<<<<<< HEAD
                 MarketCategory(cat.strip().title())
+=======
+                MarketCategory(cat.strip().lower())
+>>>>>>> BOB
                 for cat in categories.split(",")
             ]
         except ValueError as e:
@@ -1706,7 +1766,11 @@ def profile_show(
         console.print(f"\n[bold cyan]Profile: {profile.name}[/bold cyan]")
         console.print(f"Mode: {profile.mode}")
         console.print(f"Description: {profile.description}")
+<<<<<<< HEAD
         console.print(f"\n[bold]Risk Parameters:[/bold]")
+=======
+        console.print("\n[bold]Risk Parameters:[/bold]")
+>>>>>>> BOB
         console.print(f"  Risk Multiplier: {profile.risk_multiplier}")
         console.print(f"  Max Position per Market: {profile.max_position_per_market_pct}%")
         console.print(f"  Max Daily Loss: {profile.max_daily_loss_pct}%")
@@ -1714,6 +1778,7 @@ def profile_show(
         console.print(f"  Max Open Positions: {profile.max_open_positions}")
         console.print(f"  Min Liquidity: {profile.min_liquidity_threshold}")
         console.print(f"  Min Edge: {profile.min_edge_pct}%")
+<<<<<<< HEAD
         
         if profile.enabled_categories:
             console.print(f"\n[bold]Enabled Categories:[/bold]")
@@ -1721,6 +1786,15 @@ def profile_show(
                 console.print(f"  • {cat.value}")
         else:
             console.print(f"\n[bold]Enabled Categories:[/bold] All")
+=======
+
+        if profile.enabled_categories:
+            console.print("\n[bold]Enabled Categories:[/bold]")
+            for cat in profile.enabled_categories:
+                console.print(f"  • {cat.value}")
+        else:
+            console.print("\n[bold]Enabled Categories:[/bold] All")
+>>>>>>> BOB
 
 
 @profile_app.command("delete")
@@ -1740,7 +1814,11 @@ def profile_delete(
 
     registry.delete_profile(name, keep_data=keep_data)
     console.print(f"[green]✓[/green] Deleted profile '{name}'")
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> BOB
     if not keep_data:
         console.print("[yellow]Note:[/yellow] Data directories were also deleted")
 
@@ -1771,7 +1849,11 @@ def profile_assign(
         assign_token(profile_name, agent_id, token)
         console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
         console.print(f"Token: [bold]{token}[/bold]")
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> BOB
         # Inject token into agent's TOOLS.md
         try:
             agent_path = Path(".openclaw") / "workspace" / agent_id
@@ -1782,7 +1864,11 @@ def profile_assign(
                 inject_token(str(agent_path), token)
                 console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
         except FileNotFoundError:
+<<<<<<< HEAD
             console.print(f"[yellow]Warning:[/yellow] Agent directory not found")
+=======
+            console.print("[yellow]Warning:[/yellow] Agent directory not found")
+>>>>>>> BOB
             console.print("Token assigned but not injected into TOOLS.md")
         except Exception as e:
             console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")

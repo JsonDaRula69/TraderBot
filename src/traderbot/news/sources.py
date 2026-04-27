@@ -42,12 +42,12 @@ class NewsItem(BaseModel):
 class NewsAggregator:
     """Fetch and aggregate news from multiple sources with graceful degradation."""
 
-    # Source fetch priority order (fastest/breaking → slowest/analysis)
+        # Source fetch priority order (fastest/breaking → slowest/analysis)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
-        NewsSource.TWITTER,
-        NewsSource.NEWSAPI,
-        NewsSource.REDDIT,
-    ]
+    NewsSource.NEWSAPI,
+    NewsSource.REDDIT,
+    NewsSource.TWITTER,
+]
 
     def __init__(
         self,

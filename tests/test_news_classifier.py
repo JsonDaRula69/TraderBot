@@ -352,8 +352,8 @@ class TestClassifiedNewsOutput:
         cls = NewsClassifier()
         result = cls.classify(_item("Fed raises rates"))
         assert isinstance(result, ClassifiedNews)
+        assert isinstance(result.category, NewsCategory)
         assert result.category == NewsCategory.ECONOMICS
-        assert result.news_item.title == "Fed raises rates"
 
     def test_classify_preserves_news_item(self):
         cls = NewsClassifier()

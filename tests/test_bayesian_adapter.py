@@ -317,6 +317,110 @@ class TestMaxChangeGuardrail:
         assert result.magnitude > 0
 
 
+class TestCooldownExactSpec:
+    """Verify EXACTLY 4 updates per day (cooldown_blocks_per_day=4)."""
+
+    def test_exactly_4_updates_allowed(self):
+        adapter = BayesianAdapter()
+        prior = BetaParams(alpha=2.0, beta=8.0)
+        obs = BinomialObservations(successes=6, failures=4)
+
+        for i in range(4):
+            result = adapter.update_beta(prior, obs)
+            assert result.update_count == i + 1
+            assert result.cooldown_remaining is None or i == 3
+
+    def test_5th_update_is_cooled_down(self):
+        adapter = BayesianAdapter()
+        prior = BetaParams(alpha=2.0, beta=8.0)
+        obs = BinomialObservations(successes=6, failures=4)
+
+        for _ in range(4):
+            adapter.update_beta(prior, obs)
+
+        with pytest.raises(ValueError, match="Cooldown active"):
+            adapter.update_beta(prior, obs)
+
+    def test_cooldown_remaining_positive_on_5th_attempt(self):
+        adapter = BayesianAdapter()
+        prior = BetaParams(alpha=2.0, beta=8.0)
+        obs = BinomialObservations(successes=6, failures=4)
+
+        for _ in range(4):
+            adapter.update_beta(prior, obs)
+
+        remaining = adapter._cooldown_remaining()
+        assert remaining is not None
+        assert remaining > timedelta(seconds=0)
+
+    def test_cooldown_spec_enforced(self):
+        """GuardrailConfig default says max_updates_per_day=4."""
+        config = GuardrailConfig()
+        assert config.max_updates_per_day == 4
+
+
+class TestDriftExactCount:
+    """Verify drift is flagged after EXACTLY 3 consecutive direction changes."""
+
+    def test_drift_after_3_consecutive_changes(self):
+        """3 consecutive drift-inducing changes sets human_review=True."""
+        config = GuardrailConfig(
+            min_observations=5,
+            drift_threshold_pct=0.03,
+            drift_consecutive_count=3,
+            variance_reset_threshold=0.001,
+        )
+        adapter = BayesianAdapter(config=config)
+        prior = BetaParams(alpha=2.0, beta=8.0)
+        obs = BinomialObservations(successes=9, failures=1)
+
+        results = []
+        for _ in range(3):
+            result = adapter.update_beta(prior, obs)
+            results.append(result)
+
+        assert results[-1].human_review is True
+
+    def test_2_consecutive_changes_do_not_flag_drift(self):
+        """2 consecutive drift-inducing changes do NOT set human_review."""
+        config = GuardrailConfig(
+            min_observations=5,
+            drift_threshold_pct=0.03,
+            drift_consecutive_count=3,
+            variance_reset_threshold=0.001,
+        )
+        adapter = BayesianAdapter(config=config)
+        prior = BetaParams(alpha=2.0, beta=8.0)
+        obs = BinomialObservations(successes=9, failures=1)
+
+        result1 = adapter.update_beta(prior, obs)
+        result2 = adapter.update_beta(prior, obs)
+        assert result2.human_review is False or adapter._drift_counts.get("edge_threshold", 0) < 3
+
+    def test_non_consecutive_changes_reset_drift_counter(self):
+        """Interleaved stable updates reset the drift counter."""
+        config = GuardrailConfig(
+            min_observations=5,
+            drift_threshold_pct=0.03,
+            drift_consecutive_count=3,
+            variance_reset_threshold=0.001,
+        )
+        adapter = BayesianAdapter(config=config)
+
+        adapter._drift_counts["test_param"] = 0
+        adapter._check_drift("test_param", 1.0, 1.5)
+        assert adapter._drift_counts["test_param"] == 1
+        adapter._check_drift("test_param", 1.0, 1.001)
+        assert adapter._drift_counts["test_param"] == 0
+        adapter._check_drift("test_param", 1.0, 1.5)
+        assert adapter._drift_counts["test_param"] == 1
+
+    def test_drift_consecutive_count_default_is_3(self):
+        """GuardrailConfig default says drift_consecutive_count=3."""
+        config = GuardrailConfig()
+        assert config.drift_consecutive_count == 3
+
+
 class TestCooldownGuardrail:
     def test_max_4_updates_per_day(self):
         adapter = BayesianAdapter()

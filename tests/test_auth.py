@@ -64,7 +64,7 @@ class TestAuthManagerSetAndGet:
     def test_set_and_get_credential(self, auth_manager: AuthManager) -> None:
         auth_manager.set_credential("kalshi", "api_key", "test-key-123")
         result = auth_manager.get_credential("kalshi", "api_key")
-        assert result is not None
+        assert isinstance(result, CredentialResult)
         assert result.value.get_secret_value() == "test-key-123"
         assert result.source == "keyring"
         assert result.service == "kalshi"
@@ -73,7 +73,7 @@ class TestAuthManagerSetAndGet:
     def test_credential_is_secretstr(self, auth_manager: AuthManager) -> None:
         auth_manager.set_credential("kalshi", "api_secret", "super-secret")
         result = auth_manager.get_credential("kalshi", "api_secret")
-        assert result is not None
+        assert isinstance(result, CredentialResult)
         assert isinstance(result.value, SecretStr)
         assert repr(result.value) != "super-secret"
 
@@ -130,7 +130,7 @@ class TestAuthManagerEnvFallback:
         os.environ["KALSHI_API_KEY"] = "env-key-123"
         try:
             result = mgr.get_credential("kalshi", "api_key")
-            assert result is not None
+            assert isinstance(result, CredentialResult)
             assert result.value.get_secret_value() == "env-key-123"
             assert result.source == "env"
         finally:
@@ -143,7 +143,7 @@ class TestAuthManagerEnvFallback:
         os.environ["KALSHI_API_KEY"] = "from-env"
         try:
             result = auth_manager.get_credential("kalshi", "api_key")
-            assert result is not None
+            assert isinstance(result, CredentialResult)
             assert result.value.get_secret_value() == "from-keyring"
             assert result.source == "keyring"
         finally:
@@ -154,7 +154,7 @@ class TestAuthManagerEnvFallback:
         os.environ["KALSHI_API_KEY"] = "fallback-value"
         try:
             result = mgr.get_credential("kalshi", "api_key")
-            assert result is not None
+            assert isinstance(result, CredentialResult)
             assert result.value.get_secret_value() == "fallback-value"
             assert result.source == "env"
         finally:
@@ -214,7 +214,6 @@ class TestGetCredentialConvenience:
         auth_manager.set_credential("kalshi", "api_key", "direct-key")
         monkeypatch.setattr("traderbot.auth.AuthManager", lambda **kw: auth_manager)
         result = get_credential("kalshi", "api_key")
-        assert result is not None
         assert isinstance(result, SecretStr)
         assert result.get_secret_value() == "direct-key"
 

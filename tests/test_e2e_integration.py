@@ -629,6 +629,7 @@ class TestGracefulDegradation:
         )
         result = classifier.classify(item)
         assert isinstance(result.category, NewsCategory)
+        assert result.category == NewsCategory.WEATHER
 
     def test_sentiment_with_broken_voyage_client(self) -> None:
         """Sentiment scorer gracefully degrades when Voyage embed returns None."""
@@ -1060,6 +1061,8 @@ class TestImpactAssessorE2E:
         assert isinstance(impact, ImpactAssessment)
         # Without Voyage, should still produce valid output
         assert impact.direction in ("bullish", "bearish", "neutral")
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
 
 # ========================================================================

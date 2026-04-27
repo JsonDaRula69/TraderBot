@@ -59,8 +59,10 @@ def combine_signals(
     return (direction, confidence)
 
 
-def default_weights() -> dict[str, float]:
-    """Default signal source weights for indicators, odds, and momentum."""
+def default_weights(include_sentiment: bool = False) -> dict[str, float]:
+    """Signal source weights for 3-source or 4-source combinations."""
+    if include_sentiment:
+        return {"indicators": 0.25, "odds": 0.45, "momentum": 0.15, "sentiment": 0.15}
     return {"indicators": 0.3, "odds": 0.5, "momentum": 0.2}
 
 
@@ -70,9 +72,11 @@ def generate_signal(
     trades: list[Trade],
     orderbook: OrderBook,
     estimated_prob: float,
+    news_sentiment: float | None = None,
 ) -> CombinedSignal:
-    """Build a combined signal from indicators, odds, and momentum sources."""
-    weights = default_weights()
+    """Combine indicators, odds, momentum, and optional news sentiment into a signal."""
+    has_sentiment = news_sentiment is not None
+    weights = default_weights(include_sentiment=has_sentiment)
     sources: list[SignalSource] = []
 
     # --- Indicators source: RSI + Bollinger position ---
@@ -157,7 +161,22 @@ def generate_signal(
         )
     )
 
-    # --- Combine ---
+    if has_sentiment and news_sentiment is not None:
+        if news_sentiment > 0.1:
+            sent_direction: Literal["yes", "no", "neutral"] = "yes"
+        elif news_sentiment < -0.1:
+            sent_direction = "no"
+        else:
+            sent_direction = "neutral"
+        sources.append(
+            SignalSource(
+                name="sentiment",
+                weight=weights["sentiment"],
+                direction=sent_direction,
+                strength=min(abs(news_sentiment), 1.0),
+            )
+        )
+
     direction, confidence = combine_signals(sources)
     edge_cents = round(edge_result.edge * 100)
 

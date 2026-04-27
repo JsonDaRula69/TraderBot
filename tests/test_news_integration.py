@@ -67,12 +67,12 @@ def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
         SourcesNewsSource.REDDIT: NewsSource.REDDIT,
     }
     category_map: dict[str, NewsCategory] = {
-        "Economics": NewsCategory.ECONOMICS,
-        "Politics": NewsCategory.POLITICS,
-        "Weather": NewsCategory.WEATHER,
-        "Culture": NewsCategory.CULTURE,
-        "Tech": NewsCategory.TECH,
-        "Science": NewsCategory.SCIENCE,
+        "economics": NewsCategory.ECONOMICS,
+        "politics": NewsCategory.POLITICS,
+        "weather": NewsCategory.WEATHER,
+        "culture": NewsCategory.CULTURE,
+        "tech": NewsCategory.TECH,
+        "science": NewsCategory.SCIENCE,
         "uncategorized": NewsCategory.ECONOMICS,
     }
     return NewsItem(
@@ -83,7 +83,7 @@ def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
         url=src.url,
         published_at=src.published_at,
         ticker_refs=src.ticker_refs,
-        category=category_map.get(src.category, NewsCategory.ECONOMICS),
+        category=category_map.get(src.category.lower(), NewsCategory.ECONOMICS),
     )
 
 
@@ -141,6 +141,8 @@ class TestFullPipeline:
         assessor = ImpactAssessor()
         impact = assessor.assess(item, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
         assert impact.direction in ("bullish", "bearish", "neutral")
 
     def test_weather_item_pipeline(self):
@@ -163,6 +165,8 @@ class TestFullPipeline:
         assessor = ImpactAssessor()
         impact = assessor.assess(item, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
         assert impact.direction in ("bearish", "neutral")
 
     def test_social_media_item_pipeline(self):
@@ -185,6 +189,8 @@ class TestFullPipeline:
         assessor = ImpactAssessor()
         impact = assessor.assess(item, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
     def test_reddit_item_pipeline(self):
         """Reddit items use VADER for sentiment."""
@@ -264,6 +270,7 @@ class TestPipelineDegradation:
         impact = assessor.assess(item, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
         assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
     def test_assessor_voyage_exception_falls_back(self):
         """Impact assessor falls back to keyword overlap on Voyage exception."""
@@ -278,6 +285,8 @@ class TestPipelineDegradation:
         )
         impact = assessor.assess(item, classified, sentiment, voyage_client=mock_voyage)
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
     @pytest.mark.asyncio
     async def test_aggregator_without_newsapi_key(self):
@@ -333,6 +342,8 @@ class TestPipelineDegradation:
         impact = assessor.assess(item, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
         assert impact.direction in ("bullish", "bearish", "neutral")
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
     def test_full_pipeline_voyage_embed_failure(self):
         """Pipeline completes even when Voyage embed fails (returns None)."""
@@ -694,6 +705,8 @@ class TestNewsItemConversion:
         impact = assessor.assess(converted, classified, sentiment)
         assert isinstance(impact, ImpactAssessment)
         assert impact.ticker in ("SPY", "TLT")
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
 
     @pytest.mark.asyncio
     async def test_fetch_and_convert_pipeline(self):
@@ -802,6 +815,8 @@ class TestVoyageIntegration:
         )
         impact = assessor.assess(item, classified, sentiment, voyage_client=mock_voyage)
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
         assert mock_voyage.embed.called
 
     def test_full_pipeline_with_mock_voyage(self):
@@ -846,3 +861,5 @@ class TestVoyageIntegration:
             item, classified, sentiment, corroborating_count=2, voyage_client=impact_voyage,
         )
         assert isinstance(impact, ImpactAssessment)
+        assert 0.0 <= impact.magnitude <= 1.0
+        assert len(impact.reasoning) > 0
