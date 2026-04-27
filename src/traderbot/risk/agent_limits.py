@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from traderbot.profiles.models import TradingProfile
+
 from traderbot.risk.limits import HARD_LIMITS
 
 
@@ -15,7 +15,7 @@ class AgentRiskLimits:
     All properties are read-only to prevent runtime modification.
     """
 
-    def __init__(self, profile: TradingProfile) -> None:
+    def __init__(self, profile: "TradingProfile") -> None:
         """Initialize agent limits from a trading profile.
 
         Args:
