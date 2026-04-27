@@ -21,16 +21,16 @@ NOW = datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC)
 
 class TestMarketCategory:
     def test_all_categories(self):
-        expected = {"Politics", "Economics", "Science", "Sports", "Crypto", "Culture", "Tech", "Weather"}
+        expected = {"politics", "economics", "science", "sports", "crypto", "culture", "tech", "weather", "technology"}
         assert set(MarketCategory) == expected
 
     def test_str_enum_values(self):
-        assert MarketCategory.POLITICS == "Politics"
-        assert MarketCategory.ECONOMICS == "Economics"
-        assert MarketCategory.CRYPTO == "Crypto"
+        assert MarketCategory.POLITICS == "politics"
+        assert MarketCategory.ECONOMICS == "economics"
+        assert MarketCategory.CRYPTO == "crypto"
 
     def test_from_string(self):
-        assert MarketCategory("Sports") is MarketCategory.SPORTS
+        assert MarketCategory("sports") is MarketCategory.SPORTS
 
 
 class TestPrior:

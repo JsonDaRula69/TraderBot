@@ -83,7 +83,7 @@ class TestGet:
             _init_learnings(conn)
             rowid = record_pattern(conn, LearningCategory.RISK_SIGNAL, "Y", "ev", 0.7)
             result = get(conn, rowid)
-        assert result is not None
+        assert result.id == rowid
         assert result.summary == "Y"
         assert result.category == LearningCategory.RISK_SIGNAL
         assert result.confidence == 0.7
@@ -102,7 +102,7 @@ class TestGet:
             _init_learnings(conn)
             rowid = record_pattern(conn, LearningCategory.STRATEGY, "Z", "ev", 0.6)
             result = get(conn, rowid)
-        assert result is not None
+        assert result.id == rowid
         assert isinstance(result.created_at, datetime)
         assert isinstance(result.updated_at, datetime)
 
@@ -167,7 +167,6 @@ class TestPromotePattern:
             rowid = record_pattern(conn, LearningCategory.STRATEGY, "P", "e", 0.5)
             promote_pattern(conn, rowid, 0.3)
             result = get(conn, rowid)
-        assert result is not None
         assert result.confidence == 0.8
 
     def test_caps_at_one(self, tmp_path: Path) -> None:
@@ -177,7 +176,6 @@ class TestPromotePattern:
             rowid = record_pattern(conn, LearningCategory.STRATEGY, "P", "e", 0.9)
             promote_pattern(conn, rowid, 0.5)
             result = get(conn, rowid)
-        assert result is not None
         assert result.confidence == 1.0
 
     def test_updates_updated_at(self, tmp_path: Path) -> None:
@@ -224,7 +222,6 @@ class TestDeprecatePattern:
             rowid = record_pattern(conn, LearningCategory.STRATEGY, "D", "e", 0.5)
             deprecate_pattern(conn, rowid)
             result = get(conn, rowid)
-        assert result is not None
         assert result.status == LearningStatus.DEPRECATED
 
     def test_updates_updated_at(self, tmp_path: Path) -> None:

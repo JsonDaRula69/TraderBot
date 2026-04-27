@@ -242,7 +242,7 @@ class TestBatchAPI:
 
         with patch(VOYAGEAI_MODULE, MagicMock()):
             result = vc.embed_batch_retrieve("batch_123")
-        assert result is not None
+        assert isinstance(result, list)
         assert len(result) == 2
         assert result[0] == [0.1] * EMBED_DIMENSION
         assert result[1] == [0.2] * EMBED_DIMENSION

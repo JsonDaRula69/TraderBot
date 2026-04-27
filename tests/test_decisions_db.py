@@ -54,7 +54,6 @@ class TestInsertAndGet:
             init_schema(conn)
             rowid = insert(conn, _make_decision())
             result = get(conn, rowid)
-        assert result is not None
         assert result.ticker == "KX-TEST"
         assert result.risk_checks == {"max_position": True, "daily_loss": True}
 
@@ -125,7 +124,6 @@ class TestUpdateActualResult:
             rowid = insert(conn, _make_decision())
             update_actual_result(conn, rowid, True)
             result = get(conn, rowid)
-        assert result is not None
         assert result.actual_result is True
 
 

@@ -215,4 +215,179 @@ def test_no_profile_uses_default_paths(sample_decision: Decision, tmp_path: Path
     finally:
         os.chdir(original_cwd)
 
-# Made with Bob
+
+class TestProfileDataIsolationNegative:
+    """Negative tests: Profile A CANNOT read Profile B's data."""
+
+    def test_profile_a_cannot_read_profile_b_decisions(
+        self, profile1: TradingProfile, profile2: TradingProfile, sample_decision: Decision, tmp_path: Path
+    ) -> None:
+        """Decisions stored in profile1 DB are invisible to profile2."""
+        import os
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            ensure_profile_dirs(profile1)
+            ensure_profile_dirs(profile2)
+
+            db_path1 = get_profile_db_path(profile1, "decisions.db")
+            conn1 = sqlite3.connect(db_path1)
+            conn1.row_factory = sqlite3.Row
+            decisions.init_table(conn1)
+            decisions.insert(conn1, sample_decision)
+            conn1.close()
+
+            db_path2 = get_profile_db_path(profile2, "decisions.db")
+            conn2 = sqlite3.connect(db_path2)
+            conn2.row_factory = sqlite3.Row
+            decisions.init_table(conn2)
+            assert decisions.count(conn2) == 0
+            conn2.close()
+        finally:
+            os.chdir(original_cwd)
+
+
+class TestKeyringCredentialIsolation:
+    """Verify Profile A's keyring credentials are NOT accessible from Profile B's namespace."""
+
+    def test_profile_a_credentials_not_in_profile_b_namespace(self) -> None:
+        from traderbot.profiles.auth import ProfileAuthStore
+        from traderbot.profiles.models import TradingProfile
+
+        class MockKeyring:
+            def __init__(self):
+                self._store: dict[tuple[str, str], str] = {}
+
+            def set_password(self, service: str, username: str, password: str) -> None:
+                self._store[(service, username)] = password
+
+            def get_password(self, service: str, username: str) -> str | None:
+                return self._store.get((service, username))
+
+            def delete_password(self, service: str, username: str) -> None:
+                self._store.pop((service, username), None)
+
+        mock_kr = MockKeyring()
+
+        profile_a = TradingProfile(
+            name="alpha", mode="paper", description="A",
+            risk_multiplier=0.5, max_position_per_market_pct=0.05,
+            max_daily_loss_pct=0.02, max_drawdown_pct=0.10,
+            max_open_positions=5, min_liquidity_threshold=1000, min_edge_pct=0.03,
+        )
+        profile_b = TradingProfile(
+            name="beta", mode="paper", description="B",
+            risk_multiplier=0.5, max_position_per_market_pct=0.05,
+            max_daily_loss_pct=0.02, max_drawdown_pct=0.10,
+            max_open_positions=5, min_liquidity_threshold=1000, min_edge_pct=0.03,
+        )
+
+        auth_a = ProfileAuthStore(profile_a, keyring_module=mock_kr)
+        auth_b = ProfileAuthStore(profile_b, keyring_module=mock_kr)
+
+        auth_a.set_credentials("kalshi", "key_a", "secret_a")
+
+        assert auth_a.get_credentials("kalshi") == ("key_a", "secret_a")
+        assert auth_b.get_credentials("kalshi") is None
+
+    def test_profile_b_writes_do_not_overwrite_a(self) -> None:
+        from traderbot.profiles.auth import ProfileAuthStore
+        from traderbot.profiles.models import TradingProfile
+
+        class MockKeyring:
+            def __init__(self):
+                self._store: dict[tuple[str, str], str] = {}
+
+            def set_password(self, service: str, username: str, password: str) -> None:
+                self._store[(service, username)] = password
+
+            def get_password(self, service: str, username: str) -> str | None:
+                return self._store.get((service, username))
+
+            def delete_password(self, service: str, username: str) -> None:
+                self._store.pop((service, username), None)
+
+        mock_kr = MockKeyring()
+
+        profile_a = TradingProfile(
+            name="alpha", mode="paper", description="A",
+            risk_multiplier=0.5, max_position_per_market_pct=0.05,
+            max_daily_loss_pct=0.02, max_drawdown_pct=0.10,
+            max_open_positions=5, min_liquidity_threshold=1000, min_edge_pct=0.03,
+        )
+        profile_b = TradingProfile(
+            name="beta", mode="paper", description="B",
+            risk_multiplier=0.5, max_position_per_market_pct=0.05,
+            max_daily_loss_pct=0.02, max_drawdown_pct=0.10,
+            max_open_positions=5, min_liquidity_threshold=1000, min_edge_pct=0.03,
+        )
+
+        auth_a = ProfileAuthStore(profile_a, keyring_module=mock_kr)
+        auth_b = ProfileAuthStore(profile_b, keyring_module=mock_kr)
+
+        auth_a.set_credentials("kalshi", "key_a", "secret_a")
+        auth_b.set_credentials("kalshi", "key_b", "secret_b")
+
+        assert auth_a.get_credentials("kalshi") == ("key_a", "secret_a")
+        assert auth_b.get_credentials("kalshi") == ("key_b", "secret_b")
+
+
+class TestRevokedTokenResolution:
+    """When TRADERBOT_PROFILE_TOKEN is set to a revoked token, resolution FAILS."""
+
+    def test_revoked_token_returns_none(self) -> None:
+        from traderbot.profiles.tokens import revoke_token, resolve_token, set_keyring
+
+        class MockKeyring:
+            def __init__(self):
+                self._store: dict[tuple[str, str], str] = {}
+
+            def set_password(self, service: str, username: str, password: str) -> None:
+                self._store[(service, username)] = password
+
+            def get_password(self, service: str, username: str) -> str | None:
+                return self._store.get((service, username))
+
+            def delete_password(self, service: str, username: str) -> None:
+                self._store.pop((service, username), None)
+
+        mock_kr = MockKeyring()
+        set_keyring(mock_kr)
+
+        from traderbot.profiles.tokens import assign_token, generate_token
+        token = generate_token()
+        assign_token("test_profile", "test_agent", token)
+
+        result = resolve_token(token)
+        assert result is not None
+
+        revoke_token(token)
+        result_after_revoke = resolve_token(token)
+        assert result_after_revoke is None
+
+        set_keyring(None)
+
+
+    def test_nonexistent_token_returns_none(self) -> None:
+        from traderbot.profiles.tokens import resolve_token, set_keyring
+
+        class MockKeyring:
+            def __init__(self):
+                self._store: dict[tuple[str, str], str] = {}
+
+            def set_password(self, service: str, username: str, password: str) -> None:
+                self._store[(service, username)] = password
+
+            def get_password(self, service: str, username: str) -> str | None:
+                return self._store.get((service, username))
+
+            def delete_password(self, service: str, username: str) -> None:
+                self._store.pop((service, username), None)
+
+        mock_kr = MockKeyring()
+        set_keyring(mock_kr)
+
+        result = resolve_token("nonexistent_token_12345")
+        assert result is None
+
+        set_keyring(None)

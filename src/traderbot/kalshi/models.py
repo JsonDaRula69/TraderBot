@@ -167,20 +167,21 @@ class TradeRequest(BaseModel):
 
 
 class MarketCategory(StrEnum):
-    """Market categories for cross-module use (analysis, simulation, etc.).
+    """Market categories for cross-module use (analysis, simulation, news, etc.).
 
-    Lives in kalshi/models.py to avoid circular dependencies.
-    The similar enum in simulation/adaptation.py is kept for backward compatibility
-    but code should prefer this version for cross-module use.
+    Single source of truth — all modules import from here.
+    Values are lowercase to match Kalshi API convention.
     """
 
-    ECONOMICS = "Economics"
-    POLITICS = "Politics"
-    WEATHER = "Weather"
-    SPORTS = "Sports"
-    CULTURE = "Culture"
-    TECHNOLOGY = "Technology"
-    SCIENCE = "Science"
+    ECONOMICS = "economics"
+    POLITICS = "politics"
+    WEATHER = "weather"
+    SPORTS = "sports"
+    CULTURE = "culture"
+    TECHNOLOGY = "technology"
+    SCIENCE = "science"
+    TECH = "tech"
+    CRYPTO = "crypto"
 
 
 class OrderSide(StrEnum):

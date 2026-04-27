@@ -73,14 +73,14 @@ class TestNewsSource:
 
 class TestNewsCategory:
     def test_matches_market_category_values(self):
-        from traderbot.simulation.adaptation import MarketCategory
+        from traderbot.kalshi.models import MarketCategory as KalshiMarketCategory
 
         for cat in NewsCategory:
-            assert cat.value == MarketCategory[cat.name].value
+            assert cat.value == KalshiMarketCategory[cat.name].value
 
     def test_all_categories_present(self):
         names = {c.name for c in NewsCategory}
-        assert names == {"POLITICS", "ECONOMICS", "SCIENCE", "SPORTS", "CRYPTO", "CULTURE", "TECH", "WEATHER"}
+        assert names == {"POLITICS", "ECONOMICS", "SCIENCE", "SPORTS", "CRYPTO", "CULTURE", "TECH", "WEATHER", "TECHNOLOGY"}
 
 
 # --- NewsItem ---

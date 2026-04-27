@@ -1,5 +1,6 @@
 """Simulation engine — backtesting, paper trading, and performance metrics."""
 
+from traderbot.kalshi.models import MarketCategory
 from traderbot.simulation.adaptation import (
     AdaptationConfig,
     AdaptationResult,
@@ -21,6 +22,11 @@ from traderbot.simulation.adaptation import (
     update_dirichlet_multinomial,
     update_gamma_exponential,
     update_normal_normal,
+)
+from traderbot.simulation.adapter_state import (
+    AdapterState,
+    AdapterStateStore,
+    resolve_state_path,
 )
 from traderbot.simulation.data_loader import DataLoader, DataQualityReport, QualityFlag
 from traderbot.simulation.engine import (
@@ -71,6 +77,8 @@ __all__ = [
     "PRESETS",
     "AdaptationConfig",
     "AdaptationResult",
+    "AdapterState",
+    "AdapterStateStore",
     "BacktestEngine",
     "BacktestResult",
     "BacktestTrade",
@@ -116,6 +124,7 @@ __all__ = [
     "compute_metrics",
     "compute_sharpe",
     "compute_win_rate",
+    "resolve_state_path",
     "run_profiles",
     "update_beta_binomial",
     "update_dirichlet_multinomial",

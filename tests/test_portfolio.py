@@ -121,7 +121,6 @@ def test_win_rate_skips_none_result() -> None:
 def test_sharpe_ratio_known() -> None:
     returns = [0.01, 0.02, -0.01, 0.03]
     result = sharpe_ratio(returns)
-    assert result is not None
     mean_r = sum(returns) / len(returns)
     var_r = sum((r - mean_r) ** 2 for r in returns) / len(returns)
     expected = (mean_r / math.sqrt(var_r)) * math.sqrt(252)
