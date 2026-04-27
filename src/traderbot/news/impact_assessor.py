@@ -24,11 +24,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class ImpactWeights(BaseModel):
-    direct_relevance: Annotated[float, Field(gt=0, lt=1)]
-    source_authority: Annotated[float, Field(gt=0, lt=1)]
-    recency: Annotated[float, Field(gt=0, lt=1)]
-    market_sensitivity: Annotated[float, Field(gt=0, lt=1)]
-    corroboration: Annotated[float, Field(gt=0, lt=1)]
+    direct_relevance: Annotated[float, Field(gt=0, lt=1)] = 0.3
+    source_authority: Annotated[float, Field(gt=0, lt=1)] = 0.25
+    recency: Annotated[float, Field(gt=0, lt=1)] = 0.2
+    market_sensitivity: Annotated[float, Field(gt=0, lt=1)] = 0.15
+    corroboration: Annotated[float, Field(gt=0, lt=1)] = 0.1
 
     model_config = ConfigDict(strict=True, extra="forbid")
 

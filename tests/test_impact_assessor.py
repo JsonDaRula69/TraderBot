@@ -5,19 +5,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from traderbot.news.impact_assessor import ImpactWeights, ImpactAssessor
+from traderbot.news.impact_assessor import (
     CATEGORY_SENSITIVITY,
     CORROBORATION_MULTIPLIER,
     HIGH_IMPACT_THRESHOLD,
+    ImpactAssessor,
+    ImpactWeights,
     LOW_IMPACT_THRESHOLD,
     SIMILARITY_THRESHOLD,
     SOURCE_AUTHORITY,
-    WEIGHT_CORROBORATION,
-    WEIGHT_DIRECT_RELEVANCE,
-    WEIGHT_MARKET_SENSITIVITY,
-    WEIGHT_RECENCY,
-    WEIGHT_SOURCE_AUTHORITY,
-    ImpactAssessor,
     _cosine_similarity,
 )
 from traderbot.news.models import (
@@ -367,29 +363,35 @@ class TestCosineSimilarity:
 
 class TestWeights:
     def test_weights_sum_to_1(self):
+        weights = ImpactWeights()
         total = (
-            WEIGHT_DIRECT_RELEVANCE
-            + WEIGHT_SOURCE_AUTHORITY
-            + WEIGHT_RECENCY
-            + WEIGHT_MARKET_SENSITIVITY
-            + WEIGHT_CORROBORATION
+            weights.direct_relevance
+            + weights.source_authority
+            + weights.recency
+            + weights.market_sensitivity
+            + weights.corroboration
         )
         assert total == pytest.approx(1.0)
 
     def test_relevance_is_highest_weight(self):
-        assert WEIGHT_DIRECT_RELEVANCE == 0.3
+        weights = ImpactWeights()
+        assert weights.direct_relevance == 0.3
 
     def test_source_authority_second(self):
-        assert WEIGHT_SOURCE_AUTHORITY == 0.25
+        weights = ImpactWeights()
+        assert weights.source_authority == 0.25
 
     def test_recency_weight(self):
-        assert WEIGHT_RECENCY == 0.2
+        weights = ImpactWeights()
+        assert weights.recency == 0.2
 
     def test_sensitivity_weight(self):
-        assert WEIGHT_MARKET_SENSITIVITY == 0.15
+        weights = ImpactWeights()
+        assert weights.market_sensitivity == 0.15
 
     def test_corroboration_lowest_weight(self):
-        assert WEIGHT_CORROBORATION == 0.1
+        weights = ImpactWeights()
+        assert weights.corroboration == 0.1
 
 
 class TestReasoning:

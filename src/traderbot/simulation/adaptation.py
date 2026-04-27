@@ -402,11 +402,15 @@ class BayesianAdapter:
         profile_base_dir: str | None = None,
     ) -> None:
         self.config = config or GuardrailConfig()
-        self._state_path = resolve_state_path(state_path, profile_base_dir)
+        self._state_path: Path | None = None
+        if state_path is not None or profile_base_dir is not None:
+            self._state_path = resolve_state_path(state_path, profile_base_dir)
         self._update_timestamps: list[datetime] = []
         self._drift_counts: dict[str, int] = {}
         self._distribution_states: dict[str, Any] = {}
-        self._load_state()
+        if self._state_path is not None:
+            self._load_state()
+        self._last_save_success = False
 
     def _check_min_observations(self, observation_count: int) -> None:
         """Raise ValueError if observations below minimum threshold."""
@@ -480,6 +484,8 @@ class BayesianAdapter:
 
     def _persist_state(self) -> None:
         """Write current state to disk via atomic write."""
+        if self._state_path is None:
+            return
         try:
             AdapterStateStore.save(
                 update_timestamps=self._update_timestamps,

@@ -124,9 +124,9 @@ class TestNewsAggregatorInit:
 
     def test_source_priority_order(self):
         assert NewsAggregator._SOURCE_PRIORITY == [
-            NewsSource.TWITTER,
             NewsSource.NEWSAPI,
             NewsSource.REDDIT,
+            NewsSource.TWITTER,
         ]
 
 
