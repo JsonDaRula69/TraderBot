@@ -86,6 +86,10 @@ class TestBasicAssess:
     def test_returns_impact_assessment(self):
         result = _assess()
         assert isinstance(result, ImpactAssessment)
+        assert 0.0 <= result.magnitude <= 1.0
+        assert 0.0 <= result.confidence <= 1.0
+        assert isinstance(result.reasoning, str) and len(result.reasoning) > 0
+        assert result.direction in ("bullish", "bearish", "neutral")
 
     def test_ticker_from_news_item(self):
         result = _assess()
