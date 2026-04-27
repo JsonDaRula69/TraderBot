@@ -92,6 +92,58 @@ class TestConfidenceScaledSize:
         assert result == 0
 
 
+class TestKellyExactValues:
+    """Verify Kelly formula f = (bp - q) / b with known inputs."""
+
+    def test_win_prob_0_6_odds_1_5(self):
+        b = 1.5
+        p = 0.6
+        q = 1 - p
+        expected_kelly = (b * p - q) / b
+        result = kelly_criterion(p, b)
+        assert abs(result - expected_kelly) < 1e-10
+
+    def test_zero_edge_no_position(self):
+        result = kelly_criterion(0.5, 1.0)
+        assert result == 0.0
+
+    def test_negative_edge_no_position(self):
+        result = kelly_criterion(0.3, 1.5)
+        b = 1.5
+        p = 0.3
+        q = 1 - p
+        raw_kelly = (b * p - q) / b
+        assert raw_kelly < 0
+        assert result == 0.0
+
+    def test_high_prob_capped_at_max_position(self):
+        bankroll_cents = 100_000_00
+        max_position_cents = bankroll_cents * 0.05
+        sized = sized_position_for_trade(
+            prob=0.8, odds=1.5, confidence=0.9,
+            bankroll_cents=bankroll_cents,
+            max_position_cents=max_position_cents,
+        )
+        assert sized <= max_position_cents
+
+    def test_fractional_kelly_halves_and_caps(self):
+        prob = 0.6
+        odds = 1.5
+        full_kelly = kelly_criterion(prob, odds)
+        half_kelly = fractional_kelly(prob, odds, fraction=0.5)
+        assert abs(half_kelly - full_kelly * 0.5) < 1e-10
+
+    def test_kelly_formula_derivation(self):
+        """f = (bp - q) / b where b=odds, p=prob, q=1-p."""
+        for prob, odds in [(0.6, 1.5), (0.7, 2.0), (0.55, 1.8)]:
+            b = odds
+            p = prob
+            q = 1 - p
+            expected = max(0.0, (b * p - q) / b)
+            actual = kelly_criterion(prob, odds)
+            assert abs(actual - expected) < 1e-10
+
+
 class TestSizedPositionForTrade:
     def test_caps_at_max_position(self):
         result = sized_position_for_trade(0.6, 1.5, 0.9, 100_000_00, 100_00)

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.db.decisions import DbDecision, list_by_date_range
+from traderbot.kalshi.models import MarketCategory
 from traderbot.learning import (
     HEARTBEAT_INTERVAL_HOURS,
     scan_for_promotions,
@@ -19,7 +20,6 @@ from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
     BinomialObservations,
-    MarketCategory,
 )
 
 if TYPE_CHECKING:
@@ -125,6 +125,8 @@ class HeartbeatResult(BaseModel):
     circuit_breaker: CircuitBreakerReview = Field(default_factory=CircuitBreakerReview)
     system_health: SystemHealthReview = Field(default_factory=SystemHealthReview)
     steps_completed: list[str] = Field(default_factory=list)
+    state_path: Path | None = Field(default=None)
+    state_saved: bool = Field(default=False)
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +361,7 @@ def step_system_health(
 def run_heartbeat_cycle(
     conn: sqlite3.Connection,
     heartbeat_path: Path | None = None,
+    state_path: Path | None = None,
     since: datetime | None = None,
     dry_run: bool = False,
 ) -> HeartbeatResult:
@@ -379,7 +382,8 @@ def run_heartbeat_cycle(
     steps_completed.append("decision_review")
 
     # Step 3: Bayesian adaptation
-    adaptation = step_bayesian_adaptation(decisions, dry_run=dry_run)
+    adapter = BayesianAdapter(state_path=state_path) if state_path is not None else None
+    adaptation = step_bayesian_adaptation(decisions, adapter=adapter, dry_run=dry_run)
     steps_completed.append("bayesian_adaptation")
 
     # Step 4: Learning promotion

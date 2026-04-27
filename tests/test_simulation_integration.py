@@ -198,6 +198,9 @@ class TestEndToEndPipeline:
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
 
         assert isinstance(result, BacktestResult)
+        assert isinstance(result.total_pnl_cents, int)
+        assert result.trade_count >= 0
+        assert isinstance(result.trades, list)
         assert result.total_pnl_cents >= 0 or result.total_pnl_cents < 0
 
         metrics = compute_metrics(result, initial_bankroll_cents=PORTFOLIO_VALUE)
@@ -304,6 +307,9 @@ class TestEndToEndPipeline:
 
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 6, 30))
         assert isinstance(result, BacktestResult)
+        assert isinstance(result.total_pnl_cents, int)
+        assert result.trade_count >= 0
+        assert isinstance(result.trades, list)
 
 
 # ========================================================================
@@ -899,6 +905,9 @@ class TestEdgeCases:
         )
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
         assert isinstance(result, BacktestResult)
+        assert isinstance(result.total_pnl_cents, int)
+        assert result.trade_count >= 0
+        assert isinstance(result.trades, list)
 
     async def test_zero_pnl_is_loss_in_win_rate(
         self, mock_loader: AsyncMock, tmp_path: Path

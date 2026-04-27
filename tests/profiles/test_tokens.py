@@ -57,10 +57,7 @@ def test_assign_and_resolve_token():
     assign_token(profile_name, agent_id, token)
     result = resolve_token(token)
     
-    assert result is not None
-    assert result[0] == profile_name
-    assert result[1] == agent_id
-    
+    assert result == (profile_name, agent_id)
     # Cleanup
     revoke_token(token)
 
@@ -156,7 +153,7 @@ def test_token_storage_format():
     
     # Resolve and verify structure
     result = resolve_token(token)
-    assert result is not None
+    assert result == (profile_name, agent_id)
     
     # List and verify created_at is ISO8601
     assignments = list_assignments()

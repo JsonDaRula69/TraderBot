@@ -73,13 +73,13 @@ def test_category_signals_confidence_below_0_rejected() -> None:
 
 @pytest.mark.unit
 def test_market_category_values() -> None:
-    assert MarketCategory.ECONOMICS == "Economics"
-    assert MarketCategory.POLITICS == "Politics"
-    assert MarketCategory.WEATHER == "Weather"
-    assert MarketCategory.SPORTS == "Sports"
-    assert MarketCategory.CULTURE == "Culture"
-    assert MarketCategory.TECHNOLOGY == "Technology"
-    assert MarketCategory.SCIENCE == "Science"
+    assert MarketCategory.ECONOMICS == "economics"
+    assert MarketCategory.POLITICS == "politics"
+    assert MarketCategory.WEATHER == "weather"
+    assert MarketCategory.SPORTS == "sports"
+    assert MarketCategory.CULTURE == "culture"
+    assert MarketCategory.TECHNOLOGY == "technology"
+    assert MarketCategory.SCIENCE == "science"
 
 
 # --- GenericAnalyzer ---
