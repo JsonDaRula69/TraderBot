@@ -1,131 +1,134 @@
 """Adapter state persistence for BayesianAdapter.
 
-Provides JSON-based, atomic persistence of the BayesianAdapter state
-with a small versioned schema and profile-aware path resolution.
+Versioned JSON persistence with atomic writes (temp + rename) for
+crash safety and profile-aware path resolution.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
-from datetime import datetime
+import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
-
-def _ensure_parent_dir(path: Path) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        logger.debug("Could not create parent directory for state file: %s", path, exc_info=True)
+_CURRENT_VERSION = 1
 
 
 class AdapterState(BaseModel):
-    """Persistent JSON state for BayesianAdapter.
-
-    version: schema version for forward compatibility.
-    update_timestamps: ISO-formatted timestamps (UTC) as strings.
-    drift_counts: per-parameter drift counters.
-    distribution_states: serialised distribution parameter states.
-    """
+    """Serialised BayesianAdapter state for JSON persistence."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
-    version: int = 1
-    update_timestamps: list[str]  # ISO 8601 strings
-    drift_counts: dict[str, int]
-    distribution_states: dict[str, Any]
+    version: int = _CURRENT_VERSION
+    update_timestamps: list[str] = Field(default_factory=list)
+    drift_counts: dict[str, int] = Field(default_factory=dict)
+    distribution_states: dict[str, Any] = Field(default_factory=dict)
 
 
 class AdapterStateStore:
-    """Persist and load AdapterState to/from JSON files.
+    """Atomic JSON persistence for BayesianAdapter state.
 
-    Uses atomic writes via a temporary file and os.rename for safety.
+    Writes to a temp file in the target directory, then renames
+    for crash-safe atomicity. Gracefully handles corrupt or missing files.
     """
-
-    @staticmethod
-    def _to_state(
-        update_timestamps: list[datetime],
-        drift_counts: dict[str, int],
-        distribution_states: dict[str, Any],
-    ) -> AdapterState:
-        ts_strs = [ts.isoformat() for ts in update_timestamps]
-        return AdapterState(
-            update_timestamps=ts_strs,
-            drift_counts=dict(drift_counts),
-            distribution_states=dict(distribution_states),
-        )
 
     @staticmethod
     def save(
-        *,
         update_timestamps: list[datetime],
         drift_counts: dict[str, int],
         distribution_states: dict[str, Any],
-        path: Path | None,
+        path: Path,
     ) -> None:
-        """Persist state to a JSON file atomically if a path is provided."""
-        if path is None:
-            return
-        state = AdapterStateStore._to_state(update_timestamps, drift_counts, distribution_states)
-        _tmp_path = path.parent / (path.name + ".tmp")
-        _data = state.model_dump()
-        _ensure_parent_dir(path)
+        """Persist adapter state to disk via atomic write."""
+        state = AdapterState(
+            version=_CURRENT_VERSION,
+            update_timestamps=[ts.isoformat() for ts in update_timestamps],
+            drift_counts=drift_counts,
+            distribution_states=distribution_states,
+        )
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = state.model_dump_json(indent=2)
+
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=".tmp",
+            prefix=".adaptation_state_",
+            dir=str(path.parent),
+        )
         try:
-            with open(_tmp_path) as f:
-                json.dump(_data, f, indent=2, default=str)
-            os.rename(_tmp_path, path)
-        except Exception:
-            logger.warning("Failed to persist adapter state to %s", path, exc_info=True)
-            # Clean up temp file if present
-            try:
-                if _tmp_path.exists():
-                    _tmp_path.unlink()
-            except Exception:
-                pass
+            os.write(fd, payload.encode("utf-8"))
+            os.close(fd)
+            os.rename(tmp_path, str(path))
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
 
     @staticmethod
-    def load(path: Path | None) -> AdapterState | None:
-        """Load persisted state from disk. Returns AdapterState or None if not available/damaged."""
-        if path is None:
-            return None
+    def load(path: Path) -> AdapterState | None:
+        """Load adapter state from disk, returning None on missing or corrupt."""
         if not path.exists():
             return None
+
         try:
-            with open(path) as f:
-                data = json.load(f)
-            return AdapterState(**data)
-        except Exception:
-            logger.warning("Corrupted or unreadable adapter state at %s", path, exc_info=True)
+            raw = path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read adapter state from %s: %s", path, exc)
             return None
 
+        try:
+            state = AdapterState.model_validate(data)
+        except Exception as exc:
+            logger.warning("Invalid adapter state in %s: %s", path, exc)
+            return None
+
+        if state.version != _CURRENT_VERSION:
+            logger.warning(
+                "Adapter state version %d != current %d in %s, ignoring",
+                state.version,
+                _CURRENT_VERSION,
+                path,
+            )
+            return None
+
+        return state
+
     @staticmethod
-    def timestamps_to_datetime(timestamps: list[str]) -> list[datetime]:
-        """Convert list of ISO timestamp strings to datetime objects (UTC)."""
+    def timestamps_to_datetime(iso_strings: list[str]) -> list[datetime]:
+        """Convert ISO 8601 timestamp strings back to timezone-aware datetime objects."""
         result: list[datetime] = []
-        for ts in timestamps:
+        for s in iso_strings:
             try:
-                dt = datetime.fromisoformat(ts)
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                result.append(dt)
             except ValueError:
-                # Fallback: if parsing fails, skip the entry
-                continue
-            result.append(dt)
+                logger.warning("Skipping invalid timestamp: %s", s)
         return result
 
 
-def resolve_state_path(state_path: Path | None, profile_base_dir: str | None) -> Path | None:
-    """Resolve the adapter state path.
+def resolve_state_path(
+    state_path: Path | None = None,
+    profile_base_dir: str | None = None,
+) -> Path:
+    """Resolve the adapter state file path.
 
-    - If an explicit path is provided, use it.
-    - Otherwise, use a default profile-aware path:
-      {profile_base_dir or .traderbot}/adaptation_state.json
+    Priority: explicit state_path > profile_base_dir > .traderbot default.
     """
     if state_path is not None:
-        return Path(state_path)
-    base = Path(profile_base_dir) if profile_base_dir else Path(".traderbot")
-    return base / "adaptation_state.json"
+        return state_path
+    if profile_base_dir is not None:
+        return Path(profile_base_dir) / "adaptation_state.json"
+    return Path(".traderbot") / "adaptation_state.json"

@@ -16,28 +16,24 @@ Guardrails prevent pathological adaptation:
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from traderbot.kalshi.models import MarketCategory
+from traderbot.simulation.adapter_state import AdapterStateStore, resolve_state_path
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
-# Enums and distribution models
+# Enums
 # ---------------------------------------------------------------------------
-
-
-class MarketCategory(StrEnum):
-    """Market categories for per-category adaptation."""
-
-    POLITICS = "Politics"
-    ECONOMICS = "Economics"
-    SCIENCE = "Science"
-    SPORTS = "Sports"
-    CRYPTO = "Crypto"
-    CULTURE = "Culture"
-    TECH = "Tech"
-    WEATHER = "Weather"
 
 
 class UpdateMethod(StrEnum):
@@ -394,13 +390,23 @@ class BayesianAdapter:
     """Bayesian adaptation engine with conjugate prior updates and guardrails.
 
     Tracks update timestamps for cooldown enforcement and records consecutive
-    drift changes to flag for human review.
+    drift changes to flag for human review. When state_path is provided,
+    state is loaded on init and persisted after each successful update.
     """
 
-    def __init__(self, config: GuardrailConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: GuardrailConfig | None = None,
+        state_path: Path | None = None,
+        *,
+        profile_base_dir: str | None = None,
+    ) -> None:
         self.config = config or GuardrailConfig()
+        self._state_path = resolve_state_path(state_path, profile_base_dir)
         self._update_timestamps: list[datetime] = []
         self._drift_counts: dict[str, int] = {}
+        self._distribution_states: dict[str, Any] = {}
+        self._load_state()
 
     def _check_min_observations(self, observation_count: int) -> None:
         """Raise ValueError if observations below minimum threshold."""
@@ -462,6 +468,32 @@ class BayesianAdapter:
         """Record the current timestamp as an update."""
         self._update_timestamps.append(datetime.now(UTC))
 
+    def _load_state(self) -> None:
+        """Load persisted state from disk if available."""
+        loaded = AdapterStateStore.load(self._state_path)
+        if loaded is None:
+            return
+        self._update_timestamps = AdapterStateStore.timestamps_to_datetime(loaded.update_timestamps)
+        self._drift_counts = dict(loaded.drift_counts)
+        self._distribution_states = dict(loaded.distribution_states)
+        logger.debug("Loaded adapter state from %s (%d timestamps)", self._state_path, len(self._update_timestamps))
+
+    def _persist_state(self) -> None:
+        """Write current state to disk via atomic write."""
+        try:
+            AdapterStateStore.save(
+                update_timestamps=self._update_timestamps,
+                drift_counts=self._drift_counts,
+                distribution_states=self._distribution_states,
+                path=self._state_path,
+            )
+        except OSError:
+            logger.warning("Failed to persist adapter state to %s", self._state_path, exc_info=True)
+
+    def _store_distribution(self, key: str, params: DistributionParams) -> None:
+        """Store distribution parameters for persistence."""
+        self._distribution_states[key] = params.model_dump()
+
     def _cooldown_remaining(self) -> timedelta | None:
         """Return time remaining until next update is allowed, or None."""
         now = datetime.now(UTC)
@@ -516,6 +548,8 @@ class BayesianAdapter:
         human_review = self._check_drift("edge_threshold", old_mean, clamped_mean)
 
         self._record_update()
+        self._store_distribution("edge_threshold", raw_posterior)
+        self._persist_state()
 
         magnitude = abs(clamped_mean - old_mean) if clamped_mean != old_mean else 1e-10
         reasoning = f"Beta-Binomial update: Beta({prior.alpha},{prior.beta}) → Beta({raw_posterior.alpha},{raw_posterior.beta})"
@@ -579,8 +613,9 @@ class BayesianAdapter:
                 human_review = True
 
         self._record_update()
+        self._store_distribution("signal_weights", raw_posterior)
+        self._persist_state()
 
-        # Compute magnitude as max absolute change across components
         max_change = max(abs(n - o) for o, n in zip(old_means, clamped_means, strict=True))
         magnitude = max_change if max_change > 0 else 1e-10
 
@@ -637,6 +672,8 @@ class BayesianAdapter:
         human_review = self._check_drift("mean_reversion", old_mu, clamped_mu)
 
         self._record_update()
+        self._store_distribution("mean_reversion", raw_posterior)
+        self._persist_state()
 
         magnitude = abs(clamped_mu - old_mu) if clamped_mu != old_mu else 1e-10
         confidence = self._compute_confidence(prior.sigma_sq, raw_posterior.sigma_sq, variance_reset)
@@ -687,6 +724,8 @@ class BayesianAdapter:
         human_review = self._check_drift("momentum_decay", old_mean, clamped_mean)
 
         self._record_update()
+        self._store_distribution("momentum_decay", raw_posterior)
+        self._persist_state()
 
         magnitude = abs(clamped_mean - old_mean) if clamped_mean != old_mean else 1e-10
         confidence = self._compute_confidence(prior.variance, raw_posterior.variance, variance_reset)
