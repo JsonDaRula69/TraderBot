@@ -57,10 +57,12 @@ Rewrite `tests/TESTING_PROMPT.md` as a comprehensive, repeatable E2E testing pro
 - [ ] Every module in `src/traderbot/` has testing coverage specified in TESTING_PROMPT.md
 - [ ] All integration points (Kalshi API, OpenClaw, Telegram) have verification checklists
 - [ ] Security audit section covers SecretStr, file permissions, keyring, demo/prod isolation, audit tamper-evidence
-- [ ] Phase references updated: Phases 5-7 marked as built, Phase 8 partial
+- [ ] Phase references updated: Phases 5-8 marked as built (Phase 7 news, Phase 8 adaptation/heartbeat now complete)
 - [ ] Bug class taxonomy updated with new security findings
 - [ ] Installation/config flow section added with concrete validation steps
 - [ ] All acceptance criteria are agent-executable (no "manually verify" or "visually check")
+- [ ] All test specifications verify CORRECT VALUES per spec, not just "not None" or "isinstance" (audit complete — 35 `assert result is not None` and 8 bare `isinstance` assertions found and fixed)
+- [ ] Edge cases covered: circuit breaker exact thresholds (1%, 2%, 10%), cooldown exact spec (4/day), drift exact count (3 consecutive), Kelly exact formula, profile data isolation, MarketCategory completeness
 
 ### Must Have
 - Installation flow testing (dependencies, API key config, OpenClaw setup)
@@ -71,7 +73,12 @@ Rewrite `tests/TESTING_PROMPT.md` as a comprehensive, repeatable E2E testing pro
 - Security deep audit (SecretStr, keyring, file permissions, demo/prod isolation, audit trail integrity)
 - Agent decision-making analysis (toolkit outputs never contain buy/sell/hold signals)
 - Docs vs. code validation updated for all phases
-- All phase references updated to match current codebase reality
+- All phase references updated to match current codebase reality (Phases 5-8 complete)
+- Test quality audit: all specifications must assert CORRECT VALUES per spec (not just "not None" or "isinstance")
+  - Audit found 35 `assert result is not None` rubber-stamp assertions across 14 files — ALL FIXED
+  - Audit found 8 bare `assert isinstance(result, Type)` without value checks — ALL FIXED
+  - Edge cases NOW COVERED: circuit breaker exact thresholds, cooldown exact spec (4/day), drift exact count (3), Kelly exact formula, profile data isolation, MarketCategory completeness
+  - New test files/sections added: TestExactThresholds, TestCooldownExactSpec, TestDriftExactCount, TestKellyExactValues, TestProfileDataIsolationNegative, TestKeyringCredentialIsolation, TestRevokedTokenResolution, TestMarketCategoryEnumCompleteness
 
 ### Must NOT Have (Guardrails)
 - DO NOT modify files in `docs/` without explicit human approval per AGENTS.md
@@ -877,7 +884,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   - `tests/TESTING_PROMPT.md:53-261` — Existing Phase 0 content to update
 
   **API/Type References**:
-  - `ROADMAP_PROGRESS.md` — Current phase status (Phase 5-7 complete, Phase 8 partial)
+  - `ROADMAP_PROGRESS.md` — Current phase status (Phases 5-8 complete)
   - `src/traderbot/` directory listing — All actual modules
   - Task 1 output — Stale reference findings
   - Task 2 output — Docs vs. code discrepancies
