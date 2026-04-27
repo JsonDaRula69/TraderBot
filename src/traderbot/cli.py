@@ -710,7 +710,7 @@ def news(
     category_enum: NewsCategory | None = None
     if category is not None:
         try:
-            category_enum = NewsCategory(category)
+            category_enum = NewsCategory(category.lower())
         except ValueError:
             valid = ", ".join(c.value for c in NewsCategory)
             if json_output:
@@ -766,7 +766,7 @@ def news(
             try:
                 models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
                 try:
-                    cat = NewsCategory(item.category)
+                    cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
                 models_items.append(ModelsNewsItem(
@@ -887,7 +887,7 @@ def sentiment(
             try:
                 models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
                 try:
-                    cat = NewsCategory(item.category)
+                    cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
                 models_items.append(ModelsNewsItem(
@@ -1605,7 +1605,7 @@ def profile_create(
     if categories:
         try:
             enabled_categories = [
-                MarketCategory(cat.strip().title())
+                MarketCategory(cat.strip().lower())
                 for cat in categories.split(",")
             ]
         except ValueError as e:

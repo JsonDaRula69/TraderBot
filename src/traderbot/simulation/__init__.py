@@ -1,5 +1,6 @@
 """Simulation engine — backtesting, paper trading, and performance metrics."""
 
+from traderbot.kalshi.models import MarketCategory
 from traderbot.simulation.adaptation import (
     AdaptationConfig,
     AdaptationResult,

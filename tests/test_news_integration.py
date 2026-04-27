@@ -67,12 +67,12 @@ def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
         SourcesNewsSource.REDDIT: NewsSource.REDDIT,
     }
     category_map: dict[str, NewsCategory] = {
-        "Economics": NewsCategory.ECONOMICS,
-        "Politics": NewsCategory.POLITICS,
-        "Weather": NewsCategory.WEATHER,
-        "Culture": NewsCategory.CULTURE,
-        "Tech": NewsCategory.TECH,
-        "Science": NewsCategory.SCIENCE,
+        "economics": NewsCategory.ECONOMICS,
+        "politics": NewsCategory.POLITICS,
+        "weather": NewsCategory.WEATHER,
+        "culture": NewsCategory.CULTURE,
+        "tech": NewsCategory.TECH,
+        "science": NewsCategory.SCIENCE,
         "uncategorized": NewsCategory.ECONOMICS,
     }
     return NewsItem(
@@ -83,7 +83,7 @@ def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
         url=src.url,
         published_at=src.published_at,
         ticker_refs=src.ticker_refs,
-        category=category_map.get(src.category, NewsCategory.ECONOMICS),
+        category=category_map.get(src.category.lower(), NewsCategory.ECONOMICS),
     )
 
 

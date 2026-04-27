@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.db.decisions import DbDecision, list_by_date_range
+from traderbot.kalshi.models import MarketCategory
 from traderbot.learning import (
     HEARTBEAT_INTERVAL_HOURS,
     scan_for_promotions,
@@ -19,7 +20,6 @@ from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
     BinomialObservations,
-    MarketCategory,
 )
 
 if TYPE_CHECKING:
