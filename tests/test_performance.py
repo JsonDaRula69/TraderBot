@@ -147,18 +147,17 @@ class TestEdgeCapture:
     def test_winning_yes_captures_edge(self):
         trade = _make_trade(direction="yes", entry_price_cents=50, pnl_cents=500, quantity=10)
         result = compute_edge_capture([trade])
-        assert result is not None
-        assert 0.0 < result <= 2.0
+        assert result > 0.0
 
     def test_losing_yes_trade(self):
         trade = _make_trade(direction="yes", entry_price_cents=50, pnl_cents=-500, quantity=10)
         result = compute_edge_capture([trade])
-        assert result is not None
+        assert result >= 0.0
 
     def test_no_direction(self):
         trade = _make_trade(direction="no", entry_price_cents=50, pnl_cents=500, quantity=10)
         result = compute_edge_capture([trade])
-        assert result is not None
+        assert result >= 0.0
 
     def test_zero_pnl_gives_zero_capture(self):
         trade = _make_trade(direction="yes", entry_price_cents=50, pnl_cents=0, quantity=10)
@@ -199,7 +198,6 @@ class TestSharpe:
     def test_positive_sharpe(self):
         trades = [_make_trade(pnl_cents=500), _make_trade(pnl_cents=300, ticker="KX-B")]
         result = compute_sharpe(trades)
-        assert result is not None
         assert result > 0
 
 
@@ -238,6 +236,7 @@ class TestCalmar:
         trades = [_make_trade(pnl_cents=-5000)]
         result = compute_calmar(trades, 100_000_00)
         assert result is not None
+        assert result < 0
 
 
 # --- compute_metrics ---

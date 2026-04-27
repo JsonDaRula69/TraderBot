@@ -192,6 +192,61 @@ class TestGetState:
         assert s2.level == BreakerLevel.SLOW
 
 
+class TestExactThresholds:
+    """Verify circuit breaker triggers at EXACT threshold values from limits.py."""
+
+    def test_slow_at_exactly_1pct_daily_loss(self, cb: CircuitBreaker) -> None:
+        """Circuit breaker SLOW triggers at exactly 1% daily loss."""
+        state = cb.check(daily_loss_pct=0.01, drawdown_pct=0.0)
+        assert state.level == BreakerLevel.SLOW
+        assert state.can_trade is True
+        assert state.position_size_multiplier == 0.5
+
+    def test_below_1pct_daily_loss_is_normal(self, cb: CircuitBreaker) -> None:
+        """0.99% daily loss does NOT trigger SLOW — must be at or above exactly 1%."""
+        state = cb.check(daily_loss_pct=0.0099, drawdown_pct=0.0)
+        assert state.level == BreakerLevel.NORMAL
+        assert state.can_trade is True
+        assert state.position_size_multiplier == 1.0
+
+    def test_halt_at_exactly_2pct_daily_loss(self, cb: CircuitBreaker) -> None:
+        """Circuit breaker HALT triggers at exactly 2% daily loss."""
+        state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.0)
+        assert state.level == BreakerLevel.HALT
+        assert state.can_trade is False
+        assert state.position_size_multiplier == 0.0
+
+    def test_below_2pct_daily_loss_is_slow(self, cb: CircuitBreaker) -> None:
+        """1.99% daily loss triggers SLOW, not HALT."""
+        state = cb.check(daily_loss_pct=0.0199, drawdown_pct=0.0)
+        assert state.level == BreakerLevel.SLOW
+        assert state.can_trade is True
+
+    def test_full_stop_at_exactly_10pct_drawdown(self, cb: CircuitBreaker) -> None:
+        """Circuit breaker FULL_STOP triggers at exactly 10% drawdown."""
+        state = cb.check(daily_loss_pct=0.0, drawdown_pct=0.10)
+        assert state.level == BreakerLevel.FULL_STOP
+        assert state.can_trade is False
+        assert state.position_size_multiplier == 0.0
+
+    def test_below_10pct_drawdown_is_not_full_stop(self, cb: CircuitBreaker) -> None:
+        """9.99% drawdown does NOT trigger FULL_STOP."""
+        state = cb.check(daily_loss_pct=0.0, drawdown_pct=0.0999)
+        assert state.level != BreakerLevel.FULL_STOP
+
+    def test_thresholds_match_hard_limits(self) -> None:
+        """Verify circuit breaker thresholds match HARD_LIMITS in limits.py."""
+        from traderbot.risk.circuit_breaker import FULL_STOP_THRESHOLD, HALT_THRESHOLD, SLOW_THRESHOLD
+        from traderbot.risk.limits import HARD_LIMITS
+
+        # SLOW_THRESHOLD = 1% matches daily_loss_pct guard
+        assert SLOW_THRESHOLD == 0.01
+        # HALT_THRESHOLD = 2% matches max_daily_loss_pct
+        assert HALT_THRESHOLD == HARD_LIMITS["max_daily_loss_pct"]
+        # FULL_STOP_THRESHOLD = 10% matches max_drawdown_pct
+        assert FULL_STOP_THRESHOLD == HARD_LIMITS["max_drawdown_pct"]
+
+
 class TestCircuitBreakerStateExtraForbidden:
     def test_extra_field_rejected(self) -> None:
         import pytest

@@ -48,6 +48,44 @@ class TestNewsCategoryAlias:
             assert NewsCategory[name].value == member.value
 
 
+class TestMarketCategoryLowercase:
+    """Every MarketCategory value must be lowercase."""
+
+    def test_all_values_lowercase(self) -> None:
+        for member in MarketCategory:
+            assert member.value == member.value.lower(), (
+                f"{member.name} value {member.value!r} is not lowercase"
+            )
+
+    def test_specific_lowercase_values(self) -> None:
+        assert MarketCategory.ECONOMICS.value == "economics"
+        assert MarketCategory.POLITICS.value == "politics"
+        assert MarketCategory.SCIENCE.value == "science"
+        assert MarketCategory.HEALTH.value == "health" if hasattr(MarketCategory, "HEALTH") else True
+
+
+class TestMarketCategoryEnumCompleteness:
+    """Verify MarketCategory has the expected categories."""
+
+    EXPECTED_CATEGORIES = {
+        "ECONOMICS", "POLITICS", "SCIENCE", "WEATHER",
+        "SPORTS", "CRYPTO", "CULTURE",
+    }
+
+    def test_expected_categories_present(self) -> None:
+        member_names = set(MarketCategory.__members__.keys())
+        for expected in self.EXPECTED_CATEGORIES:
+            assert expected in member_names, f"{expected} missing from MarketCategory"
+
+    def test_news_category_is_market_category_identity(self) -> None:
+        assert NewsCategory is MarketCategory
+
+    def test_news_category_identity_not_just_equal(self) -> None:
+        """Verify NewsCategory IS MarketCategory (identity, not just equality)."""
+        assert NewsCategory is MarketCategory
+        assert NewsCategory.ECONOMICS is MarketCategory.ECONOMICS
+
+
 class TestAdaptationImport:
     """Importing MarketCategory from adaptation gives kalshi version."""
 

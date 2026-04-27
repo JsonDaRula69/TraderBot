@@ -295,7 +295,6 @@ class TestVoyageRelevance:
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, mock_client)
-        assert result is not None
         assert 0.0 <= result <= 1.0
 
     def test_voyage_exception_falls_back(self):
@@ -304,13 +303,13 @@ class TestVoyageRelevance:
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, mock_client)
-        assert result is not None
+        assert 0.0 <= result <= 1.0
 
     def test_no_voyage_uses_keyword_overlap(self):
         assessor = ImpactAssessor()
         news = _news_item()
         result = assessor._compute_relevance(news, None)
-        assert result is not None
+        assert 0.0 <= result <= 1.0
 
     def test_keyword_overlap_with_matching_refs(self):
         news = _news_item(title="SPY surges", body="SPY SPY", ticker_refs=["SPY"])
