@@ -168,6 +168,13 @@ For EACH bug found since the last review cycle:
 | Audit trail gap | A trade decision is made without a corresponding audit log entry. The decision/rejection is not recorded. | Trace every trade execution and rejection path. Verify each path calls the audit logger before returning. |
 | Circuit breaker not persistent | Circuit breaker state is held in memory only, lost on restart. A halted system can restart and resume trading without human intervention. | Verify circuit breaker state is written to `SESSION-STATE.md` or equivalent persistent store. Verify on startup the state is read and respected. |
 | Enum strict deserialization (IntEnum + StrEnum) | JSON stores enum values as raw int/str, but strict Pydantic mode rejects implicit coercion. Both `IntEnum(int_val)` and `StrEnum(str_val)` must be explicitly constructed before `model_validate`. | For every `_parse_*` or `_row_to_model` helper that converts API/DB data to Pydantic models, verify enum fields are wrapped: `OrderSide(raw_str)`, `BreakerLevel(raw_int)`. Grep for `model_validate` call sites and trace enum-typed fields. |
+| SecretStr violation — plain str for credentials | A credential field (API key, secret, token) is declared as `str` instead of `SecretStr`, making it exposed via `model_dump()`, `repr()`, and log output. | Grep all Pydantic models for fields containing `key`, `secret`, `token`, or `password` in their names; verify each uses `SecretStr`. Check that `.get_secret_value()` is only called in assignment context, never in logging or printing. |
+| Credential bypass — raw env access | Code reads credentials via `os.getenv` or `os.environ.get` instead of the keyring-based `ProfileAuthStore`, bypassing credential isolation and rotation. | Grep for `os.environ.get` and `os.getenv` in all source files; every match referencing a key, secret, token, or credential must go through `ProfileAuthStore` instead. |
+| Unsafe model_dump() on SecretStr models | `model_dump()` is called on a Pydantic model containing `SecretStr` fields without `mode="json"`, exposing raw secret values in the returned dict. | Grep for `.model_dump()` calls; trace each call to verify the model has no `SecretStr` fields, or the call uses `mode="json"` with proper serialization. |
+| Secret printed to console (P0) | A secret (profile token, API key, session token) is printed to stdout/console via `print()`, `typer.echo()`, or `logger` with the value interpolated. This is a P0 confidentiality violation. | Grep for `print` and `typer.echo` and `logger.*info/debug` in CLI and entrypoint files; verify no line outputs a variable holding a secret value. |
+| Insecure file permissions on sensitive data | A file containing credentials, tokens, session state, or audit data is created with default (world-readable) permissions instead of `0o600`/`0o700`. | Grep for `open`, `write_text`, `Path.touch`, and `sqlite3.connect` in `risk/`, `db/`, and `profiles/` modules; verify each sensitive file creation uses restrictive permissions. |
+| Demo/production credential cross-contamination | Demo mode uses production credentials, or production endpoint is reachable with demo credentials, allowing real-money trades in a test context. | Verify `DemoAdapter` and `WebSocketConfig.active_url` enforce endpoint isolation: `demo_mode=True` must route only to demo URLs, and production credentials must not leak into demo config objects. |
+| Audit trail mutability — WAL opened r+ | Audit trail files are opened in `r+` mode, allowing modification of past entries. No hash chain or HMAC protects entry integrity. | Grep for `open` modes in `risk/audit.py`; verify WAL files use `'a'` (append) mode only. Verify each entry includes a content hash or HMAC of the prior entry. |
 
 **Custom check generation template:**
 ```
@@ -258,6 +265,102 @@ Flag any name in ROADMAP that doesn't match source as P3 (stale docs).
 | `VERSION` file staleness | May lag behind git tags | Actual version is in git tags | P2 | Verify `VERSION` matches latest tag |
 
 **Phase 0 Gate Addition:** Before proceeding to Phase 1, ALL documentation discrepancies must be documented and classified. P0/P1 discrepancies (wrong financial types, missing modules, incorrect thresholds) must be flagged for human review. P2/P3 discrepancies (stale names, duplicate sections) should be noted but don't block review.
+
+---
+
+## PHASE 0.9: KALSHI API SPEC COMPLIANCE
+
+Verify that every interaction with the Kalshi API conforms to the documented spec in `docs/kalshi.md` and the live API behavior. Each check must reference the source file, line number, and the doc section that defines expected behavior.
+
+### 0.9.1 Authentication Compliance
+
+- Verify `KalshiClient.login()` (`src/traderbot/kalshi/client.py` L132–155) sends `POST /login` with `api_key` and `api_secret` in the JSON body — matches `docs/kalshi.md` §Authentication
+- Verify login response parsing extracts the `token` field correctly (L153) and stores it as `_session_token`
+- Verify subsequent requests include `Authorization: Bearer <token>` header (L172) — matches `docs/kalshi.md` §Authentication ("RSA-PSS signed JWT headers" documented; current implementation uses session-token Bearer auth)
+- Verify `AuthenticationError` is raised on 401/403 responses (L149–150, L188–191)
+- Verify `WebSocketConfig` (`src/traderbot/kalshi/websocket.py` L20–37) sends auth message with `type: "auth"`, `api_key`, and `api_secret` (L65–69) on connect — matches `docs/kalshi.md` §WebSocket Streams
+- Verify `MarketStream._authenticate()` (`src/traderbot/kalshi/websocket.py` L59–75) validates `type: "auth_approved"` response (L73) and rejects non-approved responses
+- Verify `AuthManager` (`src/traderbot/auth.py` L52–214) resolves Kalshi credentials from keyring first, then `.env` fallback (L100–133)
+- Verify `KeyringKalshiConfig` (`src/traderbot/kalshi/config.py` L31–68) resolves `api_key` and `api_secret` via keyring-priority lookup before env vars
+
+### 0.9.2 REST Endpoint Compliance
+
+- Verify `MarketService.list_markets()` (`src/traderbot/kalshi/markets.py` L29–48) sends `GET /markets` with `limit`, `cursor`, `category`, `state` params — matches `docs/kalshi.md` §Market Data table
+- Verify `MarketService.get_market()` (`src/traderbot/kalshi/markets.py` L50–55) sends `GET /markets/{ticker}` — matches `docs/kalshi.md` §Market Data table
+- Verify `MarketService.get_orderbook()` (`src/traderbot/kalshi/markets.py` L57–69) sends `GET /markets/{ticker}/orderbook` with `depth` param — matches `docs/kalshi.md` §Market Data table
+- Verify `MarketService.get_recent_trades()` (`src/traderbot/kalshi/markets.py` L71–85) sends `GET /markets/{ticker}/trades` with `limit` and `cursor` params — matches `docs/kalshi.md` §Market Data table
+- Verify `TradingService.place_order()` (`src/traderbot/kalshi/trading.py` L26–39) sends `POST /portfolio/orders` with `ticker`, `side`, `order_type`, `quantity`, `price` — matches `docs/kalshi.md` §Trading table
+- Verify `TradingService.cancel_order()` (`src/traderbot/kalshi/trading.py` L41–49) sends `DELETE /portfolio/orders/{order_id}` — matches `docs/kalshi.md` §Trading table
+- Verify `TradingService.get_order()` (`src/traderbot/kalshi/trading.py` L51–57) sends `GET /portfolio/orders/{order_id}` — matches `docs/kalshi.md` §Trading table
+- Verify `TradingService.list_orders()` (`src/traderbot/kalshi/trading.py` L59–69) sends `GET /portfolio/orders` with optional `ticker` filter — matches `docs/kalshi.md` §Trading table
+- Verify `HistoryService.get_cutoffs()` (`src/traderbot/kalshi/history.py` L27–43) fetches market data and extracts `market_settled_ts`, `trade_cutoff_ts`, `order_cutoff_ts` — matches `docs/kalshi.md` §Historical Data ("cutoff endpoint")
+- Verify `HistoryService.get_historical_trades()` (`src/traderbot/kalshi/history.py` L45–65) sends `GET /markets/{ticker}/trades` with `min_ts`, `max_ts`, `limit`, `cursor` — matches `docs/kalshi.md` §Historical Endpoints table
+- Verify `HistoryService.get_settled_markets()` (`src/traderbot/kalshi/history.py` L67–80) sends `GET /markets` with `state=settled` and `cursor` — matches `docs/kalshi.md` §Historical Endpoints table
+
+### 0.9.3 WebSocket Protocol Compliance
+
+- Verify `MarketStream` (`src/traderbot/kalshi/websocket.py` L39–172) connects to `wss://` URL (L52) — matches `docs/kalshi.md` §WebSocket Streams
+- Verify `WebSocketConfig.base_url` default is `wss://api.kalshi.co/trade-api/ws/v2` (L27) — matches `docs/kalshi.md` §WebSocket Streams URL
+- Verify `WebSocketConfig.demo_url` default is `wss://demo-api.kalshi.co/trade-api/ws/v2` (L28)
+- Verify `WebSocketConfig.active_url` property (L33–36) returns `demo_url` when `demo_mode=True` and `base_url` otherwise
+- Verify `MarketStream.connect()` (L50–57) establishes connection then calls `_authenticate()` before any subscriptions
+- Verify `MarketStream.subscribe()` (L77–89) sends `type: "subscribe"` message with `channels` list containing `ticker` and `side: "all"` (L83–86)
+- Verify `MarketStream.unsubscribe()` (L91–103) sends `type: "unsubscribe"` message with matching channel format
+- Verify `MarketStream.listen()` (L105–120) yields parsed JSON messages and auto-reconnects on `ConnectionClosed` with exponential backoff (L127–149)
+- Verify `_try_reconnect()` (L127–149) uses exponential backoff starting at `reconnect_delay` and caps at `max_reconnect_attempts`
+- Verify `_resubscribe()` (L122–125) re-issues subscriptions for all tracked tickers after reconnection
+
+### 0.9.4 Rate Limit Compliance
+
+- Verify `KalshiClient._request()` (`src/traderbot/kalshi/client.py` L157–215) raises `RateLimitError` on HTTP 429 (L185–186) — matches `docs/kalshi.md` §Rate limit ("~10 requests/second")
+- Verify rate-limiting semaphore (`src/traderbot/kalshi/client.py` L129) uses `rate_limit_rps` config value (default 5.0 rps)
+- Verify exponential backoff with jitter on retry: `retry_base_delay * (2^attempt) + random(0, 0.5)` (L208–209)
+- Verify `max_retries` config defaults to 3 (L45) and is respected in retry loop (L175)
+- Verify `RateLimitError` and `AuthenticationError` are NOT retried — raised immediately (L202–203)
+- Verify server errors (5xx) trigger retry within the backoff loop (L193–198)
+
+### 0.9.5 Error Handling Compliance
+
+- Verify `KalshiClient.login()` raises `AuthenticationError` on 401/403 (`src/traderbot/kalshi/client.py` L149–150)
+- Verify `KalshiClient._request()` raises `AuthenticationError` on 401/403 during subsequent requests (L188–191)
+- Verify `KalshiClient._request()` raises `RateLimitError` on 429 (L185–186)
+- Verify `KalshiClient._request()` raises `httpx.HTTPStatusError` on server errors (5xx) after exhausting retries (L193–198)
+- Verify `KalshiClient._request()` raises `httpx.HTTPError` on network-level failures (L204–205)
+- Verify all service methods (`MarketService`, `TradingService`, `HistoryService`) call `response.raise_for_status()` after API calls
+- Verify `MarketStream._authenticate()` raises `RuntimeError` on auth failure (`src/traderbot/kalshi/websocket.py` L73–75)
+- Verify `MarketStream.listen()` catches `ConnectionClosed` and attempts reconnection (L116–120)
+- Verify `_normalize_market()` handles missing optional fields gracefully (`src/traderbot/kalshi/_normalize.py` L19–35: `raw.get()` for optional fields)
+
+### 0.9.6 Demo vs. Production Isolation
+
+- Verify `KalshiConfig` (`src/traderbot/kalshi/client.py` L28–50) has separate `base_url` (production: `https://api.kalshi.co/trade-api/v2`, L41) and `demo_url` (demo: `https://demo-api.kalshi.co/trade-api/v2`, L42)
+- Verify `KalshiConfig.active_url` property (L49–50) returns `demo_url` when `demo_mode=True` and `base_url` otherwise — matches `docs/kalshi.md` §API Overview table
+- Verify `KALSHI_DEMO_MODE` env var controls demo mode toggle (L43: `demo_mode: bool = False`)
+- Verify `WebSocketConfig` (`src/traderbot/kalshi/websocket.py` L20–37) has separate `base_url` and `demo_url` with `active_url` property (L33–36)
+- Verify `KeyringKalshiConfig` (`src/traderbot/kalshi/config.py` L31–68) has same `base_url`/`demo_url` separation (L44–45) and `active_url` property (L51–53)
+- Verify `KalshiClient.__init__()` (`src/traderbot/kalshi/client.py` L95–130) uses `config.active_url` for the HTTP client base (L130) — no hardcoded URLs bypass demo mode
+- Verify profile-aware config (`src/traderbot/kalshi/client.py` L112–121) propagates `profile.demo_mode` to `KalshiConfig` and does not mix credentials between profiles
+- Verify no credential cross-contamination: `AuthManager` (`src/traderbot/auth.py`) uses namespace-prefixed service names `traderbot.<service>` (L82–85) and profile namespaces `traderbot.profiles.<profile_name>.<service>` per `AGENTS.md` §Credential Isolation
+
+### 0.9.7 Historical Data Compliance
+
+- Verify `HistoryService.get_cutoffs()` (`src/traderbot/kalshi/history.py` L27–43) fetches cutoff timestamps before historical queries — matches `docs/kalshi.md` §Historical Data ("Before querying historical data, call the cutoff endpoint")
+- Verify cutoff timestamp parsing handles `None` values (L34–37)
+- Verify `HistoryService.get_historical_trades()` (`src/traderbot/kalshi/history.py` L45–65) sends `min_ts`/`max_ts` as Unix timestamps (integer seconds, L55–56) — matches `docs/kalshi.md` §Historical Endpoints
+- Verify `HistoryService.get_historical_trades()` respects `limit` parameter (default 100, L50) — `docs/kalshi.md` states max 1000 per page
+- Verify `HistoryService.get_settled_markets()` (`src/traderbot/kalshi/history.py` L67–80) filters by `state=settled` (L72)
+- Verify `CutoffTimestamps` model (`src/traderbot/kalshi/models.py` L101–106) uses `ConfigDict(strict=True, extra="forbid")` and all three timestamp fields are `datetime | None`
+
+### 0.9.8 Pagination Compliance
+
+- Verify `MarketListResponse` model (`src/traderbot/kalshi/models.py` L109–113) includes `cursor: str | None` field for cursor-based pagination
+- Verify `TradeListResponse` model (`src/traderbot/kalshi/models.py` L116–120) includes `cursor: str | None` field for cursor-based pagination
+- Verify `MarketService.list_markets()` (`src/traderbot/kalshi/markets.py` L29–48) accepts `cursor` param and passes it to `GET /markets`
+- Verify `MarketService.get_recent_trades()` (`src/traderbot/kalshi/markets.py` L71–85) accepts `cursor` param and passes it to `GET /markets/{ticker}/trades`
+- Verify `HistoryService.get_historical_trades()` (`src/traderbot/kalshi/history.py` L45–65) accepts `cursor` param and passes it to the API
+- Verify `HistoryService.get_settled_markets()` (`src/traderbot/kalshi/history.py` L67–80) accepts `cursor` param and passes it to `GET /markets`
+- Verify all paginated endpoints return the cursor from the API response in their response models (`cursor=data.get("cursor")` in L48, L84, L65, L80)
+- Verify callers can iterate through all pages by passing the returned cursor to subsequent requests until `cursor is None`
 
 ---
 
@@ -804,6 +907,275 @@ Verify no decision path exists that does NOT produce an audit entry:
 
 ---
 
+## PHASE 3.5: OPENCLAW GATEWAY INTEGRATION
+
+### 3.5.1 Workspace File Validation
+
+Verify that every workspace file required by the OpenClaw Gateway exists and contains the expected structure.
+
+**AGENTS.md** (`.openclaw/workspace/AGENTS.md`):
+- Contains `## Session Startup` section referencing runtime-provided context files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `HEARTBEAT.md`, `SESSION-STATE.md`, `HEARTBEAT_DATA.md`)
+- Contains `## Trading Rules` → `### Hard Limits` with exact values: 10% max per market, circuit breaker 1%/2%/10%
+- Contains `## Self-Learning Protocol` with recurrence threshold (`Recurrence-Count >= 3`) and promotion flow
+- Contains `## Heartbeats` section stating `traderbot heartbeat --json` writes to `HEARTBEAT_DATA.md`
+
+**SOUL.md** (`.openclaw/workspace/SOUL.md`):
+- Contains `## Core Identity` naming the agent as **TraderBot**
+- Contains `## Principles` with: "Data-driven only", "Risk discipline is non-negotiable", "Earn trust through transparency"
+- Contains `## Boundaries` with immutable constraints (no risk modification, no trading outside guard rails, no audit skip)
+
+**IDENTITY.md** (`.openclaw/workspace/IDENTITY.md`):
+- Contains fields: `Name` = TraderBot, `Role` = Autonomous Kalshi prediction market agent, `Emoji` = 📊
+- Contains `Vibe` field matching SOUL.md persona
+
+**HEARTBEAT.md** (`.openclaw/workspace/HEARTBEAT.md`):
+- Contains YAML-style `tasks:` list with at minimum: `circuit-breaker-check`, `performance-review`, `learning-promotion`
+- Each task has `name`, `interval`, and `prompt` fields
+- `performance-review` prompt references `traderbot heartbeat --json`
+- Contains `## General Instructions` with circuit breaker halt rule
+- Contains `## Data Output` section clarifying that HEARTBEAT_DATA.md is written by `traderbot heartbeat`, NOT this file
+
+**HEARTBEAT_DATA.md** (`.openclaw/workspace/HEARTBEAT_DATA.md`):
+- Header line: `# TraderBot Heartbeat Data`
+- Blockquote distinguishing it from HEARTBEAT.md: "This is NOT HEARTBEAT.md"
+- Contains `## Last Heartbeat:` timestamp section
+- Contains sections: `### Performance`, `### Adaptation`, `### Learnings`, `### Circuit Breaker`, `### System Health`, `### Alerts`
+- Written by `traderbot heartbeat` CLI command (`src/traderbot/heartbeat.py` → `_write_heartbeat_md()`), NOT by the agent manually
+
+**SESSION-STATE.md** (`.openclaw/workspace/SESSION-STATE.md`):
+- Contains `## Active Context` section with `Last Updated`, `Decision Loop`, `Circuit Breaker` fields
+- Contains `## Tracked Markets`, `## Open Positions`, `## Pending Actions` tables
+- Contains `## WAL Entries` section with column headers: Timestamp, Ticker, Direction, Quantity, Price, Reason
+- Default `DEFAULT_SESSION_STATE_PATH` in `src/traderbot/wal.py` points to `.openclaw/workspace/SESSION-STATE.md`
+
+**.learnings/** (`.openclaw/workspace/.learnings/`):
+- Directory must exist and contain at minimum: `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`
+- Referenced by AGENTS.md `## Memory` section and HEARTBEAT.md `learning-promotion` task
+
+**TOOLS.md** (`.openclaw/workspace/TOOLS.md`):
+- Contains `## TraderBot CLI` table with commands: `scan`, `analyze`, `trade`, `positions`, `heartbeat`, `halt`, `news`, `sentiment`
+- Contains `## Environment` with `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY`, `KALSHI_DEMO`
+- Contains `## Gotchas` noting price is in cents and `--json` flag requirement
+
+**USER.md** (`.openclaw/workspace/USER.md`):
+- Contains `## Trading Preferences` with risk tolerance and signal weighting entries
+- Contains `## Context` section (filled by user over time)
+
+### 3.5.2 SKILL.md Format Validation
+
+Verify that `skills/traderbot/SKILL.md` conforms to the OpenClaw skill definition format and matches the actual CLI.
+
+**YAML frontmatter** (`skills/traderbot/SKILL.md` lines 1–10):
+- `name` field = `traderbot`
+- `description` field contains "Autonomous prediction market investment toolkit for Kalshi"
+- `metadata.openclaw.requires.env` lists `["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY"]`
+- `metadata.openclaw.requires.bins` lists `["python3"]`
+- `metadata.openclaw.primaryEnv` = `KALSHI_API_KEY`
+
+**Command table** (`skills/traderbot/SKILL.md` lines 16–42):
+- Every command in the table must match a `@app.command()` function in `src/traderbot/cli.py`
+- Required commands to verify: `scan`, `analyze`, `trade`, `positions`, `audit`, `signals`, `heartbeat`, `halt`, `news`, `sentiment`, `backtest`, `paper`, `compare`, `performance`, `learnings`, `profile create/list/show/delete/assign/revoke/assignments/discover-agents/set-auth/auth`
+- Each command must document its `--json` flag where applicable
+- `trade` command must document `--direction yes/no --quantity N --price CENTS` args
+
+**Trigger phrases** (`skills/traderbot/SKILL.md` lines 46–59):
+- Mapping from natural language to CLI command must cover all primary workflows
+- "What markets look interesting?" → `traderbot scan`
+- "Check KX* markets" → `traderbot analyze <ticker>`
+- "Buy Yes on..." → `traderbot trade`
+- "System status" / "Health check" → `traderbot heartbeat`
+- "Stop trading" → `traderbot halt`
+
+**Workspace Files section** (`skills/traderbot/SKILL.md` lines 162–177):
+- Lists all 9 workspace files: AGENTS.md, SOUL.md, IDENTITY.md, TOOLS.md, USER.md, HEARTBEAT.md, SESSION-STATE.md, HEARTBEAT_DATA.md, .learnings/
+- Explicitly documents the HEARTBEAT.md vs HEARTBEAT_DATA.md distinction
+
+**Cron Architecture section** (`skills/traderbot/SKILL.md` lines 92–148):
+- Documents two cron modes: `isolated agentTurn` and `systemEvent`
+- References `src/traderbot/cron_loops.py` as programmatic source
+
+### 3.5.3 Cron Architecture Validation
+
+Verify that the three cron loop definitions in `src/traderbot/cron_loops.py` match the SKILL.md documentation and produce valid JSON payloads.
+
+**Decision Loop** (`src/traderbot/cron_loops.py` → `DecisionLoopConfig`):
+- `name` = `decision_loop`
+- `cron_expression` = `*/5 9-15 * * 1-5`
+- `loop_type` = `decision`
+- `session_target` = `isolated`
+- `payload_type` = `agentTurn`
+- `DecisionLoopPayload.message` starts with `"AUTONOMOUS: Run traderbot decision loop"`
+
+**Heartbeat Loop** (`src/traderbot/cron_loops.py` → `HeartbeatLoopConfig`):
+- `name` = `heartbeat_loop`
+- `cron_expression` = `0 */6 * * *`
+- `loop_type` = `heartbeat`
+- `session_target` = `isolated`
+- `payload_type` = `agentTurn`
+- `HeartbeatLoopPayload.message` starts with `"HEARTBEAT: Run traderbot self-improvement cycle"`
+
+**News/Sentiment Loop** (`src/traderbot/cron_loops.py` → `NewsLoopConfig`):
+- `name` = `news_loop`
+- `cron_expression` = `None` (event-driven, not scheduled)
+- `loop_type` = `news`
+- `session_target` = `main`
+- `payload_type` = `systemEvent`
+- `NewsLoopPayload` requires `topic` (str) and `impact_score` (float, 0.0–1.0)
+- `impact_score` must be ≥ `NEWS_IMPACT_THRESHOLD` (0.7) when surfaced
+- Auto-generated `message` includes the topic: `"ALERT: High-impact event detected ({topic})"`
+
+**LOOP_DEFINITIONS** (`src/traderbot/cron_loops.py` line 120):
+- Contains exactly 3 entries: `DecisionLoopConfig()`, `HeartbeatLoopConfig()`, `NewsLoopConfig()`
+
+**Payload serialization**:
+- Each `*Payload` model uses `ConfigDict(strict=True, extra="forbid")` (no extra fields)
+- `build_payload("decision")` returns `DecisionLoopPayload` instance
+- `build_payload("heartbeat")` returns `HeartbeatLoopPayload` instance
+- `build_payload("news", topic=..., impact_score=...)` returns `NewsLoopPayload` instance
+- `build_payload("unknown")` raises `ValueError`
+
+### 3.5.4 WAL Protocol Verification
+
+Verify that the Write-Ahead Log protocol in `src/traderbot/wal.py` functions correctly for crash-safe trade execution.
+
+**WAL entry fields** (`src/traderbot/wal.py` → `WalEntry`):
+- Required fields: `intent_id`, `timestamp`, `action` (BUY/SELL), `ticker`, `direction` (yes/no), `quantity` (int ≥ 1), `price_cents` (int ≥ 1), `reason` (str), `signal` (str), `risk_checks` (str), `confidence` (float 0.0–1.0), `status` (PENDING/COMPLETED/CANCELLED/EXPIRED)
+- Uses `ConfigDict(strict=True, extra="forbid")`
+
+**Write-ahead before execution**:
+- `write_intent()` is called BEFORE `evaluate_trade()` in `src/traderbot/cli.py` → `trade` command (lines 268–279)
+- Initial status = `WalStatus.PENDING`
+- After evaluation: status updated to `WalStatus.COMPLETED` (sized > 0) or `WalStatus.CANCELLED` (sized == 0)
+- No trade execution path exists without first writing a WAL intent
+
+**Concurrent write protection**:
+- `write_intent()` uses `fcntl.LOCK_EX | fcntl.LOCK_NB` for exclusive file lock
+- If lock fails → raises `ConcurrentWriteError`
+- `update_status()` also uses exclusive lock for status transitions
+
+**WAL file path** (`DEFAULT_SESSION_STATE_PATH`):
+- Points to `.openclaw/workspace/SESSION-STATE.md`
+- File is created with parent directories if it doesn't exist
+
+**Status transitions**:
+- PENDING → COMPLETED (trade executed)
+- PENDING → CANCELLED (trade rejected)
+- PENDING → EXPIRED (stale intent)
+- `scan_pending()` returns only PENDING entries for crash recovery
+- `reconcile()` compares pending intents against actual positions and updates status
+
+**Markdown format**:
+- Each WAL entry renders as `### WAL-XXXXX` heading followed by bullet lines
+- Entry format: `- Action: {BUY|SELL} {YES|NO} {quantity} {ticker} @ {price}¢`
+- Entry format includes: `- Reason:`, `- Signal:`, `- Risk:`, `- Confidence:`, `- Status:`
+
+### 3.5.5 Skill Execution Flow
+
+Verify the complete flow from user message through OpenClaw Gateway to TraderBot response.
+
+**Discovery flow**:
+- OpenClaw Gateway reads `skills/traderbot/SKILL.md` for command definitions and trigger phrases
+- Gateway injects workspace files into agent session context (AGENTS.md, SOUL.md, IDENTITY.md, TOOLS.md, USER.md, HEARTBEAT.md, SESSION-STATE.md, HEARTBEAT_DATA.md)
+
+**Command invocation**:
+- User message → Gateway matches trigger phrase → Gateway invokes `traderbot <command> --json`
+- All commands support `--json` flag for machine-readable output (single JSON object or array)
+- JSON response shape: `{"command": "<cmd>", "timestamp": "<ISO>", "data": {...}}`
+
+**Decision Loop flow** (isolated agentTurn):
+1. Gateway starts isolated session
+2. Agent reads `SESSION-STATE.md` for tracked markets and pending actions
+3. Agent calls `traderbot scan --json` or `traderbot analyze <ticker> --json`
+4. If signal found → `traderbot trade <ticker> --direction <yes|no> --quantity N --price CENTS --json`
+5. Trade command writes WAL intent (PENDING) → evaluates risk → updates WAL status (COMPLETED/CANCELLED)
+6. All decisions logged to audit trail in SQLite
+
+**Heartbeat Loop flow** (isolated agentTurn):
+1. Gateway starts isolated session with heartbeat context
+2. Agent follows `HEARTBEAT.md` checklist tasks
+3. Agent runs `traderbot heartbeat --json` → executes 7-step cycle
+4. Output written to `HEARTBEAT_DATA.md` (NOT `HEARTBEAT.md`)
+5. If circuit breaker is HALT/FULL_STOP → no new trades
+6. If nothing needs attention → agent replies `HEARTBEAT_OK`
+
+**News Loop flow** (systemEvent):
+1. News source triggers with `impact_score >= 0.7`
+2. Gateway surfaces alert to main session (not isolated)
+3. Agent calls `traderbot sentiment <topic> --json`
+4. Agent decides whether to adjust tracked markets or circuit breaker
+
+### 3.5.6 Session Management
+
+Verify session scoping and idle reset behavior for multi-channel OpenClaw deployments.
+
+**Per-channel-peer scoping**:
+- When `TRADERBOT_PROFILE_TOKEN` is set, CLI resolves it to a `TradingProfile` via `src/traderbot/profiles/tokens.py`
+- Profile determines: `enabled_categories`, `max_position_per_market_pct`, `risk_multiplier`
+- Profile-aware `AgentRiskLimits` enforces `min(profile_limit, HARD_LIMITS)` — profiles cannot exceed hard limits
+- Data isolation: DB, ChromaDB, and audit paths use `profile.base_dir` (via `src/traderbot/profiles/isolation.py`)
+- Credentials isolated per profile: keyring namespace `traderbot.profiles.<profile_name>.<service>`
+
+**Session ID scoping**:
+- Each cron loop runs in an `isolated` or `main` session context
+- Decision and Heartbeat loops use `sessionTarget = "isolated"` (separate from main chat)
+- News loop uses `sessionTarget = "main"` (surfaces alerts to human)
+
+**Idle reset behavior**:
+- `SESSION-STATE.md` tracks `Last Updated` timestamp for active context
+- Pending WAL entries with `status = PENDING` remain across sessions for crash recovery
+- `scan_pending()` recovers interrupted trades on session restart
+- `HEARTBEAT_DATA.md` timestamp (`## Last Heartbeat:`) indicates staleness — heartbeat loop should check this
+
+**Profile token injection**:
+- `TRADERBOT_PROFILE_TOKEN` is injected into `TOOLS.md` by `src/traderbot/profiles/injection.py`
+- Agent reads `TOOLS.md` at session start to determine profile context
+- `get_current_profile()` in `src/traderbot/profiles/tokens.py` reads env var and resolves it
+
+### 3.5.7 Heartbeat Execution Verification
+
+Verify that the `traderbot heartbeat --json` command produces valid JSON output and writes `HEARTBEAT_DATA.md`.
+
+**CLI entry point** (`src/traderbot/cli.py` → `heartbeat` command):
+- Accepts `--json` flag for machine-readable output
+- Accepts `--dry-run` flag for report-only mode (no state changes)
+- Accepts `--db` flag for overriding database path
+- Calls `run_heartbeat_cycle(conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, dry_run=dry_run)`
+
+**7-step review cycle** (`src/traderbot/heartbeat.py` → `run_heartbeat_cycle`):
+1. **Performance review** (`step_performance_review`): aggregates trade outcomes, computes win rate, P&L, avg confidence, deviation flags
+2. **Decision review** (`step_decision_review`): reviews prediction accuracy for closed markets, identifies pending reviews
+3. **Bayesian adaptation** (`step_bayesian_adaptation`): Beta-Binomial update on win/loss observations, applies 4-update/day cooldown
+4. **Learning promotion** (`step_learning_promotion`): scans for `Recurrence-Count >= 3`, promotes to PENDING_REVIEW (never auto-commits to AGENTS.md)
+5. **Circuit breaker check** (`step_circuit_breaker_check`): reads CircuitBreaker state → NORMAL/SLOW/HALT/FULL_STOP
+6. **System health** (`step_system_health`): DB integrity check, API availability, data freshness
+7. **Write HEARTBEAT_DATA.md** (`_write_heartbeat_md`): renders result to markdown at `.openclaw/workspace/HEARTBEAT_DATA.md`
+
+**JSON output structure** (`HeartbeatResult.model_dump(mode="json")`):
+- `timestamp`: ISO format datetime
+- `performance`: `{trade_count, win_rate, total_pnl_cents, avg_confidence, deviation_flag, ...}`
+- `decisions`: `{closed_count, correct_predictions, prediction_accuracy, open_count, pending_review}`
+- `adaptation`: `{updated, direction, magnitude, confidence, method, human_review, variance_reset, skipped_reason}`
+- `learning_promotion`: `{candidates_found, promoted, promoted_count}`
+- `circuit_breaker`: `{level, can_trade, daily_loss_pct, drawdown_pct, position_size_multiplier, reason}`
+- `system_health`: `{api_connectivity, db_integrity, data_freshness, alerts}`
+- `steps_completed`: list of 7 step names in order
+
+**HEARTBEAT_DATA.md writer** (`_write_heartbeat_md` in `src/traderbot/heartbeat.py`):
+- Writes to `DEFAULT_HEARTBEAT_PATH` = `.openclaw/workspace/HEARTBEAT_DATA.md`
+- Creates parent directories if they don't exist (`path.parent.mkdir(parents=True, exist_ok=True)`)
+- Header: `# TraderBot Heartbeat Data` with blockquote distinguishing from HEARTBEAT.md
+- Timestamp line: `## Last Heartbeat: {ISO timestamp}`
+- Sections match `steps_completed` order: Performance, Adaptation, Learnings, Circuit Breaker, System Health, Alerts
+- All monetary values in cents (int), displayed as USD in markdown
+- Written by `traderbot heartbeat` CLI, NOT by the agent manually
+
+**HeartbeatResult model** (`src/traderbot/heartbeat.py`):
+- Uses `ConfigDict(strict=True, extra="forbid")`
+- All sub-models also use `ConfigDict(strict=True, extra="forbid")`
+- Fields have defaults for clean construction when no data is available
+
+---
+
 ## PHASE 4: PROPERTY-BASED AND INVARIANT TESTS
 
 ### 4.1 Pydantic Model Fuzzing
@@ -859,6 +1231,118 @@ def test_kelly_invariants(b, p):
 - No float arithmetic for money — all cents as int
 - `Decimal` used for intermediate calculations if needed
 - No `round()` that could lose precision on monetary values
+
+---
+
+## PHASE 4.5: AGENT DECISION-MAKING ANALYSIS
+
+Verify the toolkit NEVER decides strategy — it computes, enforces, and executes, but the agent decides. The toolkit is a dumb pipe with smart guards.
+
+### 4.5.1 Toolkit/Agent Boundary
+
+No function in `risk/`, `kalshi/`, `db/`, or `analysis/` returns a buy/sell/hold recommendation.
+
+- `grep -rn "buy\|sell\|hold" src/traderbot/risk/ src/traderbot/kalshi/ src/traderbot/db/ src/traderbot/analysis/` — verify no function return type or docstring contains "buy", "sell", or "hold" as a trading order
+- `grep -rn "Literal\[.*buy\|Literal\[.*sell\|Literal\[.*hold" src/traderbot/risk/ src/traderbot/kalshi/ src/traderbot/db/ src/traderbot/analysis/` — verify no Literal type restricts to buy/sell/hold action types
+- Verify `evaluate_trade()` in `src/traderbot/risk/__init__.py` returns `int` (sized position in cents, or 0 for rejected) — never returns a decision verb
+- Verify `run_all_checks()` in `src/traderbot/risk/limits.py` returns `list[RiskCheckResult]` — each result has `passed: bool` and `rejection_reason: str | None`, never a buy/sell directive
+- Verify `sized_position_for_trade()` in `src/traderbot/risk/sizing.py` returns `int` (position size in cents) — no trade action
+- Verify `AuditLogger.log_decision()` in `src/traderbot/risk/audit.py` accepts a `Decision` model — it records, never decides
+- Verify `src/traderbot/kalshi/` modules only: fetch market data, submit orders, manage positions — no strategy logic
+- Verify `src/traderbot/db/` modules only: persist/retrieve state — no strategy logic
+- Verify the dependency rule from line 83 of this file: `analysis/` never imports from `risk/`, `db/`, or `news/`
+
+### 4.5.2 Signal Output Verification
+
+`CombinedSignal` describes market conviction, not trading orders. The four signal sources are indicators, odds, momentum, and sentiment.
+
+- Verify `CombinedSignal` model in `src/traderbot/analysis/signals.py` has fields: `ticker: str`, `direction: Literal["yes", "no", "neutral"]`, `confidence: float` (0–1), `sources: list[SignalSource]`, `estimated_prob: float`, `edge_cents: int`
+- Verify `direction` is `Literal["yes", "no", "neutral"]` — never `"buy"`, `"sell"`, or `"hold"`
+- Verify `SignalSource` model has: `name: str`, `weight: float` (0–1), `direction: Literal["yes", "no", "neutral"]`, `strength: float` (0–1)
+- Verify `generate_signal()` returns `CombinedSignal` with populated `sources` list containing entries for each source computed
+- Verify `combine_signals()` returns `tuple[Literal["yes", "no", "neutral"], float]` — direction and confidence, never an order
+- Verify `default_weights()` returns `{"indicators": 0.3, "odds": 0.5, "momentum": 0.2}` — three base sources, weights sum to 1.0
+- Verify sentiment is supported as a 4th source: `default_weights()` has an `include_sentiment` parameter that, when `True`, redistributes weights to include `"sentiment": 0.15` (reducing others proportionally)
+- Verify when sentiment source is included, the 4 sources in `generate_signal()` output are: `indicators`, `odds`, `momentum`, `sentiment`
+- Verify `edge_cents` is typed as `int` — no floating-point monetary values leak from signal computation
+
+### 4.5.3 Risk Module Immutability
+
+`HARD_LIMITS` are frozen, non-overridable constants. Circuit breaker cannot be cleared by code.
+
+- Verify `HARD_LIMITS` in `src/traderbot/risk/limits.py` is defined as `HARD_LIMITS: Final[dict[str, float | int]] = MappingProxyType({...})` — Python frozen dict via `MappingProxyType`
+- Verify `HARD_LIMITS` contains exactly 6 keys: `max_position_per_market_pct`, `max_daily_loss_pct`, `max_drawdown_pct`, `min_liquidity_threshold`, `max_open_positions`, `min_edge_pct`
+- Verify `MappingProxyType` prevents mutation: `HARD_LIMITS["max_position_per_market_pct"] = 0.10` raises `TypeError`
+- Verify no code path in `risk/` reads limits from config files, environment variables, or external sources — `grep -rn "os.environ\|config\|yaml\|json.load\|toml" src/traderbot/risk/` must return zero matches
+- Verify `AgentRiskLimits` in `src/traderbot/risk/agent_limits.py` always takes `min(profile_limit, HARD_LIMITS)` for maximum thresholds — a permissive profile can never exceed hard limits
+- Verify `AgentRiskLimits.max_position_per_market_pct` returns `min(self._profile.max_position_per_market_pct, float(HARD_LIMITS["max_position_per_market_pct"]))`
+- Verify `AgentRiskLimits.min_edge_pct` returns `max(self._profile.min_edge_pct, float(HARD_LIMITS["min_edge_pct"]))` — more restrictive floor wins
+- Verify `AgentRiskLimits.min_liquidity_threshold` returns `max(self._profile.min_liquidity_threshold, int(HARD_LIMITS["min_liquidity_threshold"]))` — higher minimum liquidity threshold wins
+- Verify all `AgentRiskLimits` properties are read-only (no setters)
+- Verify `CircuitBreaker.clear_full_stop()` in `src/traderbot/risk/circuit_breaker.py` raises `RuntimeError("Not in FULL_STOP state")` if called when not in `FULL_STOP` — code cannot programmatically clear a `FULL_STOP` state that was never reached
+- Verify `clear_full_stop()` only resets to `NORMAL` from `FULL_STOP` — it does not transition `SLOW` or `HALT` levels, and `FULL_STOP` requires manual human reset via `traderbot halt --force` followed by clear
+- Verify `CircuitBreakerState` model uses `ConfigDict(strict=True, extra="forbid")`
+- Verify circuit breaker state is persisted to disk (`~/.traderbot/circuit_breaker_state.json`) on every `check()` call
+
+### 4.5.4 Decision Flow
+
+The CLI `trade` command orchestrates: analysis → signal → risk gate → Kelly sizing → audit log. The agent decides strategy; the toolkit enforces constraints.
+
+- Verify `cli.py` `trade` command flow: creates `TradeRequest` → calls `evaluate_trade()` → receives `int` sized position (0 = rejected) → logs to WAL → records result
+- Verify `TradeRequest` model contains: `ticker`, `direction`, `quantity`, `price_cents`, `estimated_prob`, `confidence`, `edge_estimate`, `market_price_cents`, `market_open_interest` — no "strategy" or "action" field
+- Verify `evaluate_trade()` in `risk/__init__.py` executes in order: (1) profile category filter → (2) circuit breaker check → (3) `run_all_checks()` → (4) `sized_position_for_trade()` → (5) apply breaker multiplier → (6) apply profile risk multiplier
+- Verify if `evaluate_trade()` returns 0, no trade execution happens — the `cli.py` trade handler logs `"outcome": "rejected"` and the reason
+- Verify if `evaluate_trade()` returns non-zero, the sized amount still goes through `int()` conversion — always integer cents
+- Verify `from traderbot.risk import evaluate_trade` is the ONLY public entry point for risk evaluation from `cli.py`
+- Verify `trade` command writes a WAL intent BEFORE calling `evaluate_trade()` — order matters: write intent → evaluate → update status
+- Verify audit log is written for BOTH accepted and rejected trades — no path that skips audit
+- Verify no function in `cli.py` constructs a "buy" or "sell" string — the `direction` field is `"yes"` or `"no"` (binary outcome), not a strategy recommendation
+
+### 4.5.5 SKILL.md Trigger Verification
+
+Every trigger phrase in `skills/traderbot/SKILL.md` maps to a CLI command. No trigger causes autonomous execution beyond risk-gated placement.
+
+- Verify each trigger phrase in `skills/traderbot/SKILL.md` Trigger Phrases table corresponds to exactly one CLI command defined in `src/traderbot/cli.py`
+- Verify "Buy Yes on..." / "Place a trade" maps to `traderbot trade` — which runs through `evaluate_trade()` risk gate
+- Verify "What markets look interesting?" maps to `traderbot scan` — which is read-only, no trade execution
+- Verify "System status" / "Health check" maps to `traderbot heartbeat` — which is read-only, no trade execution
+- Verify "Check signals" maps to `traderbot signals` — which displays signal data, never places trades
+- Verify "What's the latest news?" maps to `traderbot news` — which fetches and classifies news, no trade execution
+- Verify "Check sentiment" maps to `traderbot sentiment` — which computes sentiment scores, no trade execution
+- Verify no SKILL.md trigger phrase causes automatic order placement without going through the `trade` command and its risk gate
+- Verify Decision Loop cron payload says "AUTONOMOUS: Run traderbot decision loop... Execute analysis, risk-check, and trades within guard rails" — the phrase "within guard rails" refers to the risk module enforcement
+- Verify News Loop uses `systemEvent` mode (surfaces to main session for human intervention) — NOT `agentTurn` for autonomous trading
+- Verify `TRADERBOT_PROFILE_TOKEN` environment variable is documented in SKILL.md as optional and controls profile-specific risk limits — not a strategy override
+
+### 4.5.6 Heartbeat Output
+
+Heartbeat outputs only metrics and adaptation data — never trading recommendations.
+
+- Verify `HeartbeatResult` model in `src/traderbot/heartbeat.py` contains: `timestamp`, `performance` (PerformanceReview), `decisions` (DecisionReview), `adaptation` (AdaptationReview), `learning_promotion` (LearningPromotionReview), `circuit_breaker` (CircuitBreakerReview), `system_health` (SystemHealthReview), `steps_completed`
+- Verify `PerformanceReview` fields: `trade_count`, `win_rate`, `total_pnl_cents`, `avg_confidence`, `sharpe_ratio`, `max_drawdown_pct`, `open_positions`, `deviation_flag` — all metrics, no actions
+- Verify `AdaptationReview` has `direction` field typed as `str` (values like "increase", "decrease", "maintain") — this is a parameter direction for Bayesian adaptation, NOT a trading direction
+- Verify `AdaptationReview.direction` is never `"yes"` or `"no"` — it describes edge threshold adjustment, not market position
+- Verify heartbeat writes to `HEARTBEAT_DATA.md` (data output file), NOT `HEARTBEAT.md` (agent instructions file) — `_write_heartbeat_md()` writes to `heartbeat_path` parameter, defaulting to `.openclaw/workspace/HEARTBEAT_DATA.md`
+- Verify no field in `HeartbeatResult` contains buy/sell/hold recommendations
+- Verify `CircuitBreakerReview` fields: `level`, `can_trade`, `daily_loss_pct`, `drawdown_pct`, `position_size_multiplier`, `reason` — status report, no action directive
+- Verify `SystemHealthReview` fields: `api_connectivity`, `db_integrity`, `data_freshness`, `alerts` — health status, no trade signals
+- Verify heartbeat `--dry-run` flag produces the same output structure but skips all state mutations (no writes to DB, no Bayes updates, no learning promotions)
+
+### 4.5.7 News/Sentiment Output
+
+News classification and sentiment scoring produce category labels and numeric scores — never buy/sell signals.
+
+- Verify `ClassifiedNews` model in `src/traderbot/news/models.py` has fields: `news_item: NewsItem`, `category: NewsCategory`, `sentiment: SentimentResult | None`, `impact: ImpactAssessment | None` — category classification, not trading recommendations
+- Verify `NewsCategory` enum values: `POLITICS`, `ECONOMICS`, `SCIENCE`, `SPORTS`, `CRYPTO`, `CULTURE`, `TECH`, `WEATHER` — none are "buy", "sell", or "hold"
+- Verify `SentimentResult` model has: `news_id: str`, `score: float` (ge=-1.0, le=1.0), `confidence: float` (ge=0.0, le=1.0), `model: str`, `timestamp: datetime` — sentiment score and confidence, never a trade direction
+- Verify `ImpactAssessment` model has `direction: Literal["bullish", "bearish", "neutral"]` — market outlook, not an order type
+- Verify `ImpactAssessment.direction` uses "bullish"/"bearish"/"neutral" — distinct from "yes"/"no" in signal vocabulary, and never "buy"/"sell"/"hold"
+- Verify `NewsClassifier.classify()` returns `ClassifiedNews` — a category assignment, never an investment recommendation
+- Verify `SentimentScorer.score()` returns `SentimentResult` — a numeric score + confidence, never a trading action
+- Verify `ClassificationResult` (internal) has `flagged_for_llm: bool` — this flags uncertainty for future LLM review, NOT for automatic trading
+- Verify `traderbot news` CLI command outputs: title, source, category, published_at, sentiment_score, sentiment_confidence, sentiment_model, url, ticker_refs — all descriptive/metric, no "recommendation" field
+- Verify `traderbot sentiment` CLI command outputs: ticker, items_analyzed, sentiment (score + direction + confidence), and impacts — direction is "bullish"/"bearish"/"neutral" (market outlook), NOT "buy"/"sell"
+- Verify no code path in `news/classifier.py` or `news/sentiment_scorer.py` produces a `SignalSource` or `CombinedSignal` — news/sentiment feeds data INTO the signal system, it IS a signal source, but the classifier and scorer themselves don't create trading signals
 
 ---
 
@@ -918,7 +1402,119 @@ When coverage report shows missing lines (e.g., `risk/audit.py   60      6    90
 
 4. **Verify**: Re-run `pytest --cov=traderbot --cov-report=term-missing tests/` and confirm the specific lines are now covered.
 
-### 5.5 Fix and Re-run
+### 5.5 Security & Encryption Deep Audit
+
+This phase verifies that no secrets are exposed in plaintext and that the highest security practices are implemented. Every finding from the T3 security audit must be verified as a formal checklist item.
+
+#### 5.5.1 SecretStr Enforcement
+
+All credential fields must use `SecretStr` instead of plain `str`. Any credential stored as plain `str` is a leak vector — `model_dump()`, `repr()`, and log output will expose the value.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | `KalshiConfig.api_key` is `SecretStr` | `grep -n "api_key:" src/traderbot/kalshi/config.py` | Field declaration uses `SecretStr`, not `str` | P1 |
+| 2 | `WebSocketConfig.api_key` is `SecretStr` | `grep -n "api_key:" src/traderbot/kalshi/websocket.py` | Field declaration uses `SecretStr`, not `str` | P1 |
+| 3 | `KalshiClient._session_token` is `SecretStr` | `grep -n "_session_token" src/traderbot/kalshi/client.py` | Private attribute typed as `SecretStr` | P1 |
+| 4 | `NewsAggregator._newsapi_key` is `SecretStr` | `grep -n "_newsapi_key" src/traderbot/news/aggregator.py` | Private attribute typed as `SecretStr` | P1 |
+| 5 | `NewsAggregator._twitter_api_key` is `SecretStr` | `grep -n "_twitter_api_key" src/traderbot/news/aggregator.py` | Private attribute typed as `SecretStr` | P1 |
+| 6 | `VoyageClient` does not store API key as plain attribute | `grep -n "api_key\|VOYAGE_API_KEY" src/traderbot/news/embeddings.py` | Key is not stored as a plain instance attribute; accessed via keyring or `SecretStr` | P1 |
+
+#### 5.5.2 Keyring Usage — Credential Access Path
+
+All credentials must be retrieved through `auth.py` keyring abstractions. No direct `os.getenv` or `os.environ.get` for secrets — these bypass keyring isolation and make credential rotation impossible.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | No `os.getenv` / `os.environ.get` for credential-like env vars outside `auth.py` | `grep -rn 'os\.environ\.get\|os\.getenv' src/traderbot/ --include='*.py' \| grep -v auth.py \| grep -i 'key\|secret\|token\|cred\|api'` | Zero matches outside `auth.py` | P1 |
+| 2 | `VOYAGE_API_KEY` read from keyring (not env) | `grep -n "VOYAGE_API_KEY" src/traderbot/news/embeddings.py` | No `os.environ.get("VOYAGE_API_KEY")`; credential fetched via `ProfileAuthStore` | P1 |
+| 3 | `NEWSAPI_KEY` read from keyring (not env) | `grep -n "NEWSAPI_KEY" src/traderbot/cli.py` | No `os.environ.get("NEWSAPI_KEY")`; credential fetched via `ProfileAuthStore` | P1 |
+| 4 | `TWITTER_API_KEY` read from keyring (not env) | `grep -n "TWITTER_API_KEY" src/traderbot/cli.py` | No `os.environ.get("TWITTER_API_KEY")`; credential fetched via `ProfileAuthStore` | P1 |
+| 5 | `ProfileAuthStore` is the sole credential accessor | `grep -rn "get_credentials\|set_credentials" src/traderbot/ --include='*.py' \| grep -v auth.py \| grep -v test` | All credential reads go through `ProfileAuthStore` | P1 |
+
+#### 5.5.3 `model_dump()` Safety
+
+When a model containing `SecretStr` fields is serialized with `model_dump()`, the default mode exposes raw secret values. Only `model_dump(mode="json")` with `SecretStr` serialization guards is safe.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | `DemoAdapter` does not call `model_dump()` on `KalshiConfig` without serialization guard | `grep -n "model_dump" src/traderbot/kalshi/demo.py` | Uses `model_dump(mode="json")` or manual field copy, NOT bare `model_dump()` on a config that contains `SecretStr` fields | P1 |
+| 2 | No bare `model_dump()` on objects with `SecretStr` fields anywhere | `grep -rn "\.model_dump()" src/traderbot/ --include='*.py' \| grep -v 'mode="json"' \| grep -v test` | Every `model_dump()` call on a model with secret fields uses `mode="json"` or excludes secret fields | P1 |
+
+#### 5.5.4 Logging Safety — No Secrets in Console Output
+
+Logging or printing secrets to console, logs, or stdout is a P0 violation. Secrets must never appear in any output stream.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | **P0**: `cli.py` does not print profile token to console | `grep -n "profile.*token\|token.*profile\|print.*token" src/traderbot/cli.py` around line 1829 context | No `print()` or `typer.echo()` that outputs the profile token value | **P0** |
+| 2 | No `logger` calls that include secret values | `grep -rn 'logger\.\(info\|debug\|warning\|error\).*api_key\|logger\.\(info\|debug\|warning\|error\).*secret\|logger\.\(info\|debug\|warning\|error\).*token' src/traderbot/ --include='*.py'` | Zero matches where a secret value (not its name) is interpolated into a log message | P0 |
+| 3 | All `SecretStr` fields use `.get_secret_value()` only in assignment context | `grep -rn "get_secret_value" src/traderbot/ --include='*.py'` | Every call to `.get_secret_value()` is followed by assignment to a local variable, never passed to `print()`, `logger`, or `json.dump()` | P1 |
+
+#### 5.5.5 File Permissions — Sensitive Files Not World-Readable
+
+All files containing credentials, tokens, session state, or audit data must be created with restrictive permissions (0600 or equivalent). Default `open()` creates world-readable files.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | Audit log files created with restricted permissions | `grep -n "open\|write_text\|Path.*touch" src/traderbot/risk/audit.py` | Uses `os.open()` with `0o600` mode or equivalent; NOT default `open()` | P1 |
+| 2 | Session state file created with restricted permissions | `grep -n "write_text\|open.*w\|Path.*touch" src/traderbot/risk/circuit_breaker.py` | Uses restrictive file creation mode | P1 |
+| 3 | DB files created with restricted permissions | `grep -n "sqlite\|connect" src/traderbot/db/` | SQLite connection uses `mode=0600` or equivalent | P2 |
+| 4 | Profile directory created with restrictive permissions | `grep -n "mkdir\|makedirs" src/traderbot/profiles/` | Uses `0o700` mode for profile directories | P2 |
+
+#### 5.5.6 Demo/Production Isolation
+
+Demo and production configurations must be strictly separated. A demo credential must never reach a production endpoint, and a production credential must never be used in demo mode.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | `DemoAdapter` rebuilds config without leaking `SecretStr` value | Read `src/traderbot/kalshi/demo.py` lines 14–18 | `_rebuild_config` explicitly excludes secret fields from the dump, or uses `model_dump(mode="json")` with SecretStr serialization | P1 |
+| 2 | `DemoAdapter` validates that demo credentials are used for demo endpoints | `grep -n "demo_mode\|demo_url\|prod" src/traderbot/kalshi/demo.py` | When `demo_mode=True`, the adapter refuses to connect to production URLs | P1 |
+| 3 | No credential cross-contamination between demo and production | `grep -rn "demo.*prod\|prod.*demo" src/traderbot/ --include='*.py'` | No code path that loads production credentials into a demo context or vice versa | P1 |
+| 4 | `model_dump()` on `KalshiConfig` in demo context does not leak production secrets | `grep -n "model_dump" src/traderbot/kalshi/demo.py` | When `model_dump()` is called with a production config, `SecretStr` fields are redacted | P1 |
+
+#### 5.5.7 Secrets in Git History
+
+No API keys, tokens, or credentials may be tracked in git. The `.gitignore` must prevent accidental commits.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | No tracked files contain literal secret strings | `git ls-files \| xargs grep -l 'api_key\s*=\s*["\x27][a-zA-Z0-9]\{16,\}["\x27]' 2>/dev/null \|\| echo "PASS: No hardcoded secrets"` | Command exits cleanly with "PASS" output | P0 |
+| 2 | `.gitignore` covers `.env`, `*.key`, `*.pem`, `credentials.json` | `grep -E '\.env|\.key|\.pem|credentials' .gitignore` | All four patterns are ignored | P1 |
+| 3 | Git history does not contain secrets in diff content | `git log -p --all -S 'api_key' -- '*.py' \| head -50` | No diffs showing literal secret values committed | P1 |
+
+#### 5.5.8 Audit Trail Integrity
+
+Audit logs must be tamper-evident. The current WAL implementation allows `r+` (read-write) mode, enabling mutation of past entries.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | WAL file opened in append-only mode, not `r+` | `grep -n "open.*r+\|open.*'r+'" src/traderbot/risk/audit.py` | No `r+` mode; WAL files opened with `'a'` (append) or `'r'` (read-only) | P1 |
+| 2 | Audit log entries include content hash for tamper detection | `grep -n "hash\|sha\|hmac\|digest" src/traderbot/risk/audit.py` | Each audit entry includes a hash/HMAC of the prior entry (chain) or its own content | P1 |
+| 3 | Audit log files are append-only at the filesystem level | `grep -n "open.*a\b" src/traderbot/risk/audit.py` | Audit file opened in append mode (`'a'`) | P2 |
+| 4 | No code path rewrites or overwrites past audit entries | `grep -rn "seek\|truncate\|write.*offset" src/traderbot/risk/audit.py` | Zero matches; no seek/truncate/write operations on audit files | P1 |
+
+#### 5.5.9 Jailbreak Resistance — Agent Safety Boundaries
+
+The agent must not be lured into bypassing safety constraints through prompt injection, SOUL.md manipulation, or risk limit override.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | `HARD_LIMITS` are hardcoded constants, not read from config | `grep -n "HARD_LIMITS" src/traderbot/risk/limits.py` | `HARD_LIMITS` values are literal `int` constants; no `os.getenv`, `json.load`, or file reads | P0 |
+| 2 | No code path allows runtime modification of `HARD_LIMITS` | `grep -rn "HARD_LIMITS\." src/traderbot/risk/ --include='*.py' \| grep -v "import\|from\|HardLimits\|class Hard"` | Zero assignment statements modifying `HARD_LIMITS` attributes | P0 |
+| 3 | SOUL.md contains red lines that prevent self-modification | `grep -i "red.line\|never.override\|immutable\|cannot.modify" SOUL.md \| head -5` | Red-line section exists with explicit immutability rules | P1 |
+| 4 | `evaluate_trade()` enforces `min(profile_limit, HARD_LIMITS)` ceiling | `grep -n "profile.*HARD_LIMITS\|min.*HARD" src/traderbot/risk/` | Position sizing uses `min(profile.risk_multiplier, HARD_LIMITS.ceiling)` | P0 |
+
+#### 5.5.10 Dependency Security
+
+Third-party dependencies must not introduce known vulnerabilities.
+
+| # | Check | Grep / Read Command | Pass Criteria | Severity |
+|---|-------|---------------------|---------------|----------|
+| 1 | No known CVEs in direct dependencies | `pip audit 2>/dev/null \|\| pip-audit 2>/dev/null \|\| echo "SKIPPED: pip-audit not installed"` | Zero known vulnerabilities in direct dependencies | P1 |
+| 2 | `pyproject.toml` pins dependency versions | `grep -c "^dependencies" pyproject.toml \| grep -A20 "^dependencies" pyproject.toml \| grep ">=" | head -10` | Dependencies are pinned to specific versions or minimum versions with upper bounds | P2 |
+| 3 | No `--no-verify` or `--allow-unverified` in install commands | `grep -rn "no-verify\|allow-unverified\|--trusted" pyproject.toml Makefile scripts/` | Zero matches | P1 |
+
+### 5.6 Fix and Re-run
 
 Fix any failures and re-run from Phase 1.
 
@@ -940,7 +1536,7 @@ For each bug:
 3. **Version Control and Documentation**: Commit with descriptive message, tag with next version
 
 ### Continue Until
-- ALL phases (0-5) pass with zero P0, P1, P2 findings
+- ALL phases (0-5.5) pass with zero P0, P1, P2 findings (including Phase 5.5 Security & Encryption Deep Audit)
 - `pytest tests/` passes
 - `ruff check src/ tests/` reports zero errors
 - `mypy src/traderbot/` reports zero errors
@@ -1154,3 +1750,116 @@ Before completion, verify:
 - Verify `isolated agentTurn` for Decision and Heartbeat loops (no human attention needed)
 - Verify `systemEvent` for News Loop (surfaces actionable events to main session)
 - Verify WAL entry recovery on cron restart
+
+---
+
+## PHASE 0.8: INSTALLATION & CONFIGURATION FLOW
+
+Test the full installation flow from zero to operational. Every check must reference a specific file, command, or value — no vague "verify it works" items.
+
+### 0.8.1 Dependency Installation
+
+- Verify `pyproject.toml` specifies `requires-python = ">=3.12"` — run `python3 -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); assert d['project']['requires-python']=='>=3.12'"`
+- Verify all runtime dependencies listed in `pyproject.toml` `[project.dependencies]` are present: `httpx>=0.27`, `websockets>=13.0`, `pydantic>=2.7`, `pydantic-settings>=2.3`, `typer>=0.12`, `rich>=13.0`, `keyring>=25.0`, `feedparser>=6.0`, `vaderSentiment>=3.3`, `textblob>=0.18`, `chromadb>=0.4.22,<0.5.0`, `voyageai>=0.2,<1.0`
+- Verify dev dependencies are present: `pytest>=8.2`, `pytest-asyncio>=0.23`, `pytest-cov>=5.0`, `ruff>=0.5`, `respx>=0.22`
+- Verify `uv pip install -e .` completes with exit code 0 from repo root
+- Verify `pip install -e .` completes with exit code 0 as fallback when `uv` is unavailable
+- Verify after install, `traderbot --help` exits 0 and prints command listing
+- Verify `traderbot` entry point is defined in `pyproject.toml` `[project.scripts]` as `traderbot = "traderbot.cli:main"`
+- Verify `install/traderbot-installer.sh` checks for `uv` first (`command -v uv`) and falls back to `pip install -e .`
+
+### 0.8.2 Python Version Check Enforcement
+
+- Verify `cli.py` `bootstrap` command checks `sys.version_info >= (3, 12)` and exits with code 1 if version is insufficient
+- Run `traderbot bootstrap --dry-run` with Python 3.12+ — verify `"python_version_ok": true` in JSON output
+- Verify `pyproject.toml` `target-version = "py312"` is set in `[tool.ruff]`
+- Verify `install/traderbot-installer.sh` `install_dependencies_macos` checks for `python3` and exits 1 with message if not found
+- Verify error output contains "3.12" when running with Python < 3.12: `traderbot bootstrap --dry-run` produces `"python_version_ok": false` and exit code 1
+
+### 0.8.3 API Key Configuration via Keyring
+
+- Verify `src/traderbot/auth.py` defines `_REQUIRED_SERVICES = {"kalshi": ["api_key", "api_secret"]}` and `_OPTIONAL_SERVICES` containing `voyage`, `newsapi`, `twitter`, `reddit`
+- Verify `AuthManager.keyring_available` returns `False` when keyring backend name contains "Fail" or "Null"
+- Verify `AuthManager.check_credentials()` returns `{service: {key: bool}}` for all services in `_ALL_SERVICES`
+- Verify `traderbot auth check` displays credential status for all 5 services (kalshi, voyage, newsapi, twitter, reddit)
+- Verify `traderbot auth login` prompts for each key in `_ALL_SERVICES` when keyring is available
+- Verify `traderbot auth set-key <service> <key>` stores a credential via keyring with prefix `traderbot.`
+- Verify `traderbot auth list-keys` displays service names (never values) for configured credentials
+- Verify `traderbot auth rotate kalshi` deletes old keys and prompts for new ones
+- Verify keyring namespace isolation: `AuthManager._full_service("kalshi")` returns `"traderbot.kalshi"`
+- Verify profile-aware keyring namespace: `AuthManager` used inside profiles resolves to `traderbot.profiles.<name>.<service>`
+- Verify `.env` fallback: `AuthManager.get_credential()` returns `CredentialResult(source="env")` when keyring is unavailable and `KALSHI_API_KEY` environment variable is set
+- Verify env mapping: `AuthManager._service_key_to_env("kalshi", "api_key")` returns `"KALSHI_API_KEY"`, `"kalshi", "api_secret"` → `"KALSHI_API_SECRET"`, `"kalshi", "demo_mode"` → `"KALSHI_DEMO_MODE"`
+
+### 0.8.4 Demo Mode Configuration
+
+- Verify `src/traderbot/kalshi/config.py` `KeyringKalshiConfig` has `demo_mode: bool = False` field
+- Verify `KALSHI_DEMO=true` environment variable sets `KeyringKalshiConfig.demo_mode = True`
+- Verify `KeyringKalshiConfig.active_url` returns `"https://demo-api.kalshi.co/trade-api/v2"` when `demo_mode=True`
+- Verify `KeyringKalshiConfig.active_url` returns `"https://api.kalshi.co/trade-api/v2"` when `demo_mode=False`
+- Verify `KeyringKalshiConfig` has `base_url = "https://api.kalshi.co/trade-api/v2"` and `demo_url = "https://demo-api.kalshi.co/trade-api/v2"` defaults
+- Verify `KeyringKalshiConfig` uses `SettingsConfigDict(strict=True, extra="forbid", env_prefix="KALSHI_", env_file=".env")`
+- Verify `skills/traderbot/SKILL.md` environment table lists `KALSHI_DEMO` (or `KALSHI_DEMO_MODE`) as an environment variable
+- Verify `paper` command uses `DemoAdapter` when demo mode is active: `from traderbot.kalshi.demo import DemoAdapter`
+
+### 0.8.5 OpenClaw Workspace Setup
+
+- Verify `.openclaw/workspace/` directory exists with all 8 required files: `AGENTS.md`, `SESSION-STATE.md`, `HEARTBEAT.md`, `HEARTBEAT_DATA.md`, `TOOLS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`
+- Verify `.openclaw/workspace/AGENTS.md` contains trading constraints and self-learning protocol (references from `docs/architecture.md`)
+- Verify `.openclaw/workspace/SESSION-STATE.md` contains WAL protocol sections (active positions, pending actions)
+- Verify `.openclaw/workspace/HEARTBEAT.md` contains `tasks:` blocks for heartbeat checklist (NOT data output — distinct from `HEARTBEAT_DATA.md`)
+- Verify `.openclaw/workspace/TOOLS.md` references `traderbot` CLI commands and contains `TRADERBOT_PROFILE_TOKEN` placeholder for token injection
+- Verify `.learnings/` directory exists under `.openclaw/workspace/` with at minimum `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`
+- Verify workspace files are non-empty: each file in `.openclaw/workspace/` has size > 0 bytes
+- Verify `install/traderbot-installer.sh` checks for `~/.openclaw` directory and `openclaw` binary via `check_openclaw()` — exits 1 if not found
+
+### 0.8.6 Skill Registration
+
+- Verify `skills/traderbot/SKILL.md` YAML frontmatter contains `name: traderbot`, `description`, and `metadata.openclaw` with `requires.env` listing `KALSHI_API_KEY` and `KALSHI_PRIVATE_KEY`
+- Verify `skills/traderbot/SKILL.md` command table lists all CLI commands that exist in `src/traderbot/cli.py` — cross-check every command in SKILL.md against a `@app.command()` or `@<sub>_app.command()` decorator in cli.py
+- Verify SKILL.md table includes these commands with matching argument signatures: `scan`, `analyze`, `trade`, `positions`, `audit`, `signals`, `heartbeat`, `halt`, `news`, `sentiment`, `backtest`, `paper`, `compare`, `performance`, `learnings`, `bootstrap`, `profile create`, `profile list`, `profile show`, `profile delete`, `profile assign`, `profile revoke`, `profile assignments`, `profile discover-agents`, `profile set-auth`, `profile auth`, `auth login`, `auth set-key`, `auth list-keys`, `auth rotate`, `auth check`
+- Verify SKILL.md trigger phrases table maps agent language to correct CLI commands
+- Verify SKILL.md environment table lists all required and optional env vars: `KALSHI_API_KEY` (required), `KALSHI_PRIVATE_KEY` (required), `KALSHI_DEMO` (optional), `TRADERBOT_PROFILE_TOKEN` (optional)
+- Verify SKILL.md cron architecture section describes 3 loops matching `src/traderbot/cron_loops.py`: Decision Loop (`*/5 9-15 * * 1-5`), Heartbeat Loop (`0 */6 * * *`), News Loop (event-driven, `None` cron)
+- Verify SKILL.md risk guard rails section lists limits matching `src/traderbot/risk/limits.py`: 10% max position per market, daily loss thresholds, no short selling, full audit trail
+
+### 0.8.7 Cron Configuration
+
+- Verify `src/traderbot/cron_loops.py` exports `LOOP_DEFINITIONS: list[CronLoopConfig]` containing exactly 3 entries
+- Verify Decision Loop config: `name="decision_loop"`, `cron_expression="*/5 9-15 * * 1-5"`, `loop_type="decision"`, `session_target="isolated"`, `payload_type="agentTurn"`
+- Verify Heartbeat Loop config: `name="heartbeat_loop"`, `cron_expression="0 */6 * * *"`, `loop_type="heartbeat"`, `session_target="isolated"`, `payload_type="agentTurn"`
+- Verify News Loop config: `name="news_loop"`, `cron_expression=None`, `loop_type="news"`, `session_target="main"`, `payload_type="systemEvent"`
+- Verify `DecisionLoopPayload` model has `session_target="isolated"`, `kind="agentTurn"`, and a `message` field containing "AUTONOMOUS"
+- Verify `HeartbeatLoopPayload` model has `session_target="isolated"`, `kind="agentTurn"`, and a `message` field containing "HEARTBEAT"
+- Verify `NewsLoopPayload` model has `session_target="main"`, `kind="systemEvent"`, `topic: str`, `impact_score: float` with `Field(ge=0.0, le=1.0)`
+- Verify `NewsLoopPayload.model_post_init` auto-generates `message` if empty, containing "ALERT" and referencing `self.topic`
+- Verify `build_payload("decision")` returns `DecisionLoopPayload`, `build_payload("heartbeat")` returns `HeartbeatLoopPayload`, `build_payload("news", topic="BTC", impact_score=0.9)` returns `NewsLoopPayload`
+- Verify `build_payload("invalid")` raises `ValueError`
+- Verify `NEWS_IMPACT_THRESHOLD = 0.7` in `cron_loops.py` matches the threshold documented in SKILL.md
+- Verify all cron Pydantic models use `ConfigDict(strict=True, extra="forbid")`
+
+### 0.8.8 Configuration Validation Smoke Test
+
+- Verify `traderbot --help` exits 0 and lists all subcommands: `scan`, `analyze`, `trade`, `positions`, `audit`, `signals`, `heartbeat`, `halt`, `news`, `sentiment`, `backtest`, `paper`, `compare`, `performance`, `learnings`, `bootstrap`, `auth`, `profile`
+- Verify `traderbot scan --help` exits 0 and describes market listing with `--limit`, `--category`, `--json` options
+- Verify `traderbot analyze --help` exits 0 and describes market analysis with `TICKER` argument and `--json` option
+- Verify `traderbot trade --help` exits 0 and describes trade placement with `TICKER`, `--direction`, `--quantity`, `--price`, `--json` options
+- Verify `traderbot bootstrap --dry-run --json` exits 0 and returns JSON with keys: `python_version`, `python_version_ok`, `config_dir`, `keyring_available`, `credentials_ok`, `db_path`
+- Verify `traderbot auth check` exits 0 and shows credential status table (or `.env` fallback message)
+- Verify `traderbot profile list` exits 0 even with no profiles created
+- Verify `VERSION` file reads `0.08.21` (matches current release)
+- Verify `pyproject.toml` version field — note: may lag behind `VERSION` file but must be a valid semver
+- Verify `traderbot heartbeat --dry-run --json` exits 0 and returns JSON with keys: `timestamp`, `steps_completed`, `performance`, `decisions`, `adaptation`, `learning_promotion`, `circuit_breaker`, `system_health`
+
+### 0.8.9 Environment Isolation
+
+- Verify `KALSHI_DEMO=true` causes `KeyringKalshiConfig.demo_mode` to be `True` and `active_url` to point to `demo-api.kalshi.co`
+- Verify `KALSHI_DEMO` unset or `KALSHI_DEMO=false` causes `demo_mode=False` and `active_url` to point to `api.kalshi.co`
+- Verify `TRADERBOT_PROFILE_TOKEN` unset results in global HARD_LIMITS being used by risk module
+- Verify `TRADERBOT_PROFILE_TOKEN` set to a valid token resolves via `get_current_profile()` and applies profile-specific risk limits
+- Verify profile-specific `AgentRiskLimits.max_position_per_market_pct` is capped by `HARD_LIMITS.max_position_per_market_pct` — a permissive profile cannot exceed hard limits
+- Verify `AuthManager` with `TRADERBOT_PROFILE_TOKEN` resolves credentials from `traderbot.profiles.<name>.<service>` namespace, not global `traderbot.<service>`
+- Verify `KALSHI_API_KEY` and `KALSHI_API_SECRET` env vars are used as `.env` fallback when keyring is unavailable
+- Verify profile data isolation: `profile.base_dir` is used for DB, ChromaDB, and audit paths (not global `~/.traderbot/`)
+- Verify no credential values appear in `traderbot auth list-keys` output — only key names are shown
+- Verify `traderbot bootstrap --dry-run` does NOT write to keyring, database, or filesystem — only validates and reports
