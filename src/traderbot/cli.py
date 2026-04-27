@@ -1661,11 +1661,7 @@ def profile_create(
     if categories:
         try:
             enabled_categories = [
-<<<<<<< HEAD
-                MarketCategory(cat.strip().title())
-=======
                 MarketCategory(cat.strip().lower())
->>>>>>> BOB
                 for cat in categories.split(",")
             ]
         except ValueError as e:
@@ -1766,11 +1762,7 @@ def profile_show(
         console.print(f"\n[bold cyan]Profile: {profile.name}[/bold cyan]")
         console.print(f"Mode: {profile.mode}")
         console.print(f"Description: {profile.description}")
-<<<<<<< HEAD
-        console.print(f"\n[bold]Risk Parameters:[/bold]")
-=======
         console.print("\n[bold]Risk Parameters:[/bold]")
->>>>>>> BOB
         console.print(f"  Risk Multiplier: {profile.risk_multiplier}")
         console.print(f"  Max Position per Market: {profile.max_position_per_market_pct}%")
         console.print(f"  Max Daily Loss: {profile.max_daily_loss_pct}%")
@@ -1778,15 +1770,6 @@ def profile_show(
         console.print(f"  Max Open Positions: {profile.max_open_positions}")
         console.print(f"  Min Liquidity: {profile.min_liquidity_threshold}")
         console.print(f"  Min Edge: {profile.min_edge_pct}%")
-<<<<<<< HEAD
-        
-        if profile.enabled_categories:
-            console.print(f"\n[bold]Enabled Categories:[/bold]")
-            for cat in profile.enabled_categories:
-                console.print(f"  • {cat.value}")
-        else:
-            console.print(f"\n[bold]Enabled Categories:[/bold] All")
-=======
 
         if profile.enabled_categories:
             console.print("\n[bold]Enabled Categories:[/bold]")
@@ -1794,7 +1777,6 @@ def profile_show(
                 console.print(f"  • {cat.value}")
         else:
             console.print("\n[bold]Enabled Categories:[/bold] All")
->>>>>>> BOB
 
 
 @profile_app.command("delete")
@@ -1814,11 +1796,7 @@ def profile_delete(
 
     registry.delete_profile(name, keep_data=keep_data)
     console.print(f"[green]✓[/green] Deleted profile '{name}'")
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> BOB
     if not keep_data:
         console.print("[yellow]Note:[/yellow] Data directories were also deleted")
 
@@ -1849,11 +1827,7 @@ def profile_assign(
         assign_token(profile_name, agent_id, token)
         console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
         console.print(f"Token: [bold]{token}[/bold]")
-<<<<<<< HEAD
-        
-=======
 
->>>>>>> BOB
         # Inject token into agent's TOOLS.md
         try:
             agent_path = Path(".openclaw") / "workspace" / agent_id
@@ -1864,11 +1838,7 @@ def profile_assign(
                 inject_token(str(agent_path), token)
                 console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
         except FileNotFoundError:
-<<<<<<< HEAD
-            console.print(f"[yellow]Warning:[/yellow] Agent directory not found")
-=======
             console.print("[yellow]Warning:[/yellow] Agent directory not found")
->>>>>>> BOB
             console.print("Token assigned but not injected into TOOLS.md")
         except Exception as e:
             console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
@@ -1951,6 +1921,197 @@ def profile_assignments(
 
         console.print(table)
 
+
+
+@profile_app.command("update")
+def profile_update(
+    name: str,
+    mode: Annotated[str, typer.Option(help="Trading mode: paper or live")] = None,
+    description: Annotated[str, typer.Option(help="Profile description")] = None,
+    categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = None,
+    risk_multiplier: Annotated[float, typer.Option(help="Risk multiplier (0-1)")] = None,
+    max_position_pct: Annotated[float, typer.Option(help="Max position per market %")] = None,
+    max_daily_loss_pct: Annotated[float, typer.Option(help="Max daily loss %")] = None,
+    max_drawdown_pct: Annotated[float, typer.Option(help="Max drawdown %")] = None,
+    max_open_positions: Annotated[int, typer.Option(help="Max open positions")] = None,
+    min_liquidity: Annotated[int, typer.Option(help="Min liquidity threshold")] = None,
+    min_edge_pct: Annotated[float, typer.Option(help="Min edge %")] = None,
+) -> None:
+    """Update specific fields of an existing profile."""
+    from traderbot.kalshi.models import MarketCategory
+    from traderbot.profiles.registry import ProfileRegistry
+    from traderbot.risk.limits import HARD_LIMITS
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    if not registry.profile_exists(name):
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        raise typer.Exit(1)
+
+    update_kwargs: dict = {}
+
+    if mode is not None:
+        if mode not in ("paper", "live"):
+            console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
+            raise typer.Exit(1)
+        update_kwargs["mode"] = mode
+
+    if description is not None:
+        update_kwargs["description"] = description
+
+    if categories is not None:
+        try:
+            update_kwargs["enabled_categories"] = [
+                MarketCategory(cat.strip().lower())
+                for cat in categories.split(",")
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Invalid category: {e}")
+            raise typer.Exit(1)
+
+    if risk_multiplier is not None:
+        update_kwargs["risk_multiplier"] = risk_multiplier
+
+    if max_position_pct is not None:
+        update_kwargs["max_position_per_market_pct"] = max_position_pct
+
+    if max_daily_loss_pct is not None:
+        update_kwargs["max_daily_loss_pct"] = max_daily_loss_pct
+
+    if max_drawdown_pct is not None:
+        update_kwargs["max_drawdown_pct"] = max_drawdown_pct
+
+    if max_open_positions is not None:
+        update_kwargs["max_open_positions"] = max_open_positions
+
+    if min_liquidity is not None:
+        update_kwargs["min_liquidity_threshold"] = min_liquidity
+
+    if min_edge_pct is not None:
+        update_kwargs["min_edge_pct"] = min_edge_pct
+
+    if not update_kwargs:
+        console.print("[yellow]Warning:[/yellow] No fields to update")
+        return
+
+    try:
+        registry.update_profile(name, **update_kwargs)
+        console.print(f"[green]✓[/green] Updated profile '{name}'")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@profile_app.command("discover-agents")
+def profile_discover_agents(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Scan OpenClaw workspaces for available agents."""
+    from traderbot.profiles.discovery import discover_agents
+
+    console = Console()
+    agents = discover_agents()
+
+    if not agents:
+        if not json_output:
+            console.print("[yellow]No agents found in .openclaw/workspace[/yellow]")
+        else:
+            print("[]")
+        return
+
+    if json_output:
+        print(json_lib.dumps(agents, indent=2))
+    else:
+        table = Table(title="Discovered Agents")
+        table.add_column("Agent ID", style="cyan")
+        table.add_column("Name", style="magenta")
+        table.add_column("Path", style="yellow")
+
+        for agent in agents:
+            table.add_row(
+                agent["agent_id"],
+                agent["name"],
+                agent["path"],
+            )
+
+        console.print(table)
+
+
+@profile_app.command("set-auth")
+def profile_set_auth(
+    profile_name: str,
+    service: str,
+    key: str,
+) -> None:
+    """Store a credential for a profile (prompts for secret)."""
+    from traderbot.profiles.auth import ProfileAuthStore
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    profile = registry.get_profile(profile_name)
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
+        raise typer.Exit(1)
+
+    secret = typer.prompt("Secret", hide_input=True)
+
+    auth_store = ProfileAuthStore(profile)
+    auth_store.set_credentials(service, key, secret)
+    console.print(f"[green]✓[/green] Stored credentials for '{service}' on profile '{profile_name}'")
+
+
+@profile_app.command("auth")
+def profile_auth(
+    profile_name: str,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Show configured credentials for a profile."""
+    from traderbot.profiles.auth import ProfileAuthStore
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    profile = registry.get_profile(profile_name)
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
+        raise typer.Exit(1)
+
+    auth_store = ProfileAuthStore(profile)
+    services = auth_store.list_services()
+
+    if not services:
+        if not json_output:
+            console.print(f"[yellow]No credentials configured for profile '{profile_name}'[/yellow]")
+        else:
+            print("[]")
+        return
+
+    if json_output:
+        creds_list = []
+        for svc in services:
+            creds = auth_store.get_credentials(svc)
+            if creds:
+                creds_list.append({
+                    "service": svc,
+                    "key": creds[0],
+                })
+        print(json_lib.dumps(creds_list, indent=2))
+    else:
+        table = Table(title=f"Credentials for Profile '{profile_name}'")
+        table.add_column("Service", style="cyan")
+        table.add_column("Key", style="yellow")
+
+        for svc in services:
+            creds = auth_store.get_credentials(svc)
+            if creds:
+                masked_key = creds[0][:8] + "..." if len(creds[0]) > 8 else "***"
+                table.add_row(svc, masked_key)
+
+        console.print(table)
 
 
 def main() -> None:
