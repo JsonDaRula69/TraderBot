@@ -475,20 +475,39 @@ def bootstrap(
     steps["keyring_available"] = keyring_ok
 
     # Step 4: Run auth login flow (interactive — skipped in dry-run/JSON mode)
-    if not dry_run and not json_output and keyring_ok:
+    if not dry_run and not json_output:
+        if not keyring_ok:
+            console.print("\n[yellow]Keyring unavailable (headless Linux?). Credentials will be stored in ~/.traderbot/.env[/yellow]")
+            console.print("[yellow]For secure storage, install and unlock gnome-keyring with a D-Bus session.[/yellow]")
         console.print("\n[bold]Credential Setup[/bold]")
         console.print("Enter your API credentials (press Enter to skip any field):")
         from traderbot.auth import _ALL_SERVICES, KeyringUnavailableError
 
+        env_lines: list[str] = []
         for service_name, keys in _ALL_SERVICES.items():
             for key in keys:
                 value = typer.prompt(f"  {service_name}.{key}", default="", show_default=False)
                 if value:
-                    try:
-                        mgr.set_credential(service_name, key, value)
-                        console.print(f"[green]Stored[/green] {service_name}.{key}")
-                    except KeyringUnavailableError as exc:
-                        console.print(f"[red]Failed:[/red] {exc}")
+                    if keyring_ok:
+                        try:
+                            mgr.set_credential(service_name, key, value)
+                            console.print(f"[green]Stored in keyring:[/green] {service_name}.{key}")
+                        except (KeyringUnavailableError, Exception) as exc:
+                            env_key = f"{service_name.upper()}_{key.upper()}"
+                            env_lines.append(f"{env_key}={value}")
+                            console.print(f"[yellow]Keyring failed ({exc}), saved to .env:[/yellow] {env_key}")
+                    else:
+                        env_key = f"{service_name.upper()}_{key.upper()}"
+                        env_lines.append(f"{env_key}={value}")
+                        console.print(f"[green]Saved to .env:[/green] {env_key}")
+
+        if env_lines:
+            env_path = Path.home() / ".traderbot" / ".env"
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            existing = env_path.read_text() if env_path.exists() else ""
+            new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+            env_path.write_text(new_content)
+            console.print(f"[dim]Credentials written to {env_path}[/dim]")
 
     # Step 5: Create SQLite DB at configured path
     db_path = DB_PATH

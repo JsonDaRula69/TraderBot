@@ -325,25 +325,45 @@ interactive_config_flow() {
     read -r -p "Categories (comma-separated, e.g., politics,sports): " profile_categories
 
     if command -v traderbot &>/dev/null; then
-        traderbot profile create "$profile_name" --mode "$profile_mode" \
-            --categories "$profile_categories" 2>/dev/null || \
-            echo "Profile created manually. Please run: traderbot profile create $profile_name"
+        if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
+            --categories "$profile_categories" 2>&1; then
+            echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories" >&2
+        fi
     else
-        echo "TraderBot not in PATH. Profile creation skipped."
+        local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+        if [[ -x "$tb_bin" ]]; then
+            if ! "$tb_bin" profile create "$profile_name" --mode "$profile_mode" \
+                --categories "$profile_categories" 2>&1; then
+                echo "Warning: profile create failed." >&2
+            fi
+        else
+            echo "TraderBot not in PATH. Profile creation skipped." >&2
+        fi
     fi
 
     echo
     echo "=== Agent Assignment ==="
-    if command -v traderbot &>/dev/null; then
+    local tb_cmd
+    tb_cmd="$(command -v traderbot 2>/dev/null || echo "${INSTALL_DIR}/.venv/bin/traderbot")"
+    if [[ -x "$tb_cmd" ]]; then
         echo "Available agents:"
-        traderbot profile discover-agents 2>/dev/null || echo "  (no agents found)"
+        "$tb_cmd" profile discover-agents 2>&1 || echo "  (no agents found via auto-discovery)"
+    else
+        echo "  (traderbot not found for agent discovery)"
     fi
 
     read -r -p "Agent name to assign: " agent_name
-    if [[ -n "$agent_name" ]] && command -v traderbot &>/dev/null; then
+    if [[ -n "$agent_name" ]] && [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
-        traderbot profile assign "$agent_name" "$profile_name" 2>/dev/null || \
-            echo "Assignment skipped. Token will need to be set manually."
+        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$agent_name" "$profile_name" 2>&1) || {
+            echo "Warning: assign failed. Try: traderbot profile assign $agent_name $profile_name" >&2
+            TOKEN_OUTPUT=""
+        }
+        if [[ -n "$TOKEN_OUTPUT" ]]; then
+            echo "$TOKEN_OUTPUT"
+        fi
+    else
+        echo "Assignment skipped. Token will need to be set manually."
     fi
 
     echo
