@@ -19,6 +19,9 @@ tasks:
 - name: position-health
   interval: 1h
   prompt: "Run `traderbot positions --json` to check open positions. Flag any with drawdown > 5%."
+- name: memory-maintenance
+  interval: 24h
+  prompt: "Review `memory/` daily logs. Curate significant events, decisions, and lessons into `MEMORY.md`. Remove stale entries older than 30 days from daily logs."
 
 ## General Instructions
 

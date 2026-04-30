@@ -258,9 +258,13 @@ def write_promoted_entry(
     learnings_path = directory / "LEARNINGS.md"
 
     entry_text = _format_promoted_entry(candidate, pattern_key=pattern_key)
+    entry_id = f"PROMO-{candidate.learning.id:03d}"
 
     if learnings_path.exists():
         existing = learnings_path.read_text()
+        if f"## Entry: {entry_id}" in existing:
+            logger.info("Entry %s already exists in LEARNINGS.md, skipping duplicate", entry_id)
+            return learnings_path
         if existing.rstrip().endswith("(none yet)"):
             content = existing.replace("(none yet)", "").rstrip() + "\n\n" + entry_text + "\n"
         else:
@@ -309,6 +313,7 @@ def promote_learning(
         return None
 
     promote_pattern(conn, learning_id, 0.1)
+    set_status(conn, learning_id, LearningStatus.PENDING_REVIEW)
 
     updated_learning = get(conn, learning_id)
     if updated_learning is None:
