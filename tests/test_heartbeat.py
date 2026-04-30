@@ -498,6 +498,29 @@ class TestHeartbeatCycle:
         assert not hb_path.exists()
         conn.close()
 
+    def test_update_check_disabled_skips_api_call(self, tmp_path, monkeypatch):
+        """When UpdateConfig.enabled=False, heartbeat skips check_for_updates entirely."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _init_db(conn)
+
+        config_path = tmp_path / "update_config.json"
+        config_path.write_text(json.dumps({"enabled": False, "check_on_startup": True, "check_interval_hours": 6, "auto_apply": False, "include_prerelease": False}))
+        monkeypatch.setattr("traderbot.update_config.CONFIG_PATH", config_path)
+
+        api_called = {"count": 0}
+
+        def mock_fetch(*args, **kwargs):
+            api_called["count"] += 1
+            return None
+
+        monkeypatch.setattr("traderbot.updater.fetch_latest_version", mock_fetch)
+
+        result = run_heartbeat_cycle(conn, dry_run=True)
+        assert "update_check" in result.steps_completed
+        assert api_called["count"] == 0
+        conn.close()
+
     def test_steps_in_correct_order(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

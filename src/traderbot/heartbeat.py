@@ -399,13 +399,16 @@ def run_heartbeat_cycle(
     system_health = step_system_health(conn)
     steps_completed.append("system_health")
 
-    # Step 8: Update check (respects user-configured interval)
+    # Step 8: Update check (respects user-configured interval and enabled flag)
     from traderbot.update_config import UpdateConfig as _UpdateConfig
 
     _update_cfg = _UpdateConfig.load()
-    update_result = check_for_updates(check_interval_hours=_update_cfg.check_interval_hours)
-    if update_result:
-        logger.info("Update available: v%s → v%s", update_result["current"], update_result["latest"])
+    if _update_cfg.enabled:
+        update_result = check_for_updates(check_interval_hours=_update_cfg.check_interval_hours)
+        if update_result:
+            logger.info("Update available: v%s → v%s", update_result["current"], update_result["latest"])
+    else:
+        update_result = None
     steps_completed.append("update_check")
 
     result = HeartbeatResult(
