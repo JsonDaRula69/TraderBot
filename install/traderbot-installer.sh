@@ -175,6 +175,7 @@ install_traderbot() {
     fi
 
     cd "$INSTALL_DIR"
+    echo "Installing Python dependencies into venv..."
     if command -v uv &>/dev/null; then
         uv pip install -e .
     else
@@ -183,7 +184,11 @@ install_traderbot() {
         fi
         source .venv/bin/activate
         python3 -m pip install --upgrade pip --quiet
-        python3 -m pip install -e . --quiet
+        python3 -m pip install -e . --quiet 2>&1 || {
+            echo "Error: pip install failed. Retrying with verbose output..." >&2
+            python3 -m pip install -e . 2>&1 | tail -20
+            exit 1
+        }
     fi
 
     local venv_bin="${INSTALL_DIR}/.venv/bin"
@@ -211,6 +216,10 @@ install_traderbot() {
         echo "TraderBot installed successfully: $("${venv_bin}/traderbot" --version 2>/dev/null || echo 'unknown')"
     else
         echo "Error: traderbot binary not found at ${venv_bin}/traderbot" >&2
+        echo "Contents of ${venv_bin}/:" >&2
+        find "${venv_bin}/" -maxdepth 1 -type f -executable 2>/dev/null | head -20 >&2
+        echo "pip install log:" >&2
+        cat "${INSTALL_DIR}/.venv/pip_install.log" 2>/dev/null || echo "(no log available)" >&2
         exit 1
     fi
 }
