@@ -110,12 +110,28 @@ def check_for_updates(force: bool = False, check_interval_hours: int = 6) -> dic
 
 
 def apply_update(restart: bool = False) -> bool:
-    """Apply update by running git pull + pip install. Returns True on success."""
+    """Apply update by running git pull + pip install. Returns True on success.
+
+    Data preservation: all runtime data lives in ~/.traderbot/ (outside repo) and
+    is never touched by git pull. The repo-local .traderbot/ dir is gitignored.
+    """
     import subprocess
 
     repo_dir = Path(__file__).resolve().parent.parent.parent
 
     try:
+        git_status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+        if git_status.stdout.strip():
+            untracked = [l.strip() for l in git_status.stdout.strip().splitlines() if not l.startswith("??")]
+            if untracked:
+                logger.error("Cannot update: uncommitted changes in working tree. Commit or stash first.")
+                return False
+
         subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, check=True, capture_output=True)
         pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
