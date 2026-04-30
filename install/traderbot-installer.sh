@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-TRADERBOT_REPO="${TRADERBOT_REPO:-TraderBot/TraderBot}"
-TRADERBOT_ORG="${TRADERBOT_ORG:-TraderBot}"
+TRADERBOT_REPO="${TRADERBOT_REPO:-JsonDaRula69/TraderBot}"
+TRADERBOT_ORG="${TRADERBOT_ORG:-JsonDaRula69}"
 INSTALL_DIR="${HOME}/traderbot"
 SUPPORTED_DISTROS="ubuntu|debian|raspbian"
 _CLEANUP_TEMP_DIR=""
