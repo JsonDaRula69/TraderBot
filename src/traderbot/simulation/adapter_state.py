@@ -131,4 +131,4 @@ def resolve_state_path(
         return state_path
     if profile_base_dir is not None:
         return Path(profile_base_dir) / "adaptation_state.json"
-    return Path(".traderbot") / "adaptation_state.json"
+    return Path.home() / ".traderbot" / "adaptation_state.json"

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
 
-_DEFAULT_NEWS_CACHE = Path(".traderbot") / "news_cache"
+_DEFAULT_NEWS_CACHE = Path.home() / ".traderbot" / "news_cache"
 
 
 def get_news_cache_path(profile: TradingProfile | None = None) -> Path:
