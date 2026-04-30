@@ -10,7 +10,7 @@
 	<!-- Command to run: traderbot scan in continuous mode -->
 	<key>ProgramArguments</key>
 	<array>
-		<string>/usr/local/bin/traderbot</string>
+		<string>TRADERBOT_BIN_PATH</string>
 		<string>scan</string>
 		<string>--continuous</string>
 	</array>

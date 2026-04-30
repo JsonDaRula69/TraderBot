@@ -13,6 +13,18 @@ if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
     exit 1
 fi
 
+# Validate AGENT_NAME matches safe pattern (no path traversal or shell metacharacters)
+if [[ ! "$AGENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: AGENT_NAME contains invalid characters. Only alphanumeric, hyphens, and underscores allowed." >&2
+    exit 1
+fi
+
+# Validate PROFILE_TOKEN is alphanumeric (prevents sed injection and shell metacharacter injection)
+if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
+    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric characters allowed." >&2
+    exit 1
+fi
+
 # Create instance-specific service file
 SERVICE_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SERVICE_DIR"

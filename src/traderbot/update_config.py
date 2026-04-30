@@ -1,0 +1,38 @@
+"""Update configuration — persisted to ~/.traderbot/update_config.json."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field
+
+CONFIG_PATH = Path.home() / ".traderbot" / "update_config.json"
+
+
+class UpdateConfig(BaseModel):
+    """Auto-update configuration for TraderBot."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    enabled: bool = Field(default=True, description="Enable auto-update checking")
+    check_on_startup: bool = Field(default=True, description="Check for updates on CLI startup")
+    check_interval_hours: int = Field(default=6, ge=1, le=720, description="Hours between update checks")
+    auto_apply: bool = Field(default=False, description="Automatically apply updates without prompting")
+    include_prerelease: bool = Field(default=False, description="Include pre-release versions in checks")
+
+    @classmethod
+    def load(cls) -> "UpdateConfig":
+        """Load config from disk, or return defaults if not found."""
+        if CONFIG_PATH.exists():
+            try:
+                data = json.loads(CONFIG_PATH.read_text())
+                return cls.model_validate(data)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        return cls()
+
+    def save(self) -> None:
+        """Persist config to disk."""
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(self.model_dump_json(indent=2) + "\n")

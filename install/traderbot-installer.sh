@@ -8,6 +8,16 @@ TRADERBOT_REPO="${TRADERBOT_REPO:-TraderBot/TraderBot}"
 TRADERBOT_ORG="${TRADERBOT_ORG:-TraderBot}"
 INSTALL_DIR="${HOME}/traderbot"
 SUPPORTED_DISTROS="ubuntu|debian|raspbian"
+_CLEANUP_TEMP_DIR=""
+
+cleanup() {
+    if [[ -n "$_CLEANUP_TEMP_DIR" ]] && [[ -d "$_CLEANUP_TEMP_DIR" ]]; then
+        rm -rf "$_CLEANUP_TEMP_DIR"
+    fi
+}
+trap cleanup EXIT
+trap 'echo "Interrupted."; cleanup; exit 130' SIGINT
+trap 'echo "Terminated."; cleanup; exit 143' SIGTERM
 
 usage() {
     cat <<EOF
@@ -52,9 +62,8 @@ install_dependencies_debian() {
     local pkgs=(build-essential python3-dev python3-venv gnome-keyring)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
-        sudo apt update -qq
-        sudo apt install -y -qq "${pkgs[@]}" 2>/dev/null || \
-            sudo apt install -y "${pkgs[@]}"
+        sudo apt update
+        sudo apt install -y "${pkgs[@]}"
     fi
 }
 
@@ -62,10 +71,22 @@ install_dependencies_macos() {
     if ! command -v xcode-select &>/dev/null || [[ ! -d "$(xcode-select -p)" ]]; then
         echo "Installing Xcode CLI tools..."
         xcode-select --install 2>/dev/null || true
-        sleep 5
+        local timeout=30
+        while [[ ! -d "$(xcode-select -p 2>/dev/null)" ]] && [[ $timeout -gt 0 ]]; do
+            sleep 1
+            ((timeout--))
+        done
+        if [[ ! -d "$(xcode-select -p 2>/dev/null)" ]]; then
+            echo "Error: Xcode CLI tools installation timed out after 30 seconds." >&2
+            exit 1
+        fi
     fi
     if ! command -v python3 &>/dev/null; then
         echo "Python3 not found. Please install Python 3.12+ from python.org"
+        exit 1
+    fi
+    if ! python3 -c 'import sys; assert sys.version_info >= (3,12)' 2>/dev/null; then
+        echo "Error: Python 3.12+ required. Found: $(python3 --version)" >&2
         exit 1
     fi
 }
@@ -81,7 +102,10 @@ install_traderbot() {
             exit 1
         fi
         cd "$INSTALL_DIR"
-        git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+        if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
+            echo "Error: git pull failed for both 'main' and 'master' branches." >&2
+            exit 1
+        fi
     else
         if [[ -d "$INSTALL_DIR" ]]; then
             if command -v traderbot &>/dev/null; then
@@ -93,26 +117,34 @@ install_traderbot() {
                     return 0
                 fi
                 cd "$INSTALL_DIR"
-                git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+                if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
+                    echo "Error: git pull failed for both 'main' and 'master' branches." >&2
+                    exit 1
+                fi
             else
                 echo "TraderBot directory exists but not in PATH. Updating..."
                 cd "$INSTALL_DIR"
-                git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+                if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
+                    echo "Error: git pull failed for both 'main' and 'master' branches." >&2
+                    exit 1
+                fi
             fi
         else
             echo "Downloading TraderBot..."
             local temp_dir
             temp_dir="$(mktemp -d)"
-            trap 'rm -rf "$temp_dir"' EXIT
+            _CLEANUP_TEMP_DIR="$temp_dir"
 
-            if curl -sSL "https://github.com/${TRADERBOT_ORG}/TraderBot/archive/refs/heads/main.zip" -o "${temp_dir}/traderbot.zip" \
-                && file "${temp_dir}/traderbot.zip" | grep -q "Zip archive\|HTML"; then
+            local http_code
+            http_code="$(curl -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
+                "https://github.com/${TRADERBOT_ORG}/TraderBot/archive/refs/heads/main.zip")"
+            if [[ "$http_code" != "200" ]] || ! file "${temp_dir}/traderbot.zip" | grep -q "Zip archive"; then
                 rm -f "${temp_dir}/traderbot.zip"
                 echo "Public repo not found, checking for private repo access..."
                 read -r -p "Enter GitHub PAT for private repo (or press Enter to skip): " -s PAT
                 echo
                 if [[ -n "$PAT" ]]; then
-                    curl -sSL -H "Authorization: token $PAT" \
+                    curl -sSL -H "Authorization: Bearer $PAT" \
                         "https://api.github.com/repos/${TRADERBOT_ORG}/TraderBot/zipball/main" \
                         -o "${temp_dir}/traderbot.zip"
                 fi
@@ -140,6 +172,13 @@ install_traderbot() {
     else
         pip install -e . 2>/dev/null || pip install --user -e .
     fi
+
+    if ! command -v traderbot &>/dev/null || ! traderbot --version &>/dev/null; then
+        echo "Error: traderbot installation verification failed." >&2
+        echo "The package installed but 'traderbot --version' returned an error." >&2
+        exit 1
+    fi
+    echo "TraderBot installed successfully: $(traderbot --version 2>/dev/null)"
 }
 
 stop_services() {
@@ -187,9 +226,18 @@ uninstall_services() {
 
 update_services() {
     local os_type="$1"
-    stop_services "$os_type"
-    install_traderbot "" "update"
-    start_services "$os_type"
+    stop_services "$os_type" || {
+        echo "Error: Failed to stop services." >&2
+        exit 1
+    }
+    install_traderbot "" "update" || {
+        echo "Error: Failed to update TraderBot." >&2
+        exit 1
+    }
+    start_services "$os_type" || {
+        echo "Error: Failed to start services." >&2
+        exit 1
+    }
 }
 
 start_services() {
@@ -222,6 +270,10 @@ install_service_for_agent() {
 }
 
 interactive_config_flow() {
+    if [[ ! -t 0 ]]; then
+        echo "Error: interactive config requires a TTY. Run this script in a terminal." >&2
+        exit 1
+    fi
     echo "=== TraderBot Configuration ==="
     echo
     read -p "Create a trading profile? (y/n): " -n 1 -r

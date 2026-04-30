@@ -22,7 +22,7 @@
 
 [Unit]
 Description=TraderBot Agent (%i)
-Documentation=https://github.com/yourusername/traderbot
+Documentation=https://github.com/JsonDaRula69/TraderBot
 After=network.target
 Wants=network-online.target
 
@@ -47,6 +47,7 @@ Environment=PYTHONUNBUFFERED=1
 
 # Command to execute
 # Adjust the path if traderbot is installed elsewhere
+# The installer replaces this path at install time
 ExecStart=/usr/local/bin/traderbot scan --continuous
 
 # Restart policy
@@ -60,12 +61,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=traderbot-agent-%i
 
-# Security hardening (optional, uncomment to enable)
-# NoNewPrivileges=true
-# PrivateTmp=true
-# ProtectSystem=strict
-# ProtectHome=read-only
-# ReadWritePaths=/home/%i/traderbot
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/traderbot
 
 [Install]
 WantedBy=multi-user.target
