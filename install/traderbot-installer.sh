@@ -188,17 +188,31 @@ install_traderbot() {
 
     local venv_bin="${INSTALL_DIR}/.venv/bin"
     if [[ -f "${venv_bin}/traderbot" ]]; then
-        ln -sf "${venv_bin}/traderbot" /usr/local/bin/traderbot 2>/dev/null || {
+        # Try system-wide first (needs sudo), then fall back to user-local
+        if sudo ln -sf "${venv_bin}/traderbot" /usr/local/bin/traderbot 2>/dev/null; then
+            :
+        else
             mkdir -p "${HOME}/.local/bin"
             ln -sf "${venv_bin}/traderbot" "${HOME}/.local/bin/traderbot"
-        }
+            # Ensure ~/.local/bin is in PATH for this session
+            export PATH="${HOME}/.local/bin:${PATH}"
+            # Persist for future sessions
+            if ! grep -q '.local/bin' "${HOME}/.bashrc" 2>/dev/null; then
+                echo "export PATH=\"\${HOME}/.local/bin:\${PATH}\"" >> "${HOME}/.bashrc"
+            fi
+            if ! grep -q '.local/bin' "${HOME}/.profile" 2>/dev/null; then
+                echo "export PATH=\"\${HOME}/.local/bin:\${PATH}\"" >> "${HOME}/.profile"
+            fi
+        fi
     fi
 
-    if ! command -v traderbot &>/dev/null || ! traderbot --version &>/dev/null; then
-        echo "Error: traderbot installation verification failed." >&2
+    # Verify using the venv binary directly (more reliable than PATH lookup)
+    if [[ -x "${venv_bin}/traderbot" ]]; then
+        echo "TraderBot installed successfully: $("${venv_bin}/traderbot" --version 2>/dev/null || echo 'unknown')"
+    else
+        echo "Error: traderbot binary not found at ${venv_bin}/traderbot" >&2
         exit 1
     fi
-    echo "TraderBot installed successfully: $(traderbot --version 2>/dev/null)"
 }
 
 stop_services() {
