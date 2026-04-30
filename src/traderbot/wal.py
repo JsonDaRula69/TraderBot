@@ -313,7 +313,7 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
             logger.warning("WAL entry %s not found for status update", intent_id)
             return False
 
-        new_content = content[: match.start(1)] + f"Status: {status.value}" + content[match.end(1) :]
+        new_content = content[: match.start(1)] + f"Status: {status.value}" + content[match.end() :]
 
         fd.seek(0)
         fd.truncate()
