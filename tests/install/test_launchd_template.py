@@ -84,7 +84,7 @@ def test_template_program_arguments_structure(template_xml: ET.Element) -> None:
             found_key = True
         elif found_key and elem.tag == "array":
             strings = [s.text for s in elem.findall("string")]
-            assert "TRADERBOT_BIN_PATH" in strings, "Should include traderbot binary placeholder"
+            assert "traderbot" in strings[0], f"First arg should be traderbot binary path, got: {strings[0]}"
             assert "scan" in strings, "Should include 'scan' command"
             assert "--continuous" in strings, "Should include '--continuous' flag"
             return
