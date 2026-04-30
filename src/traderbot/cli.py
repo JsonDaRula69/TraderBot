@@ -20,6 +20,24 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
+
+def _version(value: bool) -> None:
+    if value:
+        from traderbot.updater import get_current_version
+        print(f"traderbot v{get_current_version()}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main_callback(
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-v", help="Show version and exit.", callback=_version, is_eager=True),
+    ] = False,
+) -> None:
+    """TraderBot — Autonomous prediction market agent."""
+
+
 auth_app = typer.Typer(
     name="auth",
     help="Manage API credentials via OS keyring.",

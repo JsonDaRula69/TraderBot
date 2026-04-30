@@ -309,8 +309,7 @@ install_service_for_agent() {
 
 interactive_config_flow() {
     if [[ ! -t 0 ]]; then
-        echo "Error: interactive config requires a TTY. Run this script in a terminal." >&2
-        exit 1
+        exec < /dev/tty
     fi
     echo "=== TraderBot Configuration ==="
     echo
