@@ -59,7 +59,7 @@ check_openclaw() {
 }
 
 install_dependencies_debian() {
-    local pkgs=(build-essential python3-dev python3-venv gnome-keyring)
+    local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
