@@ -1,6 +1,6 @@
 # Deployment
 
-This guide covers installing TraderBot on Ubuntu and macOS, setting up profiles, assigning agents, and configuring persistence.
+This guide covers installing TraderBot on Ubuntu (Debian-based Linux), setting up profiles, assigning agents, and configuring persistence.
 
 ## Installer
 
@@ -14,7 +14,7 @@ bash install/traderbot-installer.sh --update      # Pull latest and restart
 
 The installer runs three phases:
 
-1. **OS detection** — detects Ubuntu/Debian, macOS, or unsupported
+1. **OS detection** — detects Ubuntu/Debian or unsupported
 2. **Dependency installation** — platform-specific package setup
 3. **TraderBot install** — downloads from GitHub, installs via pip/uv
 4. **Interactive config** — profile creation, API keys, agent assignment
