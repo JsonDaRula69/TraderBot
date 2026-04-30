@@ -40,6 +40,14 @@ TRADERBOT_BIN="$(command -v traderbot || echo '/usr/local/bin/traderbot')"
 sed -e "s/AGENT_ID/$AGENT_NAME/g" -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" -e "s/USERNAME/$USER_NAME/g" -e "s|TRADERBOT_BIN_PATH|$TRADERBOT_BIN|g" \
     "$TEMPLATE_FILE" > "$PLIST_FILE"
 
+if command -v plutil &>/dev/null; then
+    if ! plutil -lint "$PLIST_FILE" &>/dev/null; then
+        echo "Error: Generated plist file is invalid." >&2
+        rm -f "$PLIST_FILE"
+        exit 1
+    fi
+fi
+
 if launchctl load "$PLIST_FILE" 2>/dev/null; then
     echo "Service installed and loaded for agent: $AGENT_NAME"
 else

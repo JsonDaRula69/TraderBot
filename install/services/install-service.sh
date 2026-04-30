@@ -38,6 +38,12 @@ fi
 # Copy template and replace placeholders
 sed "s/<PROFILE_TOKEN>/$PROFILE_TOKEN/g" "$TEMPLATE_FILE" > "$SERVICE_DIR/traderbot-agent@$AGENT_NAME.service"
 
+if command -v systemd-analyze &>/dev/null; then
+    if ! systemd-analyze verify "$SERVICE_DIR/traderbot-agent@$AGENT_NAME.service" 2>/dev/null; then
+        echo "Warning: systemd-analyze verify reported issues with the service file." >&2
+    fi
+fi
+
 # Enable the service
 if systemctl --user enable "traderbot-agent@$AGENT_NAME.service" 2>/dev/null; then
     systemctl --user start "traderbot-agent@$AGENT_NAME.service"
