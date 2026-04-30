@@ -1,4 +1,4 @@
-"""Tests for the heartbeat cycle — 7-step self-review, adaptation, and health check."""
+"""Tests for the heartbeat cycle — 8-step self-review, adaptation, health, and update check."""
 
 from __future__ import annotations
 
@@ -436,8 +436,9 @@ class TestHeartbeatCycle:
         assert "learning_promotion" in result.steps_completed
         assert "circuit_breaker_check" in result.steps_completed
         assert "system_health" in result.steps_completed
+        assert "update_check" in result.steps_completed
         assert "update_heartbeat_md" in result.steps_completed
-        assert len(result.steps_completed) == 7
+        assert len(result.steps_completed) == 8
         conn.close()
 
     def test_full_cycle_with_decisions(self, tmp_path):
@@ -509,6 +510,7 @@ class TestHeartbeatCycle:
             "learning_promotion",
             "circuit_breaker_check",
             "system_health",
+            "update_check",
             "update_heartbeat_md",
         ]
         assert result.steps_completed == expected_order
@@ -558,7 +560,7 @@ class TestHeartbeatCLI:
         result = runner.invoke(app, ["heartbeat", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data["steps_completed"]) == 7
+        assert len(data["steps_completed"]) == 8
 
 
 # ---------------------------------------------------------------------------

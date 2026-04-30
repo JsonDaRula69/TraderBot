@@ -189,7 +189,7 @@ class TestFullPipelineE2E:
                 dry_run=True,
             )
 
-            # Verify all 7 steps completed
+            # Verify all 8 steps completed
             expected_steps = [
                 "performance_review",
                 "decision_review",
@@ -197,6 +197,7 @@ class TestFullPipelineE2E:
                 "learning_promotion",
                 "circuit_breaker_check",
                 "system_health",
+                "update_check",
                 "update_heartbeat_md",
             ]
             for step in expected_steps:
@@ -948,7 +949,7 @@ class TestBayesianHeartbeatIntegration:
             )
 
             # Verify all steps ran
-            assert len(result.steps_completed) == 7
+            assert len(result.steps_completed) == 8
 
             # Step 4: Verify WAL still has pending entry (dry-run doesn't modify)
             pending = scan_pending(session_file)
