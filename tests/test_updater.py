@@ -209,9 +209,8 @@ class TestCheckForUpdates:
         monkeypatch.setattr("traderbot.updater.CACHE_FILE", cache_file)
         monkeypatch.setattr("traderbot.updater.CACHE_DIR", tmp_path)
 
-        with patch.object(Path, "read_text", return_value="0.08.50\n"):
+        with patch("traderbot.updater.get_current_version", return_value="0.08.50"):
             result = check_for_updates(check_interval_hours=6)
-        # Same version — should return None
         assert result is None
 
     def test_cache_hit_with_newer_version(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,7 +224,7 @@ class TestCheckForUpdates:
         monkeypatch.setattr("traderbot.updater.CACHE_FILE", cache_file)
         monkeypatch.setattr("traderbot.updater.CACHE_DIR", tmp_path)
 
-        with patch.object(Path, "read_text", return_value="0.08.50\n"):
+        with patch("traderbot.updater.get_current_version", return_value="0.08.50"):
             result = check_for_updates(check_interval_hours=6)
         assert result is not None
         assert result["current"] == "0.08.50"
@@ -284,17 +283,16 @@ class TestApplyUpdate:
 
     def test_success_returns_true(self) -> None:
         """apply_update returns True on successful update."""
-        with patch("traderbot.updater.subprocess.run") as mock_run, \
-             patch("traderbot.updater.Path") as mock_path:
-            mock_path.return_value.resolve.return_value.parent.parent.parent = Path("/fake/repo")
+        import subprocess
+
+        with patch("subprocess.run") as mock_run:
             result = apply_update(restart=False)
         assert result is True
 
     def test_failure_returns_false(self) -> None:
         """apply_update returns False on update failure."""
         import subprocess
-        with patch("traderbot.updater.subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")), \
-             patch("traderbot.updater.Path") as mock_path:
-            mock_path.return_value.resolve.return_value.parent.parent.parent = Path("/fake/repo")
+
+        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")):
             result = apply_update(restart=False)
         assert result is False
