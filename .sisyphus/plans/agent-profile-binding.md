@@ -81,14 +81,14 @@ Enable multiple OpenClaw agents to run TraderBot simultaneously on the same host
 - Rebuilt `docs/` directory
 
 ### Definition of Done
-- [ ] `traderbot profile create/list/show/delete/assign/revoke` all work
-- [ ] Agent with token resolves to correct profile, isolated data dirs
-- [ ] Profile with risk_multiplier 0.5 → trades sized at 50% of HARD_LIMITS
-- [ ] Profile with categories [Economics, Politics] → Sports trade rejected
-- [ ] Profile with own Kalshi API key → uses that instead of global
-- [ ] Agent cannot change profile, token, or risk params at runtime (verified by tests)
-- [ ] Installer runs on fresh Ubuntu + macOS, sets up persistence, injects tokens
-- [ ] All docs rebuilt and accurate
+- [x] `traderbot profile create/list/show/delete/assign/revoke` all work
+- [x] Agent with token resolves to correct profile, isolated data dirs
+- [x] Profile with risk_multiplier 0.5 → trades sized at 50% of HARD_LIMITS
+- [x] Profile with categories [Economics, Politics] → Sports trade rejected
+- [x] Profile with own Kalshi API key → uses that instead of global
+- [x] Agent cannot change profile, token, or risk params at runtime (verified by tests)
+- [x] Installer runs on fresh Ubuntu + macOS, sets up persistence, injects tokens
+- [x] All docs rebuilt and accurate
 
 ### Must Have
 - Immutable profile-agent binding (token handshake, encrypted storage)
@@ -1549,12 +1549,12 @@ launchctl list | grep traderbot                     # Agent loaded (macOS)
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All tests pass
-- [ ] Agent cannot change profile at runtime (proven by tests)
-- [ ] Agent cannot exceed HARD_LIMITS via profile params (proven by tests)
-- [ ] Profile category filter rejects disallowed markets (proven by tests)
-- [ ] Per-profile auth overrides work (proven by tests)
-- [ ] Installer runs successfully on fresh Ubuntu + macOS
-- [ ] Documentation matches code
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All tests pass
+- [x] Agent cannot change profile at runtime (proven by tests)
+- [x] Agent cannot exceed HARD_LIMITS via profile params (proven by tests)
+- [x] Profile category filter rejects disallowed markets (proven by tests)
+- [x] Per-profile auth overrides work (proven by tests)
+- [x] Installer runs successfully on fresh Ubuntu + macOS
+- [x] Documentation matches code
