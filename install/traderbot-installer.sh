@@ -59,7 +59,7 @@ check_openclaw() {
 }
 
 install_dependencies_debian() {
-    local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip)
+    local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip curl git file python3-pip)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
@@ -170,7 +170,7 @@ install_traderbot() {
     if command -v uv &>/dev/null; then
         uv pip install -e . 2>/dev/null || uv pip install --user -e .
     else
-        pip install -e . 2>/dev/null || pip install --user -e .
+        python3 -m pip install -e . 2>/dev/null || python3 -m pip install --user -e .
     fi
 
     if ! command -v traderbot &>/dev/null || ! traderbot --version &>/dev/null; then
