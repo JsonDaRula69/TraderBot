@@ -5,27 +5,58 @@ from pathlib import Path
 
 
 def discover_agents(workspace_dir: str = ".openclaw/workspace") -> list[dict[str, str]]:
-    """
-    Scan workspace for agent directories and discover valid agents.
-    
-    Args:
-        workspace_dir: Path to OpenClaw workspace directory
-        
-    Returns:
-        List of dicts with agent_id, name, and path for each valid agent
+    """Scan workspace for agent directories and discover valid agents.
+
+    When workspace_dir is the default, also checks ~/.openclaw/workspace/
+    and ~/traderbot/.openclaw/workspace/. When explicitly provided, only
+    that path is searched.
     """
     agents = []
-    
-    for agent_path in list_agent_dirs(workspace_dir):
-        identity = get_agent_identity(agent_path)
+
+    search_paths = _resolve_search_paths(workspace_dir)
+
+    for path in search_paths:
+        for agent_path in list_agent_dirs(path):
+            identity = get_agent_identity(agent_path)
+            if identity:
+                agents.append({
+                    "agent_id": identity["agent_id"],
+                    "name": identity["name"],
+                    "path": agent_path,
+                })
+
+        identity = get_agent_identity(path)
         if identity:
             agents.append({
                 "agent_id": identity["agent_id"],
                 "name": identity["name"],
-                "path": agent_path,
+                "path": path,
             })
-    
-    return agents
+
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for a in agents:
+        if a["agent_id"] not in seen:
+            seen.add(a["agent_id"])
+            unique.append(a)
+
+    return unique
+
+
+def _resolve_search_paths(workspace_dir: str) -> list[str]:
+    """Resolve workspace search paths in priority order."""
+    from pathlib import Path as P
+
+    explicit = P(workspace_dir)
+    if workspace_dir != ".openclaw/workspace":
+        return [str(explicit)] if explicit.exists() else []
+
+    candidates = [
+        explicit,
+        P.home() / ".openclaw" / "workspace",
+        P.home() / "traderbot" / ".openclaw" / "workspace",
+    ]
+    return [str(p) for p in candidates if p.exists() and p.is_dir()]
 
 
 def get_agent_identity(agent_path: str) -> dict[str, str] | None:

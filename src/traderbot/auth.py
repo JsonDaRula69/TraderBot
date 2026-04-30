@@ -74,6 +74,12 @@ class AuthManager:
                         backend_name,
                     )
                     return False
+                try:
+                    kr.set_password("__traderbot_probe__", "test", "probe")
+                    kr.delete_password("__traderbot_probe__", "test")
+                except Exception:
+                    logger.warning("Keyring write probe failed; falling back to .env")
+                    return False
             return True
         except Exception:
             logger.warning("Keyring not available; falling back to .env")
