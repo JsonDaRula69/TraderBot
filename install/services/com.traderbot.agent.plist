@@ -10,7 +10,7 @@
 	<!-- Command to run: traderbot scan in continuous mode -->
 	<key>ProgramArguments</key>
 	<array>
-		<string>TRADERBOT_BIN_PATH</string>
+		<string>/Users/USERNAME/traderbot/.venv/bin/traderbot</string>
 		<string>scan</string>
 		<string>--continuous</string>
 	</array>

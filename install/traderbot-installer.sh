@@ -168,14 +168,26 @@ install_traderbot() {
 
     cd "$INSTALL_DIR"
     if command -v uv &>/dev/null; then
-        uv pip install -e . 2>/dev/null || uv pip install --user -e .
+        uv pip install -e .
     else
-        python3 -m pip install -e . 2>/dev/null || python3 -m pip install --user -e .
+        if [[ ! -d .venv ]]; then
+            python3 -m venv .venv
+        fi
+        source .venv/bin/activate
+        python3 -m pip install --upgrade pip --quiet
+        python3 -m pip install -e . --quiet
+    fi
+
+    local venv_bin="${INSTALL_DIR}/.venv/bin"
+    if [[ -f "${venv_bin}/traderbot" ]]; then
+        ln -sf "${venv_bin}/traderbot" /usr/local/bin/traderbot 2>/dev/null || {
+            mkdir -p "${HOME}/.local/bin"
+            ln -sf "${venv_bin}/traderbot" "${HOME}/.local/bin/traderbot"
+        }
     fi
 
     if ! command -v traderbot &>/dev/null || ! traderbot --version &>/dev/null; then
         echo "Error: traderbot installation verification failed." >&2
-        echo "The package installed but 'traderbot --version' returned an error." >&2
         exit 1
     fi
     echo "TraderBot installed successfully: $(traderbot --version 2>/dev/null)"

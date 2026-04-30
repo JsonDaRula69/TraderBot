@@ -1,72 +1,46 @@
 # TraderBot Agent Systemd Service Template
 #
-# This is a systemd template unit file for running TraderBot agents as persistent services.
-# The '@' in the filename makes this a template, and '%i' is replaced with the instance name.
+# System-level service that starts at boot (no login required).
+# Uses %i as the instance/username for the agent.
 #
 # USAGE:
-#   1. Copy this file to /etc/systemd/system/
-#   2. Replace <PROFILE_TOKEN> with the actual profile token for the agent
-#   3. Adjust User, WorkingDirectory, and ExecStart paths as needed
-#   4. Enable and start: sudo systemctl enable --now traderbot-agent@<agent-id>.service
+#   install-service.sh <agent_name> <profile_token>
 #
-# EXAMPLE:
-#   For agent "molty":
-#     sudo systemctl enable traderbot-agent@molty.service
-#     sudo systemctl start traderbot-agent@molty.service
-#
-# CUSTOMIZATION POINTS:
-#   - User: Change from %i to a specific user if agents don't have system users
-#   - WorkingDirectory: Adjust to match your installation path
-#   - Environment: Replace <PROFILE_TOKEN> with actual token (installer will do this)
-#   - ExecStart: Adjust path to traderbot binary if installed elsewhere
+# The installer replaces <PROFILE_TOKEN> and adjusts paths.
+# VENV_PATH: /home/%i/traderbot/.venv/bin/traderbot
+# CONFIG_DIR: /home/%i/.traderbot/
 
 [Unit]
 Description=TraderBot Agent (%i)
 Documentation=https://github.com/JsonDaRula69/TraderBot
-After=network.target
+After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-
-# User and group to run the service as
-# %i is replaced with the instance name (agent ID)
-# Change this to a specific user if agents don't have system users
 User=%i
-# Group=%i
-
-# Working directory for the service
-# Adjust this to match your installation path
 WorkingDirectory=/home/%i/traderbot
 
-# Environment variables
-# IMPORTANT: Replace <PROFILE_TOKEN> with the actual profile token
-# The installer script will handle this replacement
 Environment=TRADERBOT_PROFILE_TOKEN=<PROFILE_TOKEN>
 Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
-# Command to execute
-# Adjust the path if traderbot is installed elsewhere
-# The installer replaces this path at install time
-ExecStart=/usr/local/bin/traderbot scan --continuous
+ExecStart=/home/%i/traderbot/.venv/bin/traderbot scan --continuous
 
-# Restart policy
 Restart=on-failure
 RestartSec=10
 StartLimitInterval=300
 StartLimitBurst=5
 
-# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=traderbot-agent-%i
 
-# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/%i/traderbot
+ReadWritePaths=/home/%i/traderbot /home/%i/.traderbot
 
 [Install]
 WantedBy=multi-user.target

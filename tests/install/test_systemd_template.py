@@ -115,7 +115,7 @@ def test_template_has_documentation_comments(template_content: str) -> None:
     assert "#" in template_content, "Template should have comments"
 
     # Check for key documentation
-    comment_keywords = ["USAGE", "CUSTOMIZATION", "EXAMPLE", "%i"]
+    comment_keywords = ["USAGE", "VENV_PATH", "CONFIG_DIR", "%i"]
     found_keywords = sum(1 for keyword in comment_keywords if keyword in template_content)
     assert found_keywords >= 3, f"Template should document key concepts, found {found_keywords}/4"
 
