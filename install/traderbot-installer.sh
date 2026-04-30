@@ -120,11 +120,21 @@ install_traderbot() {
                     exit 1
                 fi
             else
-                echo "Directory exists but traderbot not in PATH. Updating..."
+                echo "Directory exists but traderbot not in PATH. Checking git state..."
                 cd "$INSTALL_DIR"
-                if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
-                    echo "Error: git pull failed." >&2
-                    exit 1
+                if [[ ! -d ".git" ]]; then
+                    echo "Not a git repository — backing up and re-cloning..."
+                    local backup_dir
+                    backup_dir="${INSTALL_DIR}_backup_$(date +%s)"
+                    mv "$INSTALL_DIR" "$backup_dir"
+                    git clone "https://github.com/${TRADERBOT_ORG}/TraderBot.git" "$INSTALL_DIR"
+                else
+                    git checkout -- . 2>/dev/null || true
+                    git clean -fd 2>/dev/null || true
+                    if ! git pull origin main 2>&1 && ! git pull origin master 2>&1; then
+                        echo "Error: git pull failed. Try removing ~/traderbot and re-running the installer." >&2
+                        exit 1
+                    fi
                 fi
             fi
         else
