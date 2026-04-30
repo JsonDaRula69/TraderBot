@@ -91,6 +91,7 @@ def check_for_updates(force: bool = False, check_interval_hours: int = 6) -> dic
             elapsed_hours = (time.time() - cache["ts"]) / 3600
             if elapsed_hours < check_interval_hours:
                 if compare_versions(current, cache["latest"]):
+                    logger.info("Update available: v%s -> v%s", current, cache["latest"])
                     return {"current": current, "latest": cache["latest"], "url": cache.get("url", "")}
                 return None
 
@@ -102,6 +103,7 @@ def check_for_updates(force: bool = False, check_interval_hours: int = 6) -> dic
     _write_cache(latest, url)
 
     if compare_versions(current, latest):
+        logger.info("Update available: v%s -> v%s", current, latest)
         return {"current": current, "latest": latest, "url": url}
 
     return None
@@ -115,12 +117,8 @@ def apply_update(restart: bool = False) -> bool:
 
     try:
         subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", "."],
-            cwd=repo_dir,
-            check=True,
-            capture_output=True,
-        )
+        pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
+        subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
         logger.info("Updated successfully to latest version")
         if restart:
             os.execv(sys.executable, [sys.executable] + sys.argv)
