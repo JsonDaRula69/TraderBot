@@ -285,7 +285,11 @@ class TestApplyUpdate:
         """apply_update returns True on successful update."""
         import subprocess
 
-        with patch("subprocess.run") as mock_run:
+        mock_status = MagicMock()
+        mock_status.stdout = ""
+        mock_status.returncode = 0
+
+        with patch("subprocess.run", return_value=mock_status):
             result = apply_update(restart=False)
         assert result is True
 
@@ -293,6 +297,31 @@ class TestApplyUpdate:
         """apply_update returns False on update failure."""
         import subprocess
 
+        mock_status = MagicMock()
+        mock_status.stdout = ""
+
         with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")):
             result = apply_update(restart=False)
         assert result is False
+
+    def test_uncommitted_changes_returns_false(self) -> None:
+        """apply_update returns False when there are uncommitted changes."""
+        import subprocess
+
+        mock_status = MagicMock()
+        mock_status.stdout = "M src/traderbot/cli.py\n"
+
+        with patch("subprocess.run", return_value=mock_status):
+            result = apply_update(restart=False)
+        assert result is False
+
+    def test_untracked_only_does_not_block(self) -> None:
+        """apply_update proceeds when only untracked files exist (?? prefix)."""
+        import subprocess
+
+        mock_status = MagicMock()
+        mock_status.stdout = "?? newfile.py\n"
+
+        with patch("subprocess.run", return_value=mock_status):
+            result = apply_update(restart=False)
+        assert result is True

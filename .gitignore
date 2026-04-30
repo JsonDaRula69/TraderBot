@@ -33,6 +33,10 @@ Thumbs.db
 *.key
 credentials.json
 
+# TraderBot runtime data (preserved across updates)
+.traderbot/
+.traderbot-*/
+
 # Database
 *.db
 *.sqlite3
