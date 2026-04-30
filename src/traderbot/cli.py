@@ -27,6 +27,9 @@ auth_app = typer.Typer(
 )
 app.add_typer(auth_app, name="auth")
 
+update_app = typer.Typer(name="update", help="Check and apply TraderBot updates.")
+app.add_typer(update_app, name="update")
+
 err_console = Console(stderr=True)
 
 
@@ -1620,6 +1623,68 @@ def auth_check() -> None:
         console.print("Run [bold]traderbot auth login[/bold] to configure.")
 
 
+@update_app.command("check")
+def update_check(
+    force: Annotated[bool, typer.Option("--force", help="Bypass cache and check now")] = False,
+) -> None:
+    """Check if a newer version is available."""
+    from traderbot.update_config import UpdateConfig
+    from traderbot.updater import check_for_updates
+
+    console = Console()
+    config = UpdateConfig.load()
+    if not config.enabled:
+        console.print("[yellow]Update checking is disabled.[/yellow]")
+        return
+
+    result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
+    if result:
+        console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+        console.print(f"[dim]Release: {result['url']}[/dim]")
+        console.print("[dim]Run 'traderbot update apply' to update.[/dim]")
+    else:
+        console.print("[green]Already up to date.[/green]")
+
+
+@update_app.command("apply")
+def update_apply(
+    restart: Annotated[bool, typer.Option("--restart", help="Restart after update")] = False,
+) -> None:
+    """Apply the latest update."""
+    from traderbot.updater import apply_update
+
+    console = Console()
+    if apply_update(restart=restart):
+        console.print("[green]Update applied successfully.[/green]")
+    else:
+        console.print("[red]Update failed. Check logs for details.[/red]")
+
+
+@update_app.command("configure")
+def update_configure(
+    enabled: Annotated[bool | None, typer.Option(help="Enable/disable update checking")] = None,
+    check_on_startup: Annotated[bool | None, typer.Option(help="Check on startup")] = None,
+    check_interval_hours: Annotated[int | None, typer.Option(help="Hours between checks")] = None,
+    auto_apply: Annotated[bool | None, typer.Option(help="Auto-apply updates")] = None,
+) -> None:
+    """Configure auto-update settings."""
+    from traderbot.update_config import UpdateConfig
+
+    console = Console()
+    config = UpdateConfig.load()
+    if enabled is not None:
+        config.enabled = enabled
+    if check_on_startup is not None:
+        config.check_on_startup = check_on_startup
+    if check_interval_hours is not None:
+        config.check_interval_hours = check_interval_hours
+    if auto_apply is not None:
+        config.auto_apply = auto_apply
+    config.save()
+    console.print(f"[green]Update config saved to {UpdateConfig.CONFIG_PATH}[/green]")
+    console.print(config.model_dump_json(indent=2))
+
+
 # Profile management commands
 profile_app = typer.Typer(
     name="profile",
@@ -2114,8 +2179,29 @@ def profile_auth(
         console.print(table)
 
 
+def _check_updates_on_startup() -> None:
+    """Check for updates on startup if configured."""
+    try:
+        from traderbot.update_config import UpdateConfig
+        from traderbot.updater import check_for_updates
+
+        config = UpdateConfig.load()
+        if not config.enabled or not config.check_on_startup:
+            return
+
+        result = check_for_updates(check_interval_hours=config.check_interval_hours)
+        if result:
+            Console().print(
+                f"[dim]Update available: v{result['current']} → v{result['latest']}. "
+                f"Run 'traderbot update apply' to update.[/dim]"
+            )
+    except Exception:
+        pass
+
+
 def main() -> None:
     """Entry point for the traderbot CLI."""
+    _check_updates_on_startup()
     app()
 
 

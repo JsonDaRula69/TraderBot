@@ -12,6 +12,18 @@ if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
     exit 1
 fi
 
+# Validate AGENT_NAME matches safe pattern (prevents path traversal in plist filename)
+if [[ ! "$AGENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: AGENT_NAME contains invalid characters. Only alphanumeric, hyphens, and underscores allowed." >&2
+    exit 1
+fi
+
+# Validate PROFILE_TOKEN is alphanumeric (prevents sed injection into plist)
+if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
+    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric characters allowed." >&2
+    exit 1
+fi
+
 PLIST_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$PLIST_DIR"
 
@@ -24,7 +36,8 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
 fi
 
 USER_NAME="$(whoami)"
-sed -e "s/AGENT_ID/$AGENT_NAME/g" -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" -e "s/USERNAME/$USER_NAME/g" \
+TRADERBOT_BIN="$(command -v traderbot || echo '/usr/local/bin/traderbot')"
+sed -e "s/AGENT_ID/$AGENT_NAME/g" -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" -e "s/USERNAME/$USER_NAME/g" -e "s|TRADERBOT_BIN_PATH|$TRADERBOT_BIN|g" \
     "$TEMPLATE_FILE" > "$PLIST_FILE"
 
 if launchctl load "$PLIST_FILE" 2>/dev/null; then

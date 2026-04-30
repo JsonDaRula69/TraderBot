@@ -16,6 +16,7 @@ from traderbot.learning import (
     scan_for_promotions,
 )
 from traderbot.risk.circuit_breaker import CircuitBreaker
+from traderbot.updater import check_for_updates
 from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
@@ -397,6 +398,12 @@ def run_heartbeat_cycle(
     # Step 6: System health
     system_health = step_system_health(conn)
     steps_completed.append("system_health")
+
+    # Step 8: Update check
+    update_result = check_for_updates(check_interval_hours=6)
+    if update_result:
+        logger.info("Update available: v%s → v%s", update_result["current"], update_result["latest"])
+    steps_completed.append("update_check")
 
     result = HeartbeatResult(
         timestamp=now,
