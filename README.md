@@ -46,7 +46,7 @@ traderbot/
 │   └── cli.py               # CLI entry point
 ├── install/
 │   ├── traderbot-installer.sh  # OS detection, deps, config flow
-│   └── services/              # Systemd + launchd templates
+│   └── services/              # Systemd templates
 ├── skills/traderbot/
 │   └── SKILL.md             # OpenClaw skill definition
 ├── .openclaw/workspace/     # Agent workspace files
@@ -74,7 +74,7 @@ traderbot/
 | [docs/product-roadmap.md](docs/product-roadmap.md) | Implementation phases, dependencies, future expansion |
 | [docs/research.md](docs/research.md) | External references, existing projects, ecosystem analysis |
 | [docs/profiles.md](docs/profiles.md) | Profile system architecture, TradingProfile model, registry, token handshake |
-| [docs/deployment.md](docs/deployment.md) | Ubuntu + macOS installation, persistence setup, profile-agent flow |
+| [docs/deployment.md](docs/deployment.md) | Ubuntu (Debian-based Linux) installation, persistence setup, profile-agent flow |
 | [docs/security.md](docs/security.md) | Threat model, token handshake security, keyring encryption, enforcement layers |
 | [docs/api.md](docs/api.md) | CLI command reference including profile commands |
 

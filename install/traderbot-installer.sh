@@ -1,5 +1,5 @@
 #!/bin/bash
-# TraderBot Installer — Linux (systemd) only
+# TraderBot Installer — Linux (systemd) and macOS (launchd)
 set -euo pipefail
 
 TRADERBOT_REPO="${TRADERBOT_REPO:-JsonDaRula69/TraderBot}"
@@ -21,11 +21,11 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-TraderBot Installer - installs and configures TraderBot agents as systemd services
+TraderBot Installer - installs and configures TraderBot agents
 
 OPTIONS:
     --uninstall     Uninstall all TraderBot services and remove service files
-    --update        Pull latest from GitHub and restart services
+    --update       Pull latest from GitHub and restart services
     --help          Show this help message
 
 EXAMPLES:
@@ -36,7 +36,9 @@ EOF
 }
 
 detect_os() {
-    if [[ "$OSTYPE" == linux-gnu* ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
+        echo "macos"
+    elif [[ "$OSTYPE" == linux-gnu* ]]; then
         if grep -qE "$SUPPORTED_DISTROS" /etc/os-release 2>/dev/null || grep -qE "$SUPPORTED_DISTROS" /etc/debian_version 2>/dev/null; then
             echo "linux-debian"
         else
@@ -60,6 +62,30 @@ install_dependencies_debian() {
         echo "Installing dependencies with apt..."
         sudo apt update
         sudo apt install -y "${pkgs[@]}"
+    fi
+}
+
+install_dependencies_macos() {
+    if ! command -v xcode-select &>/dev/null || [[ ! -d "$(xcode-select -p)" ]]; then
+        echo "Installing Xcode CLI tools..."
+        xcode-select --install 2>/dev/null || true
+        local timeout=30
+        while [[ ! -d "$(xcode-select -p 2>/dev/null)" ]] && [[ $timeout -gt 0 ]]; do
+            sleep 1
+            ((timeout--))
+        done
+        if [[ ! -d "$(xcode-select -p 2>/dev/null)" ]]; then
+            echo "Error: Xcode CLI tools installation timed out." >&2
+            exit 1
+        fi
+    fi
+    if ! command -v python3 &>/dev/null; then
+        echo "Error: Python3 not found. Install Python 3.12+ from python.org or Homebrew." >&2
+        exit 1
+    fi
+    if ! python3 -c 'import sys; assert sys.version_info >= (3,12)' 2>/dev/null; then
+        echo "Error: Python 3.12+ required. Found: $(python3 --version)" >&2
+        exit 1
     fi
 }
 
@@ -90,14 +116,14 @@ install_traderbot() {
                 fi
                 cd "$INSTALL_DIR"
                 if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
-                    echo "Error: git pull failed for both 'main' and 'master' branches." >&2
+                    echo "Error: git pull failed." >&2
                     exit 1
                 fi
             else
-                echo "TraderBot directory exists but not in PATH. Updating..."
+                echo "Directory exists but traderbot not in PATH. Updating..."
                 cd "$INSTALL_DIR"
                 if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
-                    echo "Error: git pull failed for both 'main' and 'master' branches." >&2
+                    echo "Error: git pull failed." >&2
                     exit 1
                 fi
             fi
@@ -166,29 +192,49 @@ install_traderbot() {
 }
 
 stop_services() {
-    sudo systemctl list-units --type=service --state=running 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
-        sudo systemctl stop "$unit" 2>/dev/null || true
-    done
+    local os_type="$1"
+    if [[ "$os_type" == "macos" ]]; then
+        sudo launchctl list 2>/dev/null | grep 'com.traderbot.agent' | awk '{print $1}' | while read -r label; do
+            sudo launchctl unload "/Library/LaunchDaemons/${label}.plist" 2>/dev/null || true
+        done
+    else
+        sudo systemctl list-units --type=service --state=running 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
+            sudo systemctl stop "$unit" 2>/dev/null || true
+        done
+    fi
 }
 
 uninstall_services() {
-    local service_dir="/etc/systemd/system"
-    if [[ -d "$service_dir" ]]; then
-        find "$service_dir" -maxdepth 1 -name 'traderbot-agent@*.service' 2>/dev/null | while read -r service; do
-            local unit
-            unit="$(basename "$service")"
-            sudo systemctl stop "$unit" 2>/dev/null || true
-            sudo systemctl disable "$unit" 2>/dev/null || true
-            sudo rm -f "$service"
-            echo "Removed: $service"
-        done
-        sudo systemctl daemon-reload 2>/dev/null || true
+    local os_type="$1"
+    if [[ "$os_type" == "macos" ]]; then
+        local daemon_dir="/Library/LaunchDaemons"
+        if [[ -d "$daemon_dir" ]]; then
+            find "$daemon_dir" -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
+                sudo launchctl unload "$plist" 2>/dev/null || true
+                sudo rm -f "$plist"
+                echo "Removed: $plist"
+            done
+        fi
+    else
+        local service_dir="/etc/systemd/system"
+        if [[ -d "$service_dir" ]]; then
+            find "$service_dir" -maxdepth 1 -name 'traderbot-agent@*.service' 2>/dev/null | while read -r service; do
+                local unit
+                unit="$(basename "$service")"
+                sudo systemctl stop "$unit" 2>/dev/null || true
+                sudo systemctl disable "$unit" 2>/dev/null || true
+                sudo rm -f "$service"
+                echo "Removed: $service"
+            done
+            sudo systemctl daemon-reload 2>/dev/null || true
+        fi
     fi
     echo "Services uninstalled. Data preserved at $INSTALL_DIR and ~/.traderbot/"
 }
 
 update_services() {
-    stop_services || {
+    local os_type="$1"
+    stop_services "$os_type" || {
         echo "Error: Failed to stop services." >&2
         exit 1
     }
@@ -196,24 +242,36 @@ update_services() {
         echo "Error: Failed to update TraderBot." >&2
         exit 1
     }
-    start_services || {
+    start_services "$os_type" || {
         echo "Error: Failed to start services." >&2
         exit 1
     }
 }
 
 start_services() {
-    sudo systemctl list-units --type=service 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
-        sudo systemctl start "$unit" 2>/dev/null || true
-    done
+    local os_type="$1"
+    if [[ "$os_type" == "macos" ]]; then
+        find /Library/LaunchDaemons -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
+            sudo launchctl load "$plist" 2>/dev/null || true
+        done
+    else
+        sudo systemctl list-units --type=service 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
+            sudo systemctl start "$unit" 2>/dev/null || true
+        done
+    fi
 }
 
 install_service_for_agent() {
     local agent_name="$1"
     local profile_token="$2"
+    local os_type="$3"
     local script_dir
     script_dir="$(cd "$(dirname "$0")" && pwd)"
-    bash "${script_dir}/services/install-service.sh" "$agent_name" "$profile_token"
+    if [[ "$os_type" == "macos" ]]; then
+        bash "${script_dir}/services/install-launchd.sh" "$agent_name" "$profile_token"
+    else
+        bash "${script_dir}/services/install-service.sh" "$agent_name" "$profile_token"
+    fi
 }
 
 interactive_config_flow() {
@@ -273,13 +331,15 @@ main() {
     if [[ $# -gt 0 ]]; then
         case "$1" in
             --uninstall)
+                OS_TYPE="$(detect_os)"
                 echo "Uninstalling TraderBot services..."
-                uninstall_services
+                uninstall_services "$OS_TYPE"
                 exit 0
                 ;;
             --update)
+                OS_TYPE="$(detect_os)"
                 echo "Updating TraderBot..."
-                update_services
+                update_services "$OS_TYPE"
                 exit 0
                 ;;
             --help|-h)
@@ -294,7 +354,7 @@ main() {
     echo "Detected: $OS_TYPE"
 
     if [[ "$OS_TYPE" == "unsupported" ]]; then
-        echo "Error: Unsupported OS. TraderBot requires a Debian-based Linux system (Ubuntu/Debian/Raspbian)." >&2
+        echo "Error: Unsupported OS. TraderBot requires macOS or Debian-based Linux (Ubuntu/Debian/Raspbian)." >&2
         exit 1
     fi
 
@@ -307,6 +367,9 @@ main() {
 
     echo "Installing dependencies..."
     case "$OS_TYPE" in
+        macos)
+            install_dependencies_macos
+            ;;
         linux-debian)
             install_dependencies_debian
             ;;
@@ -323,8 +386,12 @@ main() {
 
     echo
     echo "Installation complete!"
-    echo "To assign agents and start systemd services, run:"
-    echo "  bash $(dirname "$0")/services/install-service.sh <agent_name> <profile_token>"
+    echo "To assign agents and start services, run:"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        echo "  bash $(dirname "$0")/services/install-launchd.sh <agent_name> <profile_token>"
+    else
+        echo "  bash $(dirname "$0")/services/install-service.sh <agent_name> <profile_token>"
+    fi
 }
 
 main "$@"

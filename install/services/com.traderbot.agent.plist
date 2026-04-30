@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Label: unique identifier for this agent instance (AGENT_ID replaced by installer) -->
+	<key>Label</key>
+	<string>com.traderbot.agent.AGENT_ID</string>
+
+	<!-- ProgramArguments: venv binary path, scan command, continuous mode flag -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/USERNAME/traderbot/.venv/bin/traderbot</string>
+		<string>scan</string>
+		<string>--continuous</string>
+	</array>
+
+	<!-- EnvironmentVariables: TOKEN_PLACEHOLDER replaced by installer -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>TRADERBOT_PROFILE_TOKEN</key>
+		<string>TOKEN_PLACEHOLDER</string>
+	</dict>
+
+	<!-- WorkingDirectory: USERNAME replaced by installer -->
+	<key>WorkingDirectory</key>
+	<string>/Users/USERNAME/traderbot</string>
+
+	<!-- UserName: runs as this user (boot-time LaunchDaemon) -->
+	<key>UserName</key>
+	<string>USERNAME</string>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<!-- StandardOutPath / StandardErrorPath: AGENT_ID replaced by installer -->
+	<key>StandardOutPath</key>
+	<string>/Users/USERNAME/Library/Logs/traderbot-AGENT_ID.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/USERNAME/Library/Logs/traderbot-AGENT_ID-error.log</string>
+
+	<key>ProcessType</key>
+	<string>Background</string>
+
+	<key>Nice</key>
+	<integer>1</integer>
+</dict>
+</plist>
