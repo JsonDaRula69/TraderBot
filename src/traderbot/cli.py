@@ -1903,6 +1903,30 @@ def profile_delete(
         console.print("[yellow]Note:[/yellow] Data directories were also deleted")
 
 
+def _resolve_agent_path(agent_id: str) -> Path | None:
+    """Resolve agent workspace path using OpenClaw multi-agent layout.
+
+    Search order:
+    1. ~/.openclaw/workspace-<agentId>/ (OpenClaw per-agent workspace)
+    2. ~/.openclaw/workspace/<agentId>/ (subdirectory layout)
+    3. ~/.openclaw/agents/<agentId>/ (agent state directory)
+    4. .openclaw/workspace/<agentId>/ (project-local, legacy)
+    """
+    from pathlib import Path as P
+
+    candidates = [
+        P.home() / ".openclaw" / f"workspace-{agent_id}",
+        P.home() / ".openclaw" / "workspace" / agent_id,
+        P.home() / ".openclaw" / "agents" / agent_id,
+        P.cwd() / ".openclaw" / "workspace" / agent_id,
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            if (candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists():
+                return candidate
+    return None
+
+
 @profile_app.command("assign")
 def profile_assign(
     profile_name: str,
@@ -1932,9 +1956,9 @@ def profile_assign(
 
         # Inject token into agent's TOOLS.md
         try:
-            agent_path = Path(".openclaw") / "workspace" / agent_id
-            if not agent_path.exists():
-                console.print(f"[yellow]Warning:[/yellow] Agent directory not found at {agent_path}")
+            agent_path = _resolve_agent_path(agent_id)
+            if not agent_path or not agent_path.exists():
+                console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
                 inject_token(str(agent_path), token)
@@ -1979,8 +2003,8 @@ def profile_revoke(
     # Remove token from agent's TOOLS.md
     if agent_id:
         try:
-            agent_path = Path(".openclaw") / "workspace" / agent_id
-            if agent_path.exists():
+            agent_path = _resolve_agent_path(agent_id)
+            if agent_path and agent_path.exists():
                 remove_token_from_tools(str(agent_path))
                 console.print(f"[green]✓[/green] Token removed from {agent_id}/TOOLS.md")
         except Exception as e:
