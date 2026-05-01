@@ -382,22 +382,32 @@ interactive_config_flow() {
 
     echo
     echo "=== Agent Assignment ==="
-    echo "If OpenClaw is installed, agents are discovered from ~/.openclaw/"
-    echo "Run 'openclaw agents add <name>' to create an agent workspace first."
+    echo "TraderBot profiles bind to OpenClaw agents."
+    echo "Each agent must have a workspace created via: openclaw agents add <name>"
     echo
-    local tb_cmd
-    tb_cmd="$(command -v traderbot 2>/dev/null || echo "${INSTALL_DIR}/.venv/bin/traderbot")"
-    if [[ -x "$tb_cmd" ]]; then
-        echo "Discovered agents:"
-        "$tb_cmd" profile discover-agents 2>&1 || echo "  (none found)"
+
+    if command -v openclaw &>/dev/null; then
+        echo "Available agents (via openclaw agents list --bindings):"
+        openclaw agents list --bindings 2>&1 || echo "  (run 'openclaw agents add <name>' to create one)"
+    elif command -v traderbot &>/dev/null; then
+        echo "Available agents:"
+        traderbot profile discover-agents 2>&1 || echo "  (none found)"
     else
-        echo "  (traderbot not found)"
+        local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+        if [[ -x "$tb_bin" ]]; then
+            echo "Available agents:"
+            "$tb_bin" profile discover-agents 2>&1 || echo "  (none found)"
+        else
+            echo "  (traderbot not found for agent discovery)"
+        fi
     fi
 
     echo
     read -r -p "Agent name to assign (or press Enter to skip): " agent_name
     if [[ -z "$agent_name" ]]; then
-        echo "Skipping agent assignment. Run 'traderbot profile assign <agent> <profile>' later."
+        echo "Skipping agent assignment. Run later:"
+        echo "  openclaw agents add $profile_name"
+        echo "  traderbot profile assign $agent_name $profile_name"
         return 0
     fi
 

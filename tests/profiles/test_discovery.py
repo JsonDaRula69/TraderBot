@@ -182,14 +182,27 @@ def test_discover_from_config(openclaw_home, monkeypatch):
     config_path.write_text(json.dumps({
         "agents": {
             "list": [
-                {"id": "work", "name": "Work Agent", "workspace": "~/workspaces/work"},
-                {"id": "personal", "name": "Personal Agent", "workspace": "~/workspaces/personal"},
+                {"id": "work", "name": "Work Agent", "workspace": "~/workspaces/work", "agentDir": str(openclaw_home / "agents" / "work")},
+                {"id": "personal", "name": "Personal Agent", "workspace": "~/workspaces/personal", "agentDir": str(openclaw_home / "agents" / "personal")},
             ]
         }
     }))
 
     monkeypatch.setattr("traderbot.profiles.discovery._get_openclaw_dir", lambda: openclaw_home)
     monkeypatch.setattr("traderbot.profiles.discovery._get_openclaw_config", lambda: config_path)
+
+    # Create actual agentDir directories with IDENTITY.md
+    import pathlib as P
+    work_dir = openclaw_home / "agents" / "work"
+    work_dir.mkdir(parents=True)
+    (work_dir / "IDENTITY.md").write_text(
+        "# Agent Identity\n- **Agent ID**: work\n- **Name**: Work Agent\n"
+    )
+    personal_dir = openclaw_home / "agents" / "personal"
+    personal_dir.mkdir(parents=True)
+    (personal_dir / "IDENTITY.md").write_text(
+        "# Agent Identity\n- **Agent ID**: personal\n- **Name**: Personal Agent\n"
+    )
 
     results = _discover_from_config()
     assert len(results) == 2
