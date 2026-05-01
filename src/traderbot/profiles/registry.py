@@ -46,8 +46,8 @@ def _derive_or_create_key() -> bytes:
 
     key_file = Path.home() / ".traderbot" / ".profile_key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
-    key_file.chmod(0o600)
     if key_file.exists():
+        key_file.chmod(0o600)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
     key = os.urandom(32)
     key_file.write_text(base64.urlsafe_b64encode(key).decode())
