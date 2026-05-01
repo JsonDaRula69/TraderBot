@@ -381,17 +381,26 @@ interactive_config_flow() {
 
     echo
     echo "=== Agent Assignment ==="
+    echo "If OpenClaw is installed, agents are discovered from ~/.openclaw/"
+    echo "Run 'openclaw agents add <name>' to create an agent workspace first."
+    echo
     local tb_cmd
     tb_cmd="$(command -v traderbot 2>/dev/null || echo "${INSTALL_DIR}/.venv/bin/traderbot")"
     if [[ -x "$tb_cmd" ]]; then
-        echo "Available agents:"
-        "$tb_cmd" profile discover-agents 2>&1 || echo "  (no agents found via auto-discovery)"
+        echo "Discovered agents:"
+        "$tb_cmd" profile discover-agents 2>&1 || echo "  (none found)"
     else
-        echo "  (traderbot not found for agent discovery)"
+        echo "  (traderbot not found)"
     fi
 
-    read -r -p "Agent name to assign: " agent_name
-    if [[ -n "$agent_name" ]] && [[ -x "$tb_cmd" ]]; then
+    echo
+    read -r -p "Agent name to assign (or press Enter to skip): " agent_name
+    if [[ -z "$agent_name" ]]; then
+        echo "Skipping agent assignment. Run 'traderbot profile assign <agent> <profile>' later."
+        return 0
+    fi
+
+    if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         TOKEN_OUTPUT=$("$tb_cmd" profile assign "$agent_name" "$profile_name" 2>&1) || {
             echo "Warning: assign failed. Try: traderbot profile assign $agent_name $profile_name" >&2
@@ -399,9 +408,15 @@ interactive_config_flow() {
         }
         if [[ -n "$TOKEN_OUTPUT" ]]; then
             echo "$TOKEN_OUTPUT"
+            echo
+            echo "Set this environment variable for the agent:"
+            TOKEN_VALUE=$(echo "$TOKEN_OUTPUT" | grep -oP 'Token: \K\S+' || echo "")
+            if [[ -n "$TOKEN_VALUE" ]]; then
+                echo "  export TRADERBOT_PROFILE_TOKEN=$TOKEN_VALUE"
+            fi
         fi
     else
-        echo "Assignment skipped. Token will need to be set manually."
+        echo "Assignment skipped. TraderBot not found."
     fi
 
     echo
