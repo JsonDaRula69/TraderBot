@@ -325,7 +325,12 @@ interactive_config_flow() {
         return 0
     fi
 
-    read -r -p "Profile name: " profile_name
+    while [[ -z "$profile_name" ]]; do
+        read -r -p "Profile name: " profile_name
+        if [[ -z "$profile_name" ]]; then
+            echo "Profile name cannot be empty."
+        fi
+    done
 
     echo "Select trading mode:"
     echo "  1) paper  (recommended — no real money at risk)"
