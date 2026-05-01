@@ -128,12 +128,16 @@ def test_list_agent_dirs_nonexistent():
     assert result == []
 
 
-def test_discover_agents_empty_workspace(workspace_dir):
+def test_discover_agents_empty_workspace(workspace_dir, monkeypatch):
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_config", lambda: [])
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_agent_dirs", lambda: [])
     result = discover_agents(str(workspace_dir))
     assert result == []
 
 
-def test_discover_agents_single_valid(agent_with_identity, workspace_dir):
+def test_discover_agents_single_valid(agent_with_identity, workspace_dir, monkeypatch):
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_config", lambda: [])
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_agent_dirs", lambda: [])
     result = discover_agents(str(workspace_dir))
     assert len(result) == 1
     assert result[0]["agent_id"] == "molty"
@@ -141,7 +145,9 @@ def test_discover_agents_single_valid(agent_with_identity, workspace_dir):
     assert "molty" in result[0]["path"]
 
 
-def test_discover_agents_multi_workspace(multi_agent_workspace):
+def test_discover_agents_multi_workspace(multi_agent_workspace, monkeypatch):
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_config", lambda: [])
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_agent_dirs", lambda: [])
     result = discover_agents(str(multi_agent_workspace))
     assert len(result) == 2
     agent_ids = [a["agent_id"] for a in result]
@@ -164,7 +170,9 @@ def test_discover_agents_filters_invalid(multi_agent_workspace):
     assert "empty" not in agent_ids
 
 
-def test_discover_agents_nonexistent_workspace():
+def test_discover_agents_nonexistent_workspace(monkeypatch):
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_config", lambda: [])
+    monkeypatch.setattr("traderbot.profiles.discovery._discover_from_agent_dirs", lambda: [])
     result = discover_agents("/nonexistent/workspace")
     assert result == []
 
