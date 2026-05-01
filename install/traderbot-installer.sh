@@ -326,8 +326,36 @@ interactive_config_flow() {
     fi
 
     read -r -p "Profile name: " profile_name
-    read -r -p "Mode (paper/live): " profile_mode
-    read -r -p "Categories (comma-separated, e.g., politics,sports): " profile_categories
+
+    echo "Select trading mode:"
+    echo "  1) paper  (recommended — no real money at risk)"
+    echo "  2) live   (real money — use with caution)"
+    read -r -p "Choice [1]: " mode_choice
+    case "$mode_choice" in
+        2) profile_mode="live" ;;
+        *) profile_mode="paper" ;;
+    esac
+
+    echo "Select market categories (enter numbers, space-separated):"
+    echo "  1) Politics"
+    echo "  2) Economics"
+    echo "  3) Sports"
+    echo "  4) Crypto"
+    echo "  5) Science/Tech"
+    echo "  6) Weather"
+    echo "  7) Culture"
+    echo "  8) All categories"
+    read -r -p "Choice [8]: " cat_choice
+    case "$cat_choice" in
+        1) profile_categories="politics" ;;
+        2) profile_categories="economics" ;;
+        3) profile_categories="sports" ;;
+        4) profile_categories="crypto" ;;
+        5) profile_categories="science" ;;
+        6) profile_categories="weather" ;;
+        7) profile_categories="culture" ;;
+        *) profile_categories="politics,economics,sports,crypto,science,weather,culture" ;;
+    esac
 
     if command -v traderbot &>/dev/null; then
         if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
