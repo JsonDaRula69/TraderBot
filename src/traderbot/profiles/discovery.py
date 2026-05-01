@@ -67,14 +67,29 @@ def _discover_from_config() -> list[dict[str, str]]:
         agent_id = agent_conf.get("id", "")
         if not agent_id:
             continue
-        workspace = agent_conf.get("workspace", "")
-        if workspace:
-            workspace = str(Path(workspace).expanduser())
+
+        # Resolve agent dir (contains IDENTITY.md/TOOLS.md)
+        agent_dir = agent_conf.get("agentDir", "")
+        if not agent_dir:
+            # Fallback: use workspace or default
+            workspace = agent_conf.get("workspace", "")
+            if workspace:
+                agent_dir = str(Path(workspace).expanduser())
+            else:
+                agent_dir = str(_get_openclaw_dir() / f"workspace-{agent_id}")
+
+        agent_dir_path = Path(agent_dir).expanduser()
+        if not (agent_dir_path.exists() and agent_dir_path.is_dir()):
+            continue
+
+        if not ((agent_dir_path / "IDENTITY.md").exists() or (agent_dir_path / "TOOLS.md").exists()):
+            continue
+
         name = agent_conf.get("name", agent_id)
         results.append({
             "agent_id": agent_id,
             "name": name,
-            "path": workspace or str(_get_openclaw_dir() / "workspace"),
+            "path": str(agent_dir_path),
         })
 
     return results
