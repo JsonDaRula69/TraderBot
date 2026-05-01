@@ -325,6 +325,7 @@ interactive_config_flow() {
         return 0
     fi
 
+    local profile_name=""
     while [[ -z "$profile_name" ]]; do
         read -r -p "Profile name: " profile_name
         if [[ -z "$profile_name" ]]; then
