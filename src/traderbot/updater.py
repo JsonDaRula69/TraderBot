@@ -120,6 +120,10 @@ def apply_update(restart: bool = False) -> bool:
     repo_dir = Path(__file__).resolve().parent.parent.parent
 
     try:
+        if not (repo_dir / ".git").exists():
+            logger.error("Cannot update: not a git repository (installed via ZIP?). Reinstall with: curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh")
+            return False
+
         git_status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_dir,

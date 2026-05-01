@@ -139,38 +139,43 @@ install_traderbot() {
             fi
         else
             echo "Downloading TraderBot..."
-            local temp_dir
-            temp_dir="$(mktemp -d)"
-            _CLEANUP_TEMP_DIR="$temp_dir"
+            if ! git clone "https://github.com/${TRADERBOT_ORG}/TraderBot.git" "$INSTALL_DIR" 2>&1; then
+                echo "git clone failed, trying ZIP fallback..."
+                local temp_dir
+                temp_dir="$(mktemp -d)"
+                _CLEANUP_TEMP_DIR="$temp_dir"
 
-            local http_code
-            http_code="$(curl -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
-                "https://github.com/${TRADERBOT_ORG}/TraderBot/archive/refs/heads/main.zip")"
-            if [[ "$http_code" != "200" ]] || ! file "${temp_dir}/traderbot.zip" | grep -q "Zip archive"; then
-                rm -f "${temp_dir}/traderbot.zip"
-                echo "Public repo not found, checking for private repo access..."
-                read -r -p "Enter GitHub PAT for private repo (or press Enter to skip): " -s PAT
-                echo
-                if [[ -n "$PAT" ]]; then
-                    curl -sSL -H "Authorization: Bearer $PAT" \
-                        "https://api.github.com/repos/${TRADERBOT_ORG}/TraderBot/zipball/main" \
-                        -o "${temp_dir}/traderbot.zip"
+                local http_code
+                http_code="$(curl -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
+                    "https://github.com/${TRADERBOT_ORG}/TraderBot/archive/refs/heads/main.zip")"
+                if [[ "$http_code" != "200" ]] || ! file "${temp_dir}/traderbot.zip" | grep -q "Zip archive"; then
+                    rm -f "${temp_dir}/traderbot.zip"
+                    echo "Public repo not found, checking for private repo access..."
+                    read -r -p "Enter GitHub PAT for private repo (or press Enter to skip): " -s PAT
+                    echo
+                    if [[ -n "$PAT" ]]; then
+                        curl -sSL -H "Authorization: Bearer $PAT" \
+                            "https://api.github.com/repos/${TRADERBOT_ORG}/TraderBot/zipball/main" \
+                            -o "${temp_dir}/traderbot.zip"
+                    fi
                 fi
-            fi
 
-            if [[ ! -f "${temp_dir}/traderbot.zip" ]]; then
-                echo "Error: Failed to download TraderBot" >&2
-                exit 1
-            fi
+                if [[ ! -f "${temp_dir}/traderbot.zip" ]]; then
+                    echo "Error: Failed to download TraderBot" >&2
+                    exit 1
+                fi
 
-            unzip -q "${temp_dir}/traderbot.zip" -d "${temp_dir}"
-            local extracted_dir
-            extracted_dir="$(find "${temp_dir}" -mindepth 1 -maxdepth 1 -type d -name 'TraderBot-*' | head -1)"
-            if [[ -z "$extracted_dir" ]]; then
-                echo "Error: Failed to extract TraderBot archive" >&2
-                exit 1
+                unzip -q "${temp_dir}/traderbot.zip" -d "${temp_dir}"
+                local extracted_dir
+                extracted_dir="$(find "${temp_dir}" -mindepth 1 -maxdepth 1 -type d -name 'TraderBot-*' | head -1)"
+                if [[ -z "$extracted_dir" ]]; then
+                    echo "Error: Failed to extract TraderBot archive" >&2
+                    exit 1
+                fi
+                mv "$extracted_dir" "$INSTALL_DIR"
+                echo "Warning: Installed via ZIP (no .git). Auto-update will not work." >&2
+                echo "To enable updates, run: cd ~/traderbot && git init && git remote add origin https://github.com/${TRADERBOT_ORG}/TraderBot.git && git fetch && git checkout main" >&2
             fi
-            mv "$extracted_dir" "$INSTALL_DIR"
         fi
     fi
 
