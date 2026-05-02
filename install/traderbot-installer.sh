@@ -411,6 +411,7 @@ interactive_config_flow() {
         return 0
     fi
 
+    local tb_cmd="${venv_bin}/traderbot"
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         TOKEN_OUTPUT=$("$tb_cmd" profile assign "$agent_name" "$profile_name" 2>&1) || {
