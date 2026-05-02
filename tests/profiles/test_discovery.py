@@ -182,8 +182,8 @@ def test_discover_from_config(openclaw_home, monkeypatch):
     config_path.write_text(json.dumps({
         "agents": {
             "list": [
-                {"id": "work", "name": "Work Agent", "workspace": str(openclaw_home / "workspace-work")},
-                {"id": "personal", "name": "Personal Agent", "workspace": str(openclaw_home / "workspace-personal")},
+                {"id": "work", "name": "Work Agent", "workspace": str(openclaw_home / "workspace")},
+                {"id": "personal", "name": "Personal Agent", "workspace": str(openclaw_home / "workspace")},
             ]
         }
     }))
@@ -191,16 +191,16 @@ def test_discover_from_config(openclaw_home, monkeypatch):
     monkeypatch.setattr("traderbot.profiles.discovery._get_openclaw_dir", lambda: openclaw_home)
     monkeypatch.setattr("traderbot.profiles.discovery._get_openclaw_config", lambda: config_path)
 
-    # Create actual workspace directories with IDENTITY.md (per OpenClaw: workspace contains identity files)
+    # Create per-agent subdirs in workspace (OpenClaw layout: workspace has subdirs per agent)
     import pathlib as P
-    work_ws = openclaw_home / "workspace-work"
-    work_ws.mkdir(parents=True)
-    (work_ws / "IDENTITY.md").write_text(
+    work_subdir = openclaw_home / "workspace" / "work"
+    work_subdir.mkdir(parents=True)
+    (work_subdir / "IDENTITY.md").write_text(
         "# Agent Identity\n- **Agent ID**: work\n- **Name**: Work Agent\n"
     )
-    personal_ws = openclaw_home / "workspace-personal"
-    personal_ws.mkdir(parents=True)
-    (personal_ws / "IDENTITY.md").write_text(
+    personal_subdir = openclaw_home / "workspace" / "personal"
+    personal_subdir.mkdir(parents=True)
+    (personal_subdir / "IDENTITY.md").write_text(
         "# Agent Identity\n- **Agent ID**: personal\n- **Name**: Personal Agent\n"
     )
 

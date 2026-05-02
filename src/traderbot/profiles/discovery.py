@@ -68,22 +68,40 @@ def _discover_from_config() -> list[dict[str, str]]:
         if not agent_id:
             continue
 
-        # Workspace contains IDENTITY.md/TOOLS.md (per OpenClaw config: agents.list[].workspace)
+        # Workspace contains per-agent subdirs (e.g., workspace/sports/)
         workspace = agent_conf.get("workspace", "")
-        if not workspace:
+        if workspace:
+            workspace = str(Path(workspace).expanduser())
+        else:
             workspace = str(_get_openclaw_dir() / f"workspace-{agent_id}")
 
-        workspace_path = Path(workspace).expanduser()
+        workspace_path = Path(workspace)
         if not (workspace_path.exists() and workspace_path.is_dir()):
             continue
-        if not ((workspace_path / "IDENTITY.md").exists() or (workspace_path / "TOOLS.md").exists()):
+
+        # Find first subdir with identity files, or workspace root itself
+        found = None
+
+        # Check workspace root first
+        if (workspace_path / "IDENTITY.md").exists() or (workspace_path / "TOOLS.md").exists():
+            found = workspace_path
+        else:
+            # Scan subdirs for one that matches this agent_id or has identity files
+            for subdir in sorted(workspace_path.iterdir()):
+                if not subdir.is_dir():
+                    continue
+                if (subdir / "IDENTITY.md").exists() or (subdir / "TOOLS.md").exists():
+                    found = subdir
+                    break
+
+        if found is None:
             continue
 
         name = agent_conf.get("name", agent_id)
         results.append({
             "agent_id": agent_id,
             "name": name,
-            "path": str(workspace_path),
+            "path": str(found),
         })
 
     return results
