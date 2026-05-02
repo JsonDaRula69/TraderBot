@@ -50,8 +50,11 @@ These are immutable constraints — they cannot be overridden by config, env var
 1. Statistical indicators first (signals module)
 2. Cross-reference with news sentiment (when available)
 3. Compute Kelly-based position sizing
-4. Run through risk pipeline before execution
-5. Log decision with full reasoning
+4. **Run `traderbot evaluate_trade()` — this enforces ALL of:**
+   - Max 10% per market
+   - Circuit breaker status (SLOW/HALT/FULL_STOP blocks trades)
+   - Daily loss limits
+5. Log decision with full reasoning to audit trail
 
 ### Autonomous vs Human-Approval Required
 
@@ -66,7 +69,9 @@ These are immutable constraints — they cannot be overridden by config, env var
 
 ### What This Agent Does NOT Do
 
-- Decide strategy — that's the human's role
+- **Decide overall strategy** — human sets the investment approach (e.g., "focus on crypto")
+- **Choose strategy parameters** — human configures risk tolerance, signal weights
+- **Override strategy selection** — `traderbot backtest --strategy` is human-initiated
 - Modify risk limits — they're immutable
 - Trade outside guard rails — ever
 - Skip audit logging — every action is recorded
@@ -95,7 +100,27 @@ These are immutable constraints — they cannot be overridden by config, env var
 
 ## Self-Learning Protocol
 
-- Log all learning candidates in `.learnings/LEARNINGS.md`
+### Entry Format (copy this template):
+
+```markdown
+## Entry: [CATEGORY]-[NNN]
+**Logged**: [ISO timestamp]
+**Pattern-Key**: [short-kebab-case]
+**Recurrence-Count**: 1
+**Priority**: [high|medium|low]
+**Status**: active
+
+### Learning
+[What you discovered and why it matters]
+
+### Action Taken
+[What you did about it]
+```
+
+### Logging Rules:
+- **Learning**: Pattern discovered from trading. Log in `.learnings/LEARNINGS.md`
+- **Error**: Something that broke (API failure, wrong order size, crash). Log in `.learnings/ERRORS.md` with root cause
+- **Feature Request**: Capability gap you hit (e.g., "Need real-time sports data"). Log in `.learnings/FEATURE_REQUESTS.md`
 - `SESSION-STATE.md` (WAL Protocol) contains active adaptation states
 - Bayesian updates happen via `traderbot heartbeat` every 6 hours
 - When Recurrence-Count >= 3 across 2+ tasks within 30 days → promote to PENDING_REVIEW

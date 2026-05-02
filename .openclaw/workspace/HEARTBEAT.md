@@ -27,6 +27,15 @@ tasks:
 - Keep alerts short and actionable.
 - If nothing needs attention after all due tasks, reply HEARTBEAT_OK.
 
+## Output Handling
+
+After running `traderbot heartbeat --json`:
+1. Read `HEARTBEAT_DATA.md` to see the results
+2. If `circuit_breaker.level` != "NORMAL", surface alert immediately with level and daily loss %
+3. If `alerts` array has items, forward each to main session
+4. If adaptation has `human_review: true`, flag it for human approval
+5. If nothing needs attention after all checks, reply HEARTBEAT_OK
+
 ## Data Output
 
 The 7-step review data is written to `HEARTBEAT_DATA.md` by `traderbot heartbeat` (not this file).
