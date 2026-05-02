@@ -143,3 +143,4 @@ A dedicated `STRATEGY.md` document is coming — it will detail each strategy's 
 - Bayesian adaptation has a 4-update/day cooldown — don't expect updates every heartbeat
 - Backtest `--strategy` flag accepts: `momentum`, `contrarian`, etc. (see `src/traderbot/simulation/strategies/`)
 - `traderbot profile discover-agents` scans OpenClaw workspace to map agents ↔ profiles
+- Portfolio is divided equally across enabled markets (not max 10% per market)

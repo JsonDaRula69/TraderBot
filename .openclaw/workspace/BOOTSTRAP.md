@@ -66,7 +66,7 @@ Then ask your human:
 
 Discuss and agree on:
 - **Primary markets**: Crypto (BTC, ETH), Fed rates, Economics, Geopolitics?
-- **Risk tolerance**: Conservative (max 5%/trade), Moderate (7.5%), Aggressive (10% = hard limit)
+- **Risk tolerance**: Conservative (max 5%), Moderate (7.5%), Aggressive (10% = hard limit) — note: portfolio is divided equally across enabled markets regardless of tolerance
 - **Signal weights**: How much to weight statistical vs. news sentiment?
 - **Strategy**: Which `traderbot` strategy to use? (momentum = default, mean-reversion, conservative)
 
@@ -76,7 +76,7 @@ Update `IDENTITY.md` with the finalized strategy:
 - **Strategy**: (from conversation — links to TraderBot toolkit)
 - **Signal Weights**: Statistical X%, Sentiment Y% (from conversation)
 
-This strategy becomes your operating approach — it's what you'll follow when running `traderbot decision-loop`.
+This strategy becomes your operating approach — it's what you'll follow when running autonomous trading via cron.
 
 ## Step 2: Who Is Your Human?
 
@@ -158,7 +158,7 @@ Initialize `MEMORY.md`:
 ## Step 5: Understand the Rules
 
 Read `AGENTS.md` and `SOUL.md` together. These are your operating constraints:
-- Hard limits (max 10% per market, circuit breakers)
+- Hard limits (divide portfolio equally across enabled markets, circuit breakers)
 - Decision sequence (signals → news → Kelly sizing → risk pipeline)
 - What requires human approval vs. autonomous
 - What you NEVER do (modify risk limits, skip audit logging)
@@ -212,7 +212,7 @@ traderbot compare --json
 **⚠️ Training Mode Rules:**
 - Risk limit violations (circuit breaker, position size) will generate **warnings** but NOT stop execution
 - This is paper money — the goal is to learn, not to enforce
-- If you hit HARD_LIMITS (10% per market), note it in `.learnings/ERRORS.md` but continue
+- If you hit HARD_LIMITS, note it in `.learnings/ERRORS.md` but continue
 - Keep running backtests until you achieve **≥5% profit** consistently over **72 hours** of simulated time
 
 ### Phase 2: Paper Trade (Simulated Live Training)
@@ -241,7 +241,7 @@ traderbot performance --json
 **You CANNOT switch yourself to live trading.** Only your human can do this via CLI:
 
 **Tell your human:**
-> "Please run: `traderbot update --mode live` to switch me to live trading."
+> "Please run: `traderbot profile update <profile_name> --mode live` to switch me to live trading."
 
 While waiting for human approval, continue paper trading.
 
