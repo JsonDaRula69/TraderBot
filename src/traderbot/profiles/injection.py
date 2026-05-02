@@ -25,7 +25,7 @@ def propagate_workspace_files(agent_path: Path, workspace_template: Path) -> Non
     for filename in core_files:
         src = workspace_template / filename
         dst = agent_path / filename
-        if src.exists() and not dst.exists():
+        if src.exists():
             shutil.copy2(src, dst)
 
     src_learnings = workspace_template / ".learnings"
@@ -38,9 +38,8 @@ def propagate_workspace_files(agent_path: Path, workspace_template: Path) -> Non
                 if filepath.is_file():
                     rel_path = filepath.relative_to(src_learnings)
                     dst_file = dst_learnings / rel_path
-                    if not dst_file.exists():
-                        dst_file.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(filepath, dst_file)
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(filepath, dst_file)
 
 
 def inject_token(agent_path: str, token: str) -> None:
