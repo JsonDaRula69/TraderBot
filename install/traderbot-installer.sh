@@ -89,6 +89,19 @@ install_dependencies_macos() {
     fi
 }
 
+install_uv() {
+    if command -v uv &>/dev/null; then
+        return 0
+    fi
+    echo "Installing uv (Python package manager)..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Ensure uv is available in current session
+    export PATH="$HOME/.local/bin:$PATH"
+    if ! command -v uv &>/dev/null; then
+        echo "Warning: uv installed but not found in PATH. You may need to restart your shell." >&2
+    fi
+}
+
 install_traderbot() {
     local install_type="${1:-install}"
     local update_mode="${2:-false}"
@@ -182,7 +195,10 @@ install_traderbot() {
 
     cd "$INSTALL_DIR"
     echo "Installing Python dependencies into venv..."
-    if command -v uv &>/dev/null || true; then
+    
+    install_uv
+    
+    if command -v uv &>/dev/null; then
         uv pip install -e .
     else
         if [[ ! -d .venv ]]; then
