@@ -1,4 +1,4 @@
-"""OpenClaw agent auto-discovery from IDENTITY.md files."""
+"""OpenClaw agent discovery from openclaw.json config."""
 
 import json
 import re
@@ -17,13 +17,7 @@ def _get_openclaw_config() -> Path:
 
 
 def discover_agents(workspace_dir: str = ".openclaw/workspace") -> list[dict[str, str]]:
-    """Scan OpenClaw multi-agent layout and workspace directories for agents.
-
-    Search order:
-    1. ~/.openclaw/openclaw.json agents.list (authoritative multi-agent config)
-    2. ~/.openclaw/agents/<agentId>/ workspace directories
-    3. Workspace directories (default, CWD, ~/traderbot)
-    """
+    """Discover agents from openclaw.json, agent dirs, and workspaces."""
     agents = []
     seen: set[str] = set()
 
@@ -56,9 +50,12 @@ def _discover_from_config() -> list[dict[str, str]]:
     except (json.JSONDecodeError, OSError):
         return []
 
-    agent_list = _get_nested(config, ["agents", "list"]) or []
+    agents_section = config.get("agents", {})
+    agent_list = agents_section.get("list", [])
     if not isinstance(agent_list, list):
         return []
+
+    default_workspace = agents_section.get("defaults", {}).get("workspace", "")
 
     results = []
     for agent_conf in agent_list:
@@ -68,41 +65,16 @@ def _discover_from_config() -> list[dict[str, str]]:
         if not agent_id:
             continue
 
-        # Workspace contains per-agent subdirs (e.g., workspace/sports/)
-        workspace = agent_conf.get("workspace", "")
-        if workspace:
-            workspace = str(Path(workspace).expanduser())
-        else:
-            workspace = str(_get_openclaw_dir() / f"workspace-{agent_id}")
-
-        workspace_path = Path(workspace)
-        if not (workspace_path.exists() and workspace_path.is_dir()):
+        workspace = agent_conf.get("workspace") or default_workspace
+        if not workspace:
             continue
 
-        # Find first subdir with identity files, or workspace root itself
-        found = None
-
-        # Check workspace root first
-        if (workspace_path / "IDENTITY.md").exists() or (workspace_path / "TOOLS.md").exists():
-            found = workspace_path
-        else:
-            # Scan subdirs for one that matches this agent_id or has identity files
-            for subdir in sorted(workspace_path.iterdir()):
-                if not subdir.is_dir():
-                    continue
-                if (subdir / "IDENTITY.md").exists() or (subdir / "TOOLS.md").exists():
-                    found = subdir
-                    break
-
-        if found is None:
+        workspace = str(Path(workspace).expanduser())
+        if not Path(workspace).exists():
             continue
 
         name = agent_conf.get("name", agent_id)
-        results.append({
-            "agent_id": agent_id,
-            "name": name,
-            "path": str(found),
-        })
+        results.append({"agent_id": agent_id, "name": name, "path": workspace})
 
     return results
 
@@ -156,28 +128,16 @@ def _discover_from_workspaces(workspace_dir: str) -> list[dict[str, str]]:
 
 def _resolve_search_paths(workspace_dir: str) -> list[str]:
     """Resolve workspace search paths in priority order."""
-    from pathlib import Path as P
-
-    explicit = P(workspace_dir)
+    explicit = Path(workspace_dir)
     if workspace_dir != ".openclaw/workspace":
         return [str(explicit)] if explicit.exists() else []
 
     candidates = [
         explicit,
-        P.home() / ".openclaw" / "workspace",
-        P.home() / "traderbot" / ".openclaw" / "workspace",
+        Path.home() / ".openclaw" / "workspace",
+        Path.home() / "traderbot" / ".openclaw" / "workspace",
     ]
     return [str(p) for p in candidates if p.exists() and p.is_dir()]
-
-
-def _get_nested(data: dict, keys: list[str]) -> object:
-    """Get a nested value from a dict by a list of keys."""
-    current = data
-    for key in keys:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(key)
-    return current
 
 
 def get_agent_identity(agent_path: str) -> dict[str, str] | None:
