@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import os
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _KEYRING_SERVICE_PREFIX = "traderbot.tokens."
+_TOKENS_FILE = Path.home() / ".traderbot" / "tokens.enc"
 
 # Global keyring instance (can be overridden for testing)
 _keyring_instance: Any | None = None
@@ -29,6 +33,66 @@ def set_keyring(keyring_module: Any) -> None:
     _keyring_instance = keyring_module
 
 
+def _keyring_available() -> bool:
+    try:
+        kr = _get_keyring()
+        if hasattr(kr, "get_keyring"):
+            backend = kr.get_keyring()
+            backend_name = type(backend).__name__
+            if "Fail" in backend_name or "Null" in backend_name:
+                return False
+        kr.set_password("__traderbot_probe__", "test", "probe")
+        kr.delete_password("__traderbot_probe__", "test")
+        return True
+    except Exception:
+        return False
+
+
+def _derive_or_create_key() -> bytes:
+    key_file = Path.home() / ".traderbot" / ".token_key"
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    if key_file.exists():
+        key_file.chmod(0o600)
+        return base64.urlsafe_b64decode(key_file.read_text().strip())
+    key = os.urandom(32)
+    key_file.write_text(base64.urlsafe_b64encode(key).decode())
+    key_file.chmod(0o600)
+    return key
+
+
+def _encrypt_data(data: str, key: bytes) -> bytes:
+    from cryptography.fernet import Fernet
+    fernet_key = base64.urlsafe_b64encode(key)
+    return Fernet(fernet_key).encrypt(data.encode())
+
+
+def _decrypt_data(data: bytes, key: bytes) -> str:
+    from cryptography.fernet import Fernet
+    fernet_key = base64.urlsafe_b64encode(key)
+    return Fernet(fernet_key).decrypt(data).decode()
+
+
+def _load_tokens_file() -> list[dict]:
+    if not _TOKENS_FILE.exists():
+        return []
+    try:
+        key = _derive_or_create_key()
+        encrypted = _TOKENS_FILE.read_bytes()
+        decrypted = _decrypt_data(encrypted, key)
+        return json.loads(decrypted)
+    except Exception as e:
+        logger.warning("Failed to load tokens file: %s", e)
+        return []
+
+
+def _save_tokens_file(tokens: list[dict]) -> None:
+    _TOKENS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    key = _derive_or_create_key()
+    encrypted = _encrypt_data(json.dumps(tokens), key)
+    _TOKENS_FILE.write_bytes(encrypted)
+    _TOKENS_FILE.chmod(0o600)
+
+
 def generate_token() -> str:
     """Generate 12-char opaque token with ~72 bits entropy.
     
@@ -39,118 +103,95 @@ def generate_token() -> str:
 
 
 def assign_token(profile_name: str, agent_id: str, token: str) -> None:
-    """Store token→profile mapping in keyring.
-    
-    Args:
-        profile_name: Name of the trading profile
-        agent_id: Unique identifier for the agent
-        token: Token string to assign
-        
-    Raises:
-        ValueError: If profile already has a token assigned (one-to-one mapping)
-    """
     # Check if profile already has a token
     existing_token = get_profile_token(profile_name)
     if existing_token is not None:
         raise ValueError(f"Profile '{profile_name}' already has a token assigned")
     
-    kr = _get_keyring()
-    service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-    
-    # Store as JSON with profile, agent, and timestamp
     data = {
+        "token": token,
         "profile": profile_name,
         "agent": agent_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    kr.set_password(service, "token", json.dumps(data))
+    
+    if _keyring_available():
+        kr = _get_keyring()
+        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
+        kr.set_password(service, "token", json.dumps(data))
+    else:
+        tokens = _load_tokens_file()
+        tokens.append(data)
+        _save_tokens_file(tokens)
+    
     logger.info("Assigned token to profile '%s' for agent '%s'", profile_name, agent_id)
 
 
 def resolve_token(token: str) -> tuple[str, str] | None:
-    """Return (profile_name, agent_id) or None if invalid/revoked.
-    
-    Args:
-        token: Token string to resolve
-        
-    Returns:
-        Tuple of (profile_name, agent_id) if valid, None otherwise
-    """
-    kr = _get_keyring()
-    service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-    
-    try:
-        data_json = kr.get_password(service, "token")
-        if data_json is None:
+    if _keyring_available():
+        kr = _get_keyring()
+        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
+        try:
+            data_json = kr.get_password(service, "token")
+            if data_json is None:
+                return None
+            data = json.loads(data_json)
+            return (data["profile"], data["agent"])
+        except Exception as e:
+            logger.debug("Failed to resolve token from keyring: %s", e)
             return None
-        
-        data = json.loads(data_json)
-        return (data["profile"], data["agent"])
-    except Exception as e:
-        logger.debug("Failed to resolve token: %s", e)
+    else:
+        tokens = _load_tokens_file()
+        for entry in tokens:
+            if entry["token"] == token:
+                return (entry["profile"], entry["agent"])
         return None
 
 
 def revoke_token(token: str) -> None:
-    """Delete token from keyring.
-    
-    Args:
-        token: Token string to revoke
-    """
-    kr = _get_keyring()
-    service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-    
-    try:
-        kr.delete_password(service, "token")
+    if _keyring_available():
+        kr = _get_keyring()
+        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
+        try:
+            kr.delete_password(service, "token")
+            logger.info("Revoked token: %s", token)
+        except Exception as e:
+            logger.debug("Failed to revoke token (may not exist): %s", e)
+    else:
+        tokens = _load_tokens_file()
+        tokens = [t for t in tokens if t["token"] != token]
+        _save_tokens_file(tokens)
         logger.info("Revoked token: %s", token)
-    except Exception as e:
-        logger.debug("Failed to revoke token (may not exist): %s", e)
 
 
 def list_assignments() -> list[dict[str, str]]:
-    """Return all token assignments.
-    
-    Returns:
-        List of dicts with keys: token, profile, agent, created_at
-    """
-    kr = _get_keyring()
-    assignments: list[dict[str, str]] = []
-    
-    # For mock keyring, iterate the store directly
-    if hasattr(kr, "_store"):
-        for (service, username) in kr._store.keys():
-            if service.startswith(_KEYRING_SERVICE_PREFIX) and username == "token":
-                token = service[len(_KEYRING_SERVICE_PREFIX):]
-                try:
-                    data_json = kr.get_password(service, "token")
-                    if data_json:
-                        data = json.loads(data_json)
-                        assignments.append({
-                            "token": token,
-                            "profile": data["profile"],
-                            "agent": data["agent"],
-                            "created_at": data["created_at"],
-                        })
-                except Exception as e:
-                    logger.warning("Failed to parse token data for %s: %s", token, e)
+    if _keyring_available():
+        kr = _get_keyring()
+        assignments: list[dict[str, str]] = []
+        if hasattr(kr, "_store"):
+            for (service, username) in kr._store.keys():
+                if service.startswith(_KEYRING_SERVICE_PREFIX) and username == "token":
+                    token = service[len(_KEYRING_SERVICE_PREFIX):]
+                    try:
+                        data_json = kr.get_password(service, "token")
+                        if data_json:
+                            data = json.loads(data_json)
+                            assignments.append({
+                                "token": token,
+                                "profile": data["profile"],
+                                "agent": data["agent"],
+                                "created_at": data["created_at"],
+                            })
+                    except Exception as e:
+                        logger.warning("Failed to parse token data for %s: %s", token, e)
+        else:
+            logger.warning("list_assignments() not fully supported with real keyring backend")
+        return assignments
     else:
-        # Real keyring case - we'd need an index similar to ProfileRegistry
-        # For now, this is a limitation of the real keyring backend
-        logger.warning("list_assignments() not fully supported with real keyring backend")
-    
-    return assignments
+        return _load_tokens_file()
 
 
 def get_profile_token(profile_name: str) -> str | None:
-    """Get token assigned to profile (one-to-one mapping).
-    
-    Args:
-        profile_name: Name of the trading profile
-        
-    Returns:
-        Token string if found, None otherwise
-    """
-    # Iterate all assignments to find the one for this profile
     assignments = list_assignments()
     for assignment in assignments:
         if assignment["profile"] == profile_name:
