@@ -437,8 +437,11 @@ interactive_config_flow() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
+        echo "DEBUG: Running: $tb_cmd profile assign $agent_name $profile_name" >&2
         TOKEN_OUTPUT=$("$tb_cmd" profile assign "$agent_name" "$profile_name" 2>&1) || {
-            echo "Warning: assign failed. Try: traderbot profile assign $agent_name $profile_name" >&2
+            echo "Error: assign failed with output:" >&2
+            echo "$TOKEN_OUTPUT" >&2
+            echo "Try manually: $tb_cmd profile assign $agent_name $profile_name" >&2
             TOKEN_OUTPUT=""
         }
         if [[ -n "$TOKEN_OUTPUT" ]]; then
