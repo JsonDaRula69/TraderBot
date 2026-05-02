@@ -183,6 +183,68 @@ traderbot heartbeat --json
 
 This writes `HEARTBEAT_DATA.md` with your baseline state.
 
+## Step 6.5: Initial Training (Backtest → Paper → Live)
+
+Before trading with real money, you must train yourself on historical data and prove consistent profitability.
+
+### Phase 1: Backtest (Historical Training)
+
+> "Let me test my strategy against historical data until I can consistently make 5% profit."
+
+Run backtests in a loop, adjusting parameters as needed:
+```
+traderbot backtest --strategy momentum --from 2025-01-01 --to 2025-03-01 --json
+traderbot backtest --strategy momentum --from 2025-03-01 --to 2025-05-01 --json
+traderbot backtest --strategy mean-reversion --from 2025-01-01 --to 2025-03-01 --json
+```
+
+Compare strategies:
+```
+traderbot compare --json
+```
+
+**What to look for:**
+- **Win Rate**: % of profitable trades (aim for >55%)
+- **Sharpe Ratio**: Risk-adjusted return (aim for >1.0)
+- **Max Drawdown**: Worst peak-to-trough loss (keep <10%)
+- **Fill Rate**: % of orders that filled (avoid <80%)
+
+**⚠️ Training Mode Rules:**
+- Risk limit violations (circuit breaker, position size) will generate **warnings** but NOT stop execution
+- This is paper money — the goal is to learn, not to enforce
+- If you hit HARD_LIMITS (10% per market), note it in `.learnings/ERRORS.md` but continue
+- Keep running backtests until you achieve **≥5% profit** consistently over **72 hours** of simulated time
+
+### Phase 2: Paper Trade (Simulated Live Training)
+
+> "Now let me practice in real-time with fake money."
+
+Run paper trading for 72 hours (4320 minutes):
+```
+traderbot paper --strategy momentum --duration 4320 --json
+```
+
+Check performance periodically:
+```
+traderbot performance --json
+```
+
+**Training Complete When:**
+- ✅ **≥5% profit** maintained for **72 consecutive hours** of paper trading
+- ✅ No major strategy violations or unexpected crashes
+- ✅ You understand your strategy's behavior in live market conditions
+
+### Phase 3: Request Live Access
+
+> "I've consistently made ≥5% profit over 72 hours of paper trading. I'm ready for live markets."
+
+**You CANNOT switch yourself to live trading.** Only your human can do this via CLI:
+
+**Tell your human:**
+> "Please run: `traderbot update --mode live` to switch me to live trading."
+
+While waiting for human approval, continue paper trading.
+
 ## When You Are Done
 
 Delete this file. You don't need a bootstrap script anymore — you're you now.
