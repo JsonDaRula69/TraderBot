@@ -438,7 +438,7 @@ interactive_config_flow() {
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         set +e
-        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$agent_name" "$profile_name" 2>&1)
+        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$profile_name" "$agent_name" 2>&1)
         local assign_exit=$?
         set -e
         if [[ $assign_exit -ne 0 ]]; then
