@@ -325,12 +325,11 @@ install_service_for_agent() {
     local agent_name="$1"
     local profile_token="$2"
     local os_type="$3"
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local script_dir="${INSTALL_DIR}"
     if [[ "$os_type" == "macos" ]]; then
-        bash "${script_dir}/services/install-launchd.sh" "$agent_name" "$profile_token"
+        bash "${script_dir}/install/services/install-launchd.sh" "$agent_name" "$profile_token"
     else
-        bash "${script_dir}/services/install-service.sh" "$agent_name" "$profile_token"
+        bash "${script_dir}/install/services/install-service.sh" "$agent_name" "$profile_token"
     fi
 }
 
