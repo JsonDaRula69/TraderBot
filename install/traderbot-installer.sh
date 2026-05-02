@@ -50,7 +50,7 @@ detect_os() {
 }
 
 check_openclaw() {
-    if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
+    if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null || true; then
         return 0
     fi
     return 1
@@ -58,7 +58,7 @@ check_openclaw() {
 
 install_dependencies_debian() {
     local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip curl git file python3-pip)
-    if command -v apt &>/dev/null; then
+    if command -v apt &>/dev/null || true; then
         echo "Installing dependencies with apt..."
         sudo apt update
         sudo apt install -y "${pkgs[@]}"
@@ -66,7 +66,7 @@ install_dependencies_debian() {
 }
 
 install_dependencies_macos() {
-    if ! command -v xcode-select &>/dev/null || [[ ! -d "$(xcode-select -p)" ]]; then
+    if ! command -v xcode-select &>/dev/null || [[ ! -d "$(xcode-select -p 2>/dev/null)" ]]; then
         echo "Installing Xcode CLI tools..."
         xcode-select --install 2>/dev/null || true
         local timeout=30
@@ -79,7 +79,7 @@ install_dependencies_macos() {
             exit 1
         fi
     fi
-    if ! command -v python3 &>/dev/null; then
+    if ! command -v python3 &>/dev/null || true; then
         echo "Error: Python3 not found. Install Python 3.12+ from python.org or Homebrew." >&2
         exit 1
     fi
@@ -106,11 +106,12 @@ install_traderbot() {
         fi
     else
         if [[ -d "$INSTALL_DIR" ]]; then
-            if command -v traderbot &>/dev/null; then
+            if command -v traderbot &>/dev/null || true; then
                 echo "TraderBot is already installed at $INSTALL_DIR"
-                read -p "Update to latest? (y/n): " -n 1 -r
+                local REPLY=""
+                read -r -p "Update to latest? (y/n): " -n 1 REPLY
                 echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
                     echo "Skipping installation."
                     return 0
                 fi
@@ -181,7 +182,7 @@ install_traderbot() {
 
     cd "$INSTALL_DIR"
     echo "Installing Python dependencies into venv..."
-    if command -v uv &>/dev/null; then
+    if command -v uv &>/dev/null || true; then
         uv pip install -e .
     else
         if [[ ! -d .venv ]]; then
@@ -318,9 +319,10 @@ interactive_config_flow() {
     fi
     echo "=== TraderBot Configuration ==="
     echo
-    read -p "Create a trading profile? (y/n): " -n 1 -r
+    local REPLY=""
+    read -r -p "Create a trading profile? (y/n): " -n 1 REPLY
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
         echo "Skipping profile creation."
         return 0
     fi
@@ -363,7 +365,7 @@ interactive_config_flow() {
         *) profile_categories="politics,economics,sports,crypto,science,weather,culture" ;;
     esac
 
-    if command -v traderbot &>/dev/null; then
+    if command -v traderbot &>/dev/null || true; then
         if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
             --categories "$profile_categories" 2>&1; then
             echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories" >&2
@@ -386,10 +388,10 @@ interactive_config_flow() {
     echo "Each agent must have a workspace created via: openclaw agents add <name>"
     echo
 
-    if command -v openclaw &>/dev/null; then
+    if command -v openclaw &>/dev/null || true; then
         echo "Available agents (via openclaw agents list --bindings):"
         openclaw agents list --bindings 2>&1 || echo "  (run 'openclaw agents add <name>' to create one)"
-    elif command -v traderbot &>/dev/null; then
+    elif command -v traderbot &>/dev/null || true; then
         echo "Available agents:"
         traderbot profile discover-agents 2>&1 || echo "  (none found)"
     else
@@ -433,7 +435,7 @@ interactive_config_flow() {
 
     echo
     echo "=== Verification ==="
-    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null; then
+    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null || true; then
         if traderbot heartbeat --json 2>/dev/null; then
             echo "Heartbeat verification: PASSED"
         else
