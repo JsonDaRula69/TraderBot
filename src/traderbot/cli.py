@@ -1935,7 +1935,7 @@ def profile_assign(
     """Assign a token to an agent for profile access."""
     from pathlib import Path
 
-    from traderbot.profiles.injection import inject_token
+    from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
 
@@ -1954,15 +1954,18 @@ def profile_assign(
         console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
         console.print(f"Token: [bold]{token}[/bold]")
 
-        # Inject token into agent's TOOLS.md
         try:
             agent_path = _resolve_agent_path(agent_id)
             if not agent_path or not agent_path.exists():
                 console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
+                workspace_template = Path.cwd() / ".openclaw" / "workspace"
+                if not workspace_template.exists():
+                    workspace_template = Path.home() / ".openclaw" / "workspace"
+                propagate_workspace_files(agent_path, workspace_template)
                 inject_token(str(agent_path), token)
-                console.print(f"[green]✓[/green] Token injected into {agent_id}/TOOLS.md")
+                console.print(f"[green]✓[/green] Workspace files and token injected into {agent_id}/")
         except FileNotFoundError:
             console.print("[yellow]Warning:[/yellow] Agent directory not found")
             console.print("Token assigned but not injected into TOOLS.md")
