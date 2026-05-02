@@ -435,6 +435,7 @@ interactive_config_flow() {
     fi
 
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    local token_value=""
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         set +e
@@ -450,14 +451,15 @@ interactive_config_flow() {
         if [[ -n "$TOKEN_OUTPUT" ]]; then
             echo "$TOKEN_OUTPUT"
             echo
-            echo "Set this environment variable for the agent:"
-            TOKEN_VALUE=$(echo "$TOKEN_OUTPUT" | grep -oP 'Token: \K\S+' || echo "")
-            if [[ -n "$TOKEN_VALUE" ]]; then
-                echo "  export TRADERBOT_PROFILE_TOKEN=$TOKEN_VALUE"
-            fi
+            token_value=$(echo "$TOKEN_OUTPUT" | grep -oP 'Token: \K\S+' || echo "")
         fi
     else
         echo "Assignment skipped. TraderBot not found."
+    fi
+
+    if [[ -n "$token_value" ]]; then
+        echo "Installing service for agent $agent_name..."
+        install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE"
     fi
 
     echo
@@ -532,12 +534,6 @@ main() {
 
     echo
     echo "Installation complete!"
-    echo "To assign agents and start services, run:"
-    if [[ "$OS_TYPE" == "macos" ]]; then
-        echo "  bash $(dirname "$0")/services/install-launchd.sh <agent_name> <profile_token>"
-    else
-        echo "  bash $(dirname "$0")/services/install-service.sh <agent_name> <profile_token>"
-    fi
 }
 
 main "$@"
