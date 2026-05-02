@@ -198,10 +198,12 @@ install_traderbot() {
     
     install_uv
     
+    if [[ ! -d .venv ]]; then
+        python3 -m venv .venv
+    fi
+    source .venv/bin/activate
+
     if command -v uv &>/dev/null; then
-        if [[ ! -d .venv ]]; then
-            uv venv
-        fi
         uv pip install -e .
     else
         if [[ ! -d .venv ]]; then
