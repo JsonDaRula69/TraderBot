@@ -199,6 +199,9 @@ install_traderbot() {
     install_uv
     
     if command -v uv &>/dev/null; then
+        if [[ ! -d .venv ]]; then
+            uv venv
+        fi
         uv pip install -e .
     else
         if [[ ! -d .venv ]]; then
