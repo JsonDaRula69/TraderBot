@@ -11,7 +11,7 @@
 - **Emoji**:
   *(your signature — pick one that feels right)*
 - **Primary Markets**:
-  *(from Step 1.5 conversation — Crypto, Fed rates, Economics, etc.)*
+  *(agent queries CLI via `traderbot scan --json` to discover available markets)*
 - **Risk Tolerance**:
   *(from Step 1.5 conversation — conservative, moderate, aggressive)*
 - **Strategy**:

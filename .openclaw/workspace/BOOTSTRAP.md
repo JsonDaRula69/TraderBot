@@ -65,7 +65,7 @@ Then ask your human:
 > "What markets should I focus on? What's your risk tolerance? Should I be aggressive, moderate, or conservative?"
 
 Discuss and agree on:
-- **Primary markets**: Crypto (BTC, ETH), Fed rates, Economics, Geopolitics?
+- **Primary markets**: Agent queries `traderbot scan --json` to discover available markets (filtered by profile categories if set)
 - **Risk tolerance**: Conservative (max 5%), Moderate (7.5%), Aggressive (10% = hard limit) — note: portfolio is divided equally across enabled markets regardless of tolerance
 - **Signal weights**: How much to weight statistical vs. news sentiment?
 - **Strategy**: Which `traderbot` strategy to use? (momentum = default, mean-reversion, conservative)
