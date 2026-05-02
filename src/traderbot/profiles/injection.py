@@ -5,8 +5,42 @@ OpenClaw agent TOOLS.md files for automatic authentication.
 """
 
 import re
+import shutil
 import tempfile
 from pathlib import Path
+
+
+def propagate_workspace_files(agent_path: Path, workspace_template: Path) -> None:
+    if not workspace_template.exists() or not workspace_template.is_dir():
+        return
+
+    core_files = [
+        "AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md",
+        "BOOTSTRAP.md", "BOOT.md", "HEARTBEAT.md", "SESSION-STATE.md",
+        "MEMORY.md", "USER.md", "HEARTBEAT_DATA.md"
+    ]
+
+    agent_path.mkdir(parents=True, exist_ok=True)
+
+    for filename in core_files:
+        src = workspace_template / filename
+        dst = agent_path / filename
+        if src.exists() and not dst.exists():
+            shutil.copy2(src, dst)
+
+    src_learnings = workspace_template / ".learnings"
+    dst_learnings = agent_path / ".learnings"
+    if src_learnings.exists():
+        if not dst_learnings.exists():
+            shutil.copytree(src_learnings, dst_learnings)
+        else:
+            for filepath in src_learnings.rglob("*"):
+                if filepath.is_file():
+                    rel_path = filepath.relative_to(src_learnings)
+                    dst_file = dst_learnings / rel_path
+                    if not dst_file.exists():
+                        dst_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(filepath, dst_file)
 
 
 def inject_token(agent_path: str, token: str) -> None:
