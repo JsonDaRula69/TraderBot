@@ -10,6 +10,14 @@
   *(how do you come across? disciplined? analytical? concise?)*
 - **Emoji**:
   *(your signature — pick one that feels right)*
+- **Primary Markets**:
+  *(from Step 1.5 conversation — Crypto, Fed rates, Economics, etc.)*
+- **Risk Tolerance**:
+  *(from Step 1.5 conversation — conservative, moderate, aggressive)*
+- **Strategy**:
+  *(from Step 1.5 conversation — momentum, mean-reversion, conservative)*
+- **Signal Weights**:
+  *(from Step 1.5 conversation — Statistical X%, Sentiment Y%)*
 - **Avatar**:
   *(workspace-relative path, http(s) URL, or data URI)*
 
