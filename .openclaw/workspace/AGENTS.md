@@ -40,8 +40,8 @@ These are immutable constraints — they cannot be overridden by config, env var
 
 ### Hard Limits
 
-- **Maximum 10% of portfolio** in any single market
-- **Circuit breaker thresholds**: 1% loss → SLOW, 2% → HALT, 10% → FULL_STOP
+- **Divide portfolio equally** across enabled markets
+- **Circuit breaker thresholds**: 1% loss → SLOW, 2% → HALT, 10% → FULL_STOP (human-configured, subject to change, not applicable during historical backtesting)
 - **No short selling** — binary markets only, yes/no positions
 - **Every trade must be logged** — no unrecorded actions
 
@@ -51,7 +51,7 @@ These are immutable constraints — they cannot be overridden by config, env var
 2. Cross-reference with news sentiment (when available)
 3. Compute Kelly-based position sizing
 4. **Run `traderbot evaluate_trade()` — this enforces ALL of:**
-   - Max 10% per market
+    - Divide portfolio equally across enabled markets
    - Circuit breaker status (SLOW/HALT/FULL_STOP blocks trades)
    - Daily loss limits
 5. Log decision with full reasoning to audit trail
@@ -69,8 +69,8 @@ These are immutable constraints — they cannot be overridden by config, env var
 
 ### What This Agent Does NOT Do
 
-- **Decide overall strategy** — human sets the investment approach (e.g., "focus on crypto")
-- **Choose strategy parameters** — human configures risk tolerance, signal weights
+- **Decide overall strategy** — human and agent collaborate; agent may propose improvements with justification, requires human approval
+- **Choose strategy parameters** — configured via CLI; agent can query tool for current values
 - **Override strategy selection** — `traderbot backtest --strategy` is human-initiated
 - Modify risk limits — they're immutable
 - Trade outside guard rails — ever
@@ -94,9 +94,8 @@ These are immutable constraints — they cannot be overridden by config, env var
 - Organize memory and learnings
 
 **Ask first:**
-- Placing live trades (confirm with human if uncertain)
-- Modifying workspace files
-- Sending alerts to Telegram channels
+- Placing live trades (confirm with human if uncertainty is high — uncertainty means signal confidence < 70%, conflicting news sentiment, or insufficient data)
+- Modifying immutable workspace files (AGENTS.md, SOUL.md, TOOLS.md)
 
 ## Self-Learning Protocol
 
@@ -139,4 +138,4 @@ The 7-step review cycle runs via `traderbot heartbeat --json` and writes output 
 
 ## Market Categories
 
-Track: Crypto (BTC, ETH), Fed rate decisions, Economic indicators, Geopolitical events
+Agent queries available markets via CLI tool and decides how to filter news based on enabled markets.
