@@ -201,7 +201,7 @@ Max Concurrent: 10 (Wave 3)
 
 ## TODOs
 
-- [ ] 0.1. Fix Base URLs (C2 + C3 partial)
+- [x] 0.1. Fix Base URLs (C2 + C3 partial)
 
   **What to do**:
   - Change `api.kalshi.co` → `api.elections.kalshi.com` in `client.py:41`, `config.py:44`
@@ -259,7 +259,7 @@ Max Concurrent: 10 (Wave 3)
   - Message: `fix(kalshi): correct base URLs to api.elections.kalshi.com`
   - Files: `client.py, config.py, websocket.py`
 
-- [ ] 0.2. RSA-PSS Auth + Credential Migration (C1 — BREAKING v0.10.00)
+- [x] 0.2. RSA-PSS Auth + Credential Migration (C1 — BREAKING v0.10.00)
 
   **What to do**:
   - Create `src/traderbot/kalshi/signing.py` with:
@@ -351,7 +351,7 @@ Max Concurrent: 10 (Wave 3)
   - Message: `feat(kalshi): RSA-PSS auth replaces session-token auth [BREAKING v0.10.00]`
   - Files: `signing.py (new), client.py, config.py, auth.py, cli.py, demo.py, profiles/config.py, profiles/auth.py`
 
-- [ ] 0.3. Fix WebSocket Auth + Protocol (C3)
+- [x] 0.3. Fix WebSocket Auth + Protocol (C3)
 
   **What to do**:
   - Rewrite `src/traderbot/kalshi/websocket.py`:
@@ -423,7 +423,7 @@ Max Concurrent: 10 (Wave 3)
   - Message: `fix(kalshi): WebSocket auth via HTTP headers + correct subscribe format`
   - Files: `websocket.py`
 
-- [ ] 0.4. Fix Order Creation Fields (C4)
+- [x] 0.4. Fix Order Creation Fields (C4)
 
   **What to do**:
   - Modify `src/traderbot/kalshi/trading.py:28-34`: Body = `{ticker, action, side, count, yes_price}`
@@ -484,7 +484,7 @@ Max Concurrent: 10 (Wave 3)
   - Message: `fix(kalshi): order creation uses action/count/yes_price fields`
   - Files: `trading.py, models.py`
 
-- [ ] 1.1. Fix Trades Endpoint Path (C5)
+- [x] 1.1. Fix Trades Endpoint Path (C5)
 
   **What to do**:
   - Change `GET /markets/{ticker}/trades` → `GET /markets/trades?ticker={ticker}` in `markets.py:81` and `history.py` (get_historical_trades, get_recent_trades)
@@ -505,7 +505,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-1.1-trades-path.txt
   ```
 
-- [ ] 1.2. Fix Market Model Fields (H5)
+- [x] 1.2. Fix Market Model Fields (H5)
 
   **What to do**:
   - `Market.state` → `Market.status` in `models.py:28`; add `@field_validator("status", mode="before")` accepting `state` as alias
@@ -537,7 +537,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-1.2-no-state-access.txt
   ```
 
-- [ ] 1.3. Fix Historical Endpoints (M9 + H2 partial)
+- [x] 1.3. Fix Historical Endpoints (M9 + H2 partial)
 
   **What to do**:
   - In `history.py`: `get_cutoffs()` → `GET /historical/cutoffs`; `get_historical_trades()` → `GET /historical/trades?ticker=...`
@@ -559,7 +559,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-1.3-historical-endpoints.txt
   ```
 
-- [ ] 1.4. Add DELETE Method to KalshiClient (M2 + A1)
+- [x] 1.4. Add DELETE Method to KalshiClient (M2 + A1)
 
   **What to do**:
   - Add `async def delete(self, path, **params)` to `client.py`
@@ -588,7 +588,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-1.4-cancel-delete.txt
   ```
 
-- [ ] 1.5. Fix _normalize_trade Timestamp Fallback (M4 + A3)
+- [x] 1.5. Fix _normalize_trade Timestamp Fallback (M4 + A3)
 
   **What to do**:
   - Replace `raw.get("timestamp") or raw.get("created_time", 0)` in `_normalize.py:43` with explicit None check: `raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("created_time", 0)`
@@ -608,7 +608,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-1.5-timestamp-zero.txt
   ```
 
-- [ ] 2.1. Add Portfolio Endpoints (H1)
+- [x] 2.1. Add Portfolio Endpoints (H1)
 
   **What to do**:
   - Create `src/traderbot/kalshi/portfolio.py` with endpoints: `GET /portfolio/balance`, `GET /portfolio/positions`, `GET /portfolio/fills`, `GET /portfolio/settlements`
@@ -629,7 +629,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.1-portfolio-imports.txt
   ```
 
-- [ ] 2.2. Add Events Endpoints (H3)
+- [x] 2.2. Add Events Endpoints (H3)
 
   **What to do**:
   - Create `src/traderbot/kalshi/events.py` with `GET /events`, `GET /events/{event_ticker}`
@@ -650,7 +650,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.2-events-imports.txt
   ```
 
-- [ ] 2.3. Add list_markets Query Parameters (H4)
+- [x] 2.3. Add list_markets Query Parameters (H4)
 
   **What to do**:
   - Add params to `markets.py`: `event_ticker`, `series_ticker`, `min_close_ts`, `max_close_ts`
@@ -693,7 +693,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.4-everything-method.txt
   ```
 
-- [ ] 2.5. NewsAPI Error Checking + Auth Header (H7 + M6)
+- [x] 2.5. NewsAPI Error Checking + Auth Header (H7 + M6)
 
   **What to do**:
   - Check `status: "error"` in 200 responses before accessing `articles`
@@ -724,7 +724,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.5-auth-header.txt
   ```
 
-- [ ] 2.6. NewsAPI Rate-Limit Header Capture (N5)
+- [x] 2.6. NewsAPI Rate-Limit Header Capture (N5)
 
   **What to do**:
   - Capture `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` from NewsAPI responses
@@ -747,7 +747,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.6-rate-limit.txt
   ```
 
-- [ ] 2.7. Fix OpenClaw Cron Delivery + Session Logic (OC1 + OC2 + OC5 + OC6)
+- [x] 2.7. Fix OpenClaw Cron Delivery + Session Logic (OC1 + OC2 + OC5 + OC6)
 
   **What to do**:
   - Fix `cli.py` cron setup to require `--channel` + `--to` with `--announce` and validate channel format per OpenClaw docs (e.g. `telegram`, `whatsapp`, `slack` with proper `--to` format like E.164 for WhatsApp, chat ID for Telegram)
@@ -793,7 +793,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.7-cron-hours.txt
   ```
 
-- [ ] 2.8. Fix SKILL.md Gating After Auth Migration (OC6)
+- [x] 2.8. Fix SKILL.md Gating After Auth Migration (OC6)
 
   **What to do**:
   - Update `skills/traderbot/SKILL.md:7` env list from `["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY"]` to `["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY_PEM"]`
@@ -815,7 +815,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.8-skill-gating.txt
   ```
 
-- [ ] 2.9. Fix injection.py Wrong Finding Reference (OC7)
+- [x] 2.9. Fix injection.py Wrong Finding Reference (OC7)
 
   **What to do**:
   - Remove `# Made with Bob` from `src/traderbot/profiles/injection.py:173` (plan 4.5 references wrong file `agent_limits.py:92`)
@@ -836,7 +836,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.9-no-bob.txt
   ```
 
-- [ ] 3.1. Implement Real Brier Score (H9)
+- [x] 3.1. Implement Real Brier Score (H9)
 
   **What to do**:
   - Replace `engine.py:384` hardcoded `brier_score = 0.25 if closed_trades else None` with proper Brier score computation: `mean((predicted - actual)^2)` where predicted is the price/100 and actual is 1 or 0
@@ -858,7 +858,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.1-brier-score.txt
   ```
 
-- [ ] 3.2. Wire PaperTrader Through evaluate_trade() (H10)
+- [x] 3.2. Wire PaperTrader Through evaluate_trade() (H10)
 
   **What to do**:
   - Add `evaluate_trade()` call in `paper_trader.py:162-200` `submit_order()` before placing paper trade
@@ -903,7 +903,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.3-floor-fix.txt
   ```
 
-- [ ] 3.4. Delete simulation/models.py Dead Code (H12)
+- [x] 3.4. Delete simulation/models.py Dead Code (H12)
 
   **What to do**:
   - Delete `src/traderbot/simulation/models.py` — duplicates `BacktestResult` fields and imports from `kalshi.models`, creating circular import risk
@@ -956,7 +956,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.5-unified-enum.txt
   ```
 
-- [ ] 3.6. Replace Semaphore Rate Limiter with Token Bucket (M1 + A2)
+- [x] 3.6. Replace Semaphore Rate Limiter with Token Bucket (M1 + A2)
 
   **What to do**:
   - Replace `asyncio.Semaphore(int(rate_limit_rps))` in `client.py:129` with token bucket rate limiter
@@ -979,7 +979,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.6-token-bucket.txt
   ```
 
-- [ ] 3.7. Fix Sharpe Ratio N→N-1 (M3)
+- [x] 3.7. Fix Sharpe Ratio N→N-1 (M3)
 
   **What to do**:
   - Fix `analysis/portfolio.py:75`: Change `variance = sum(...) / len(excess)` to `/ (len(excess) - 1)` for sample standard deviation
@@ -1001,7 +1001,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.7-sharpe-fix.txt
   ```
 
-- [ ] 3.8. Fix Orderbook Key Names + Remove Fallback (M5)
+- [x] 3.8. Fix Orderbook Key Names + Remove Fallback (M5)
 
   **What to do**:
   - Fix `markets.py:62-67`: Orderbook key names to match Kalshi API (`bids`/`asks` with sub-fields)
@@ -1023,7 +1023,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.8-orderbook-keys.txt
   ```
 
-- [ ] 3.9. Centralize Path.home() / ".traderbot" into paths.py (M10)
+- [x] 3.9. Centralize Path.home() / ".traderbot" into paths.py (M10)
 
   **What to do**:
   - Create `src/traderbot/paths.py` with `TRADERBOT_HOME = Path.home() / ".traderbot"` and related path constants
@@ -1044,7 +1044,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.9-paths.txt
   ```
 
-- [ ] 3.10. Fix OpenClaw Config Path in cli.py (M7)
+- [x] 3.10. Fix OpenClaw Config Path in cli.py (M7)
 
   **What to do**:
   - `cli.py:2413`: `_write_heartbeat_config()` uses `Path.home() / ".openclaw" / "config.json"` — WRONG

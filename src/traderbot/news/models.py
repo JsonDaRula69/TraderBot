@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 — needed at runtime by Pydantic
-from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.kalshi.models import MarketCategory
+from traderbot.news.sources import NewsSource
 
 NewsCategory = MarketCategory
 """Backward-compatible alias — prefer MarketCategory from kalshi.models."""
-
-
-class NewsSource(StrEnum):
-    """Supported news sources."""
-
-    NEWSAPI = "newsapi"
-    TWITTER = "twitter"
-    REDDIT = "reddit"
 
 
 class NewsItem(BaseModel):
