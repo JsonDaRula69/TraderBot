@@ -71,8 +71,8 @@ class TestAuthManagerSetAndGet:
         assert result.key == "api_key"
 
     def test_credential_is_secretstr(self, auth_manager: AuthManager) -> None:
-        auth_manager.set_credential("kalshi", "api_secret", "super-secret")
-        result = auth_manager.get_credential("kalshi", "api_secret")
+        auth_manager.set_credential("kalshi", "private_key_pem", "super-secret")
+        result = auth_manager.get_credential("kalshi", "private_key_pem")
         assert isinstance(result, CredentialResult)
         assert isinstance(result.value, SecretStr)
         assert repr(result.value) != "super-secret"
@@ -103,11 +103,11 @@ class TestAuthManagerDelete:
 class TestAuthManagerListServices:
     def test_list_services_with_keyring(self, auth_manager: AuthManager) -> None:
         auth_manager.set_credential("kalshi", "api_key", "k1")
-        auth_manager.set_credential("kalshi", "api_secret", "k2")
+        auth_manager.set_credential("kalshi", "private_key_pem", "k2")
         services = auth_manager.list_services()
         kalshi = next(s for s in services if s.name == "kalshi")
         assert "api_key" in kalshi.keys
-        assert "api_secret" in kalshi.keys
+        assert "private_key_pem" in kalshi.keys
 
     def test_list_services_empty(self, auth_manager: AuthManager) -> None:
         services = auth_manager.list_services()
@@ -164,15 +164,15 @@ class TestAuthManagerEnvFallback:
 class TestAuthManagerCheckCredentials:
     def test_check_with_all_present(self, auth_manager: AuthManager) -> None:
         auth_manager.set_credential("kalshi", "api_key", "k1")
-        auth_manager.set_credential("kalshi", "api_secret", "k2")
+        auth_manager.set_credential("kalshi", "private_key_pem", "k2")
         status = auth_manager.check_credentials()
         assert status["kalshi"]["api_key"] is True
-        assert status["kalshi"]["api_secret"] is True
+        assert status["kalshi"]["private_key_pem"] is True
 
     def test_check_with_missing(self, auth_manager: AuthManager) -> None:
         status = auth_manager.check_credentials()
         assert status["kalshi"]["api_key"] is False
-        assert status["kalshi"]["api_secret"] is False
+        assert status["kalshi"]["private_key_pem"] is False
 
 
 class TestAuthManagerNoKeyring:
@@ -225,7 +225,7 @@ class TestGetCredentialConvenience:
 class TestKeyringKalshiConfig:
     def test_config_resolves_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("KALSHI_API_KEY", "env-key")
-        monkeypatch.setenv("KALSHI_API_SECRET", "env-secret")
+        monkeypatch.setenv("KALSHI_PRIVATE_KEY_PEM", "env-secret")
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig()
         assert cfg.resolve_api_key() == "env-key"
@@ -258,7 +258,7 @@ class TestEnvMapping:
         assert AuthManager._service_key_to_env("kalshi", "api_key") == "KALSHI_API_KEY"
 
     def test_kalshi_api_secret_env_mapping(self) -> None:
-        assert AuthManager._service_key_to_env("kalshi", "api_secret") == "KALSHI_API_SECRET"
+        assert AuthManager._service_key_to_env("kalshi", "private_key_pem") == "KALSHI_PRIVATE_KEY_PEM"
 
     def test_generic_service_env_mapping(self) -> None:
         assert AuthManager._service_key_to_env("voyage", "api_key") == "VOYAGE_API_KEY"
