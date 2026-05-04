@@ -30,7 +30,7 @@ PORTFOLIO_VALUE_CENTS = 100_000_00  # $100k
 def _make_market(
     ticker: str = "KX-TEST",
     question: str = "Test market?",
-    state: str = "open",
+    status: str = "open",
     volume: int = 5000,
     open_interest: int = 2000,
     settlement_result: bool | None = None,
@@ -44,7 +44,7 @@ def _make_market(
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-        state=state,
+        status=status,
         event_ticker="KX-EVENT",
         category=category,
         settlement_result=settlement_result,
@@ -78,7 +78,7 @@ def _make_demo_adapter() -> DemoAdapter:
     from traderbot.kalshi.client import KalshiConfig
     config = KalshiConfig(
         api_key=SecretStr("demo"),
-        api_secret=SecretStr("demo"),
+        private_key_pem=SecretStr("demo"),
         demo_mode=True,
     )
     return DemoAdapter(config)

@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 def _make_market(
     ticker: str = "KX-TEST",
     question: str = "Test market?",
-    state: str = "settled",
+    status: str = "settled",
     volume: int = 5000,
     open_interest: int = 2000,
     settlement_result: bool | None = True,
@@ -93,7 +93,7 @@ def _make_market(
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-        state=state,
+        status=status,
         event_ticker=ticker.rsplit("-", 1)[0] if "-" in ticker else "KX-TEST",
         category="economics",
         settlement_result=settlement_result,

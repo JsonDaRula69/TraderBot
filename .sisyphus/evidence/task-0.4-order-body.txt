@@ -9,5 +9,3 @@
         }
         if order_request.client_order_id is not None:
             body["client_order_id"] = order_request.client_order_id
-        if order_request.no_price is not None:
-            body["no_price"] = order_request.no_price

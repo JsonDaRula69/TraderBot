@@ -138,7 +138,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_basic(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": "page2"})
         )
         async with KalshiClient(cfg) as client:
@@ -156,7 +156,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_with_time_filters(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        route = respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": None})
         )
         after = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
@@ -175,7 +175,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_date_serialization(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        route = respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": []})
         )
         after = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
@@ -191,7 +191,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": []})
         )
         async with KalshiClient(cfg) as client:
@@ -252,7 +252,7 @@ class TestGetSettledMarkets:
     @respx.mock
     async def test_get_historical_trades_with_cursor(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/markets/KX-TEST/trades").mock(
+        route = respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(
                 200, json={"trades": [SAMPLE_TRADE_RAW]}
             )

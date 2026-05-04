@@ -204,14 +204,26 @@ def test_simulation_imports_market_category() -> None:
         today_unrealized_loss_cents=0,
         open_positions_count=0,
     )
+    from traderbot.risk.circuit_breaker import CircuitBreakerState
+    from traderbot.kalshi.models import Trade
+    breaker_state = CircuitBreakerState()
     ctx = Context(
         portfolio=portfolio,
-        market_data=[],
-        sentiment={},
-        risk_state={},
-        category=MarketCategory.TECHNOLOGY,
+        market=Market(
+            ticker="KX-TEST",
+            question="Test?",
+            outcome_prices=["0.65", "0.35"],
+            volume=1000,
+            open_interest=500,
+            close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
+            status="open",
+            event_ticker="KX-EVENT",
+            category="technology",
+        ),
+        recent_trades=[],
+        sentiment_score=0.5,
+        breaker_state=breaker_state,
     )
-    assert ctx.category == MarketCategory.TECHNOLOGY
 
 
 @pytest.mark.unit

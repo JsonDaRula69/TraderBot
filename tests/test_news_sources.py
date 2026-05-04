@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from traderbot.news.sources import NewsAggregator, NewsItem, NewsSource
+from traderbot.news.sources import NewsAPIError, NewsAggregator, NewsItem, NewsSource
 
 
 def _newsapi_article(
@@ -185,7 +185,8 @@ class TestFetchNewsAPI:
         assert mock_client.get.await_count == 4  # 1 initial + 3 retries
 
     @pytest.mark.asyncio
-    async def test_non_200_returns_empty(self):
+    async def test_non_200_raises_error(self):
+        from traderbot.news.sources import NewsAPIError
         not_found = httpx.Response(
             status_code=404,
             request=httpx.Request("GET", "https://newsapi.org"),
@@ -194,8 +195,8 @@ class TestFetchNewsAPI:
         mock_client.get = AsyncMock(return_value=not_found)
 
         agg = NewsAggregator(newsapi_key="test-key", http_client=mock_client)
-        items = await agg._fetch_newsapi(limit=10)
-        assert items == []
+        with pytest.raises(NewsAPIError):
+            await agg._fetch_newsapi(limit=10)
 
     @pytest.mark.asyncio
     async def test_non_json_response_returns_empty(self):

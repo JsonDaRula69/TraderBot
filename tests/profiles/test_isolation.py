@@ -1,6 +1,7 @@
 """Tests for per-profile data isolation path resolution."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -50,84 +51,73 @@ def live_profile() -> TradingProfile:
 def test_get_profile_db_path_paper(paper_profile: TradingProfile) -> None:
     """Get profile DB path returns correct path with paper base_dir."""
     path = get_profile_db_path(paper_profile, "decisions.db")
-    assert path == Path(".traderbot-paper/db/decisions.db")
-    assert str(path).startswith(".traderbot-paper")
+    assert str(path).endswith("/.traderbot/paper/db/decisions.db")
+    assert "/.traderbot/paper" in str(path)
 
 
 def test_get_profile_db_path_live(live_profile: TradingProfile) -> None:
     """Get profile DB path returns correct path with live base_dir."""
     path = get_profile_db_path(live_profile, "learnings.db")
-    assert path == Path(".traderbot-live/db/learnings.db")
-    assert str(path).startswith(".traderbot-live")
+    assert str(path).endswith("/.traderbot/live/db/learnings.db")
+    assert "/.traderbot/live" in str(path)
 
 
 def test_get_profile_chroma_path_paper(paper_profile: TradingProfile) -> None:
     """Get profile ChromaDB path returns correct path."""
     path = get_profile_chroma_path(paper_profile)
-    assert path == Path(".traderbot-paper/chroma")
-    assert str(path).startswith(".traderbot-paper")
+    assert str(path).endswith("/.traderbot/paper/chroma")
+    assert "/.traderbot/paper" in str(path)
 
 
 def test_get_profile_chroma_path_live(live_profile: TradingProfile) -> None:
     """Get profile ChromaDB path returns correct path."""
     path = get_profile_chroma_path(live_profile)
-    assert path == Path(".traderbot-live/chroma")
-    assert str(path).startswith(".traderbot-live")
+    assert str(path).endswith("/.traderbot/live/chroma")
+    assert "/.traderbot/live" in str(path)
 
 
 def test_get_profile_audit_path_paper(paper_profile: TradingProfile) -> None:
     """Get profile audit path returns correct path."""
     path = get_profile_audit_path(paper_profile)
-    assert path == Path(".traderbot-paper/audit")
-    assert str(path).startswith(".traderbot-paper")
+    assert str(path).endswith("/.traderbot/paper/audit")
+    assert "/.traderbot/paper" in str(path)
 
 
 def test_get_profile_audit_path_live(live_profile: TradingProfile) -> None:
     """Get profile audit path returns correct path."""
     path = get_profile_audit_path(live_profile)
-    assert path == Path(".traderbot-live/audit")
-    assert str(path).startswith(".traderbot-live")
+    assert str(path).endswith("/.traderbot/live/audit")
+    assert "/.traderbot/live" in str(path)
 
 
-def test_ensure_profile_dirs_creates_all(paper_profile: TradingProfile, tmp_path: Path) -> None:
+def test_ensure_profile_dirs_creates_all(paper_profile: TradingProfile, tmp_path: Path, monkeypatch: Any) -> None:
     """Ensure profile dirs creates all directories."""
-    # Change to tmp_path for testing
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        
-        ensure_profile_dirs(paper_profile)
-        
-        # Check all directories exist
-        assert (tmp_path / ".traderbot-paper" / "db").exists()
-        assert (tmp_path / ".traderbot-paper" / "chroma").exists()
-        assert (tmp_path / ".traderbot-paper" / "audit").exists()
-        
-        # Check they are directories
-        assert (tmp_path / ".traderbot-paper" / "db").is_dir()
-        assert (tmp_path / ".traderbot-paper" / "chroma").is_dir()
-        assert (tmp_path / ".traderbot-paper" / "audit").is_dir()
-    finally:
-        os.chdir(original_cwd)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    
+    ensure_profile_dirs(paper_profile)
+    
+    # Check all directories exist
+    assert (tmp_path / ".traderbot" / "paper" / "db").exists()
+    assert (tmp_path / ".traderbot" / "paper" / "chroma").exists()
+    assert (tmp_path / ".traderbot" / "paper" / "audit").exists()
+    
+    # Check they are directories
+    assert (tmp_path / ".traderbot" / "paper" / "db").is_dir()
+    assert (tmp_path / ".traderbot" / "paper" / "chroma").is_dir()
+    assert (tmp_path / ".traderbot" / "paper" / "audit").is_dir()
 
 
-def test_ensure_profile_dirs_idempotent(paper_profile: TradingProfile, tmp_path: Path) -> None:
+def test_ensure_profile_dirs_idempotent(paper_profile: TradingProfile, tmp_path: Path, monkeypatch: Any) -> None:
     """Ensure profile dirs is idempotent (can be called multiple times)."""
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        
-        # Call twice
-        ensure_profile_dirs(paper_profile)
-        ensure_profile_dirs(paper_profile)
-        
-        # Should still work
-        assert (tmp_path / ".traderbot-paper" / "db").exists()
-        assert (tmp_path / ".traderbot-paper" / "chroma").exists()
-        assert (tmp_path / ".traderbot-paper" / "audit").exists()
-    finally:
-        os.chdir(original_cwd)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    
+    # Call twice
+    ensure_profile_dirs(paper_profile)
+    ensure_profile_dirs(paper_profile)
+    
+    # Should still work
+    assert (tmp_path / ".traderbot" / "paper" / "db").exists()
+    assert (tmp_path / ".traderbot" / "paper" / "chroma").exists()
+    assert (tmp_path / ".traderbot" / "paper" / "audit").exists()
 
 # Made with Bob

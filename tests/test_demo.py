@@ -44,7 +44,7 @@ class TestDemoAdapterConfig:
 
         prod_config = KalshiConfig(
             api_key=SecretStr("key"),
-            api_secret="secret",
+            private_key_pem="secret",
             demo_mode=False,
         )
 

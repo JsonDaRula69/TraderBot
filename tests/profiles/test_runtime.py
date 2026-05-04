@@ -168,7 +168,7 @@ def test_load_profile_config_with_global_credentials_fallback(
     
     global_auth = AuthManager(keyring_module=mock_keyring)
     global_auth.set_credential("kalshi", "api_key", "global-key")
-    global_auth.set_credential("kalshi", "api_secret", "global-secret")
+    global_auth.set_credential("kalshi", "private_key_pem", "global-key")
     
     # Load config (profile has no credentials)
     config = load_profile_config(
@@ -178,7 +178,7 @@ def test_load_profile_config_with_global_credentials_fallback(
     )
     
     # Should fall back to global credentials
-    assert config["credentials"]["kalshi"] == ("global-key", "global-secret")
+    assert config["credentials"]["kalshi"] == ("global-key", "global-key")
 
 
 def test_get_runtime_context(

@@ -2,6 +2,7 @@
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -73,178 +74,152 @@ def sample_position() -> Position:
     )
 
 
-def test_decision_isolation(profile1: TradingProfile, profile2: TradingProfile, sample_decision: Decision, tmp_path: Path) -> None:
+def test_decision_isolation(profile1: TradingProfile, profile2: TradingProfile, sample_decision: Decision, tmp_path: Path, monkeypatch: Any) -> None:
     """Create decision in profile1 → not visible in profile2."""
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        ensure_profile_dirs(profile1)
-        ensure_profile_dirs(profile2)
-        
-        # Create decision in profile1
-        db_path1 = get_profile_db_path(profile1, "decisions.db")
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        decisions.init_table(conn1)
-        decision_id = decisions.insert(conn1, sample_decision)
-        conn1.close()
-        
-        # Verify it exists in profile1
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        assert decisions.count(conn1) == 1
-        retrieved = decisions.get(conn1, decision_id)
-        assert retrieved is not None
-        assert retrieved.ticker == "TEST-MARKET"
-        conn1.close()
-        
-        # Verify it does NOT exist in profile2
-        db_path2 = get_profile_db_path(profile2, "decisions.db")
-        conn2 = sqlite3.connect(db_path2)
-        conn2.row_factory = sqlite3.Row
-        decisions.init_table(conn2)
-        assert decisions.count(conn2) == 0
-        conn2.close()
-    finally:
-        os.chdir(original_cwd)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    ensure_profile_dirs(profile1)
+    ensure_profile_dirs(profile2)
+    
+    # Create decision in profile1
+    db_path1 = get_profile_db_path(profile1, "decisions.db")
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    decisions.init_table(conn1)
+    decision_id = decisions.insert(conn1, sample_decision)
+    conn1.close()
+    
+    # Verify it exists in profile1
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    assert decisions.count(conn1) == 1
+    retrieved = decisions.get(conn1, decision_id)
+    assert retrieved is not None
+    assert retrieved.ticker == "TEST-MARKET"
+    conn1.close()
+    
+    # Verify it does NOT exist in profile2
+    db_path2 = get_profile_db_path(profile2, "decisions.db")
+    conn2 = sqlite3.connect(db_path2)
+    conn2.row_factory = sqlite3.Row
+    decisions.init_table(conn2)
+    assert decisions.count(conn2) == 0
+    conn2.close()
 
 
-def test_learning_isolation(profile1: TradingProfile, profile2: TradingProfile, tmp_path: Path) -> None:
+def test_learning_isolation(profile1: TradingProfile, profile2: TradingProfile, tmp_path: Path, monkeypatch: Any) -> None:
     """Create learning in profile1 → not visible in profile2."""
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        ensure_profile_dirs(profile1)
-        ensure_profile_dirs(profile2)
-        
-        # Create learning in profile1
-        db_path1 = get_profile_db_path(profile1, "learnings.db")
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        learnings.init_table(conn1)
-        learning_id = learnings.record_pattern(
-            conn1,
-            learnings.LearningCategory.MARKET_BEHAVIOR,
-            "Test pattern",
-            "Test evidence",
-            0.8,
-        )
-        conn1.close()
-        
-        # Verify it exists in profile1
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        assert learnings.count(conn1) == 1
-        retrieved = learnings.get(conn1, learning_id)
-        assert retrieved is not None
-        assert retrieved.summary == "Test pattern"
-        conn1.close()
-        
-        # Verify it does NOT exist in profile2
-        db_path2 = get_profile_db_path(profile2, "learnings.db")
-        conn2 = sqlite3.connect(db_path2)
-        conn2.row_factory = sqlite3.Row
-        learnings.init_table(conn2)
-        assert learnings.count(conn2) == 0
-        conn2.close()
-    finally:
-        os.chdir(original_cwd)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    ensure_profile_dirs(profile1)
+    ensure_profile_dirs(profile2)
+    
+    # Create learning in profile1
+    db_path1 = get_profile_db_path(profile1, "learnings.db")
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    learnings.init_table(conn1)
+    learning_id = learnings.record_pattern(
+        conn1,
+        learnings.LearningCategory.MARKET_BEHAVIOR,
+        "Test pattern",
+        "Test evidence",
+        0.8,
+    )
+    conn1.close()
+    
+    # Verify it exists in profile1
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    assert learnings.count(conn1) == 1
+    retrieved = learnings.get(conn1, learning_id)
+    assert retrieved is not None
+    assert retrieved.summary == "Test pattern"
+    conn1.close()
+    
+    # Verify it does NOT exist in profile2
+    db_path2 = get_profile_db_path(profile2, "learnings.db")
+    conn2 = sqlite3.connect(db_path2)
+    conn2.row_factory = sqlite3.Row
+    learnings.init_table(conn2)
+    assert learnings.count(conn2) == 0
+    conn2.close()
 
 
-def test_position_isolation(profile1: TradingProfile, profile2: TradingProfile, sample_position: Position, tmp_path: Path) -> None:
+def test_position_isolation(profile1: TradingProfile, profile2: TradingProfile, sample_position: Position, tmp_path: Path, monkeypatch: Any) -> None:
     """Create position in profile1 → not visible in profile2."""
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        ensure_profile_dirs(profile1)
-        ensure_profile_dirs(profile2)
-        
-        # Create position in profile1
-        db_path1 = get_profile_db_path(profile1, "positions.db")
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        positions.init_table(conn1)
-        positions.upsert(conn1, sample_position)
-        conn1.close()
-        
-        # Verify it exists in profile1
-        conn1 = sqlite3.connect(db_path1)
-        conn1.row_factory = sqlite3.Row
-        retrieved = positions.get(conn1, "TEST-MARKET")
-        assert retrieved is not None
-        assert retrieved.quantity == 10
-        conn1.close()
-        
-        # Verify it does NOT exist in profile2
-        db_path2 = get_profile_db_path(profile2, "positions.db")
-        conn2 = sqlite3.connect(db_path2)
-        conn2.row_factory = sqlite3.Row
-        positions.init_table(conn2)
-        retrieved2 = positions.get(conn2, "TEST-MARKET")
-        assert retrieved2 is None
-        conn2.close()
-    finally:
-        os.chdir(original_cwd)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    ensure_profile_dirs(profile1)
+    ensure_profile_dirs(profile2)
+    
+    # Create position in profile1
+    db_path1 = get_profile_db_path(profile1, "positions.db")
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    positions.init_table(conn1)
+    positions.upsert(conn1, sample_position)
+    conn1.close()
+    
+    # Verify it exists in profile1
+    conn1 = sqlite3.connect(db_path1)
+    conn1.row_factory = sqlite3.Row
+    retrieved = positions.get(conn1, "TEST-MARKET")
+    assert retrieved is not None
+    assert retrieved.quantity == 10
+    conn1.close()
+    
+    # Verify it does NOT exist in profile2
+    db_path2 = get_profile_db_path(profile2, "positions.db")
+    conn2 = sqlite3.connect(db_path2)
+    conn2.row_factory = sqlite3.Row
+    positions.init_table(conn2)
+    retrieved2 = positions.get(conn2, "TEST-MARKET")
+    assert retrieved2 is None
+    conn2.close()
 
 
-def test_no_profile_uses_default_paths(sample_decision: Decision, tmp_path: Path) -> None:
+def test_no_profile_uses_default_paths(sample_decision: Decision, tmp_path: Path, monkeypatch: Any) -> None:
     """No profile → uses default paths (backward compatibility)."""
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        
-        # Create decision without profile (uses default path)
-        default_db = tmp_path / "decisions.db"
-        conn = sqlite3.connect(default_db)
-        conn.row_factory = sqlite3.Row
-        decisions.init_table(conn)
-        decision_id = decisions.insert(conn, sample_decision)
-        conn.close()
-        
-        # Verify it exists
-        conn = sqlite3.connect(default_db)
-        conn.row_factory = sqlite3.Row
-        assert decisions.count(conn) == 1
-        retrieved = decisions.get(conn, decision_id)
-        assert retrieved is not None
-        conn.close()
-    finally:
-        os.chdir(original_cwd)
+    
+    # Create decision without profile (uses default path)
+    default_db = tmp_path / "decisions.db"
+    conn = sqlite3.connect(default_db)
+    conn.row_factory = sqlite3.Row
+    decisions.init_table(conn)
+    decision_id = decisions.insert(conn, sample_decision)
+    conn.close()
+    
+    # Verify it exists
+    conn = sqlite3.connect(default_db)
+    conn.row_factory = sqlite3.Row
+    assert decisions.count(conn) == 1
+    retrieved = decisions.get(conn, decision_id)
+    assert retrieved is not None
+    conn.close()
 
 
 class TestProfileDataIsolationNegative:
     """Negative tests: Profile A CANNOT read Profile B's data."""
 
     def test_profile_a_cannot_read_profile_b_decisions(
-        self, profile1: TradingProfile, profile2: TradingProfile, sample_decision: Decision, tmp_path: Path
+        self, profile1: TradingProfile, profile2: TradingProfile, sample_decision: Decision, tmp_path: Path, monkeypatch: Any
     ) -> None:
         """Decisions stored in profile1 DB are invisible to profile2."""
-        import os
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(tmp_path)
-            ensure_profile_dirs(profile1)
-            ensure_profile_dirs(profile2)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        ensure_profile_dirs(profile1)
+        ensure_profile_dirs(profile2)
 
-            db_path1 = get_profile_db_path(profile1, "decisions.db")
-            conn1 = sqlite3.connect(db_path1)
-            conn1.row_factory = sqlite3.Row
-            decisions.init_table(conn1)
-            decisions.insert(conn1, sample_decision)
-            conn1.close()
+        db_path1 = get_profile_db_path(profile1, "decisions.db")
+        conn1 = sqlite3.connect(db_path1)
+        conn1.row_factory = sqlite3.Row
+        decisions.init_table(conn1)
+        decisions.insert(conn1, sample_decision)
+        conn1.close()
 
-            db_path2 = get_profile_db_path(profile2, "decisions.db")
-            conn2 = sqlite3.connect(db_path2)
-            conn2.row_factory = sqlite3.Row
-            decisions.init_table(conn2)
-            assert decisions.count(conn2) == 0
-            conn2.close()
-        finally:
-            os.chdir(original_cwd)
+        db_path2 = get_profile_db_path(profile2, "decisions.db")
+        conn2 = sqlite3.connect(db_path2)
+        conn2.row_factory = sqlite3.Row
+        decisions.init_table(conn2)
+        assert decisions.count(conn2) == 0
+        conn2.close()
 
 
 class TestKeyringCredentialIsolation:

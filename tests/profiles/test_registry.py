@@ -145,18 +145,23 @@ def test_delete_profile_remove_data(
     registry: ProfileRegistry, sample_profile: TradingProfile, tmp_path: Path, monkeypatch: Any
 ) -> None:
     """Delete profile with keep_data=False should remove profile and data dirs."""
+    from traderbot.profiles.models import TradingProfile as _TP
+    from traderbot.paths import get_data_dir
+    
     # Create profile
     registry.create_profile(sample_profile)
     assert registry.profile_exists("test-profile")
 
-    # Create mock data directory in tmp_path
-    data_dir = tmp_path / ".traderbot-paper"
-    data_dir.mkdir()
-    test_file = data_dir / "test.db"
-    test_file.write_text("test data")
+    # Monkeypatch get_data_dir to return tmp_path / ".traderbot"
+    data_root = tmp_path / ".traderbot"
+    data_root.mkdir()
+    monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: data_root)
 
-    # Monkeypatch Path.home() to return tmp_path
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # Recreate profile so base_dir resolves to our temp path
+    base_dir_path = data_root / "paper"
+    base_dir_path.mkdir()
+    test_file = base_dir_path / "test.db"
+    test_file.write_text("test data")
 
     # Delete with keep_data=False
     registry.delete_profile("test-profile", keep_data=False)
@@ -165,7 +170,7 @@ def test_delete_profile_remove_data(
     assert not registry.profile_exists("test-profile")
 
     # Data directory should be gone
-    assert not data_dir.exists()
+    assert not base_dir_path.exists()
 
 
 def test_get_nonexistent_profile(registry: ProfileRegistry) -> None:
