@@ -194,7 +194,7 @@ def test_simulation_imports_market_category() -> None:
     from datetime import UTC, datetime
 
     from traderbot.kalshi.models import Market, PortfolioState
-    from traderbot.simulation.models import Context
+    from traderbot.simulation.engine import Context
 
     portfolio = PortfolioState(
         portfolio_value_cents=1000000,

@@ -235,17 +235,17 @@ class TestKeyringKalshiConfig:
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig()
         assert cfg.demo_mode is False
-        assert cfg.base_url == "https://api.kalshi.co/trade-api/v2"
+        assert cfg.base_url == "https://api.elections.kalshi.com/trade-api/v2"
 
     def test_active_url_demo(self) -> None:
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig(demo_mode=True)
-        assert cfg.active_url == "https://demo-api.kalshi.co/trade-api/v2"
+        assert cfg.active_url == "https://demo-api.elections.kalshi.com/trade-api/v2"
 
     def test_active_url_prod(self) -> None:
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig()
-        assert cfg.active_url == "https://api.kalshi.co/trade-api/v2"
+        assert cfg.active_url == "https://api.elections.kalshi.com/trade-api/v2"
 
     def test_config_rejects_extra_fields(self) -> None:
         with pytest.raises(Exception):

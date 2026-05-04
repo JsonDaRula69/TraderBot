@@ -420,7 +420,7 @@ class TestBacktestEngine:
             volume=5000,
             open_interest=2000,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-            state="settled",
+            status="settled",
             event_ticker="KX-EVENT",
             category="test",
             settlement_result=True,

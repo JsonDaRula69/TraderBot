@@ -429,18 +429,35 @@ class TestRiskImmutability:
             for key in HARD_LIMITS:
                 assert profile.effective_limit(key) <= HARD_LIMITS[key]
 
-    def test_conservative_halves_all_limits(self) -> None:
+    def test_conservative_halves_ceilings_floors_at_limit(self) -> None:
+        """Conservative: ceilings halved, floors stay at hard limit."""
+        _CEILINGS = CONSERVATIVE._CEILING_KEYS
         for key in HARD_LIMITS:
-            assert CONSERVATIVE.effective_limit(key) == pytest.approx(0.5 * HARD_LIMITS[key])
+            val = CONSERVATIVE.effective_limit(key)
+            if key in _CEILINGS:
+                # Ceiling-type: 0.5 * hard limit
+                assert val == pytest.approx(0.5 * HARD_LIMITS[key])
+            else:
+                # Floor-type: max(0.5 * hard, hard) = hard limit
+                assert val == HARD_LIMITS[key]
 
     def test_moderate_equals_hard_limits(self) -> None:
         for key in HARD_LIMITS:
             assert MODERATE.effective_limit(key) == pytest.approx(1.0 * HARD_LIMITS[key])
 
-    def test_aggressive_below_hard_limits(self) -> None:
+    def test_aggressive_below_ceilings_at_floors(self) -> None:
+        """Aggressive profile: ceilings scale down, floors stay at hard limit."""
+        _CEILINGS = AGGRESSIVE._CEILING_KEYS
+        _FLOORS = AGGRESSIVE._FLOOR_KEYS
         for key in HARD_LIMITS:
-            assert AGGRESSIVE.effective_limit(key) == pytest.approx(0.8 * HARD_LIMITS[key])
-            assert AGGRESSIVE.effective_limit(key) < HARD_LIMITS[key]
+            val = AGGRESSIVE.effective_limit(key)
+            if key in _CEILINGS:
+                # Ceiling-type: 0.8 * hard limit (more conservative)
+                assert val == pytest.approx(0.8 * HARD_LIMITS[key])
+                assert val < HARD_LIMITS[key]
+            else:
+                # Floor-type (min_*): max(0.8 * hard, hard) = hard limit (can't go below floor)
+                assert val == HARD_LIMITS[key]
 
     def test_custom_profile_cannot_exceed_hard_limits(self) -> None:
         p = StrategyProfile(

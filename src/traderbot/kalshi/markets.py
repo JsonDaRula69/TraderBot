@@ -31,7 +31,7 @@ class MarketService:
         cursor: str | None = None,
         limit: int = 100,
         category: str | None = None,
-        state: str | None = None,
+        status: str | None = None,
         event_ticker: str | None = None,
         series_ticker: str | None = None,
         min_close_ts: int | None = None,
@@ -42,8 +42,8 @@ class MarketService:
             params["cursor"] = cursor
         if category is not None:
             params["category"] = category
-        if state is not None:
-            params["state"] = state
+        if status is not None:
+            params["status"] = status
         if event_ticker is not None:
             params["event_ticker"] = event_ticker
         if series_ticker is not None:

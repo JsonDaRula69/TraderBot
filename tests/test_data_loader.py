@@ -241,7 +241,7 @@ class TestGetOutcomes:
     async def test_handles_none_settlement_result(
         self, loader: DataLoader, mock_history: AsyncMock
     ) -> None:
-        market_unsettled = _make_market(ticker="KX-C", settlement_result=None, state="open")
+        market_unsettled = _make_market(ticker="KX-C", settlement_result=None, status="open")
         mock_history.get_market_series.return_value = market_unsettled
 
         result = await loader.get_outcomes(["KX-C"])
@@ -363,7 +363,7 @@ class TestDataQuality:
     ) -> None:
         market = _make_market(
             ticker="KX-SET",
-            state="settled",
+            status="settled",
             settlement_result=True,
         )
         trade_no_hi = _make_trade(ticker="KX-SET", price=15, side="no")

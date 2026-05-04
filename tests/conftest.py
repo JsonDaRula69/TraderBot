@@ -17,7 +17,7 @@ def sample_market_data() -> dict:
         "volume": 15000,
         "open_interest": 2500,
         "close_time": datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-        "state": "open",
+        "status": "open",
         "event_ticker": "KXBTCD-26MAR31",
         "category": "crypto",
     }
