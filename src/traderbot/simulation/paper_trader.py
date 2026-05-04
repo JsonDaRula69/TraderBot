@@ -9,11 +9,15 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.risk import evaluate_trade
+
 if TYPE_CHECKING:
     import sqlite3
 
     from traderbot.kalshi.demo import DemoAdapter
     from traderbot.kalshi.models import OrderBook
+    from traderbot.profiles.models import TradingProfile
+    from traderbot.risk.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -99,12 +103,19 @@ class PaperTrader:
         db_conn: sqlite3.Connection,
         initial_cash_cents: int = 100_000_00,
         slippage_model: PaperSlippageModel | None = None,
+        breaker: CircuitBreaker | None = None,
+        profile: TradingProfile | None = None,
     ) -> None:
+        if breaker is None:
+            from traderbot.risk.circuit_breaker import CircuitBreaker as _CircuitBreaker
+            breaker = _CircuitBreaker()
         self._demo = demo_adapter
         self._conn = db_conn
         self._cash_cents = initial_cash_cents
         self._initial_cash_cents = initial_cash_cents
         self._slippage = slippage_model or PaperSlippageModel()
+        self._breaker = breaker
+        self._profile = profile
         self._realized_pnl_cents = 0
         _init_paper_positions_table(db_conn)
 
@@ -115,6 +126,20 @@ class PaperTrader:
     @property
     def is_demo(self) -> bool:
         return True
+
+    @property
+    def breaker(self) -> CircuitBreaker:
+        return self._breaker
+
+    @property
+    def profile(self) -> TradingProfile | None:
+        return self._profile
+
+    def _position_value_cents(self) -> int:
+        total = 0
+        for pos in self.get_positions():
+            total += pos.avg_price_cents * pos.quantity
+        return total
 
     def get_portfolio(self) -> PaperPortfolio:
         positions = self.get_positions()
@@ -170,6 +195,38 @@ class PaperTrader:
             logger.warning("Rejected zero/negative quantity order: ticker=%s qty=%d", ticker, quantity)
             return None
 
+        from traderbot.kalshi.models import PortfolioState, TradeRequest
+
+        portfolio = PortfolioState(
+            portfolio_value_cents=max(self._cash_cents, 1),
+            peak_value_cents=max(self._cash_cents, 1),
+            current_positions_value_cents=self._position_value_cents(),
+            today_realized_loss_cents=max(0, self._initial_cash_cents - self._cash_cents - self._position_value_cents()),
+            today_unrealized_loss_cents=0,
+            open_positions_count=len(self.get_positions()),
+        )
+        trade_request = TradeRequest(
+            ticker=ticker,
+            direction=side,
+            quantity=quantity,
+            price_cents=price_cents,
+            estimated_prob=0.5,
+            confidence=0.5,
+            edge_estimate=0.0,
+            market_price_cents=price_cents,
+            market_open_interest=0,
+        )
+
+        sized = evaluate_trade(trade_request, portfolio, self._breaker, profile=self._profile)
+        if sized == 0:
+            logger.info("Paper trade rejected by risk gate: ticker=%s side=%s", ticker, side)
+            return None
+
+        risk_adjusted_qty = min(quantity, sized // max(price_cents, 1))
+        if risk_adjusted_qty <= 0:
+            logger.info("Paper trade sized to zero: ticker=%s sized=%d price=%d", ticker, sized, price_cents)
+            return None
+
         try:
             market_service = self._demo.get_market_service()
             orderbook = await market_service.get_orderbook(ticker)
@@ -177,14 +234,13 @@ class PaperTrader:
             logger.exception("DemoAdapter failure fetching orderbook for %s", ticker)
             return None
 
-        fill_price = self._slippage.compute_fill_price(orderbook, side, quantity)
+        fill_price = self._slippage.compute_fill_price(orderbook, side, risk_adjusted_qty)
 
-        max_cost = fill_price * quantity
-        max_qty = quantity
+        max_cost = fill_price * risk_adjusted_qty
         if max_cost > self._cash_cents:
-            max_qty = self._cash_cents // max(fill_price, 1)
+            risk_adjusted_qty = self._cash_cents // max(fill_price, 1)
 
-        if max_qty <= 0:
+        if risk_adjusted_qty <= 0:
             logger.warning("Insufficient cash for order: ticker=%s need=%d have=%d", ticker, max_cost, self._cash_cents)
             return None
 
@@ -192,7 +248,7 @@ class PaperTrader:
             ticker=ticker,
             side=side,
             price_cents=fill_price,
-            quantity=max_qty,
+            quantity=risk_adjusted_qty,
             slippage_cents=fill_price - price_cents if fill_price > price_cents else 0,
             timestamp=datetime.now(UTC),
         )

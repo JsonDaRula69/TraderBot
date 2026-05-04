@@ -38,11 +38,34 @@ class StrategyProfile(BaseModel):
             raise ValueError("category_focus must be non-empty")
         return self
 
+    # Ceiling-type limits: lower is more restrictive (use min)
+    _CEILING_KEYS = frozenset({
+        "max_position_per_market_pct",
+        "max_daily_loss_pct",
+        "max_drawdown_pct",
+        "max_open_positions",
+    })
+    # Floor-type limits: higher is more restrictive (use max)
+    _FLOOR_KEYS = frozenset({
+        "min_liquidity_threshold",
+        "min_edge_pct",
+    })
+
     def effective_limit(self, key: str) -> float | int:
-        """Compute profile-scoped limit: risk_multiplier * HARD_LIMITS[key]."""
+        """Compute profile-scoped limit within HARD_LIMITS.
+
+        For ceiling-type limits (max_*), uses min(profile_scaled, HARD_LIMITS)
+        — lower is more restrictive.
+
+        For floor-type limits (min_*), uses max(profile_scaled, HARD_LIMITS)
+        — higher is more restrictive (a floor means "at least this much").
+        """
         if key not in HARD_LIMITS:
             raise KeyError(f"Unknown HARD_LIMITS key: {key!r}")
-        return self.risk_multiplier * HARD_LIMITS[key]
+        scaled = self.risk_multiplier * HARD_LIMITS[key]
+        if key in self._FLOOR_KEYS:
+            return max(scaled, HARD_LIMITS[key])
+        return min(scaled, HARD_LIMITS[key])
 
 
 CONSERVATIVE = StrategyProfile(
