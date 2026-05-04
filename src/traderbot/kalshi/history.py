@@ -58,7 +58,7 @@ class HistoryService:
         if cursor is not None:
             params["cursor"] = cursor
 
-        response = await self._client.get(f"/markets/{ticker}/trades", **params)
+        response = await self._client.get("/markets/trades", ticker=ticker, **params)
         response.raise_for_status()
         data = response.json()
         trades = [_normalize_trade(t) for t in data.get("trades", [])]
@@ -69,7 +69,7 @@ class HistoryService:
         cursor: str | None = None,
         limit: int = 100,
     ) -> MarketListResponse:
-        params: dict[str, Any] = {"limit": limit, "state": "settled"}
+        params: dict[str, Any] = {"limit": limit, "status": "settled"}
         if cursor is not None:
             params["cursor"] = cursor
 
