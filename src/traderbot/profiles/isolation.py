@@ -62,4 +62,3 @@ def ensure_profile_dirs(profile: TradingProfile) -> None:
     (base / "chroma").mkdir(parents=True, exist_ok=True)
     (base / "audit").mkdir(parents=True, exist_ok=True)
 
-# Made with Bob

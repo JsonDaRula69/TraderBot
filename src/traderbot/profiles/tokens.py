@@ -198,4 +198,3 @@ def get_profile_token(profile_name: str) -> str | None:
             return assignment["token"]
     return None
 
-# Made with Bob

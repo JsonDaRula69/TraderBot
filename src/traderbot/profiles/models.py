@@ -110,4 +110,3 @@ class TradingProfile(BaseModel):
             return True
         return category in self.enabled_categories
 
-# Made with Bob
