@@ -2451,6 +2451,14 @@ def cron_setup(
         str,
         typer.Option("--agent", help="OpenClaw agent ID to register loops for"),
     ],
+    channel: Annotated[
+        str | None,
+        typer.Option("--channel", help="Delivery channel for announce (e.g. telegram, slack, whatsapp)"),
+    ] = None,
+    to: Annotated[
+        str | None,
+        typer.Option("--to", help="Delivery target (chat ID for telegram, E.164 phone for whatsapp)"),
+    ] = None,
     heartbeat_interval: Annotated[
         str,
         typer.Option("--heartbeat-every", help="Heartbeat interval (e.g. 30m, 1h, 6h)"),
@@ -2469,9 +2477,14 @@ def cron_setup(
     ] = False,
 ) -> None:
     """Register decision, heartbeat, and news cron loops with OpenClaw for an agent."""
-    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload, LOOP_DEFINITIONS
+    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload
 
     console = Console()
+
+    if bool(channel) ^ bool(to):
+        console.print("[red]Error:[/red] Both --channel and --to are required when either is provided.")
+        raise typer.Exit(1)
+
     results: list[dict[str, str | bool]] = []
 
     if not dry_run and not shutil.which("openclaw"):
@@ -2485,7 +2498,7 @@ def cron_setup(
     cron_jobs = [
         {
             "name": "decision_loop",
-            "cron_expr": "*/5 9-15 * * 1-5",
+            "cron_expr": "*/5 9-16 * * 1-5",
             "session": "isolated",
             "message": decision_payload.message,
         },
@@ -2520,6 +2533,8 @@ def cron_setup(
             "--agent", agent_id,
             "--announce",
         ]
+        if channel and to:
+            args.extend(["--channel", channel, "--to", to])
         if "cron_expr" in job:
             args.extend(["--cron", job["cron_expr"]])
         else:
