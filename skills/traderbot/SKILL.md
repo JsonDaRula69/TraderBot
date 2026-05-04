@@ -30,16 +30,15 @@ metadata:
 | `traderbot compare` | `STRATEGY_A STRATEGY_B [--json]` | Compare strategies |
 | `traderbot performance` | `[--period STR] [--json]` | Portfolio performance |
 | `traderbot learnings` | `[--json]` | Self-improvement log |
-| `traderbot profile create` | `NAME --mode paper|live [--json]` | Create a trading profile |
+| `traderbot profile create` | `NAME --mode paper|live [--json]` | Create a trading profile (user-only) |
 | `traderbot profile list` | `[--json]` | List all profiles |
 | `traderbot profile show` | `NAME [--json]` | Show profile details |
-| `traderbot profile delete` | `NAME [--keep-data]` | Delete a profile |
+| `traderbot profile delete` | `NAME [--keep-data]` | Delete a profile (user-only) |
 | `traderbot profile assign` | `AGENT-ID PROFILE-NAME` | Assign agent to profile |
 | `traderbot profile revoke` | `PROFILE-NAME` | Revoke agent assignment |
 | `traderbot profile assignments` | `[--json]` | List token assignments |
 | `traderbot profile discover-agents` | `[--json]` | Discover OpenClaw agents |
-| `traderbot profile set-auth` | `PROFILE-NAME SERVICE` | Set profile credentials |
-| `traderbot profile auth` | `PROFILE-NAME [--json]` | Show profile credentials |
+| `traderbot profile set-auth` | `PROFILE-NAME SERVICE` | Set profile credentials (user-only) |
 
 ## Trigger Phrases
 
@@ -53,10 +52,11 @@ metadata:
 | "Check signals" / "Active signals" | `traderbot signals` |
 | "System status" / "Health check" | `traderbot heartbeat` |
 | "Stop trading" / "Circuit breaker" | `traderbot halt` |
-| "What's the latest news?" | `traderbot news` (Phase 7) |
-| "Check sentiment" | `traderbot sentiment` (Phase 7) |
-| "Test this strategy" | `traderbot backtest` (Phase 5) |
-| "How did we do?" / "Performance" | `traderbot performance` (Phase 5) |
+| "What's the latest news?" | `traderbot news` |
+| "Check sentiment" | `traderbot sentiment` |
+| "Cancel that order" / "Cancel order" | `traderbot cancel ORDER_ID` |
+| "Test this strategy" | `traderbot backtest` |
+| "How did we do?" / "Performance" | `traderbot performance` |
 
 ## Output Format
 
