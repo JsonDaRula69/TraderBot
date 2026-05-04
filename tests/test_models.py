@@ -422,11 +422,11 @@ class TestDecision:
         assert d.rejection_reason == "daily_loss_limit"
         assert d.risk_checks["daily_loss"] is False
 
-    def test_hold_direction(self) -> None:
+    def test_neutral_direction(self) -> None:
         d = Decision(
             timestamp=_ts(),
             ticker="KX-TEST",
-            direction="hold",
+            direction="neutral",
             quantity=0,
             price=0,
             signal_strength=0.3,
@@ -435,7 +435,7 @@ class TestDecision:
             risk_checks={},
             outcome="held",
         )
-        assert d.direction == "hold"
+        assert d.direction == "neutral"
 
     def test_invalid_direction_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -471,7 +471,7 @@ class TestDecision:
         Decision(
             timestamp=_ts(),
             ticker="KX-TEST",
-            direction="hold",
+            direction="neutral",
             quantity=0,
             price=0,
             signal_strength=0.0,
@@ -1002,7 +1002,7 @@ class TestTradeRequest:
         with pytest.raises(ValidationError):
             TradeRequest(
                 ticker="KX-TEST",
-                direction="hold",
+                direction="neutral",
                 quantity=10,
                 price_cents=55,
                 estimated_prob=0.6,
