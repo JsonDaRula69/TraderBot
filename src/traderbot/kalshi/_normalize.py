@@ -28,7 +28,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         volume=int(raw["volume"]),
         open_interest=int(raw["open_interest"]),
         close_time=close_time_val,
-        state=raw["state"],
+        status=raw.get("state", raw.get("status")),
         event_ticker=raw["event_ticker"],
         category=raw.get("category"),
         settlement_result=raw.get("settlement_result"),

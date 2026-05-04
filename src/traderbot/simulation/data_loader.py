@@ -131,7 +131,7 @@ class DataLoader:
                     message=f"Market has {len(ticker_trades)} trades",
                 ))
 
-            if market.state == "settled" and len(ticker_trades) >= _MIN_TRADES_FOR_QUALITY and self._check_settlement_inconsistency(market, ticker_trades):
+            if market.status == "settled" and len(ticker_trades) >= _MIN_TRADES_FOR_QUALITY and self._check_settlement_inconsistency(market, ticker_trades):
                 flags.append(QualityFlag(
                     ticker=market.ticker,
                     flag_type="settlement_inconsistency",

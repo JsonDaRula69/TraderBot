@@ -78,7 +78,7 @@ class MarketService:
         if cursor is not None:
             params["cursor"] = cursor
 
-        response = await self._client.get(f"/markets/{ticker}/trades", **params)
+        response = await self._client.get("/markets/trades", ticker=ticker, **params)
         response.raise_for_status()
         data = response.json()
         trades = [_normalize_trade(t) for t in data.get("trades", [])]
