@@ -326,7 +326,7 @@ class TestScan:
                 volume=1000,
                 open_interest=500,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
-                state="open",
+                status="open",
                 event_ticker="KXBTCD-26MAR31",
             ),
             Market(
@@ -336,7 +336,7 @@ class TestScan:
                 volume=2000,
                 open_interest=800,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
-                state="open",
+                status="open",
                 event_ticker="KXBTCD-26MAR31",
             ),
         ]
@@ -367,7 +367,7 @@ class TestScan:
                 volume=1000,
                 open_interest=500,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
-                state="open",
+                status="open",
                 event_ticker="KXBTCD-26MAR31",
             ),
         ]
@@ -401,7 +401,7 @@ class TestAnalyze:
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, tzinfo=UTC),
-            state="open",
+            status="open",
             event_ticker="KXBTCD-26MAR31",
         )
         orderbook = OrderBook(
@@ -438,7 +438,7 @@ class TestAnalyze:
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, tzinfo=UTC),
-            state="open",
+            status="open",
             event_ticker="KXBTCD-26MAR31",
         )
         orderbook = OrderBook(

@@ -718,7 +718,7 @@ class TestRiskEnforcementIntegration:
             ticker="KX-NOEDGE", question="Low edge?",
             outcome_prices=["0.52", "0.48"], volume=5000, open_interest=2000,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-            state="settled", event_ticker="KX-EVENT",
+            status="settled", event_ticker="KX-EVENT",
             category="test", settlement_result=True,
         )
         trade = _make_trade(ticker="KX-NOEDGE", price=52, quantity=10)

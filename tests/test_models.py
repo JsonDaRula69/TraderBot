@@ -79,7 +79,7 @@ class TestMarket:
     def test_valid(self, sample_market_data: dict) -> None:
         m = Market(**_normalize_market(sample_market_data))
         assert m.ticker == "KXBTCD-26MAR31-T55000"
-        assert m.state == "open"
+        assert m.status == "open"
         assert m.category == "crypto"
 
     def test_optional_fields_none(self) -> None:
@@ -90,7 +90,7 @@ class TestMarket:
             volume=0,
             open_interest=0,
             close_time=_ts(),
-            state="open",
+            status="open",
             event_ticker="KX-EVENT",
         )
         assert m.category is None
@@ -105,7 +105,7 @@ class TestMarket:
                 volume=1,
                 open_interest=1,
                 close_time=_ts(),
-                state="pending",
+                status="pending",
                 event_ticker="KX-E",
             )
 
@@ -133,7 +133,7 @@ class TestMarket:
             volume=100,
             open_interest=50,
             close_time=_ts(),
-            state="settled",
+            status="settled",
             event_ticker="KX-E",
             settlement_result=True,
         )
@@ -148,7 +148,7 @@ class TestMarket:
                 volume=-1,
                 open_interest=0,
                 close_time=_ts(),
-                state="open",
+                status="open",
                 event_ticker="KX-E",
             )
 
@@ -160,10 +160,10 @@ class TestMarket:
             volume=500,
             open_interest=200,
             close_time=_ts(),
-            state="closed",
+            status="closed",
             event_ticker="KX-E",
         )
-        assert m.state == "closed"
+        assert m.status == "closed"
 
 
 class TestOrderBook:
@@ -670,7 +670,7 @@ class TestMarketListResponse:
             volume=500,
             open_interest=100,
             close_time=_ts(),
-            state="open",
+            status="open",
             event_ticker="KX-OTHER-E",
         )
         r = MarketListResponse(markets=[m1, m2])
