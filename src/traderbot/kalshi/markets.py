@@ -32,6 +32,10 @@ class MarketService:
         limit: int = 100,
         category: str | None = None,
         state: str | None = None,
+        event_ticker: str | None = None,
+        series_ticker: str | None = None,
+        min_close_ts: int | None = None,
+        max_close_ts: int | None = None,
     ) -> MarketListResponse:
         params: dict[str, Any] = {"limit": limit}
         if cursor is not None:
@@ -40,6 +44,14 @@ class MarketService:
             params["category"] = category
         if state is not None:
             params["state"] = state
+        if event_ticker is not None:
+            params["event_ticker"] = event_ticker
+        if series_ticker is not None:
+            params["series_ticker"] = series_ticker
+        if min_close_ts is not None:
+            params["min_close_ts"] = min_close_ts
+        if max_close_ts is not None:
+            params["max_close_ts"] = max_close_ts
 
         response = await self._client.get("/markets", **params)
         response.raise_for_status()
