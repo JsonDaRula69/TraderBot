@@ -367,7 +367,7 @@ class BacktestEngine:
 
         pnls = [t.pnl_cents for t in closed_trades]
         mean_pnl = sum(pnls) / len(pnls)
-        std_pnl = (sum((p - mean_pnl) ** 2 for p in pnls) / len(pnls)) ** 0.5 if len(pnls) > 1 else 1.0
+        std_pnl = (sum((p - mean_pnl) ** 2 for p in pnls) / (len(pnls) - 1)) ** 0.5 if len(pnls) > 1 else 1.0
         sharpe = (mean_pnl / std_pnl) * math.sqrt(252) if std_pnl > 0 else 0.0
 
         cumulative = self._initial_bankroll_cents
