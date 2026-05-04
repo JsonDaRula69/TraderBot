@@ -27,11 +27,15 @@ class TradingService:
         """Submit a new order and return the created order."""
         body: dict[str, Any] = {
             "ticker": order_request.ticker,
+            "action": order_request.action,
             "side": order_request.side.value,
-            "order_type": order_request.order_type.value,
-            "quantity": order_request.quantity,
-            "price": order_request.price,
+            "count": order_request.count,
+            "yes_price": order_request.yes_price,
         }
+        if order_request.client_order_id is not None:
+            body["client_order_id"] = order_request.client_order_id
+        if order_request.no_price is not None:
+            body["no_price"] = order_request.no_price
         response = await self._client.post("/portfolio/orders", **body)
         response.raise_for_status()
         data = response.json()
@@ -82,8 +86,8 @@ class TradingService:
             ticker=raw["ticker"],
             side=OrderSide(raw.get("side", "yes")),
             order_type=OrderType(raw.get("order_type", "limit")),
-            quantity=int(raw.get("quantity", 0)),
-            price=int(raw.get("price", 0)),
+            quantity=int(raw.get("count", raw.get("quantity", 0))),
+            price=int(raw.get("yes_price", raw.get("price", 0))),
             status=OrderStatus(raw.get("status", "live")),
             created_time=created_time,
             filled_quantity=int(raw.get("filled_quantity", 0)),
