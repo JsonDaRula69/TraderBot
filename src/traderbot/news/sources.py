@@ -72,11 +72,13 @@ class NewsAggregator:
         self.rate_limit_limit: int | None = None
         self.rate_limit_remaining: int | None = None
 
-    async def fetch_recent(self, source: NewsSource, limit: int = 20) -> list[NewsItem]:
+    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None) -> list[NewsItem]:
         """Fetch recent items from a single source."""
         try:
             match source:
                 case NewsSource.NEWSAPI:
+                    if query:
+                        return await self._fetch_everything(query, limit)
                     return await self._fetch_newsapi(limit)
                 case NewsSource.TWITTER:
                     return await self._fetch_twitter(limit)
@@ -189,6 +191,95 @@ class NewsAggregator:
 
         if last_exc is not None:
             logger.error("NewsAPI request failed: %s", last_exc)
+        return []
+
+    async def _fetch_everything(self, query: str, limit: int = 20) -> list[NewsItem]:
+        """Fetch articles matching query via NewsAPI /everything endpoint."""
+        if not self._newsapi_key:
+            logger.warning("NEWSAPI_KEY not set, skipping NewsAPI everything")
+            return []
+
+        params: dict[str, Any] = {
+            "apiKey": self._newsapi_key,
+            "q": query,
+            "pageSize": min(limit, 100),
+            "sortBy": "publishedAt",
+            "language": "en",
+        }
+
+        max_retries = 3
+        base_delay = 1.0
+        last_exc: Exception | None = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self._client.get(
+                    f"{self._newsapi_base}/everything",
+                    params=params,
+                )
+                self._capture_rate_limits(response)
+
+                if response.status_code == 429:
+                    if attempt < max_retries:
+                        delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                        logger.warning(
+                            "NewsAPI everything rate limited (429), retry %d/%d in %.1fs",
+                            attempt + 1, max_retries, delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    logger.error("NewsAPI everything rate limit exhausted")
+                    return []
+
+                if response.status_code != 200:
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", response.text[:200])
+                    except Exception:
+                        error_msg = response.text[:200]
+                    raise NewsAPIError(f"NewsAPI everything HTTP {response.status_code}: {error_msg}")
+
+                try:
+                    data = response.json()
+                except Exception:
+                    logger.warning("NewsAPI everything returned non-JSON, skipping")
+                    return []
+
+                articles = data.get("articles", [])
+                items: list[NewsItem] = []
+                for idx, article in enumerate(articles[:limit]):
+                    try:
+                        published = article.get("publishedAt", "")
+                        published_at = (
+                            datetime.fromisoformat(published.replace("Z", "+00:00"))
+                            if published
+                            else datetime.now(tz=UTC)
+                        )
+                        items.append(
+                            NewsItem(
+                                id=f"newsapi-everything-{idx}-{hash(query) & 0xFFFF}",
+                                title=article.get("title", "") or "",
+                                body=article.get("description", "") or "",
+                                source=NewsSource.NEWSAPI,
+                                url=article.get("url", "") or "",
+                                published_at=published_at,
+                                ticker_refs=[],
+                                category="uncategorized",
+                            )
+                        )
+                    except Exception:
+                        logger.warning("Skipping malformed everything article at index %d", idx)
+                        continue
+                return items
+
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    await asyncio.sleep(delay)
+
+        if last_exc is not None:
+            logger.error("NewsAPI everything request failed: %s", last_exc)
         return []
 
     def _capture_rate_limits(self, response: httpx.Response) -> None:

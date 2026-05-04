@@ -257,7 +257,7 @@ def signals(
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """Show active signals across tracked markets. (Phase 4)"""
+    """NOT YET IMPLEMENTED — stub for Phase 4. Show active signals across tracked markets."""
     if json_output:
         json_lib.dump(
             {"note": "Signal generation requires tracked markets and price data"}, sys.stdout
@@ -2491,10 +2491,14 @@ def cron_setup(
 
     results: list[dict[str, str | bool]] = []
 
-    if not dry_run and not shutil.which("openclaw"):
-        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-        console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
-        raise typer.Exit(1)
+    if not dry_run:
+        if not shutil.which("openclaw"):
+            console.print("[red]Error:[/red] openclaw CLI not found in PATH")
+            console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
+            raise typer.Exit(1)
+
+        # channel/to validated by XOR check above — either both provided or neither
+        announce = bool(channel and to)  # implicit announce when channel+to provided
 
     decision_payload = DecisionLoopPayload()
     heartbeat_payload = HeartbeatLoopPayload()
