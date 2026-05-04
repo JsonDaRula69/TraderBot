@@ -125,8 +125,8 @@ class RiskCheckResult(BaseModel):
 
     passed: bool
     limit_name: str
-    current_value: float
-    limit_value: float
+    current_value: float | int
+    limit_value: float | int
     rejection_reason: str | None = None
 
 
