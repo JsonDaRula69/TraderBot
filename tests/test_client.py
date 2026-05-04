@@ -57,7 +57,7 @@ class TestKalshiConfig:
     def test_env_loading(self) -> None:
         with patch.dict(
             "os.environ",
-            {"KALSHI_API_KEY": "env-key", "KALSHI_API_SECRET": "env-secret"},
+            {"KALSHI_API_KEY": "env-key", "KALSHI_PRIVATE_KEY_PEM": "env-secret"},
             clear=False,
         ):
             cfg = KalshiConfig()

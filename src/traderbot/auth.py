@@ -205,7 +205,7 @@ class AuthManager:
         if service == "kalshi" and key == "api_key":
             return "KALSHI_API_KEY"
         if service == "kalshi" and key == "private_key_pem":
-            return "KALSHI_API_SECRET"
+            return "KALSHI_PRIVATE_KEY_PEM"
         if service == "kalshi" and key == "demo_mode":
             return "KALSHI_DEMO_MODE"
         return f"{service_prefix}_{key.upper()}"

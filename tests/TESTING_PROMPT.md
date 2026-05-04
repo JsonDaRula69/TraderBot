@@ -887,7 +887,7 @@ Test `auth.py` (`AuthManager`):
 **Env fallback:**
 - `get_credential()` returns `CredentialResult(source="env")` when keyring is unavailable and env var is set
 - `_service_key_to_env("kalshi", "api_key")` returns `"KALSHI_API_KEY"`
-- `_service_key_to_env("kalshi", "api_secret")` returns `"KALSHI_API_SECRET"`
+- `_service_key_to_env("kalshi", "api_secret")` returns `"KALSHI_PRIVATE_KEY_PEM"`
 - `_service_key_to_env("kalshi", "demo_mode")` returns `"KALSHI_DEMO_MODE"`
 
 **Keyring namespace isolation:**
@@ -2081,7 +2081,7 @@ Test the full installation flow from zero to operational. Every check must refer
 - Verify keyring namespace isolation: `AuthManager._full_service("kalshi")` returns `"traderbot.kalshi"`
 - Verify profile-aware keyring namespace: `AuthManager` used inside profiles resolves to `traderbot.profiles.<name>.<service>`
 - Verify `.env` fallback: `AuthManager.get_credential()` returns `CredentialResult(source="env")` when keyring is unavailable and `KALSHI_API_KEY` environment variable is set
-- Verify env mapping: `AuthManager._service_key_to_env("kalshi", "api_key")` returns `"KALSHI_API_KEY"`, `"kalshi", "api_secret"` → `"KALSHI_API_SECRET"`, `"kalshi", "demo_mode"` → `"KALSHI_DEMO_MODE"`
+- Verify env mapping: `AuthManager._service_key_to_env("kalshi", "api_key")` returns `"KALSHI_API_KEY"`, `"kalshi", "api_secret"` → `"KALSHI_PRIVATE_KEY_PEM"`, `"kalshi", "demo_mode"` → `"KALSHI_DEMO_MODE"`
 
 ### 0.8.4 Demo Mode Configuration
 
@@ -2151,7 +2151,7 @@ Test the full installation flow from zero to operational. Every check must refer
 - Verify `TRADERBOT_PROFILE_TOKEN` set to a valid token resolves via `get_current_profile()` and applies profile-specific risk limits
 - Verify profile-specific `AgentRiskLimits.max_position_per_market_pct` is capped by `HARD_LIMITS.max_position_per_market_pct` — a permissive profile cannot exceed hard limits
 - Verify `AuthManager` with `TRADERBOT_PROFILE_TOKEN` resolves credentials from `traderbot.profiles.<name>.<service>` namespace, not global `traderbot.<service>`
-- Verify `KALSHI_API_KEY` and `KALSHI_API_SECRET` env vars are used as `.env` fallback when keyring is unavailable
+- Verify `KALSHI_API_KEY` and `KALSHI_PRIVATE_KEY_PEM` env vars are used as `.env` fallback when keyring is unavailable
 - Verify profile data isolation: `profile.base_dir` is used for DB, ChromaDB, and audit paths (not global `~/.traderbot/`)
 - Verify no credential values appear in `traderbot auth list-keys` output — only key names are shown
 - Verify `traderbot bootstrap --dry-run` does NOT write to keyring, database, or filesystem — only validates and reports

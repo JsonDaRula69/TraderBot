@@ -444,7 +444,7 @@ setup_api_credentials() {
         echo
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
         if [[ -n "$kalshi_secret" ]]; then
-            _env_set "$env_file" "KALSHI_API_SECRET" "$kalshi_secret"
+            _env_set "$env_file" "KALSHI_PRIVATE_KEY_PEM" "$kalshi_secret"
         fi
         echo "Kalshi credentials stored."
     fi
