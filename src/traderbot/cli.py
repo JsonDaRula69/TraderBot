@@ -473,6 +473,7 @@ def bootstrap(
 
     from traderbot.auth import AuthManager
     from traderbot.db import DB_PATH, get_connection, init_schema
+    from traderbot.paths import get_data_dir
 
     console = Console()
     steps: dict[str, str | bool] = {}
@@ -493,7 +494,7 @@ def bootstrap(
         raise typer.Exit(code=1)
 
     # Step 2: Create default config directory
-    config_dir = Path.home() / ".traderbot"
+    config_dir = get_data_dir()
     config_dir_exists = config_dir.exists()
     steps["config_dir"] = str(config_dir)
     if not dry_run and not config_dir_exists:
@@ -539,7 +540,7 @@ def bootstrap(
                         console.print(f"[green]Saved to .env:[/green] {env_key}")
 
         if env_lines:
-            env_path = Path.home() / ".traderbot" / ".env"
+            env_path = get_data_dir() / ".env"
             env_path.parent.mkdir(parents=True, exist_ok=True)
             existing = env_path.read_text() if env_path.exists() else ""
             new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
@@ -1307,10 +1308,13 @@ def paper(
         return
 
     from traderbot.db import get_connection, init_schema
+    from traderbot.profiles import get_current_profile
+
+    profile = get_current_profile()
 
     with get_connection(db_path) as conn:
         init_schema(conn)
-        trader = PaperTrader(demo, conn)
+        trader = PaperTrader(demo, conn, profile=profile)
         portfolio = trader.get_portfolio()
         pnl = trader.get_pnl()
 
