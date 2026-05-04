@@ -49,6 +49,37 @@ detect_os() {
     fi
 }
 
+# Find a compatible Python (3.12.x only — chroma-hnswlib has no wheels for 3.13+).
+# Prefer system Python over linuxbrew/homebrew versions which may be too new.
+find_compatible_python() {
+    local candidates=()
+
+    # Prioritise system Python on Debian/Ubuntu
+    if [[ -f "/usr/bin/python3.12" ]]; then
+        candidates+=("/usr/bin/python3.12")
+    fi
+    # General system python3 (may be 3.12 on recent Ubuntu)
+    if [[ -f "/usr/bin/python3" ]]; then
+        candidates+=("/usr/bin/python3")
+    fi
+    # Homebrew/linuxbrew Python — checked last (often too new)
+    if command -v python3 &>/dev/null; then
+        candidates+=("python3")
+    fi
+
+    for py in "${candidates[@]}"; do
+        local ver
+        ver="$("$py" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)" || continue
+        if [[ "$ver" == "3.12" ]]; then
+            echo "$py"
+            return 0
+        fi
+    done
+
+    # No compatible Python found
+    return 1
+}
+
 check_openclaw() {
     if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
         return 0
@@ -57,11 +88,21 @@ check_openclaw() {
 }
 
 install_dependencies_debian() {
-    local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip curl git file python3-pip)
+    local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev gnome-keyring unzip curl git file python3-pip)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
-        sudo apt install -y "${pkgs[@]}"
+        sudo apt install -y "${pkgs[@]}" || {
+            echo "Warning: Some packages failed to install (python3.12 may need deadsnakes PPA)." >&2
+            echo "Attempting to add deadsnakes PPA..." >&2
+            sudo apt install -y software-properties-common 2>/dev/null
+            sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null
+            sudo apt update
+            sudo apt install -y python3.12 python3.12-venv python3.12-dev || {
+                echo "Error: Could not install Python 3.12. Install it manually and re-run." >&2
+                exit 1
+            }
+        }
     fi
 }
 
@@ -79,12 +120,11 @@ install_dependencies_macos() {
             exit 1
         fi
     fi
-    if ! command -v python3 &>/dev/null; then
-        echo "Error: Python3 not found. Install Python 3.12+ from python.org or Homebrew." >&2
-        exit 1
-    fi
-    if ! python3 -c 'import sys; assert sys.version_info >= (3,12)' 2>/dev/null; then
-        echo "Error: Python 3.12+ required. Found: $(python3 --version)" >&2
+    local py_bin
+    py_bin="$(find_compatible_python 2>/dev/null)" || true
+    if [[ -z "$py_bin" ]]; then
+        echo "Error: Python 3.12 is required (chromadb dependency has no wheels for 3.13+)." >&2
+        echo "Install Python 3.12 from python.org or: brew install python@3.12" >&2
         exit 1
     fi
 }
@@ -197,9 +237,19 @@ install_traderbot() {
     echo "Installing Python dependencies into venv..."
     
     install_uv
-    
+
+    PYTHON_BIN=""
+    if ! PYTHON_BIN="$(find_compatible_python)"; then
+        echo "Error: Python 3.12 is required but not found." >&2
+        echo "  chroma-hnswlib (a dependency) has no pre-built wheels for Python 3.13+." >&2
+        echo "  Install Python 3.12 and re-run this installer." >&2
+        echo "  On Ubuntu/Debian: sudo apt install python3.12 python3.12-venv" >&2
+        exit 1
+    fi
+    echo "Using Python: $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1))"
+
     if [[ ! -d .venv ]]; then
-        python3 -m venv .venv
+        "$PYTHON_BIN" -m venv .venv
     fi
     source .venv/bin/activate
 

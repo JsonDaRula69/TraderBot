@@ -448,6 +448,13 @@ def audit(
     console.print(table)
 
 
+def _python_version_ok() -> tuple[bool, str, tuple[int, int]]:
+    """Check if the running Python version is compatible (3.12.x only)."""
+    major, minor = sys.version_info.major, sys.version_info.minor
+    version_str = f"{major}.{minor}.{sys.version_info.micro}"
+    return (major, minor) == (3, 12), version_str, (major, minor)
+
+
 @app.command()
 def bootstrap(
     dry_run: Annotated[
@@ -466,22 +473,19 @@ def bootstrap(
     console = Console()
     steps: dict[str, str | bool] = {}
 
-    # Step 1: Check Python version (3.12+)
-    py_version = (sys.version_info.major, sys.version_info.minor)
-    py_ok = py_version >= (3, 12)
-    steps["python_version"] = (
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
+    # Step 1: Check Python version (3.12.x — chroma-hnswlib has no wheels for 3.13+)
+    py_ok, version_str, py_version_tuple = _python_version_ok()
+    steps["python_version"] = version_str
     steps["python_version_ok"] = py_ok
 
     if not py_ok:
         if json_output:
             json_lib.dump(
-                {"error": f"Python {steps['python_version']} < 3.12 required", "steps": steps},
+                {"error": f"Python {version_str} — 3.12.x required (chromadb dependency)", "steps": steps},
                 sys.stdout,
             )
             raise typer.Exit(code=1)
-        console.print(f"[red]Python {steps['python_version']} found, but 3.12+ is required.[/red]")
+        console.print(f"[red]Python {version_str} found, but 3.12.x is required (chromadb has no wheels for 3.13+).[/red]")
         raise typer.Exit(code=1)
 
     # Step 2: Create default config directory
@@ -570,9 +574,9 @@ def bootstrap(
 
     console.print("\n[bold]1. Python Version[/bold]")
     if py_ok:
-        console.print(f"  [green]✓[/green] Python {steps['python_version']} (≥ 3.12)")
+        console.print(f"  [green]✓[/green] Python {steps['python_version']} (= 3.12)")
     else:
-        console.print(f"  [red]✗[/red] Python {steps['python_version']} (requires ≥ 3.12)")
+        console.print(f"  [red]✗[/red] Python {steps['python_version']} (requires = 3.12)")
 
     console.print("\n[bold]2. Config Directory[/bold]")
     if config_dir_exists or dry_run:
