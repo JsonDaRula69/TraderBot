@@ -11,6 +11,8 @@ from traderbot.kalshi.models import MarketCategory
 from traderbot.news.sources import NewsSource
 
 NewsCategory = MarketCategory
+
+__all__ = ["NewsCategory", "NewsItem", "NewsSource"]
 """Backward-compatible alias — prefer MarketCategory from kalshi.models."""
 
 

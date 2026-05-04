@@ -21,7 +21,7 @@ class DemoAdapter:
         else:
             self._config = KalshiConfig(
                 api_key=SecretStr("demo"),
-                
+
                 demo_mode=True,
             )
 

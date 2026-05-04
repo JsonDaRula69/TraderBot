@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from traderbot.risk.limits import HARD_LIMITS
 from traderbot.simulation.engine import BacktestEngine, BacktestResult
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 class StrategyProfile(BaseModel):

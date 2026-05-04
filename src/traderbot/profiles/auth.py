@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
-from traderbot.profiles.models import TradingProfile
+if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +17,14 @@ _KEYRING_SERVICE_PREFIX = "traderbot.profiles."
 
 class ProfileAuthStore:
     """Per-profile credential store via OS keyring.
-    
+
     Each profile has isolated credential storage under:
     traderbot.profiles.{profile_name}.{service}
     """
 
     def __init__(self, profile: TradingProfile, keyring_module: Any = None) -> None:
         """Initialize auth store for a specific profile.
-        
+
         Args:
             profile: TradingProfile to manage credentials for
             keyring_module: Optional keyring module (for testing)
@@ -39,10 +40,10 @@ class ProfileAuthStore:
 
     def _service_name(self, service: str) -> str:
         """Get full keyring service name for this profile and service.
-        
+
         Args:
             service: Service name (e.g., 'kalshi', 'voyage')
-            
+
         Returns:
             Full service name: traderbot.profiles.{profile_name}.{service}
         """
@@ -50,7 +51,7 @@ class ProfileAuthStore:
 
     def set_credentials(self, service: str, key: str, secret: str) -> None:
         """Store credentials in keyring for this profile.
-        
+
         Args:
             service: Service name (e.g., 'kalshi')
             key: API key
@@ -58,33 +59,33 @@ class ProfileAuthStore:
         """
         kr = self._get_keyring()
         service_name = self._service_name(service)
-        
+
         # Store as JSON with timestamp
         data = {
             "key": key,
             "secret": secret,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
         kr.set_password(service_name, "credentials", json.dumps(data))
         logger.info("Stored credentials for profile '%s' service '%s'", self._profile.name, service)
 
     def get_credentials(self, service: str) -> tuple[str, str] | None:
         """Retrieve credentials for this profile.
-        
+
         Args:
             service: Service name (e.g., 'kalshi')
-            
+
         Returns:
             Tuple of (key, secret) if found, None otherwise
         """
         kr = self._get_keyring()
         service_name = self._service_name(service)
-        
+
         try:
             stored = kr.get_password(service_name, "credentials")
             if stored is None:
                 return None
-            
+
             data = json.loads(stored)
             return (data["key"], data["secret"])
         except Exception as e:
@@ -98,13 +99,13 @@ class ProfileAuthStore:
 
     def delete_credentials(self, service: str) -> None:
         """Remove credentials from keyring for this profile.
-        
+
         Args:
             service: Service name (e.g., 'kalshi')
         """
         kr = self._get_keyring()
         service_name = self._service_name(service)
-        
+
         try:
             kr.delete_password(service_name, "credentials")
             logger.info("Deleted credentials for profile '%s' service '%s'", self._profile.name, service)
@@ -118,10 +119,10 @@ class ProfileAuthStore:
 
     def has_credentials(self, service: str) -> bool:
         """Check if credentials exist for this profile.
-        
+
         Args:
             service: Service name (e.g., 'kalshi')
-            
+
         Returns:
             True if credentials exist, False otherwise
         """
@@ -129,17 +130,17 @@ class ProfileAuthStore:
 
     def list_services(self) -> list[str]:
         """List all services with stored credentials for this profile.
-        
+
         Returns:
             List of service names (sorted alphabetically)
         """
         kr = self._get_keyring()
         services: list[str] = []
-        
+
         # For mock keyring, iterate the store
         if hasattr(kr, "_store"):
             prefix = f"{_KEYRING_SERVICE_PREFIX}{self._profile.name}."
-            for (service_name, username) in kr._store.keys():
+            for (service_name, username) in kr._store:
                 if service_name.startswith(prefix) and username == "credentials":
                     # Extract service name from full service path
                     service = service_name[len(prefix):]
@@ -151,7 +152,7 @@ class ProfileAuthStore:
             for service in common_services:
                 if self.has_credentials(service):
                     services.append(service)
-        
+
         return sorted(services)
 
 

@@ -6,7 +6,7 @@ from datetime import datetime  # noqa: TC003
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field
 
 
 class OrderBookLevel(BaseModel):

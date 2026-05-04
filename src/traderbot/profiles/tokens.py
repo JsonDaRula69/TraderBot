@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from traderbot.paths import get_data_dir
@@ -96,7 +96,7 @@ def _save_tokens_file(tokens: list[dict]) -> None:
 
 def generate_token() -> str:
     """Generate 12-char opaque token with ~72 bits entropy.
-    
+
     Returns:
         URL-safe token string (12 characters)
     """
@@ -108,14 +108,14 @@ def assign_token(profile_name: str, agent_id: str, token: str) -> None:
     existing_token = get_profile_token(profile_name)
     if existing_token is not None:
         raise ValueError(f"Profile '{profile_name}' already has a token assigned")
-    
+
     data = {
         "token": token,
         "profile": profile_name,
         "agent": agent_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
-    
+
     if _keyring_available():
         kr = _get_keyring()
         service = f"{_KEYRING_SERVICE_PREFIX}{token}"
@@ -124,7 +124,7 @@ def assign_token(profile_name: str, agent_id: str, token: str) -> None:
         tokens = _load_tokens_file()
         tokens.append(data)
         _save_tokens_file(tokens)
-    
+
     logger.info("Assigned token to profile '%s' for agent '%s'", profile_name, agent_id)
 
 
@@ -170,7 +170,7 @@ def list_assignments() -> list[dict[str, str]]:
         kr = _get_keyring()
         assignments: list[dict[str, str]] = []
         if hasattr(kr, "_store"):
-            for (service, username) in kr._store.keys():
+            for (service, username) in kr._store:
                 if service.startswith(_KEYRING_SERVICE_PREFIX) and username == "token":
                     token = service[len(_KEYRING_SERVICE_PREFIX):]
                     try:

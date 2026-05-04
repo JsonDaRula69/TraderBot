@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from traderbot.profiles.models import TradingProfile
+from typing import TYPE_CHECKING
+
 from traderbot.risk.limits import HARD_LIMITS
+
+if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
 
 
 class AgentRiskLimits:

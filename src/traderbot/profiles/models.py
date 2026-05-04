@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from traderbot.kalshi.models import MarketCategory
 from traderbot.risk.limits import HARD_LIMITS
+
+if TYPE_CHECKING:
+    from traderbot.kalshi.models import MarketCategory
 
 
 class TradingProfile(BaseModel):

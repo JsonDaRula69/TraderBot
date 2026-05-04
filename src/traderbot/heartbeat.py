@@ -16,12 +16,12 @@ from traderbot.learning import (
     scan_for_promotions,
 )
 from traderbot.risk.circuit_breaker import CircuitBreaker
-from traderbot.updater import check_for_updates
 from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
     BinomialObservations,
 )
+from traderbot.updater import check_for_updates
 
 if TYPE_CHECKING:
     import sqlite3

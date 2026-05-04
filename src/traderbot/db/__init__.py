@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
-from pathlib import Path
+from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING
 
 from traderbot.db.decisions import init_table as init_decisions_table
@@ -13,6 +12,7 @@ from traderbot.paths import get_db_path as _get_db_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 DB_PATH: Path = _get_db_path()
 
@@ -24,10 +24,8 @@ def get_connection(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
-    try:
+    with suppress(OSError):
         path.chmod(0o600)
-    except OSError:
-        pass
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     try:

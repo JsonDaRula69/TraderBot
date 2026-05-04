@@ -479,7 +479,7 @@ def bootstrap(
     steps: dict[str, str | bool] = {}
 
     # Step 1: Check Python version (3.12.x — chroma-hnswlib has no wheels for 3.13+)
-    py_ok, version_str, py_version_tuple = _python_version_ok()
+    py_ok, version_str, _py_version_tuple = _python_version_ok()
     steps["python_version"] = version_str
     steps["python_version_ok"] = py_ok
 
@@ -1901,7 +1901,7 @@ def profile_create(
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] Invalid category: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # Use HARD_LIMITS as defaults for unspecified params
     profile_data = {
@@ -1926,7 +1926,7 @@ def profile_create(
         console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @profile_app.command("list")
@@ -2046,17 +2046,16 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
     3. ~/.openclaw/agents/<agentId>/ (agent state directory)
     4. .openclaw/workspace/<agentId>/ (project-local, legacy)
     """
-    from pathlib import Path as P
+    from pathlib import Path
 
     candidates = [
-        P.home() / ".openclaw" / f"workspace-{agent_id}",
-        P.home() / ".openclaw" / "workspace" / agent_id,
-        P.home() / ".openclaw" / "agents" / agent_id,
-        P.cwd() / ".openclaw" / "workspace" / agent_id,
+        Path.home() / ".openclaw" / f"workspace-{agent_id}",
+        Path.home() / ".openclaw" / "workspace" / agent_id,
+        Path.home() / ".openclaw" / "agents" / agent_id,
+        Path.cwd() / ".openclaw" / "workspace" / agent_id,
     ]
     for candidate in candidates:
-        if candidate.exists() and candidate.is_dir():
-            if (candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists():
+        if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
                 return candidate
     return None
 
@@ -2114,7 +2113,7 @@ def profile_assign(
             console.print("Token assigned but not injected")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @profile_app.command("revoke")
@@ -2122,7 +2121,6 @@ def profile_revoke(
     profile_name: str,
 ) -> None:
     """Revoke token assignment for a profile."""
-    from pathlib import Path
 
     from traderbot.profiles.injection import remove_token_from_tools
     from traderbot.profiles.tokens import get_profile_token, resolve_token, revoke_token
@@ -2212,7 +2210,6 @@ def profile_update(
     """Update specific fields of an existing profile."""
     from traderbot.kalshi.models import MarketCategory
     from traderbot.profiles.registry import ProfileRegistry
-    from traderbot.risk.limits import HARD_LIMITS
 
     console = Console()
     registry = ProfileRegistry()
@@ -2239,7 +2236,7 @@ def profile_update(
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] Invalid category: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     if risk_multiplier is not None:
         update_kwargs["risk_multiplier"] = risk_multiplier
@@ -2271,7 +2268,7 @@ def profile_update(
         console.print(f"[green]✓[/green] Updated profile '{name}'")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @profile_app.command("discover-agents")
@@ -2498,7 +2495,7 @@ def cron_setup(
             raise typer.Exit(1)
 
         # channel/to validated by XOR check above — either both provided or neither
-        announce = bool(channel and to)  # implicit announce when channel+to provided
+        bool(channel and to)  # implicit announce when channel+to provided
 
     decision_payload = DecisionLoopPayload()
     heartbeat_payload = HeartbeatLoopPayload()

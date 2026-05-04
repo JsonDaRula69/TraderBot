@@ -1,6 +1,6 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.08.32 (2026-04-26)
+**Last updated**: v0.10.05 (2026-04-26)
 **Current focus**: All phases complete
 
 ---
@@ -160,7 +160,7 @@
 | Profile-aware | `news/` + `cli.py` | ✅ Done | ProfileAuthStore API keys, enabled_categories filtering |
 | News signal | `analysis/signals.py` | ✅ Done | Sentiment as 4th signal source in generate_signal() |
 
-**Version**: v0.08.32 | **Tests**: 1544 total | **Dependencies**: Phase 1, 9
+**Version**: v0.10.05 | **Tests**: 1544 total | **Dependencies**: Phase 1, 9
 
 **Success criteria met**:
 - [x] News pipeline aggregates from NewsAPI + Reddit RSS
@@ -185,7 +185,7 @@
 | Heartbeat persistence | `heartbeat.py` | ✅ Done | state_path wiring, profile-aware paths |
 | Three-loop system | `.openclaw/` crons | ✅ Done | 5 cron tasks defined in HEARTBEAT.md |
 
-**Version**: v0.08.32 | **Tests**: 1544 total | **Dependencies**: Phase 5, 6, 7, 9
+**Version**: v0.10.05 | **Tests**: 1544 total | **Dependencies**: Phase 5, 6, 7, 9
 
 **Success criteria met**:
 - [x] BayesianAdapter persists state across restarts (atomic JSON writes)

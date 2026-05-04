@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import enum
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
 from traderbot.paths import get_data_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class BreakerLevel(enum.IntEnum):

@@ -5,20 +5,19 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date  # noqa: TC003
-from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from traderbot.paths import get_data_dir
-
 from traderbot.kalshi.models import Market, PortfolioState, Trade, TradeRequest
+from traderbot.paths import get_data_dir
 from traderbot.risk import evaluate_trade
 from traderbot.risk.circuit_breaker import CircuitBreaker, CircuitBreakerState
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.simulation.data_loader import DataLoader
-    from traderbot.simulation.profiles import StrategyProfile
     from traderbot.simulation.profiles import StrategyProfile
 
 

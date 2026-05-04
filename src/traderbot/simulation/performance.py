@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
 from traderbot.analysis.portfolio import (
     brier_score as _portfolio_brier,
+)
+from traderbot.analysis.portfolio import (
     calmar_ratio,
-    edge_realization,
     max_drawdown,
     sharpe_ratio,
-    win_rate,
 )
-from traderbot.simulation.engine import BacktestResult, BacktestTrade
+
+if TYPE_CHECKING:
+    from traderbot.simulation.engine import BacktestResult, BacktestTrade
 
 
 class StrategyComparison(BaseModel):
@@ -131,7 +132,7 @@ def compute_calmar(
     if not trades:
         return None
     total_pnl = sum(t.pnl_cents for t in trades)
-    final_value = initial_bankroll_cents + total_pnl
+    initial_bankroll_cents + total_pnl
     if initial_bankroll_cents <= 0:
         return None
     annualized_return = (total_pnl / initial_bankroll_cents) * (252 / max(len(trades), 1))
