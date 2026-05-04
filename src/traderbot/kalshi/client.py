@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from pydantic import BaseModel, SecretStr  # noqa: TC002
+from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
@@ -36,7 +36,7 @@ class KalshiConfig(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    api_key: str
+    api_key: SecretStr
     api_secret: SecretStr
     base_url: str = "https://api.kalshi.co/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
@@ -98,11 +98,11 @@ class KalshiClient:
         profile: TradingProfile | None = None,
     ) -> None:
         """Initialize KalshiClient with optional profile-aware configuration.
-        
+
         Args:
             config: KalshiConfig to use (if None, loads from env vars or profile)
             profile: TradingProfile to use for credentials and demo mode (optional)
-            
+
         Note:
             If both config and profile are None, attempts to load from KALSHI_* env vars.
             If profile is provided but config is None, uses profile credentials and demo mode.
@@ -112,10 +112,10 @@ class KalshiClient:
             if profile is not None:
                 # Use profile-aware credentials and demo mode
                 from traderbot.profiles.config import resolve_kalshi_credentials
-                
+
                 api_key, api_secret = resolve_kalshi_credentials(profile)
                 config = KalshiConfig(
-                    api_key=api_key,
+                    api_key=SecretStr(api_key),
                     api_secret=SecretStr(api_secret),
                     demo_mode=profile.demo_mode,
                 )
@@ -123,7 +123,7 @@ class KalshiClient:
                 # Fall back to env vars (backward compatibility)
                 # This will raise ValidationError if KALSHI_API_KEY/KALSHI_API_SECRET not set
                 config = KalshiConfig()  # type: ignore[call-arg]
-        
+
         self._config = config
         self._session_token: str | None = None
         self._semaphore = asyncio.Semaphore(int(self._config.rate_limit_rps))
@@ -142,7 +142,7 @@ class KalshiClient:
         response = await self._client.post(
             "/login",
             json={
-                "api_key": self._config.api_key,
+                "api_key": self._config.api_key.get_secret_value(),
                 "api_secret": self._config.api_secret.get_secret_value(),
             },
         )

@@ -22,7 +22,7 @@ class WebSocketConfig(BaseModel):
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
-    api_key: str
+    api_key: SecretStr
     api_secret: SecretStr
     base_url: str = "wss://api.kalshi.co/trade-api/ws/v2"
     demo_url: str = "wss://demo-api.kalshi.co/trade-api/ws/v2"
@@ -64,7 +64,7 @@ class MarketStream:
 
         auth_msg: dict[str, Any] = {
             "type": "auth",
-            "api_key": self._config.api_key,
+            "api_key": self._config.api_key.get_secret_value(),
             "api_secret": self._config.api_secret.get_secret_value(),
         }
         await self._ws.send(json.dumps(auth_msg))

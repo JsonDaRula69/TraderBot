@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import SecretStr
+
 from traderbot.kalshi.client import KalshiClient, KalshiConfig
 from traderbot.kalshi.history import HistoryService
 from traderbot.kalshi.markets import MarketService
@@ -13,23 +15,17 @@ class DemoAdapter:
     def __init__(self, config: KalshiConfig | None = None) -> None:
         if config is not None:
             if not config.demo_mode:
-                override = config.model_dump()
-                override["demo_mode"] = True
-                self._config = self._rebuild_config(override)
+                self._config = config.model_copy(update={"demo_mode": True})
             else:
                 self._config = config
         else:
             self._config = KalshiConfig(
-                api_key="demo",
+                api_key=SecretStr("demo"),
                 api_secret="demo",
                 demo_mode=True,
             )
 
         self._client = KalshiClient(self._config)
-
-    @staticmethod
-    def _rebuild_config(override: dict) -> KalshiConfig:
-        return KalshiConfig(**override)
 
     @property
     def is_demo(self) -> bool:
