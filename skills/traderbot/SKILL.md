@@ -4,7 +4,7 @@ description: Autonomous prediction market investment toolkit for Kalshi
 metadata:
   openclaw:
     requires:
-      env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY"]
+      env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY_PEM"]
       bins: ["python3"]
     primaryEnv: KALSHI_API_KEY
 ---
@@ -77,7 +77,7 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 | Variable | Required | Description |
 |---|---|---|
 | `KALSHI_API_KEY` | Yes | Kalshi API authentication key |
-| `KALSHI_PRIVATE_KEY` | Yes | RSA private key for JWT auth |
+| `KALSHI_PRIVATE_KEY_PEM` | Yes | RSA private key for JWT auth |
 | `KALSHI_DEMO` | No | Set to `true` to use demo API (`demo-api.kalshi.co`) |
 | `TRADERBOT_PROFILE_TOKEN` | No | Profile token for multi-agent deployment (auto-injected into TOOLS.md) |
 

@@ -6,7 +6,7 @@ from datetime import datetime  # noqa: TC003
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class OrderBookLevel(BaseModel):
@@ -17,7 +17,7 @@ class OrderBookLevel(BaseModel):
 
 
 class Market(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
 
     ticker: str
     question: str
@@ -25,14 +25,11 @@ class Market(BaseModel):
     volume: Annotated[int, Field(ge=0)]
     open_interest: Annotated[int, Field(ge=0)]
     close_time: datetime
-    status: Literal["open", "closed", "settled"]
+    status: Literal["open", "closed", "settled"] = Field(
+        validation_alias=AliasChoices("status", "state"),
+    )
     event_ticker: str
 
-    @field_validator("status", mode="before")
-    @classmethod
-    def accept_state_alias(cls, v: object) -> object:
-        """Accept 'state' as alias for 'status' at parse time."""
-        return v
     category: str | None = None
     market_category: MarketCategory | None = None
     settlement_result: bool | None = None
