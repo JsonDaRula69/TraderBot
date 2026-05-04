@@ -40,7 +40,7 @@ def _normalize_orderbook_level(raw: list[Any]) -> OrderBookLevel:
 
 
 def _normalize_trade(raw: dict[str, Any]) -> Trade:
-    ts_val = raw.get("timestamp") or raw.get("created_time", 0)
+    ts_val = raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("created_time", 0)
     if isinstance(ts_val, int):
         ts_val = _unix_to_datetime(ts_val)
 
