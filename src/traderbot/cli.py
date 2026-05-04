@@ -2407,10 +2407,10 @@ def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
 
 
 def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
-    """Write heartbeat config for an agent into ~/.openclaw/config.json."""
+    """Write heartbeat config for an agent into ~/.openclaw/openclaw.json."""
     import json as _json
 
-    config_path = Path.home() / ".openclaw" / "config.json"
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
     config: dict = {}
 
     if config_path.exists():
@@ -2457,7 +2457,7 @@ def cron_setup(
     ] = "6h",
     skip_heartbeat_config: Annotated[
         bool,
-        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to config.json"),
+        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
     ] = False,
     dry_run: Annotated[
         bool,
