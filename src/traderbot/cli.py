@@ -24,6 +24,7 @@ app = typer.Typer(
 def _version(value: bool) -> None:
     if value:
         from traderbot.updater import get_current_version
+
         print(f"traderbot v{get_current_version()}")
         raise typer.Exit()
 
@@ -32,7 +33,9 @@ def _version(value: bool) -> None:
 def main_callback(
     version: Annotated[
         bool,
-        typer.Option("--version", "-v", help="Show version and exit.", callback=_version, is_eager=True),
+        typer.Option(
+            "--version", "-v", help="Show version and exit.", callback=_version, is_eager=True
+        ),
     ] = False,
 ) -> None:
     """TraderBot — Autonomous prediction market agent."""
@@ -74,11 +77,16 @@ def _get_strategy(name: str):
                 return []
             direction = "yes" if yes_price > 0.5 else "no"
             prob = yes_price if direction == "yes" else 1.0 - yes_price
-            return [Signal(
-                ticker=market.ticker, direction=direction,
-                quantity=1, price_cents=int(yes_price * 100),
-                estimated_prob=prob, confidence=min(edge * 2, 1.0),
-            )]
+            return [
+                Signal(
+                    ticker=market.ticker,
+                    direction=direction,
+                    quantity=1,
+                    price_cents=int(yes_price * 100),
+                    estimated_prob=prob,
+                    confidence=min(edge * 2, 1.0),
+                )
+            ]
 
         def on_trade(self, trade, context: Context) -> list[Signal]:
             return []
@@ -97,11 +105,16 @@ def _get_strategy(name: str):
                 return []
             direction = "no" if yes_price > 0.65 else "yes"
             prob = 1.0 - yes_price if direction == "no" else yes_price
-            return [Signal(
-                ticker=market.ticker, direction=direction,
-                quantity=1, price_cents=int(yes_price * 100),
-                estimated_prob=prob, confidence=0.5,
-            )]
+            return [
+                Signal(
+                    ticker=market.ticker,
+                    direction=direction,
+                    quantity=1,
+                    price_cents=int(yes_price * 100),
+                    estimated_prob=prob,
+                    confidence=0.5,
+                )
+            ]
 
         def on_trade(self, trade, context: Context) -> list[Signal]:
             return []
@@ -121,11 +134,16 @@ def _get_strategy(name: str):
                 return []
             direction = "yes" if yes_price > 0.5 else "no"
             prob = yes_price if direction == "yes" else 1.0 - yes_price
-            return [Signal(
-                ticker=market.ticker, direction=direction,
-                quantity=1, price_cents=int(yes_price * 100),
-                estimated_prob=prob, confidence=min(edge, 1.0),
-            )]
+            return [
+                Signal(
+                    ticker=market.ticker,
+                    direction=direction,
+                    quantity=1,
+                    price_cents=int(yes_price * 100),
+                    estimated_prob=prob,
+                    confidence=min(edge, 1.0),
+                )
+            ]
 
         def on_trade(self, trade, context: Context) -> list[Signal]:
             return []
@@ -451,12 +469,17 @@ def bootstrap(
     # Step 1: Check Python version (3.12+)
     py_version = (sys.version_info.major, sys.version_info.minor)
     py_ok = py_version >= (3, 12)
-    steps["python_version"] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    steps["python_version"] = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
     steps["python_version_ok"] = py_ok
 
     if not py_ok:
         if json_output:
-            json_lib.dump({"error": f"Python {steps['python_version']} < 3.12 required", "steps": steps}, sys.stdout)
+            json_lib.dump(
+                {"error": f"Python {steps['python_version']} < 3.12 required", "steps": steps},
+                sys.stdout,
+            )
             raise typer.Exit(code=1)
         console.print(f"[red]Python {steps['python_version']} found, but 3.12+ is required.[/red]")
         raise typer.Exit(code=1)
@@ -477,8 +500,12 @@ def bootstrap(
     # Step 4: Run auth login flow (interactive — skipped in dry-run/JSON mode)
     if not dry_run and not json_output:
         if not keyring_ok:
-            console.print("\n[yellow]Keyring unavailable (headless Linux?). Credentials will be stored in ~/.traderbot/.env[/yellow]")
-            console.print("[yellow]For secure storage, install and unlock gnome-keyring with a D-Bus session.[/yellow]")
+            console.print(
+                "\n[yellow]Keyring unavailable (headless Linux?). Credentials will be stored in ~/.traderbot/.env[/yellow]"
+            )
+            console.print(
+                "[yellow]For secure storage, install and unlock gnome-keyring with a D-Bus session.[/yellow]"
+            )
         console.print("\n[bold]Credential Setup[/bold]")
         console.print("Enter your API credentials (press Enter to skip any field):")
         from traderbot.auth import _ALL_SERVICES, KeyringUnavailableError
@@ -495,7 +522,9 @@ def bootstrap(
                         except (KeyringUnavailableError, Exception) as exc:
                             env_key = f"{service_name.upper()}_{key.upper()}"
                             env_lines.append(f"{env_key}={value}")
-                            console.print(f"[yellow]Keyring failed ({exc}), saved to .env:[/yellow] {env_key}")
+                            console.print(
+                                f"[yellow]Keyring failed ({exc}), saved to .env:[/yellow] {env_key}"
+                            )
                     else:
                         env_key = f"{service_name.upper()}_{key.upper()}"
                         env_lines.append(f"{env_key}={value}")
@@ -526,9 +555,7 @@ def bootstrap(
         s: {k: v for k, v in keys.items()} for s, keys in sorted(status.items())
     }
 
-    missing = [
-        f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok
-    ]
+    missing = [f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok]
     steps["missing_credentials"] = missing
 
     # Step 7: Platform info
@@ -581,7 +608,9 @@ def bootstrap(
         console.print("[bold yellow]Bootstrap partially complete.[/bold yellow]")
         if missing:
             console.print(f"  Missing credentials: {', '.join(missing)}")
-            console.print("  Run [bold]traderbot auth login[/bold] to configure missing credentials.")
+            console.print(
+                "  Run [bold]traderbot auth login[/bold] to configure missing credentials."
+            )
 
 
 @app.command()
@@ -616,9 +645,11 @@ def heartbeat(
         if profile:
             state_path = resolve_state_path(profile_base_dir=profile.base_dir)
         else:
-            state_path = resolve_state_path(state_path=Path('.traderbot/adaptation_state.json'))
+            state_path = resolve_state_path(state_path=Path(".traderbot/adaptation_state.json"))
 
-        return run_heartbeat_cycle(conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run)
+        return run_heartbeat_cycle(
+            conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run
+        )
 
     try:
         result = _with_db(db_path, _run)
@@ -646,9 +677,7 @@ def heartbeat(
     console.print("\n[bold]Performance[/bold]")
     pnl_str = f"{perf.total_pnl_cents / 100:+.2f}"
     console.print(
-        f"  Trades: {perf.trade_count}  "
-        f"Win rate: {perf.win_rate:.0%}  "
-        f"P&L: {pnl_str} USD"
+        f"  Trades: {perf.trade_count}  Win rate: {perf.win_rate:.0%}  P&L: {pnl_str} USD"
     )
     if perf.deviation_flag:
         console.print(f"  [yellow]⚠[/yellow] {perf.deviation_flag}")
@@ -741,7 +770,10 @@ def halt(
 def news(
     category: Annotated[
         str | None,
-        typer.Option("--category", help="Filter by category: Economics, Politics, Weather, Culture, Tech, Science"),
+        typer.Option(
+            "--category",
+            help="Filter by category: Economics, Politics, Weather, Culture, Tech, Science",
+        ),
     ] = None,
     limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
     source: Annotated[
@@ -775,16 +807,25 @@ def news(
         except ValueError:
             valid = ", ".join(c.value for c in NewsCategory)
             if json_output:
-                json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
+                json_lib.dump(
+                    {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
+                )
             else:
                 err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
             raise typer.Exit(code=1) from None
 
     # Profile-aware category validation: --category must be in enabled_categories
-    if profile is not None and category_enum is not None and profile.enabled_categories and not profile.is_category_enabled(category_enum):
+    if (
+        profile is not None
+        and category_enum is not None
+        and profile.enabled_categories
+        and not profile.is_category_enabled(category_enum)
+    ):
         if json_output:
             json_lib.dump(
-                {"error": f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"},
+                {
+                    "error": f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"
+                },
                 sys.stdout,
             )
         else:
@@ -818,9 +859,16 @@ def news(
 
     if not newsapi_key and not twitter_key:
         if json_output:
-            json_lib.dump({"error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."}, sys.stdout)
+            json_lib.dump(
+                {
+                    "error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."
+                },
+                sys.stdout,
+            )
         else:
-            console.print("[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials.")
+            console.print(
+                "[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."
+            )
             console.print("Reddit RSS feeds work without keys — try [cyan]--source reddit[/cyan].")
         return
 
@@ -836,7 +884,9 @@ def news(
     }
 
     async def _fetch() -> list[ModelsNewsItem]:
-        async with NewsAggregator(newsapi_key=newsapi_key, twitter_api_key=twitter_key) as aggregator:
+        async with NewsAggregator(
+            newsapi_key=newsapi_key, twitter_api_key=twitter_key
+        ) as aggregator:
             if source_filter is not None:
                 raw_items = await aggregator.fetch_recent(source_filter, limit=limit)
             else:
@@ -851,16 +901,18 @@ def news(
                     cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
-                models_items.append(ModelsNewsItem(
-                    id=item.id,
-                    title=item.title,
-                    body=item.body,
-                    source=models_source,
-                    url=item.url,
-                    published_at=item.published_at,
-                    ticker_refs=item.ticker_refs,
-                    category=cat,
-                ))
+                models_items.append(
+                    ModelsNewsItem(
+                        id=item.id,
+                        title=item.title,
+                        body=item.body,
+                        source=models_source,
+                        url=item.url,
+                        published_at=item.published_at,
+                        ticker_refs=item.ticker_refs,
+                        category=cat,
+                    )
+                )
             except Exception:
                 continue
         return models_items
@@ -886,10 +938,12 @@ def news(
         if category_enum is not None and classified.category != category_enum:
             continue
         sentiment = scorer.score(item.title, item.source, item.id)
-        classified_items.append({
-            "classified": classified,
-            "sentiment": sentiment,
-        })
+        classified_items.append(
+            {
+                "classified": classified,
+                "sentiment": sentiment,
+            }
+        )
 
     if json_output:
         output = []
@@ -897,18 +951,20 @@ def news(
             c = entry["classified"]
             s = entry["sentiment"]
             item = c.news_item
-            output.append({
-                "id": item.id,
-                "title": item.title,
-                "source": item.source.value,
-                "category": c.category.value,
-                "published_at": item.published_at.isoformat(),
-                "sentiment_score": s.score,
-                "sentiment_confidence": s.confidence,
-                "sentiment_model": s.model,
-                "url": item.url,
-                "ticker_refs": item.ticker_refs,
-            })
+            output.append(
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "source": item.source.value,
+                    "category": c.category.value,
+                    "published_at": item.published_at.isoformat(),
+                    "sentiment_score": s.score,
+                    "sentiment_confidence": s.confidence,
+                    "sentiment_model": s.model,
+                    "url": item.url,
+                    "ticker_refs": item.ticker_refs,
+                }
+            )
         json_lib.dump(output, sys.stdout, default=str)
         return
 
@@ -973,7 +1029,9 @@ def sentiment(
     }
 
     async def _fetch() -> list[ModelsNewsItem]:
-        async with NewsAggregator(newsapi_key=newsapi_key, twitter_api_key=twitter_key) as aggregator:
+        async with NewsAggregator(
+            newsapi_key=newsapi_key, twitter_api_key=twitter_key
+        ) as aggregator:
             raw_items = await aggregator.fetch_all(limit=50)
 
         models_items: list[ModelsNewsItem] = []
@@ -984,16 +1042,18 @@ def sentiment(
                     cat = NewsCategory(item.category.lower())
                 except ValueError:
                     cat = NewsCategory.ECONOMICS
-                models_items.append(ModelsNewsItem(
-                    id=item.id,
-                    title=item.title,
-                    body=item.body,
-                    source=models_source,
-                    url=item.url,
-                    published_at=item.published_at,
-                    ticker_refs=item.ticker_refs,
-                    category=cat,
-                ))
+                models_items.append(
+                    ModelsNewsItem(
+                        id=item.id,
+                        title=item.title,
+                        body=item.body,
+                        source=models_source,
+                        url=item.url,
+                        published_at=item.published_at,
+                        ticker_refs=item.ticker_refs,
+                        category=cat,
+                    )
+                )
             except Exception:
                 continue
         return models_items
@@ -1010,15 +1070,19 @@ def sentiment(
     # Filter items that reference the ticker (case-insensitive)
     ticker_upper = ticker.upper()
     ticker_refs_items = [
-        item for item in items
-        if any(t.upper() == ticker_upper for t in item.ticker_refs) or ticker_upper in item.title.upper()
+        item
+        for item in items
+        if any(t.upper() == ticker_upper for t in item.ticker_refs)
+        or ticker_upper in item.title.upper()
     ]
 
     if not ticker_refs_items and not items:
         if json_output:
             json_lib.dump({"ticker": ticker_upper, "error": "No news found"}, sys.stdout)
         else:
-            console.print(f"[yellow]No news found for [/yellow]{ticker_upper}[yellow]. Check API keys.[/yellow]")
+            console.print(
+                f"[yellow]No news found for [/yellow]{ticker_upper}[yellow]. Check API keys.[/yellow]"
+            )
         return
 
     # Fall back to all items if none have ticker refs
@@ -1035,11 +1099,13 @@ def sentiment(
             continue
         sentiment = scorer.score(item.title, item.source, item.id)
         impact = assessor.assess(item, classified, sentiment)
-        results.append({
-            "classified": classified,
-            "sentiment": sentiment,
-            "impact": impact,
-        })
+        results.append(
+            {
+                "classified": classified,
+                "sentiment": sentiment,
+                "impact": impact,
+            }
+        )
 
     if not results:
         if json_output:
@@ -1085,7 +1151,9 @@ def sentiment(
     console.print(f"\n[bold]Sentiment Analysis: {ticker_upper}[/bold]")
     console.print(f"  Items analyzed: {len(results)}")
     console.print(f"  Sentiment score: {avg_score:+.4f}")
-    direction_style = "green" if direction == "bullish" else "red" if direction == "bearish" else "yellow"
+    direction_style = (
+        "green" if direction == "bullish" else "red" if direction == "bearish" else "yellow"
+    )
     console.print(f"  Direction: [{direction_style}]{direction}[/{direction_style}]")
     console.print(f"  Confidence: {avg_confidence:.1%}")
 
@@ -1098,8 +1166,18 @@ def sentiment(
         table.add_column("Confidence", justify="right")
         for r in results:
             impact = r["impact"]
-            title = r["classified"].news_item.title[:40] + "\u2026" if len(r["classified"].news_item.title) > 40 else r["classified"].news_item.title
-            dir_color = "green" if impact.direction == "bullish" else "red" if impact.direction == "bearish" else "yellow"
+            title = (
+                r["classified"].news_item.title[:40] + "\u2026"
+                if len(r["classified"].news_item.title) > 40
+                else r["classified"].news_item.title
+            )
+            dir_color = (
+                "green"
+                if impact.direction == "bullish"
+                else "red"
+                if impact.direction == "bearish"
+                else "yellow"
+            )
             table.add_row(
                 title,
                 f"[{dir_color}]{impact.direction}[/{dir_color}]",
@@ -1113,7 +1191,9 @@ def sentiment(
 @app.command()
 def backtest(
     strategy: Annotated[str, typer.Option("--strategy", help="Strategy name")] = "momentum",
-    from_date: Annotated[str, typer.Option("--from", help="Start date (YYYY-MM-DD)")] = "2025-01-01",
+    from_date: Annotated[
+        str, typer.Option("--from", help="Start date (YYYY-MM-DD)")
+    ] = "2025-01-01",
     to_date: Annotated[str, typer.Option("--to", help="End date (YYYY-MM-DD)")] = "2025-03-01",
     bankroll: Annotated[int, typer.Option("--bankroll", help="Initial bankroll in cents")] = 100000,
     db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
@@ -1174,11 +1254,25 @@ def backtest(
     table.add_column("Value", justify="right")
     table.add_row("Trades", str(metrics["trade_count"]))
     table.add_row("Total P&L", f"${metrics['total_pnl_cents'] / 100:.2f}")
-    table.add_row("Win Rate", f"{metrics['win_rate']:.1%}" if metrics["win_rate"] is not None else "\u2014")
-    table.add_row("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}" if metrics["sharpe_ratio"] is not None else "\u2014")
-    table.add_row("Max Drawdown", f"{metrics['max_drawdown']:.1%}" if metrics["max_drawdown"] is not None else "\u2014")
-    table.add_row("Brier Score", f"{metrics['brier_score']:.4f}" if metrics["brier_score"] is not None else "\u2014")
-    table.add_row("Edge Capture", f"{metrics['edge_capture']:.1%}" if metrics["edge_capture"] is not None else "\u2014")
+    table.add_row(
+        "Win Rate", f"{metrics['win_rate']:.1%}" if metrics["win_rate"] is not None else "\u2014"
+    )
+    table.add_row(
+        "Sharpe Ratio",
+        f"{metrics['sharpe_ratio']:.2f}" if metrics["sharpe_ratio"] is not None else "\u2014",
+    )
+    table.add_row(
+        "Max Drawdown",
+        f"{metrics['max_drawdown']:.1%}" if metrics["max_drawdown"] is not None else "\u2014",
+    )
+    table.add_row(
+        "Brier Score",
+        f"{metrics['brier_score']:.4f}" if metrics["brier_score"] is not None else "\u2014",
+    )
+    table.add_row(
+        "Edge Capture",
+        f"{metrics['edge_capture']:.1%}" if metrics["edge_capture"] is not None else "\u2014",
+    )
     console.print(table)
 
 
@@ -1248,7 +1342,9 @@ def compare(
         typer.Option("--profiles", help="Comma-separated profile names from PRESETS"),
     ] = "Conservative,Moderate,Aggressive",
     strategy: Annotated[str, typer.Option("--strategy", help="Strategy name")] = "momentum",
-    from_date: Annotated[str, typer.Option("--from", help="Start date (YYYY-MM-DD)")] = "2025-01-01",
+    from_date: Annotated[
+        str, typer.Option("--from", help="Start date (YYYY-MM-DD)")
+    ] = "2025-01-01",
     to_date: Annotated[str, typer.Option("--to", help="End date (YYYY-MM-DD)")] = "2025-03-01",
     bankroll: Annotated[int, typer.Option("--bankroll", help="Initial bankroll in cents")] = 100000,
     db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
@@ -1309,7 +1405,15 @@ def compare(
     for comp in comparisons:
         table.add_column(comp["profile_name"], justify="right")
 
-    metric_keys = ["trade_count", "total_pnl_cents", "win_rate", "sharpe_ratio", "max_drawdown", "brier_score", "edge_capture"]
+    metric_keys = [
+        "trade_count",
+        "total_pnl_cents",
+        "win_rate",
+        "sharpe_ratio",
+        "max_drawdown",
+        "brier_score",
+        "edge_capture",
+    ]
     metric_labels = {
         "trade_count": "Trades",
         "total_pnl_cents": "Total P&L",
@@ -1399,7 +1503,10 @@ def learnings(
     ] = "active",
     category: Annotated[
         str | None,
-        typer.Option("--category", help="Filter by category: MarketBehavior, RiskSignal, Timing, Strategy, Execution, FeatureRequest"),
+        typer.Option(
+            "--category",
+            help="Filter by category: MarketBehavior, RiskSignal, Timing, Strategy, Execution, FeatureRequest",
+        ),
     ] = None,
     promote: Annotated[
         str | None,
@@ -1430,16 +1537,23 @@ def learnings(
             active_entries = [e for e in entries if e.status != LearningStatus.DEPRECATED]
             if not active_entries:
                 if json_output:
-                    json_lib.dump({"error": f"No active learning found for pattern-key: {promote}"}, sys.stdout)
+                    json_lib.dump(
+                        {"error": f"No active learning found for pattern-key: {promote}"},
+                        sys.stdout,
+                    )
                 else:
-                    err_console.print(f"[red]No active learning found for pattern-key:[/red] {promote}")
+                    err_console.print(
+                        f"[red]No active learning found for pattern-key:[/red] {promote}"
+                    )
                 raise typer.Exit(code=1)
 
             learning_id = active_entries[0].id
             result_path = promote_learning(conn, learning_id)
             if result_path is None:
                 if json_output:
-                    json_lib.dump({"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout)
+                    json_lib.dump(
+                        {"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout
+                    )
                 else:
                     err_console.print(f"[red]Promotion failed for learning[/red] #{learning_id}")
                 raise typer.Exit(code=1)
@@ -1452,7 +1566,9 @@ def learnings(
             if json_output:
                 json_lib.dump(promoted_entry, sys.stdout, default=str)
             else:
-                console.print(f"[green]Promoted[/green] pattern [cyan]{promote}[/cyan] (learning #{learning_id})")
+                console.print(
+                    f"[green]Promoted[/green] pattern [cyan]{promote}[/cyan] (learning #{learning_id})"
+                )
                 console.print(f"  Written to: {result_path}")
             return
 
@@ -1463,7 +1579,9 @@ def learnings(
             except ValueError:
                 valid = ", ".join(c.value for c in LearningCategory)
                 if json_output:
-                    json_lib.dump({"error": f"Unknown category: {category}. Valid: {valid}"}, sys.stdout)
+                    json_lib.dump(
+                        {"error": f"Unknown category: {category}. Valid: {valid}"}, sys.stdout
+                    )
                 else:
                     err_console.print(f"[red]Unknown category:[/red] {category}. Valid: {valid}")
                 raise typer.Exit(code=1) from None
@@ -1477,7 +1595,9 @@ def learnings(
             except ValueError:
                 valid = ", ".join(s.value for s in LearningStatus)
                 if json_output:
-                    json_lib.dump({"error": f"Unknown status: {status}. Valid: {valid}"}, sys.stdout)
+                    json_lib.dump(
+                        {"error": f"Unknown status: {status}. Valid: {valid}"}, sys.stdout
+                    )
                 else:
                     err_console.print(f"[red]Unknown status:[/red] {status}. Valid: {valid}")
                 raise typer.Exit(code=1) from None
@@ -1652,9 +1772,7 @@ def auth_check() -> None:
             table.add_row(service_name, key, mark)
     console.print(table)
 
-    missing = [
-        f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok
-    ]
+    missing = [f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok]
     if missing:
         console.print(f"[yellow]Missing credentials:[/yellow] {', '.join(missing)}")
         console.print("Run [bold]traderbot auth login[/bold] to configure.")
@@ -1676,7 +1794,9 @@ def update_check(
 
     result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
     if result:
-        console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+        console.print(
+            f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]"
+        )
         console.print(f"[dim]Release: {result['url']}[/dim]")
         console.print("[dim]Run 'traderbot update apply' to update.[/dim]")
     else:
@@ -1738,12 +1858,14 @@ def profile_create(
     description: Annotated[str, typer.Option(help="Profile description")] = "",
     categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = "",
     risk_multiplier: Annotated[float, typer.Option(help="Risk multiplier (0-1)")] = 1.0,
-    max_position_pct: Annotated[float, typer.Option(help="Max position per market %")] = None,
-    max_daily_loss_pct: Annotated[float, typer.Option(help="Max daily loss %")] = None,
-    max_drawdown_pct: Annotated[float, typer.Option(help="Max drawdown %")] = None,
-    max_open_positions: Annotated[int, typer.Option(help="Max open positions")] = None,
-    min_liquidity: Annotated[int, typer.Option(help="Min liquidity threshold")] = None,
-    min_edge_pct: Annotated[float, typer.Option(help="Min edge %")] = None,
+    max_position_pct: Annotated[
+        float | None, typer.Option(help="Max position per market %")
+    ] = None,
+    max_daily_loss_pct: Annotated[float | None, typer.Option(help="Max daily loss %")] = None,
+    max_drawdown_pct: Annotated[float | None, typer.Option(help="Max drawdown %")] = None,
+    max_open_positions: Annotated[int | None, typer.Option(help="Max open positions")] = None,
+    min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
+    min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
 ) -> None:
     """Create a new trading profile with risk parameters."""
     from traderbot.kalshi.models import MarketCategory
@@ -1763,8 +1885,7 @@ def profile_create(
     if categories:
         try:
             enabled_categories = [
-                MarketCategory(cat.strip().lower())
-                for cat in categories.split(",")
+                MarketCategory(cat.strip().lower()) for cat in categories.split(",")
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] Invalid category: {e}")
@@ -1777,7 +1898,8 @@ def profile_create(
         "description": description or f"{name} trading profile",
         "enabled_categories": enabled_categories,
         "risk_multiplier": risk_multiplier,
-        "max_position_per_market_pct": max_position_pct or HARD_LIMITS["max_position_per_market_pct"],
+        "max_position_per_market_pct": max_position_pct
+        or HARD_LIMITS["max_position_per_market_pct"],
         "max_daily_loss_pct": max_daily_loss_pct or HARD_LIMITS["max_daily_loss_pct"],
         "max_drawdown_pct": max_drawdown_pct or HARD_LIMITS["max_drawdown_pct"],
         "max_open_positions": max_open_positions or int(HARD_LIMITS["max_open_positions"]),
@@ -1951,13 +2073,17 @@ def profile_assign(
     try:
         token = generate_token()
         assign_token(profile_name, agent_id, token)
-        console.print(f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'")
-        console.print(f"Token: [bold]{token}[/bold]")
+        console.print(
+            f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
+        )
+        console.print(f"Token: [bold]{token[:4]}{'*' * (len(token) - 4)}[/bold]")
 
         try:
             agent_path = _resolve_agent_path(agent_id)
             if not agent_path or not agent_path.exists():
-                console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
+                console.print(
+                    f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'"
+                )
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
                 workspace_template = Path.cwd() / ".openclaw" / "workspace"
@@ -1965,7 +2091,9 @@ def profile_assign(
                     workspace_template = Path.home() / ".openclaw" / "workspace"
                 propagate_workspace_files(agent_path, workspace_template)
                 inject_token(str(agent_path), token)
-                console.print(f"[green]✓[/green] Workspace files and token injected into {agent_id}/")
+                console.print(
+                    f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
+                )
         except FileNotFoundError:
             console.print("[yellow]Warning:[/yellow] Agent directory not found")
             console.print("Token assigned but not injected into TOOLS.md")
@@ -2051,20 +2179,23 @@ def profile_assignments(
         console.print(table)
 
 
-
 @profile_app.command("update")
 def profile_update(
     name: str,
-    mode: Annotated[str, typer.Option(help="Trading mode: paper or live")] = None,
-    description: Annotated[str, typer.Option(help="Profile description")] = None,
-    categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = None,
-    risk_multiplier: Annotated[float, typer.Option(help="Risk multiplier (0-1)")] = None,
-    max_position_pct: Annotated[float, typer.Option(help="Max position per market %")] = None,
-    max_daily_loss_pct: Annotated[float, typer.Option(help="Max daily loss %")] = None,
-    max_drawdown_pct: Annotated[float, typer.Option(help="Max drawdown %")] = None,
-    max_open_positions: Annotated[int, typer.Option(help="Max open positions")] = None,
-    min_liquidity: Annotated[int, typer.Option(help="Min liquidity threshold")] = None,
-    min_edge_pct: Annotated[float, typer.Option(help="Min edge %")] = None,
+    mode: Annotated[str | None, typer.Option(help="Trading mode: paper or live")] = None,
+    description: Annotated[str | None, typer.Option(help="Profile description")] = None,
+    categories: Annotated[
+        str | None, typer.Option(help="Comma-separated market categories")
+    ] = None,
+    risk_multiplier: Annotated[float | None, typer.Option(help="Risk multiplier (0-1)")] = None,
+    max_position_pct: Annotated[
+        float | None, typer.Option(help="Max position per market %")
+    ] = None,
+    max_daily_loss_pct: Annotated[float | None, typer.Option(help="Max daily loss %")] = None,
+    max_drawdown_pct: Annotated[float | None, typer.Option(help="Max drawdown %")] = None,
+    max_open_positions: Annotated[int | None, typer.Option(help="Max open positions")] = None,
+    min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
+    min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
 ) -> None:
     """Update specific fields of an existing profile."""
     from traderbot.kalshi.models import MarketCategory
@@ -2092,8 +2223,7 @@ def profile_update(
     if categories is not None:
         try:
             update_kwargs["enabled_categories"] = [
-                MarketCategory(cat.strip().lower())
-                for cat in categories.split(",")
+                MarketCategory(cat.strip().lower()) for cat in categories.split(",")
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] Invalid category: {e}")
@@ -2189,7 +2319,9 @@ def profile_set_auth(
 
     auth_store = ProfileAuthStore(profile)
     auth_store.set_credentials(service, key, secret)
-    console.print(f"[green]✓[/green] Stored credentials for '{service}' on profile '{profile_name}'")
+    console.print(
+        f"[green]✓[/green] Stored credentials for '{service}' on profile '{profile_name}'"
+    )
 
 
 @profile_app.command("auth")
@@ -2214,7 +2346,9 @@ def profile_auth(
 
     if not services:
         if not json_output:
-            console.print(f"[yellow]No credentials configured for profile '{profile_name}'[/yellow]")
+            console.print(
+                f"[yellow]No credentials configured for profile '{profile_name}'[/yellow]"
+            )
         else:
             print("[]")
         return
@@ -2224,10 +2358,12 @@ def profile_auth(
         for svc in services:
             creds = auth_store.get_credentials(svc)
             if creds:
-                creds_list.append({
-                    "service": svc,
-                    "key": creds[0],
-                })
+                creds_list.append(
+                    {
+                        "service": svc,
+                        "key": creds[0],
+                    }
+                )
         print(json_lib.dumps(creds_list, indent=2))
     else:
         table = Table(title=f"Credentials for Profile '{profile_name}'")
