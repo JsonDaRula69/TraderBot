@@ -217,7 +217,12 @@ def write_intent(
         entry = entry.model_copy(update={"timestamp": datetime.now(UTC)})
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = open(path, "a+" if path.exists() else "w+")  # noqa: SIM115 - fcntl.flock requires manual fd
+    if not path.exists():
+        path.write_text(
+            "# Session State\n\n## Pending Actions\n\n(none)\n\n## Completed Actions\n\n(none)\n"
+        )
+        path.chmod(0o600)
+    fd = open(path, "r+")  # noqa: SIM115 - fcntl.flock requires manual fd
     fd_closed = False
     try:
         try:
@@ -276,7 +281,13 @@ def write_intent(
             fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
             fd.close()
 
-    logger.info("WAL intent written: %s %s %s %s", entry.action.value, entry.direction, entry.ticker, entry.intent_id)
+    logger.info(
+        "WAL intent written: %s %s %s %s",
+        entry.action.value,
+        entry.direction,
+        entry.ticker,
+        entry.intent_id,
+    )
     return entry
 
 
@@ -297,7 +308,9 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         except OSError as err:
             fd.close()
             logger.error("Concurrent WAL writer during status update for %s", intent_id)
-            raise ConcurrentWriteError(f"Another writer is active, cannot update {intent_id}") from err
+            raise ConcurrentWriteError(
+                f"Another writer is active, cannot update {intent_id}"
+            ) from err
 
         content = fd.read()
 

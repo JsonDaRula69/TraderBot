@@ -97,6 +97,7 @@ class CircuitBreaker:
     def _persist_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         self._state_file.write_text(self._state.model_dump_json() + "\n")
+        self._state_file.chmod(0o600)
 
     def _load_state(self) -> None:
         if self._state_file.exists():
