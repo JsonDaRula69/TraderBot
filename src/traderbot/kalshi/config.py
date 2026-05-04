@@ -17,7 +17,7 @@ def _resolve_from_keyring(key: str) -> SecretStr | None:
     mgr = AuthManager()
     service_map = {
         "api_key": "api_key",
-        "api_secret": "api_secret",
+        "private_key_pem": "private_key_pem",
     }
     kalshi_key = service_map.get(key)
     if kalshi_key is None:
@@ -40,7 +40,7 @@ class KeyringKalshiConfig(BaseSettings):
     )
 
     api_key: str | None = None
-    api_secret: SecretStr | None = None
+    private_key_pem: SecretStr | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     demo_mode: bool = False
@@ -61,8 +61,8 @@ class KeyringKalshiConfig(BaseSettings):
             return secret.get_secret_value()
         return None
 
-    def resolve_api_secret(self) -> SecretStr | None:
-        """Resolve api_secret: keyring first, then env/config."""
-        if self.api_secret is not None:
-            return self.api_secret
-        return _resolve_from_keyring("api_secret")
+    def resolve_private_key(self) -> SecretStr | None:
+        """Resolve private_key_pem: keyring first, then env/config."""
+        if self.private_key_pem is not None:
+            return self.private_key_pem
+        return _resolve_from_keyring("private_key_pem")

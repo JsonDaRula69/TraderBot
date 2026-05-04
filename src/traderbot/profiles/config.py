@@ -33,7 +33,7 @@ def resolve_kalshi_credentials(
         profile_keyring: Optional keyring module for ProfileAuthStore (testing)
 
     Returns:
-        Tuple of (api_key, api_secret)
+        Tuple of (api_key, private_key_pem)
 
     Raises:
         ValueError: If no credentials found in either profile or global
@@ -47,9 +47,9 @@ def resolve_kalshi_credentials(
 
     global_auth = AuthManager(keyring_module=global_keyring)
     key_result = global_auth.get_credential("kalshi", "api_key")
-    secret_result = global_auth.get_credential("kalshi", "api_secret")
+    private_key_result = global_auth.get_credential("kalshi", "private_key_pem")
 
-    if key_result is not None and secret_result is not None:
+    if key_result is not None and private_key_result is not None:
         if profile is not None:
             logger.info(
                 "Profile '%s' has no Kalshi credentials, using global credentials",
@@ -57,7 +57,7 @@ def resolve_kalshi_credentials(
             )
         else:
             logger.info("Using global Kalshi credentials")
-        return (key_result.value.get_secret_value(), secret_result.value.get_secret_value())
+        return (key_result.value.get_secret_value(), private_key_result.value.get_secret_value())
 
     raise ValueError(
         "No Kalshi credentials configured. "

@@ -1667,7 +1667,7 @@ def auth_login() -> None:
 
     services = ["kalshi", "voyage", "newsapi", "twitter", "reddit"]
     service_keys = {
-        "kalshi": ["api_key", "api_secret"],
+        "kalshi": ["api_key", "private_key_pem"],
         "voyage": ["api_key"],
         "newsapi": ["api_key"],
         "twitter": ["api_key"],
