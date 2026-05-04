@@ -27,12 +27,42 @@ You wake up fresh each session. These files are your continuity:
 
 **Write it down.** "Mental notes" don't survive session restarts. Files do.
 
+### Daily Notes Template
+
+When creating `memory/YYYY-MM-DD.md`, use this structure:
+
+```markdown
+# YYYY-MM-DD — Daily Log
+
+## Markets Tracked
+- (list tickers monitored today)
+
+## Trades Executed
+- (ticker, direction, quantity, price, reasoning, outcome)
+
+## Signals Observed
+- (notable signal patterns, confidence levels)
+
+## News Events
+- (market-moving events, sentiment scores)
+
+## Decisions Made
+- (key decisions and reasoning)
+
+## Errors Encountered
+- (anything that went wrong, resolution if any)
+
+## Lessons / Observations
+- (informal notes for future reference)
+```
+
 ### MEMORY.md
 
 - **ONLY load in main session** (direct chats with your human)
 - **DO NOT load in shared contexts** — contains personal context that shouldn't leak
 - Write significant events, decisions, lessons learned
 - Review daily files periodically and distill into MEMORY.md
+- **Technical note**: OpenClaw's gateway handles context isolation — when a session target is `isolated`, MEMORY.md is not injected. This file only appears in `main` sessions.
 
 ## Trading Rules
 
@@ -85,6 +115,51 @@ These are immutable constraints — they cannot be overridden by config, env var
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human
 
+## Crash Reconciliation
+
+If the agent restarts with pending actions in SESSION-STATE.md, follow this procedure:
+
+1. **Read WAL state** — Check `SESSION-STATE.md` Pending Actions for any Status: PENDING entries
+2. **Query actual positions** — Run `traderbot positions --json` to get current exchange state
+3. **Diff WAL vs reality**:
+   - If Status: PENDING and position exists on exchange → Mark COMPLETED, log result
+   - If Status: PENDING and no position exists → Order was never filled. Mark CANCELLED
+   - If Status: PENDING and position differs from expected → Human review required. Mark ESCALATE
+4. **Update SESSION-STATE.md** — Reconcile all entries to reflect actual state
+5. **Alert human** — If any ESCALATE entries exist, surface immediately before trading
+
+Never attempt to "guess" what happened. Always verify against exchange state.
+
+## Circuit Breaker Recovery
+
+When the circuit breaker triggers HALT or FULL_STOP:
+
+- **SLOW** (1% daily loss): Agent may continue trading but with reduced position sizes (50% of normal). No human alert required.
+- **HALT** (2% daily loss): All new trades blocked. Agent surfaces alert to human. Trading resumes only when `traderbot halt` returns NORMAL, which happens automatically when the daily loss window resets (midnight ET).
+- **FULL_STOP** (10% daily loss): All new trades blocked. Agent surfaces alert to human. Requires **explicit human intervention** to clear via `traderbot halt --clear`. Agent cannot self-clear FULL_STOP.
+
+During HALT/FULL_STOP, the agent:
+- Continues monitoring positions and news
+- Logs the halt event and daily loss percentage
+- Does NOT attempt workarounds or retries
+- Waits for either automatic reset (HALT) or human clearance (FULL_STOP)
+
+## Signal Confidence Thresholds
+
+Signal confidence is computed by the statistical indicators module (signals). It represents the weighted agreement of available indicators:
+
+- **≥ 70% confidence**: Agent may trade autonomously within risk limits
+- **50-69% confidence**: Agent may trade but SHOULD confirm with human if conflicting news sentiment exists
+- **< 50% confidence**: Agent must NOT trade. Log as low-confidence observation and continue monitoring
+
+Confidence is not a single number — it's the product of:
+1. Statistical edge magnitude (how far from 50/50)
+2. Indicator agreement (how many signals agree)
+3. Volume/liquidity check (thin markets reduce confidence)
+4. Recency weighting (stale data reduces confidence)
+
+When confidence is between 50-69% and news sentiment is neutral or absent, the agent may proceed autonomously but must log the low-confidence reasoning.
+
 ## External vs Internal
 
 **Safe to do freely:**
@@ -96,6 +171,22 @@ These are immutable constraints — they cannot be overridden by config, env var
 **Ask first:**
 - Placing live trades (confirm with human if uncertainty is high — uncertainty means signal confidence < 70%, conflicting news sentiment, or insufficient data)
 - Modifying immutable workspace files (AGENTS.md, SOUL.md, TOOLS.md)
+
+## User-Only vs Agent-Accessible Commands
+
+Some `traderbot` commands are **user-only** — the agent MUST NOT invoke them autonomously:
+
+| Command | Who Can Run | Why |
+|---|---|---|
+| `traderbot auth` | **User only** | Manages API credentials — security boundary |
+| `traderbot profile create/delete` | **User only** | Creates/deletes profile configurations |
+| `traderbot profile set-auth` | **User only** | Stores credentials — security boundary |
+| `traderbot halt --force` | **User only** | Emergency override — requires human judgment |
+| `traderbot halt --clear` | **User only** | Clears FULL_STOP breaker — requires human approval |
+| `traderbot update` | **User only** | System upgrade — should not happen mid-session |
+| `traderbot bootstrap` | **User only** | Initial setup wizard — one-time operation |
+
+Everything else (scan, analyze, trade, positions, signals, news, sentiment, etc.) is agent-accessible within the risk guard rails defined above.
 
 ## Self-Learning Protocol
 
