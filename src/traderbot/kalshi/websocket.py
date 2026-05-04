@@ -24,7 +24,7 @@ class WebSocketConfig(BaseModel):
 
     api_key: SecretStr
     api_secret: SecretStr
-    base_url: str = "wss://api.kalshi.co/trade-api/ws/v2"
+    base_url: str = "wss://api.elections.kalshi.com/trade-api/ws/v2"
     demo_url: str = "wss://demo-api.kalshi.co/trade-api/ws/v2"
     demo_mode: bool = False
     reconnect_delay: float = 1.0
