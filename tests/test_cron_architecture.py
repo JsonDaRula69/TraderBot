@@ -37,6 +37,7 @@ class TestCronExpressions:
         hour_parts = hour.split("-")
         assert int(hour_parts[0]) == MARKET_OPEN_HOUR
         assert int(hour_parts[1]) == MARKET_CLOSE_HOUR
+        assert MARKET_CLOSE_HOUR == 16  # Market closes at 4 PM ET = 16:00
         day_parts = weekday.split("-")
         assert int(day_parts[0]) == min(MARKET_DAYS)
         assert int(day_parts[1]) == max(MARKET_DAYS)
@@ -86,6 +87,16 @@ class TestDecisionLoopPayload:
         assert "SESSION-STATE.md" in payload.message
         assert "risk-check" in payload.message
 
+    def test_channel_to_fields_optional(self) -> None:
+        payload = DecisionLoopPayload()
+        assert payload.channel is None
+        assert payload.to is None
+
+    def test_channel_to_fields_populated(self) -> None:
+        payload = DecisionLoopPayload(channel="telegram", to="+15555550123")
+        assert payload.channel == "telegram"
+        assert payload.to == "+15555550123"
+
 
 class TestHeartbeatLoopPayload:
     def test_default_payload(self) -> None:
@@ -108,6 +119,11 @@ class TestHeartbeatLoopPayload:
         assert "circuit breaker" in payload.message.lower()
         assert "Bayesian" in payload.message
         assert "learnings" in payload.message.lower()
+
+    def test_channel_to_fields_optional(self) -> None:
+        payload = HeartbeatLoopPayload()
+        assert payload.channel is None
+        assert payload.to is None
 
 
 class TestNewsLoopPayload:
@@ -167,6 +183,33 @@ class TestNewsLoopPayload:
         data = payload.model_dump(mode="json")
         assert data["session_target"] == "main"
         assert data["kind"] == "systemEvent"
+
+    def test_wake_field_optional(self) -> None:
+        payload = NewsLoopPayload(topic="test", impact_score=0.5)
+        assert payload.wake is None
+
+    def test_wake_now_for_immediate_delivery(self) -> None:
+        payload = NewsLoopPayload(topic="fed-rate-cut", impact_score=0.9, wake="now")
+        assert payload.wake == "now"
+
+    def test_wake_rejects_invalid(self) -> None:
+        with pytest.raises(ValidationError):
+            NewsLoopPayload(topic="test", impact_score=0.5, wake="later")
+
+    def test_channel_to_fields(self) -> None:
+        payload = NewsLoopPayload(
+            topic="fed-rate-cut",
+            impact_score=0.9,
+            channel="telegram",
+            to="+15555550123",
+        )
+        assert payload.channel == "telegram"
+        assert payload.to == "+15555550123"
+
+    def test_channel_to_default_none(self) -> None:
+        payload = NewsLoopPayload(topic="test", impact_score=0.5)
+        assert payload.channel is None
+        assert payload.to is None
 
 
 class TestLoopConfigs:
@@ -234,6 +277,13 @@ class TestLoopConfigs:
         cfg = NewsLoopConfig()
         assert cfg.session_target == "main"
         assert cfg.payload_type == "systemEvent"
+
+    def test_no_agent_turn_targets_main_session(self) -> None:
+        for cfg in LOOP_DEFINITIONS:
+            if cfg.payload_type == "agentTurn":
+                assert cfg.session_target == "isolated", (
+                    f"{cfg.name} uses agentTurn on main session — must be isolated"
+                )
 
 
 class TestGetLoopConfig:
