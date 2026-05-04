@@ -381,7 +381,14 @@ class BacktestEngine:
             if dd > max_dd:
                 max_dd = dd
 
-        brier_score = 0.25 if closed_trades else None
+        brier_score = None
+        if closed_trades:
+            sq_diffs = []
+            for t in closed_trades:
+                pred = t.entry_price_cents / 100.0 if t.direction == "yes" else 1.0 - t.entry_price_cents / 100.0
+                actual = 1.0 if t.pnl_cents > 0 else 0.0
+                sq_diffs.append((pred - actual) ** 2)
+            brier_score = sum(sq_diffs) / len(sq_diffs)
 
         return BacktestResult(
             trade_count=trade_count,
