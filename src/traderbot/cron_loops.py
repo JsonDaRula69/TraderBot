@@ -14,14 +14,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DECISION_LOOP_CRON = "*/5 9-15 * * 1-5"
+DECISION_LOOP_CRON = "*/5 9-16 * * 1-5"
 HEARTBEAT_LOOP_CRON = "0 */6 * * *"
 NEWS_LOOP_CRON = None
 
 NEWS_IMPACT_THRESHOLD = 0.7
 
 MARKET_OPEN_HOUR = 9
-MARKET_CLOSE_HOUR = 15
+MARKET_CLOSE_HOUR = 16
 MARKET_DAYS = range(1, 6)
 
 
@@ -38,6 +38,8 @@ class DecisionLoopPayload(BaseModel):
         "Execute analysis, risk-check, and trades within guard rails. "
         "Log all decisions."
     )
+    channel: str | None = None
+    to: str | None = None
 
 
 class HeartbeatLoopPayload(BaseModel):
@@ -53,6 +55,8 @@ class HeartbeatLoopPayload(BaseModel):
         "update Bayesian parameters, promote learnings. "
         "Write HEARTBEAT_DATA.md."
     )
+    channel: str | None = None
+    to: str | None = None
 
 
 class NewsLoopPayload(BaseModel):
@@ -65,6 +69,9 @@ class NewsLoopPayload(BaseModel):
     topic: str
     impact_score: float = Field(ge=0.0, le=1.0)
     relevant_markets: list[str] = Field(default_factory=list)
+    wake: Literal["now"] | None = None
+    channel: str | None = None
+    to: str | None = None
     message: str = ""
 
     def model_post_init(self, __context: object) -> None:

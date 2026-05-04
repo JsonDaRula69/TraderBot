@@ -820,10 +820,53 @@ class TestCronSetup:
             assert result.exit_code == 1
             assert "openclaw" in result.output.lower()
 
+    def test_cron_setup_channel_without_to_errors(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--dry-run"])
+        assert result.exit_code == 1
+        assert "channel" in result.output.lower() or "to" in result.output.lower()
+
+    def test_cron_setup_to_without_channel_errors(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--to", "+15555550123", "--dry-run"])
+        assert result.exit_code == 1
+        assert "channel" in result.output.lower() or "to" in result.output.lower()
+
+    def test_cron_setup_with_channel_and_to_dry_run(self):
+        result = runner.invoke(
+            app,
+            ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--to", "+15555550123", "--dry-run"],
+        )
+        assert result.exit_code == 0
+
+    def test_cron_setup_with_channel_and_to_passes_args(self, tmp_path):
+        config_dir = tmp_path / ".openclaw"
+        config_dir.mkdir()
+
+        calls = []
+
+        def mock_cron_add(args):
+            calls.append(args)
+            return (0, "ok")
+
+        with (
+            patch("traderbot.cli.Path.home", return_value=tmp_path),
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_add", side_effect=mock_cron_add),
+        ):
+            result = runner.invoke(
+                app,
+                ["cron", "setup", "--agent", "my-agent", "--channel", "telegram", "--to", "+15555550123", "--json"],
+            )
+            assert result.exit_code == 0
+        for call_args in calls:
+            assert "--channel" in call_args
+            assert "telegram" in call_args
+            assert "--to" in call_args
+            assert "+15555550123" in call_args
+
     def test_cron_setup_writes_heartbeat_config(self, tmp_path):
         config_dir = tmp_path / ".openclaw"
         config_dir.mkdir()
-        config_file = config_dir / "config.json"
+        config_file = config_dir / "openclaw.json"
 
         with (
             patch("traderbot.cli.Path.home", return_value=tmp_path),
