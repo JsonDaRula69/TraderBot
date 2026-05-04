@@ -23,7 +23,7 @@ class UpdateConfig(BaseModel):
     include_prerelease: bool = Field(default=False, description="Include pre-release versions in checks")
 
     @classmethod
-    def load(cls) -> "UpdateConfig":
+    def load(cls) -> UpdateConfig:
         """Load config from disk, or return defaults if not found."""
         if CONFIG_PATH.exists():
             try:

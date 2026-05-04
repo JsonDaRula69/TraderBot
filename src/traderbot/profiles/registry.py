@@ -175,7 +175,7 @@ class ProfileRegistry:
         if profile_dict is None:
             return None
 
-        if "enabled_categories" in profile_dict and profile_dict["enabled_categories"]:
+        if profile_dict.get("enabled_categories"):
             from traderbot.kalshi.models import MarketCategory
             profile_dict["enabled_categories"] = [
                 MarketCategory(cat.lower()) if isinstance(cat, str) else cat
@@ -206,7 +206,7 @@ class ProfileRegistry:
             kr = self._get_keyring()
             profiles: list[str] = []
             if hasattr(kr, "_store"):
-                for (service, username) in kr._store.keys():
+                for (service, username) in kr._store:
                     if service.startswith(_KEYRING_SERVICE_PREFIX) and username == "profile":
                         profiles.append(service[len(_KEYRING_SERVICE_PREFIX):])
             else:
@@ -275,7 +275,7 @@ class ProfileRegistry:
             mode="json"
         )
 
-        if "enabled_categories" in profile_dict and profile_dict["enabled_categories"]:
+        if profile_dict.get("enabled_categories"):
             from traderbot.kalshi.models import MarketCategory
             profile_dict["enabled_categories"] = [
                 MarketCategory(cat.lower()) if isinstance(cat, str) else cat

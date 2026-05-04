@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import threading
 from datetime import UTC, datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from traderbot.kalshi.models import Decision
 from traderbot.paths import get_audit_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class AuditLogger:

@@ -133,7 +133,7 @@ def apply_update(restart: bool = False) -> bool:
             text=True,
         )
         if git_status.stdout.strip():
-            untracked = [l.strip() for l in git_status.stdout.strip().splitlines() if not l.startswith("??")]
+            untracked = [line.strip() for line in git_status.stdout.strip().splitlines() if not line.startswith("??")]
             if untracked:
                 logger.error("Cannot update: uncommitted changes in working tree. Commit or stash first.")
                 return False
@@ -143,7 +143,7 @@ def apply_update(restart: bool = False) -> bool:
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
         logger.info("Updated successfully to latest version")
         if restart:
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            os.execv(sys.executable, [sys.executable, *sys.argv])
         return True
     except subprocess.CalledProcessError as exc:
         logger.error("Update failed: %s", exc)

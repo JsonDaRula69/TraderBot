@@ -40,10 +40,8 @@ def evaluate_trade(
     Returns the sized position in cents (0 if rejected).
     """
     # Category filtering (profile-aware only)
-    if profile is not None:
-        if trade_request.market_category is not None:
-            if not profile.is_category_enabled(trade_request.market_category):
-                return 0
+    if profile is not None and trade_request.market_category is not None and not profile.is_category_enabled(trade_request.market_category):
+        return 0
 
     daily_loss_pct = portfolio.today_realized_loss_cents / max(portfolio.portfolio_value_cents, 1)
     drawdown_pct = (portfolio.peak_value_cents - portfolio.portfolio_value_cents) / max(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import random
 from datetime import UTC, datetime
@@ -285,15 +286,11 @@ class NewsAggregator:
     def _capture_rate_limits(self, response: httpx.Response) -> None:
         """Extract rate-limit headers from NewsAPI response."""
         if "X-RateLimit-Limit" in response.headers:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 self.rate_limit_limit = int(response.headers["X-RateLimit-Limit"])
-            except (ValueError, TypeError):
-                pass
         if "X-RateLimit-Remaining" in response.headers:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 self.rate_limit_remaining = int(response.headers["X-RateLimit-Remaining"])
-            except (ValueError, TypeError):
-                pass
 
     async def get_everything(
         self,

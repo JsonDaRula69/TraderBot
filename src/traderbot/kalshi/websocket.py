@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
 import websockets
-from pydantic import SecretStr
+from pydantic import SecretStr  # noqa: TC002 — needed at runtime for BaseSettings field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.signing import auth_headers

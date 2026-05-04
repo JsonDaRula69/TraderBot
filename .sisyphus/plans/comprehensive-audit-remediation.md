@@ -671,7 +671,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-2.3-market-params.txt
   ```
 
-- [ ] 2.4. Add NewsAPI /everything Endpoint (H6)
+- [x] 2.4. Add NewsAPI /everything Endpoint (H6)
 
   **What to do**:
   - Add `_fetch_everything()` to `sources.py` using `GET /v2/everything` with `q`, `from`, `to`, `sortBy` params
@@ -880,7 +880,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.2-paper-risk.txt
   ```
 
-- [ ] 3.3. Fix effective_limit Floor Thresholds (H11)
+- [x] 3.3. Fix effective_limit Floor Thresholds (H11)
 
   **What to do**:
   - Fix `simulation/profiles.py:41-45`: `effective_limit()` returns `risk_multiplier * HARD_LIMITS[key]` for ALL keys
@@ -932,7 +932,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.4-no-imports.txt
   ```
 
-- [ ] 3.5. Unify NewsSource Enum (H8)
+- [x] 3.5. Unify NewsSource Enum (H8)
 
   **What to do**:
   - `sources.py:19-24`: `NewsSource` has lowercase values (`newsapi`, `twitter`, `reddit`)
@@ -1068,7 +1068,7 @@ Max Concurrent: 10 (Wave 3)
     Evidence: .sisyphus/evidence/task-3.10-config-path.txt
   ```
 
-- [ ] 4.1. Require --channel/--to with --announce in cron
+- [x] 4.1. Require --channel/--to with --announce in cron
 
   **What to do**: In `cli.py:2516-2526`, validate that `--announce` is always accompanied by `--channel` and `--to`. Raise error if missing.
 
@@ -1092,31 +1092,31 @@ Max Concurrent: 10 (Wave 3)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.5. Remove # Made with Bob from injection.py:173
+- [x] 4.5. Remove # Made with Bob from injection.py:173
 
   **What to do**: Remove comment from line 173 (previously misattributed to agent_limits.py:92)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.6. Fix cron hour range 9-15 → 9-16 in cli.py
+- [x] 4.6. Fix cron hour range 9-15 → 9-16 in cli.py
 
   **What to do**: Change market hours cron expression in `cli.py` to include 4 PM ET hour
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.7. Remove dead return from _process_signals
+- [x] 4.7. Remove dead return from _process_signals
 
   **What to do**: Fix `engine.py:338` unreachable/dead return
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.8. Document Twitter source stub as not implemented
+- [x] 4.8. Document Twitter source stub as not implemented
 
   **What to do**: Add explicit docstring/comment in `sources.py` that Twitter API integration is a stub
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.9. Document signals CLI command as stub
+- [x] 4.9. Document signals CLI command as stub
 
   **What to do**: Add explicit docstring in `cli.py` that `signals` command is not yet implemented
 
