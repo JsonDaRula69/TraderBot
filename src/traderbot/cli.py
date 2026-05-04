@@ -4,6 +4,7 @@ import asyncio
 import json as json_lib
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -50,6 +51,9 @@ app.add_typer(auth_app, name="auth")
 
 update_app = typer.Typer(name="update", help="Check and apply TraderBot updates.")
 app.add_typer(update_app, name="update")
+
+cron_app = typer.Typer(name="cron", help="Register cron loops and heartbeat with OpenClaw.")
+app.add_typer(cron_app, name="cron")
 
 err_console = Console(stderr=True)
 
@@ -2381,6 +2385,193 @@ def profile_auth(
                 table.add_row(svc, masked_key)
 
         console.print(table)
+
+
+
+def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
+    """Run `openclaw cron add` and return (exit_code, output)."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["openclaw", "cron", "add", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.returncode, (result.stdout + result.stderr).strip()
+    except FileNotFoundError:
+        return -1, "openclaw CLI not found"
+    except subprocess.TimeoutExpired:
+        return -2, "openclaw cron add timed out"
+
+
+def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
+    """Write heartbeat config for an agent into ~/.openclaw/config.json."""
+    import json as _json
+
+    config_path = Path.home() / ".openclaw" / "config.json"
+    config: dict = {}
+
+    if config_path.exists():
+        try:
+            config = _json.loads(config_path.read_text())
+        except (ValueError, OSError):
+            config = {}
+
+    agents = config.setdefault("agents", {})
+    agent_list = agents.setdefault("list", [])
+
+    for entry in agent_list:
+        if entry.get("id") == agent_id:
+            entry["heartbeat"] = {
+                "every": heartbeat_interval,
+                "lightContext": True,
+                "isolatedSession": True,
+            }
+            break
+    else:
+        agent_list.append({
+            "id": agent_id,
+            "heartbeat": {
+                "every": heartbeat_interval,
+                "lightContext": True,
+                "isolatedSession": True,
+            },
+        })
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_json.dumps(config, indent=2) + "\n")
+    return True
+
+
+@cron_app.command("setup")
+def cron_setup(
+    agent_id: Annotated[
+        str,
+        typer.Option("--agent", help="OpenClaw agent ID to register loops for"),
+    ],
+    heartbeat_interval: Annotated[
+        str,
+        typer.Option("--heartbeat-every", help="Heartbeat interval (e.g. 30m, 1h, 6h)"),
+    ] = "6h",
+    skip_heartbeat_config: Annotated[
+        bool,
+        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to config.json"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be registered without executing"),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON"),
+    ] = False,
+) -> None:
+    """Register decision, heartbeat, and news cron loops with OpenClaw for an agent."""
+    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload, LOOP_DEFINITIONS
+
+    console = Console()
+    results: list[dict[str, str | bool]] = []
+
+    if not dry_run and not shutil.which("openclaw"):
+        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
+        console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
+        raise typer.Exit(1)
+
+    decision_payload = DecisionLoopPayload()
+    heartbeat_payload = HeartbeatLoopPayload()
+
+    cron_jobs = [
+        {
+            "name": "decision_loop",
+            "cron_expr": "*/5 9-15 * * 1-5",
+            "session": "isolated",
+            "message": decision_payload.message,
+        },
+        {
+            "name": "heartbeat_loop",
+            "every": heartbeat_interval,
+            "session": "isolated",
+            "message": heartbeat_payload.message,
+        },
+    ]
+
+    for job in cron_jobs:
+        job_result: dict[str, str | bool] = {
+            "name": job["name"],
+            "registered": False,
+        }
+
+        if dry_run:
+            if "cron_expr" in job:
+                job_result["cron"] = job["cron_expr"]
+            else:
+                job_result["every"] = job["every"]
+            job_result["message"] = job["message"]
+            job_result["registered"] = True
+            results.append(job_result)
+            continue
+
+        args = [
+            "--name", job["name"],
+            "--session", job["session"],
+            "--message", job["message"],
+            "--agent", agent_id,
+            "--announce",
+        ]
+        if "cron_expr" in job:
+            args.extend(["--cron", job["cron_expr"]])
+        else:
+            args.extend(["--every", job["every"]])
+
+        exit_code, output = _run_openclaw_cron_add(args)
+        job_result["exit_code"] = str(exit_code)
+        job_result["output"] = output
+
+        if exit_code == 0:
+            job_result["registered"] = True
+        else:
+            job_result["error"] = output if exit_code > 0 else f"openclaw error: {output}"
+
+        results.append(job_result)
+
+    hb_result: dict[str, str | bool] = {
+        "name": "heartbeat_config",
+        "registered": False,
+    }
+    if not skip_heartbeat_config:
+        if dry_run:
+            hb_result["interval"] = heartbeat_interval
+            hb_result["agent_id"] = agent_id
+            hb_result["registered"] = True
+        else:
+            try:
+                _write_heartbeat_config(agent_id, heartbeat_interval)
+                hb_result["registered"] = True
+            except Exception as e:
+                hb_result["error"] = str(e)
+    results.append(hb_result)
+
+    if json_output:
+        print(json_lib.dumps({"agent_id": agent_id, "loops": results}, indent=2))
+        return
+
+    console.print(f"\n[bold]Cron Registration for Agent '{agent_id}'[/bold]\n")
+
+    for r in results:
+        name = r["name"]
+        if r["registered"]:
+            console.print(f"  [green]✓[/green] {name}")
+        else:
+            console.print(f"  [red]✗[/red] {name}: {r.get('error', 'unknown error')}")
+
+    failed = [r for r in results if not r["registered"]]
+    if failed:
+        console.print(f"\n[yellow]{len(failed)} loop(s) failed to register.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print("\n[green]All loops registered successfully.[/green]")
 
 
 def _check_updates_on_startup() -> None:

@@ -775,6 +775,75 @@ class TestHeartbeat:
         assert result.exit_code == 0
 
 
+class TestCronSetup:
+    def test_cron_setup_dry_run(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run"])
+        assert result.exit_code == 0
+        assert "decision_loop" in result.output
+        assert "heartbeat_loop" in result.output
+        assert "heartbeat_config" in result.output
+
+    def test_cron_setup_dry_run_json(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["agent_id"] == "test-agent"
+        assert len(data["loops"]) == 3
+        names = [loop["name"] for loop in data["loops"]]
+        assert "decision_loop" in names
+        assert "heartbeat_loop" in names
+        assert "heartbeat_config" in names
+
+    def test_cron_setup_custom_interval(self, tmp_path):
+        result = runner.invoke(
+            app,
+            ["cron", "setup", "--agent", "test-agent", "--heartbeat-every", "30m", "--dry-run", "--json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        heartbeat_loop = next(l for l in data["loops"] if l["name"] == "heartbeat_loop")
+        assert heartbeat_loop["every"] == "30m"
+
+    def test_cron_setup_skip_heartbeat_config(self, tmp_path):
+        result = runner.invoke(
+            app,
+            ["cron", "setup", "--agent", "test-agent", "--skip-heartbeat-config", "--dry-run", "--json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        hb_config = next(l for l in data["loops"] if l["name"] == "heartbeat_config")
+        assert hb_config["registered"] is False
+
+    def test_cron_setup_no_openclaw(self):
+        with patch("traderbot.cli.shutil.which", return_value=None):
+            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent"])
+            assert result.exit_code == 1
+            assert "openclaw" in result.output.lower()
+
+    def test_cron_setup_writes_heartbeat_config(self, tmp_path):
+        config_dir = tmp_path / ".openclaw"
+        config_dir.mkdir()
+        config_file = config_dir / "config.json"
+
+        with (
+            patch("traderbot.cli.Path.home", return_value=tmp_path),
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_add", return_value=(0, "ok")),
+        ):
+            result = runner.invoke(
+                app,
+                ["cron", "setup", "--agent", "my-agent", "--json"],
+            )
+            assert result.exit_code == 0
+
+        assert config_file.exists()
+        config = json.loads(config_file.read_text())
+        agents_list = config["agents"]["list"]
+        agent_entry = next(a for a in agents_list if a["id"] == "my-agent")
+        assert agent_entry["heartbeat"]["every"] == "6h"
+        assert agent_entry["heartbeat"]["lightContext"] is True
+
+
 class TestHalt:
     def test_halt_shows_status(self):
         result = runner.invoke(app, ["halt"])

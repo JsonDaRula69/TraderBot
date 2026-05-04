@@ -183,6 +183,28 @@ traderbot heartbeat --json
 
 This writes `HEARTBEAT_DATA.md` with your baseline state.
 
+### Register Cron Loops with OpenClaw
+
+After your first heartbeat, register your scheduled loops so OpenClaw wakes you on cadence:
+```
+traderbot cron setup --agent <your-agent-id>
+```
+
+This registers:
+- **Decision Loop** — isolated agentTurn every 5 min during market hours (Mon–Fri 9am–3pm ET)
+- **Heartbeat Loop** — isolated agentTurn every 6 hours (self-improvement cycle)
+- **Heartbeat config** — written to `~/.openclaw/config.json` so the gateway knows your interval
+
+To preview without registering:
+```
+traderbot cron setup --agent <your-agent-id> --dry-run
+```
+
+To customize the heartbeat interval:
+```
+traderbot cron setup --agent <your-agent-id> --heartbeat-every 30m
+```
+
 ## Step 6.5: Initial Training (Backtest → Paper → Live)
 
 Before trading with real money, you must train yourself on historical data and prove consistent profitability.
