@@ -645,6 +645,30 @@ interactive_config_flow() {
         install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE"
     fi
 
+    if [[ -n "$agent_name" ]]; then
+        echo
+        echo "=== Cron Loop Registration ==="
+        echo "Registering heartbeat and decision loops with OpenClaw for agent $agent_name..."
+        if [[ -x "$tb_cmd" ]]; then
+            if "$tb_cmd" cron setup --agent "$agent_name" --json 2>&1; then
+                echo "Cron loops registered."
+            else
+                echo "Warning: cron setup failed. Register manually with:" >&2
+                echo "  $tb_cmd cron setup --agent $agent_name" >&2
+            fi
+        elif command -v traderbot &>/dev/null; then
+            if traderbot cron setup --agent "$agent_name" 2>&1; then
+                echo "Cron loops registered."
+            else
+                echo "Warning: cron setup failed. Register manually with:" >&2
+                echo "  traderbot cron setup --agent $agent_name" >&2
+            fi
+        else
+            echo "TraderBot not found. Register cron loops manually:" >&2
+            echo "  traderbot cron setup --agent $agent_name" >&2
+        fi
+    fi
+
     echo
     echo "=== Verification ==="
     if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null; then
