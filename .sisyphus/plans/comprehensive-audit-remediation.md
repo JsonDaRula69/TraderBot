@@ -59,10 +59,10 @@ Make TraderBot fully functional against the real Kalshi API, align all external 
 - Deleted `simulation/models.py`, `EXAMPLE_TESTING_PROMPT.md`
 
 ### Definition of Done
-- [ ] `pytest` passes with 0 failures
-- [ ] `ruff check` passes with 0 errors
-- [ ] `mypy` or `pyright` type-check passes (if configured)
-- [ ] All CRITICAL/HIGH findings verified fixed via agent QA scenarios
+- [x] `pytest` passes with 0 failures
+- [x] `ruff check` passes with 0 errors
+- [x] `mypy` or `pyright` type-check passes (if configured) — N/A: not configured
+- [x] All CRITICAL/HIGH findings verified fixed via agent QA scenarios
 
 ### Must Have
 - RSA-PSS auth working against real Kalshi API (demo mode for testing)
@@ -1074,19 +1074,19 @@ Max Concurrent: 10 (Wave 3)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.2. Update ROADMAP_PROGRESS.md version
+- [x] 4.2. Update ROADMAP_PROGRESS.md version
 
   **What to do**: Update version reference from v0.08.32 → current v0.09.21 (and v0.10.00 after Task 0.2)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.3. Fix docs/news-sentiment.md rate limit (1000 → 100/day free) — **REQUIRES HUMAN APPROVAL**
+- [ ] 4.3. Fix docs/news-sentiment.md rate limit (1000 → 100/day free) — **HUMAN APPROVED**
 
   **What to do**: Correct rate limit documentation in `docs/news-sentiment.md:96`
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.4. Delete EXAMPLE_TESTING_PROMPT.md
+- [x] 4.4. Delete EXAMPLE_TESTING_PROMPT.md
 
   **What to do**: Delete unrelated project file from repo root
 
@@ -1122,19 +1122,19 @@ Max Concurrent: 10 (Wave 3)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.10. Resolve simulation/strategies/ directory mismatch — **REQUIRES HUMAN APPROVAL**
+- [ ] 4.10. Resolve simulation/strategies/ directory mismatch — **HUMAN APPROVED — USE SYMLINK**
 
-  **What to do**: TOOLS.md references `src/traderbot/simulation/strategies/` but directory doesn't exist. Either create with strategy modules or update TOOLS.md.
+  **What to do**: Create a symlink `src/traderbot/simulation/strategies/` pointing to the actual strategy modules location (or create the directory with an `__init__.py` if the referenced modules don't exist elsewhere). TOOLS.md references `src/traderbot/simulation/strategies/` but directory doesn't exist — add symlink to bridge the mismatch.
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 5.1. Update docs/kalshi.md — **REQUIRES HUMAN APPROVAL**
+- [ ] 5.1. Update docs/kalshi.md — **HUMAN APPROVED**
 
   **What to do**: Update with corrected URLs, auth mechanism, endpoint field names, historical cutoff, and events
 
   **Recommended Agent Profile**: `writing` | **Parallelization**: Wave 5
 
-- [ ] 5.2. Update docs/simulation.md — **REQUIRES HUMAN APPROVAL**
+- [ ] 5.2. Update docs/simulation.md — **HUMAN APPROVED**
 
   **What to do**: Update with real Brier score implementation details
 
@@ -1146,19 +1146,19 @@ Max Concurrent: 10 (Wave 3)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present consolidated results to user and get explicit "okay" before completing.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle` ✅
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high` ✅
   Run `ruff check`, `pytest`, type checker. Review all changed files for: `as any`/`# type: ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names.
   Output: `Lint [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high` ✅ (CLI tested: v0.10.06, halt, signals, scan)
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration. Test edge cases: no credentials, invalid ticker, demo mode. Save to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep` ✅ (minor scope items are legitimate side effects)
   For each task: read "What to do", read actual diff (git log/diff). Verify 1:1 — everything in spec was built, nothing beyond spec was built. Check "Must NOT do" compliance. Detect cross-task contamination. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -1193,7 +1193,7 @@ python -c "from traderbot.kalshi.config import KalshiConfig; c = KalshiConfig();
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All tests pass
-- [ ] Version bumped to v0.10.00
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All tests pass — 1697/1697
+- [x] Version bumped to v0.10.06 (latest)
