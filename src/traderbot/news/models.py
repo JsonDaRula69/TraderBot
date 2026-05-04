@@ -17,9 +17,9 @@ NewsCategory = MarketCategory
 class NewsSource(StrEnum):
     """Supported news sources."""
 
-    NEWSAPI = "NewsAPI"
-    TWITTER = "Twitter"
-    REDDIT = "Reddit"
+    NEWSAPI = "newsapi"
+    TWITTER = "twitter"
+    REDDIT = "reddit"
 
 
 class NewsItem(BaseModel):

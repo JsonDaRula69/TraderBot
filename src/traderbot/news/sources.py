@@ -39,14 +39,18 @@ class NewsItem(BaseModel):
     category: str = "uncategorized"
 
 
+class NewsAPIError(Exception):
+    """Raised when the NewsAPI returns an error response."""
+
+
 class NewsAggregator:
     """Fetch and aggregate news from multiple sources with graceful degradation."""
 
-        # Source fetch priority order (fastest/breaking → slowest/analysis)
+    # Source fetch priority order (fastest/breaking → slowest/analysis)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
     NewsSource.NEWSAPI,
-    NewsSource.REDDIT,
-    NewsSource.TWITTER,
+        NewsSource.REDDIT,
+        NewsSource.TWITTER,
 ]
 
     def __init__(
@@ -65,6 +69,8 @@ class NewsAggregator:
         ]
         self._client = http_client or httpx.AsyncClient()
         self._newsapi_base = "https://newsapi.org/v2"
+        self.rate_limit_limit: int | None = None
+        self.rate_limit_remaining: int | None = None
 
     async def fetch_recent(self, source: NewsSource, limit: int = 20) -> list[NewsItem]:
         """Fetch recent items from a single source."""
@@ -135,8 +141,12 @@ class NewsAggregator:
                     return []
 
                 if response.status_code != 200:
-                    logger.warning("NewsAPI returned HTTP %d, skipping", response.status_code)
-                    return []
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", response.text[:200])
+                    except Exception:
+                        error_msg = response.text[:200]
+                    raise NewsAPIError(f"NewsAPI HTTP {response.status_code}: {error_msg}")
 
                 try:
                     data = response.json()
@@ -180,6 +190,89 @@ class NewsAggregator:
         if last_exc is not None:
             logger.error("NewsAPI request failed: %s", last_exc)
         return []
+
+    def _capture_rate_limits(self, response: httpx.Response) -> None:
+        """Extract rate-limit headers from NewsAPI response."""
+        if "X-RateLimit-Limit" in response.headers:
+            try:
+                self.rate_limit_limit = int(response.headers["X-RateLimit-Limit"])
+            except (ValueError, TypeError):
+                pass
+        if "X-RateLimit-Remaining" in response.headers:
+            try:
+                self.rate_limit_remaining = int(response.headers["X-RateLimit-Remaining"])
+            except (ValueError, TypeError):
+                pass
+
+    async def get_everything(
+        self,
+        query: str,
+        page: int = 1,
+        page_size: int = 100,
+        sort_by: str = "publishedAt",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Search all articles matching query via NewsAPI /everything endpoint.
+
+        Args:
+            query: Search query (required by NewsAPI).
+            page: Page number (1-indexed).
+            page_size: Results per page (max 100).
+            sort_by: Sort order — publishedAt, relevancy, popularity.
+            **kwargs: Additional query parameters.
+
+        Returns:
+            Raw NewsAPI response dict with "articles", "totalResults", etc.
+
+        Raises:
+            NewsAPIError: On non-200 responses with API error message.
+        """
+        if not self._newsapi_key:
+            raise NewsAPIError("NEWSAPI_KEY not set")
+
+        params: dict[str, Any] = {
+            "apiKey": self._newsapi_key,
+            "q": query,
+            "pageSize": min(page_size, 100),
+            "page": page,
+            "sortBy": sort_by,
+            "language": "en",
+            **kwargs,
+        }
+
+        for attempt in range(4):
+            try:
+                response = await self._client.get(
+                    f"{self._newsapi_base}/everything",
+                    params=params,
+                )
+                self._capture_rate_limits(response)
+
+                if response.status_code == 429:
+                    if attempt < 3:
+                        delay = 1.0 * (2**attempt)
+                        logger.warning("NewsAPI rate limited, retry %d in %.1fs", attempt + 1, delay)
+                        await asyncio.sleep(delay)
+                        continue
+                    raise NewsAPIError("NewsAPI rate limit exhausted after retries")
+
+                if response.status_code != 200:
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", response.text[:200])
+                    except Exception:
+                        error_msg = response.text[:200]
+                    raise NewsAPIError(f"NewsAPI HTTP {response.status_code}: {error_msg}")
+
+                return response.json()
+
+            except httpx.HTTPError as exc:
+                if attempt < 3:
+                    await asyncio.sleep(1.0 * (2**attempt))
+                    continue
+                raise NewsAPIError(f"NewsAPI request failed: {exc}") from exc
+
+        raise NewsAPIError("NewsAPI request failed after retries")
 
     async def _fetch_twitter(self, limit: int) -> list[NewsItem]:
         """Stub — returns empty until Twitter API credentials are configured."""
