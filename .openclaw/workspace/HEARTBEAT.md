@@ -31,7 +31,7 @@ tasks:
 
 After running `traderbot heartbeat --json`:
 1. Read `HEARTBEAT_DATA.md` to see the results
-2. If `circuit_breaker.level` != "OK", surface alert immediately with level and daily loss %
+2. If `circuit_breaker.level` != "NORMAL", surface alert immediately with level and daily loss %
 3. If `alerts` array has items, forward each to main session
 4. If adaptation has `human_review: true`, flag it for human approval
 5. If nothing needs attention after all checks, reply HEARTBEAT_OK
