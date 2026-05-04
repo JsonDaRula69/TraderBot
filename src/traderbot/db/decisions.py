@@ -20,7 +20,7 @@ class DbDecision(BaseModel):
     id: int
     timestamp: datetime
     ticker: str
-    direction: Literal["yes", "no", "hold"]
+    direction: Literal["yes", "no", "neutral"]
     quantity: Annotated[int, Field(ge=0)]
     price: Annotated[int, Field(ge=0, description="Price in cents")]
     signal_strength: Annotated[float, Field(ge=0, le=1)]
