@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import httpx
+from pydantic import SecretStr
 import pytest
 import respx
 
@@ -22,7 +23,7 @@ from traderbot.kalshi.models import Decision, Market, MarketListResponse
 
 def _make_config(demo_mode: bool = False) -> KalshiConfig:
     return KalshiConfig(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         api_secret="test-secret",
         demo_mode=demo_mode,
         rate_limit_rps=10.0,
@@ -60,7 +61,7 @@ class TestKalshiConfig:
             clear=False,
         ):
             cfg = KalshiConfig()
-            assert cfg.api_key == "env-key"
+            assert cfg.api_key.get_secret_value() == "env-key"
             assert cfg.api_secret.get_secret_value() == "env-secret"
 
     def test_extra_field_rejected(self) -> None:
@@ -68,7 +69,7 @@ class TestKalshiConfig:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            KalshiConfig(api_key="k", api_secret="s", extra_field=True)
+            KalshiConfig(api_key=SecretStr("k"), api_secret="s", extra_field=True)
 
 
 class TestNormalizeApiResponse:

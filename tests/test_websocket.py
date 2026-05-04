@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import SecretStr
 from websockets.frames import Close
 
 from traderbot.kalshi.websocket import MarketStream, WebSocketConfig
@@ -14,7 +15,7 @@ from traderbot.kalshi.websocket import MarketStream, WebSocketConfig
 
 def _make_config(**overrides: Any) -> WebSocketConfig:
     defaults: dict[str, Any] = {
-        "api_key": "test-key",
+        "api_key": SecretStr("test-key"),
         "api_secret": "test-secret",
     }
     defaults.update(overrides)
@@ -49,7 +50,7 @@ class TestWebSocketConfig:
         from traderbot.kalshi.websocket import WebSocketConfig
 
         with pytest.raises(ValidationError):
-            WebSocketConfig(api_key="k", api_secret="s", extra_field=True)
+            WebSocketConfig(api_key=SecretStr("k"), api_secret="s", extra_field=True)
 
 
 def _make_mock_ws(auth_response: dict[str, Any] | None = None) -> AsyncMock:

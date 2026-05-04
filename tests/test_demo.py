@@ -38,27 +38,19 @@ class TestDemoAdapterConfig:
         assert adapter.is_demo is True
 
     def test_forces_demo_mode_when_config_has_demo_false(self) -> None:
-        forced_config = _mock_demo_config()
-        mock_client = _mock_demo_client(forced_config)
+        from pydantic import SecretStr
 
-        prod_config = MagicMock()
-        prod_config.demo_mode = False
-        prod_config.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
-        prod_config.model_dump.return_value = {
-            "api_key": "key",
-            "api_secret": "secret",
-            "demo_mode": False,
-            "base_url": "https://api.kalshi.co/trade-api/v2",
-            "demo_url": "https://demo-api.kalshi.co/trade-api/v2",
-            "rate_limit_rps": 5.0,
-            "max_retries": 3,
-            "retry_base_delay": 1.0,
-        }
+        from traderbot.kalshi.client import KalshiConfig
 
-        with (
-            patch("traderbot.kalshi.client.KalshiConfig", return_value=forced_config),
-            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
-        ):
+        prod_config = KalshiConfig(
+            api_key=SecretStr("key"),
+            api_secret="secret",
+            demo_mode=False,
+        )
+
+        with patch("traderbot.kalshi.client.KalshiClient") as MockClient:
+            mock_client = MagicMock()
+            MockClient.return_value = mock_client
             adapter = DemoAdapter(config=prod_config)
 
         assert adapter.is_demo is True

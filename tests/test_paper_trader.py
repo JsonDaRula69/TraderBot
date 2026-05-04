@@ -77,7 +77,7 @@ def _make_demo_adapter() -> DemoAdapter:
 
     from traderbot.kalshi.client import KalshiConfig
     config = KalshiConfig(
-        api_key="demo",
+        api_key=SecretStr("demo"),
         api_secret=SecretStr("demo"),
         demo_mode=True,
     )

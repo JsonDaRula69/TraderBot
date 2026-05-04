@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import httpx
 import respx
+from pydantic import SecretStr
 
 from traderbot.kalshi.client import KalshiClient, KalshiConfig
 from traderbot.kalshi.history import HistoryService
@@ -19,7 +20,7 @@ CUTOFF_ORDER_TS = 1774800000
 
 def _make_config() -> KalshiConfig:
     return KalshiConfig(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         api_secret="test-secret",
         rate_limit_rps=10.0,
         retry_base_delay=0.01,
