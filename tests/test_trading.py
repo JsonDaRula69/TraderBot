@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 import respx
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from traderbot.kalshi.client import KalshiClient, KalshiConfig
 from traderbot.kalshi.models import (
@@ -26,7 +26,7 @@ CREATED_TIME_DT = datetime(2025, 4, 20, 12, 0, 0, tzinfo=UTC)
 
 def _make_config() -> KalshiConfig:
     return KalshiConfig(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         api_secret="test-secret",
         rate_limit_rps=10.0,
         retry_base_delay=0.01,

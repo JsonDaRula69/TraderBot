@@ -111,14 +111,14 @@ def test_kalshi_client_with_profile_uses_profile_credentials(mock_keyring, paper
     
     # Create KalshiClient with profile
     config = KalshiConfig(
-        api_key="profile-key",
+        api_key=SecretStr("profile-key"),
         api_secret=SecretStr("profile-secret"),
         demo_mode=True,
     )
     client = KalshiClient(config=config)
     
     # Verify client uses profile credentials
-    assert client._config.api_key == "profile-key"
+    assert client._config.api_key.get_secret_value() == "profile-key"
     assert client._config.api_secret.get_secret_value() == "profile-secret"
     assert client._config.demo_mode is True
 
@@ -136,14 +136,14 @@ def test_kalshi_client_without_profile_uses_global_credentials(mock_keyring):
     
     # Create KalshiClient without profile (existing behavior)
     config = KalshiConfig(
-        api_key="global-key",
+        api_key=SecretStr("global-key"),
         api_secret=SecretStr("global-secret"),
         demo_mode=False,
     )
     client = KalshiClient(config=config)
     
     # Verify client uses global credentials
-    assert client._config.api_key == "global-key"
+    assert client._config.api_key.get_secret_value() == "global-key"
     assert client._config.api_secret.get_secret_value() == "global-secret"
     assert client._config.demo_mode is False
 
@@ -161,7 +161,7 @@ def test_profile_with_demo_mode_true_creates_demo_client(mock_keyring, paper_pro
     
     # Create client with demo mode
     config = KalshiConfig(
-        api_key="demo-key",
+        api_key=SecretStr("demo-key"),
         api_secret=SecretStr("demo-secret"),
         demo_mode=paper_profile.demo_mode,
     )
@@ -185,7 +185,7 @@ def test_profile_with_demo_mode_false_creates_live_client(mock_keyring, live_pro
     
     # Create client with live mode
     config = KalshiConfig(
-        api_key="live-key",
+        api_key=SecretStr("live-key"),
         api_secret=SecretStr("live-secret"),
         demo_mode=live_profile.demo_mode,
     )
