@@ -60,10 +60,10 @@ class MarketService:
         data = response.json()
 
         yes_bids = [
-            _normalize_orderbook_level(level) for level in data.get("yes_bids", data.get("yes", []))
+            _normalize_orderbook_level(level) for level in data.get("yes_bids", [])
         ]
         no_bids = [
-            _normalize_orderbook_level(level) for level in data.get("no_bids", data.get("no", []))
+            _normalize_orderbook_level(level) for level in data.get("no_bids", [])
         ]
 
         return OrderBook(yes_bids=yes_bids, no_bids=no_bids)
