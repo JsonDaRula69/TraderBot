@@ -21,6 +21,12 @@ if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
     exit 1
 fi
 
+USER_NAME="$(whoami)"
+if [[ "$USER_NAME" =~ AGENT_ID ]] || [[ "$USER_NAME" =~ USERNAME ]] || [[ "$USER_NAME" =~ TOKEN_PLACEHOLDER ]]; then
+    echo "Error: Username '$USER_NAME' conflicts with plist template placeholders." >&2
+    exit 1
+fi
+
 TEMPLATE_FILE="$(dirname "$0")/com.traderbot.agent.plist"
 if [[ ! -f "$TEMPLATE_FILE" ]]; then
     echo "Error: template file not found: $TEMPLATE_FILE" >&2
@@ -45,5 +51,6 @@ fi
 
 sudo cp "/tmp/com.traderbot.agent.$AGENT_NAME.plist" "$PLIST_FILE"
 rm -f "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
-sudo launchctl load "$PLIST_FILE" 2>/dev/null || true
+sudo launchctl bootstrap "system/com.traderbot.agent.$AGENT_NAME" 2>/dev/null || \
+    sudo launchctl load "$PLIST_FILE" 2>/dev/null || true
 echo "LaunchDaemon installed and loaded for agent: $AGENT_NAME (starts at boot, no login required)"

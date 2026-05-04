@@ -50,7 +50,7 @@ detect_os() {
 }
 
 check_openclaw() {
-    if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null || true; then
+    if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
         return 0
     fi
     return 1
@@ -58,7 +58,7 @@ check_openclaw() {
 
 install_dependencies_debian() {
     local pkgs=(build-essential python3-dev python3-venv gnome-keyring unzip curl git file python3-pip)
-    if command -v apt &>/dev/null || true; then
+    if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
         sudo apt install -y "${pkgs[@]}"
@@ -79,7 +79,7 @@ install_dependencies_macos() {
             exit 1
         fi
     fi
-    if ! command -v python3 &>/dev/null || true; then
+    if ! command -v python3 &>/dev/null; then
         echo "Error: Python3 not found. Install Python 3.12+ from python.org or Homebrew." >&2
         exit 1
     fi
@@ -119,7 +119,7 @@ install_traderbot() {
         fi
     else
         if [[ -d "$INSTALL_DIR" ]]; then
-            if command -v traderbot &>/dev/null || true; then
+            if command -v traderbot &>/dev/null; then
                 echo "TraderBot is already installed at $INSTALL_DIR"
                 local REPLY=""
                 read -r -p "Update to latest? (y/n): " -n 1 REPLY
@@ -206,14 +206,10 @@ install_traderbot() {
     if command -v uv &>/dev/null; then
         uv pip install -e .
     else
-        if [[ ! -d .venv ]]; then
-            python3 -m venv .venv
-        fi
-        source .venv/bin/activate
-        python3 -m pip install --upgrade pip --quiet
-        python3 -m pip install -e . --quiet 2>&1 || {
+        pip install --upgrade pip --quiet
+        pip install -e . --quiet 2>&1 || {
             echo "Error: pip install failed. Retrying with verbose output..." >&2
-            python3 -m pip install -e . 2>&1 | tail -20
+            pip install -e . 2>&1 | tail -20
             exit 1
         }
     fi
@@ -254,8 +250,9 @@ install_traderbot() {
 stop_services() {
     local os_type="$1"
     if [[ "$os_type" == "macos" ]]; then
-        sudo launchctl list 2>/dev/null | grep 'com.traderbot.agent' | awk '{print $1}' | while read -r label; do
-            sudo launchctl unload "/Library/LaunchDaemons/${label}.plist" 2>/dev/null || true
+        sudo launchctl list 2>/dev/null | grep 'com.traderbot.agent' | awk '{print $3}' | while read -r label; do
+            sudo launchctl bootout "system/${label}" 2>/dev/null || \
+                sudo launchctl unload "/Library/LaunchDaemons/${label}.plist" 2>/dev/null || true
         done
     else
         sudo systemctl list-units --type=service --state=running 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
@@ -270,7 +267,10 @@ uninstall_services() {
         local daemon_dir="/Library/LaunchDaemons"
         if [[ -d "$daemon_dir" ]]; then
             find "$daemon_dir" -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
-                sudo launchctl unload "$plist" 2>/dev/null || true
+                local label
+                label="$(basename "$plist" .plist)"
+                sudo launchctl bootout "system/${label}" 2>/dev/null || \
+                    sudo launchctl unload "$plist" 2>/dev/null || true
                 sudo rm -f "$plist"
                 echo "Removed: $plist"
             done
@@ -312,10 +312,13 @@ start_services() {
     local os_type="$1"
     if [[ "$os_type" == "macos" ]]; then
         find /Library/LaunchDaemons -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
-            sudo launchctl load "$plist" 2>/dev/null || true
+            local label
+            label="$(basename "$plist" .plist)"
+            sudo launchctl kickstart -p "system/${label}" 2>/dev/null || \
+                sudo launchctl load "$plist" 2>/dev/null || true
         done
     else
-        sudo systemctl list-units --type=service 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
+        sudo systemctl list-unit-files --type=service 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
             sudo systemctl start "$unit" 2>/dev/null || true
         done
     fi
@@ -333,9 +336,138 @@ install_service_for_agent() {
     fi
 }
 
+_env_set() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        local tmp_file
+        tmp_file="$(mktemp)"
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" == "${key}="* ]]; then
+                echo "${key}=${value}"
+            else
+                echo "$line"
+            fi
+        done < "$env_file" > "$tmp_file"
+        mv "$tmp_file" "$env_file"
+    else
+        echo "${key}=${value}" >> "$env_file"
+    fi
+}
+
+setup_api_credentials() {
+    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ ! -x "$tb_cmd" ]]; then
+        echo "TraderBot binary not found. Skipping API credential setup." >&2
+        return 1
+    fi
+
+    echo
+    echo "=== API Credentials ==="
+    echo "Kalshi credentials are required. Other services are optional."
+    echo
+
+    local use_keyring="false"
+    if "$tb_cmd" auth list-keys 2>/dev/null | grep -qi 'kalshi'; then
+        use_keyring="true"
+        echo "Keyring detected. Credentials will be stored securely."
+        echo "You can also run 'traderbot auth login' after installation for keyring storage."
+        echo
+    fi
+
+    mkdir -p "${HOME}/.traderbot"
+    local env_file="${HOME}/.traderbot/.env"
+    touch "$env_file"
+
+    local REPLY=""
+
+    # --- Kalshi (required) ---
+    echo "--- Kalshi (required) ---"
+    local kalshi_key=""
+    local kalshi_secret=""
+    read -r -p "Kalshi API key: " kalshi_key
+    if [[ -z "$kalshi_key" ]]; then
+        echo "Warning: Kalshi API key is required. Set it later with: traderbot auth set-key kalshi api_key" >&2
+    else
+        read -r -p "Kalshi API secret: " -s kalshi_secret
+        echo
+        _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
+        if [[ -n "$kalshi_secret" ]]; then
+            _env_set "$env_file" "KALSHI_API_SECRET" "$kalshi_secret"
+        fi
+        echo "Kalshi credentials stored."
+    fi
+
+    # --- NewsAPI (optional) ---
+    echo
+    echo "--- NewsAPI (optional) ---"
+    local newsapi_key=""
+    read -r -p "NewsAPI key (press Enter to skip): " newsapi_key
+    if [[ -n "$newsapi_key" ]]; then
+        _env_set "$env_file" "NEWSAPI_KEY" "$newsapi_key"
+        echo "NewsAPI key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key newsapi api_key"
+    fi
+
+    # --- Voyage (optional) ---
+    echo
+    echo "--- Voyage (optional) ---"
+    local voyage_key=""
+    read -r -p "Voyage API key (press Enter to skip): " voyage_key
+    if [[ -n "$voyage_key" ]]; then
+        _env_set "$env_file" "VOYAGE_API_KEY" "$voyage_key"
+        echo "Voyage key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key voyage api_key"
+    fi
+
+    # --- Twitter/X (optional) ---
+    echo
+    echo "--- Twitter/X (optional) ---"
+    local twitter_key=""
+    read -r -p "Twitter API key (press Enter to skip): " twitter_key
+    if [[ -n "$twitter_key" ]]; then
+        _env_set "$env_file" "TWITTER_API_KEY" "$twitter_key"
+        echo "Twitter key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key twitter api_key"
+    fi
+
+    # --- Reddit (optional) ---
+    echo
+    echo "--- Reddit (optional) ---"
+    local reddit_id=""
+    local reddit_secret=""
+    read -r -p "Reddit client ID (press Enter to skip): " reddit_id
+    if [[ -n "$reddit_id" ]]; then
+        read -r -p "Reddit client secret: " -s reddit_secret
+        echo
+        _env_set "$env_file" "REDDIT_CLIENT_ID" "$reddit_id"
+        if [[ -n "$reddit_secret" ]]; then
+            _env_set "$env_file" "REDDIT_CLIENT_SECRET" "$reddit_secret"
+        fi
+        echo "Reddit credentials stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key reddit client_id"
+    fi
+
+    echo
+    echo "API credential setup complete."
+    echo "Credentials written to ${env_file}"
+    if [[ "$use_keyring" == "true" ]]; then
+        echo "To migrate credentials to keyring, run: traderbot auth login"
+    fi
+    return 0
+}
+
 interactive_config_flow() {
     if [[ ! -t 0 ]]; then
-        exec < /dev/tty
+        if ! exec < /dev/tty; then
+            echo "Error: Interactive terminal required for configuration." >&2
+            exit 1
+        fi
     fi
     echo "=== TraderBot Configuration ==="
     echo
@@ -385,7 +517,7 @@ interactive_config_flow() {
         *) profile_categories="politics,economics,sports,crypto,science,weather,culture" ;;
     esac
 
-    if command -v traderbot &>/dev/null || true; then
+    if command -v traderbot &>/dev/null; then
         if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
             --categories "$profile_categories" 2>&1; then
             echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories" >&2
@@ -402,16 +534,18 @@ interactive_config_flow() {
         fi
     fi
 
+    setup_api_credentials
+
     echo
     echo "=== Agent Assignment ==="
     echo "TraderBot profiles bind to OpenClaw agents."
     echo "Each agent must have a workspace created via: openclaw agents add <name>"
     echo
 
-    if command -v openclaw &>/dev/null || true; then
+    if command -v openclaw &>/dev/null; then
         echo "Available agents (via openclaw agents list --bindings):"
         openclaw agents list --bindings 2>&1 || echo "  (run 'openclaw agents add <name>' to create one)"
-    elif command -v traderbot &>/dev/null || true; then
+    elif command -v traderbot &>/dev/null; then
         echo "Available agents:"
         traderbot profile discover-agents 2>&1 || echo "  (none found)"
     else
@@ -463,7 +597,7 @@ interactive_config_flow() {
 
     echo
     echo "=== Verification ==="
-    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null || true; then
+    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null; then
         if traderbot heartbeat --json 2>/dev/null; then
             echo "Heartbeat verification: PASSED"
         else
