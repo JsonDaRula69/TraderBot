@@ -196,7 +196,7 @@ class TestNewsCommand:
             assert result.exit_code == 0
             assert "News Feed" in result.output
             assert "economics" in result.output
-            assert "NewsAPI" in result.output
+            assert "newsapi" in result.output.lower()
 
     @pytest.mark.unit
     def test_news_empty_items(self):

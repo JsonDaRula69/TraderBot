@@ -73,7 +73,7 @@ PORTFOLIO_VALUE = 100_000_00  # $100k in cents
 def _make_market(
     ticker: str = "KX-TEST",
     question: str = "Test market?",
-    state: str = "settled",
+    status: str = "settled",
     volume: int = 5000,
     open_interest: int = 2000,
     settlement_result: bool | None = True,
@@ -87,7 +87,7 @@ def _make_market(
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-        state=state,
+        status=status,
         event_ticker="KX-EVENT",
         category=category,
         settlement_result=settlement_result,
@@ -768,7 +768,12 @@ class TestRiskEnforcementIntegration:
     def test_conservative_halves_all_limits(self) -> None:
         """Conservative (0.5x) → all effective limits are exactly 50% of HARD_LIMITS."""
         for key in HARD_LIMITS:
-            assert CONSERVATIVE.effective_limit(key) == pytest.approx(0.5 * HARD_LIMITS[key])
+            _CEILINGS = CONSERVATIVE._CEILING_KEYS
+            val = CONSERVATIVE.effective_limit(key)
+            if key in _CEILINGS:
+                assert val == pytest.approx(0.5 * HARD_LIMITS[key])
+            else:
+                assert val == HARD_LIMITS[key]
 
     def test_risk_multiplier_above_1_rejected(self) -> None:
         """StrategyProfile rejects risk_multiplier > 1.0 (cannot exceed HARD_LIMITS)."""

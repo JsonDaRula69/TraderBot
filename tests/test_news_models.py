@@ -61,12 +61,12 @@ def _make_impact(**overrides: object) -> dict[str, object]:
 
 class TestNewsSource:
     def test_values(self):
-        assert NewsSource.NEWSAPI == "NewsAPI"
-        assert NewsSource.TWITTER == "Twitter"
-        assert NewsSource.REDDIT == "Reddit"
+        assert NewsSource.NEWSAPI == 'newsapi'
+        assert NewsSource.TWITTER == 'twitter'
+        assert NewsSource.REDDIT == 'reddit'
 
     def test_from_string(self):
-        assert NewsSource("NewsAPI") is NewsSource.NEWSAPI
+        assert NewsSource('newsapi') is NewsSource.NEWSAPI
 
 
 # --- NewsCategory enum ---

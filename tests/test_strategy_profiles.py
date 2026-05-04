@@ -32,7 +32,7 @@ PORTFOLIO_VALUE = 100_000_00
 
 def _make_market(
     ticker: str = "KX-TEST",
-    state: str = "settled",
+    status: str = "settled",
     volume: int = 5000,
     open_interest: int = 2000,
     settlement_result: bool | None = True,
@@ -46,7 +46,7 @@ def _make_market(
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
-        state=state,
+        status=status,
         event_ticker="KX-EVENT",
         category=category,
         settlement_result=settlement_result,

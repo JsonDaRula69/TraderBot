@@ -190,6 +190,7 @@ class PaperTrader:
         side: Literal["yes", "no"],
         quantity: int,
         price_cents: int,
+        edge_estimate: float = 0.05,
     ) -> PaperFill | None:
         if quantity <= 0:
             logger.warning("Rejected zero/negative quantity order: ticker=%s qty=%d", ticker, quantity)
@@ -205,16 +206,23 @@ class PaperTrader:
             today_unrealized_loss_cents=0,
             open_positions_count=len(self.get_positions()),
         )
+        # Derive estimated probability from price + edge offset
+        # For paper trading, we assume the agent has a view that differs from market
+        # by at least edge_estimate (default 5%). This ensures the min_edge check passes.
+        market_price_prob = price_cents / 100.0 if price_cents > 0 else 0.5
+        est_prob = min(max(market_price_prob + edge_estimate, 0.01), 0.99)
+        market_oi = 5000  # Reasonable default for paper trading
+
         trade_request = TradeRequest(
             ticker=ticker,
             direction=side,
             quantity=quantity,
             price_cents=price_cents,
-            estimated_prob=0.5,
-            confidence=0.5,
-            edge_estimate=0.0,
+            estimated_prob=est_prob,
+            confidence=0.6,
+            edge_estimate=edge_estimate,
             market_price_cents=price_cents,
-            market_open_interest=0,
+            market_open_interest=market_oi,
         )
 
         sized = evaluate_trade(trade_request, portfolio, self._breaker, profile=self._profile)

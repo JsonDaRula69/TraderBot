@@ -1,0 +1,12 @@
+=== QA: Channel/to support in cron setup ===
+channel/to params in DecisionLoopPayload:
+DecisionLoop: channel=telegram, to=+15555550123
+HeartbeatLoop: channel=slack, to=#trading
+NewsLoop: wake=now, channel=telegram, to=+15555550123
+All delivery fields populated correctly
+--- cli.py --channel/--to args ---
+2484:    if channel or to:
+2485:        if not channel or not to:
+2486:            console.print("[red]Error:[/red] Both --channel and --to are required when either is provided.")
+2537:        if channel and to:
+2538:            args.extend(["--channel", channel, "--to", to])

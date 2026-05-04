@@ -197,7 +197,7 @@ def scan(
     table.add_column("Volume", justify="right")
     table.add_column("State", style="green")
     for m in markets:
-        table.add_row(m.ticker, m.question, str(m.volume), m.state)
+        table.add_row(m.ticker, m.question, str(m.volume), m.status)
     console.print(table)
 
 
@@ -238,7 +238,7 @@ def analyze(
         return
 
     console.print(f"[bold]{market.ticker}[/bold]: {market.question}")
-    console.print(f"State: {market.state}  Volume: {market.volume}  OI: {market.open_interest}")
+    console.print(f"State: {market.status}  Volume: {market.volume}  OI: {market.open_interest}")
     console.print(f"YES bids: {len(orderbook.yes_bids)}  NO bids: {len(orderbook.no_bids)}")
 
     from traderbot.analysis.odds import implied_probability

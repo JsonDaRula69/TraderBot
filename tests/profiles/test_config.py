@@ -60,9 +60,9 @@ def test_resolve_with_profile_credentials(test_profile: TradingProfile, mock_key
     auth_mgr.set_credentials("kalshi", "profile-key", "-----BEGIN PRIVATE KEY-----\nprofile-key-pem\n-----END PRIVATE KEY-----\n")
     
     # Resolve should return profile credentials
-    key, pem = resolve_kalshi_credentials(test_profile, profile_keyring=mock_keyring)
+    key, private_key = resolve_kalshi_credentials(test_profile, profile_keyring=mock_keyring)
     assert key == "profile-key"
-    assert "BEGIN PRIVATE KEY" in pem
+    assert "BEGIN PRIVATE KEY" in private_key
 
 
 def test_resolve_fallback_to_global(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
@@ -73,9 +73,9 @@ def test_resolve_fallback_to_global(test_profile: TradingProfile, mock_keyring: 
     global_auth.set_credential("kalshi", "private_key_pem", "-----BEGIN PRIVATE KEY-----\nglobal-key-pem\n-----END PRIVATE KEY-----\n")
     
     # Profile has no credentials, should fall back to global
-    key, pem = resolve_kalshi_credentials(test_profile, global_keyring=mock_keyring, profile_keyring=mock_keyring)
+    key, private_key = resolve_kalshi_credentials(test_profile, global_keyring=mock_keyring, profile_keyring=mock_keyring)
     assert key == "global-key"
-    assert "BEGIN PRIVATE KEY" in pem
+    assert "BEGIN PRIVATE KEY" in private_key
 
 
 def test_resolve_no_credentials_raises(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
@@ -93,9 +93,9 @@ def test_resolve_none_profile_uses_global(mock_keyring: MockKeyring) -> None:
     global_auth.set_credential("kalshi", "private_key_pem", "-----BEGIN PRIVATE KEY-----\nglobal-key-pem\n-----END PRIVATE KEY-----\n")
     
     # No profile provided, should use global
-    key, secret = resolve_kalshi_credentials(None, global_keyring=mock_keyring)
+    key, private_key = resolve_kalshi_credentials(None, global_keyring=mock_keyring)
     assert key == "global-key"
-    assert "BEGIN PRIVATE KEY" in pem or "BEGIN PRIVATE KEY" in secret
+    assert "BEGIN PRIVATE KEY" in private_key
 
 
 def test_resolve_profile_overrides_global(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
@@ -106,11 +106,11 @@ def test_resolve_profile_overrides_global(test_profile: TradingProfile, mock_key
     global_auth.set_credential("kalshi", "private_key_pem", "-----BEGIN PRIVATE KEY-----\nglobal-key-pem\n-----END PRIVATE KEY-----\n")
     
     profile_auth = ProfileAuthStore(test_profile, keyring_module=mock_keyring)
-    profile_auth.set_credentials("kalshi", "profile-key", "profile-secret")
+    profile_auth.set_credentials("kalshi", "profile-key", "-----BEGIN PRIVATE KEY-----\nprofile-key-pem\n-----END PRIVATE KEY-----\n")
     
     # Should prefer profile credentials
-    key, secret = resolve_kalshi_credentials(test_profile, global_keyring=mock_keyring, profile_keyring=mock_keyring)
+    key, private_key = resolve_kalshi_credentials(test_profile, global_keyring=mock_keyring, profile_keyring=mock_keyring)
     assert key == "profile-key"
-    assert "BEGIN PRIVATE KEY" in pem or "BEGIN PRIVATE KEY" in secret
+    assert "BEGIN PRIVATE KEY" in private_key
 
 # Made with Bob

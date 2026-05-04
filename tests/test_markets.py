@@ -222,7 +222,7 @@ class TestGetRecentTrades:
     @respx.mock
     async def test_returns_trades(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(
                 200,
                 json={"trades": [SAMPLE_TRADE_RAW, SAMPLE_TRADE_RAW_2], "cursor": "next_page"},
@@ -245,7 +245,7 @@ class TestGetRecentTrades:
     @respx.mock
     async def test_pagination(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/trades").mock(
+        respx.get(f"{cfg.active_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": "page2"})
         )
         async with KalshiClient(cfg) as client:

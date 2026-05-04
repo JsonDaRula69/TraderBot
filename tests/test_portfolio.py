@@ -122,7 +122,7 @@ def test_sharpe_ratio_known() -> None:
     returns = [0.01, 0.02, -0.01, 0.03]
     result = sharpe_ratio(returns)
     mean_r = sum(returns) / len(returns)
-    var_r = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+    var_r = sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)  # Bessel's correction
     expected = (mean_r / math.sqrt(var_r)) * math.sqrt(252)
     assert result == pytest.approx(expected)
 

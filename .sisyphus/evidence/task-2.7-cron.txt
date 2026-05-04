@@ -1,0 +1,7 @@
+=== QA: Cron uses standard 5-field format ===
+17:DECISION_LOOP_CRON = "*/5 9-16 * * 1-5"
+---
+Cron expression: DECISION_LOOP_CRON = "*/5 9-16 * * 1-5"
+    cron_expression: str | None = DECISION_LOOP_CRON
+MARKET_CLOSE_HOUR: MARKET_CLOSE_HOUR = 16
+Old 9-15 no longer exists: 1

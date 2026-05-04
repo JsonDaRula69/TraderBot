@@ -229,7 +229,7 @@ class TestKeyringKalshiConfig:
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig()
         assert cfg.resolve_api_key() == "env-key"
-        assert cfg.resolve_api_secret() is not None
+        assert cfg.resolve_private_key() is not None
 
     def test_config_defaults(self) -> None:
         from traderbot.kalshi.config import KeyringKalshiConfig
@@ -240,7 +240,7 @@ class TestKeyringKalshiConfig:
     def test_active_url_demo(self) -> None:
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig(demo_mode=True)
-        assert cfg.active_url == "https://demo-api.elections.kalshi.com/trade-api/v2"
+        assert cfg.active_url == "https://demo-api.kalshi.co/trade-api/v2"
 
     def test_active_url_prod(self) -> None:
         from traderbot.kalshi.config import KeyringKalshiConfig
@@ -257,7 +257,7 @@ class TestEnvMapping:
     def test_kalshi_api_key_env_mapping(self) -> None:
         assert AuthManager._service_key_to_env("kalshi", "api_key") == "KALSHI_API_KEY"
 
-    def test_kalshi_api_secret_env_mapping(self) -> None:
+    def test_kalshi_private_key_pem_env_mapping(self) -> None:
         assert AuthManager._service_key_to_env("kalshi", "private_key_pem") == "KALSHI_PRIVATE_KEY_PEM"
 
     def test_generic_service_env_mapping(self) -> None:

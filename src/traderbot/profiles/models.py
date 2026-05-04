@@ -87,7 +87,8 @@ class TradingProfile(BaseModel):
     @property
     def base_dir(self) -> str:
         """Base directory for profile state files."""
-        return f".traderbot-{self.mode}"
+        from traderbot.paths import get_data_dir
+        return str(get_data_dir() / f"{self.mode}")
 
     @computed_field
     @property
