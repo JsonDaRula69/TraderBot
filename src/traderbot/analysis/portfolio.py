@@ -72,7 +72,7 @@ def sharpe_ratio(returns: list[float], risk_free: float = 0.0) -> float | None:
         return None
     excess = [r - risk_free for r in returns]
     mean_excess = sum(excess) / len(excess)
-    variance = sum((e - mean_excess) ** 2 for e in excess) / len(excess)
+    variance = sum((e - mean_excess) ** 2 for e in excess) / (len(excess) - 1)
     if variance < 1e-15:
         return None
     return mean_excess / math.sqrt(variance) * math.sqrt(252)
