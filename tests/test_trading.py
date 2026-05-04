@@ -58,10 +58,10 @@ class TestPlaceOrder:
             service = TradingService(client)
             order_request = OrderRequest(
                 ticker="KXBTCD-26MAR31-T55000",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=10,
-                price=55,
+                count=10,
+                yes_price=55,
             )
             result = await service.place_order(order_request)
 
@@ -194,30 +194,30 @@ class TestOrderRequestValidation:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=10,
-                price=100,
+                count=10,
+                yes_price=100,
             )
 
     def test_place_order_zero_quantity(self) -> None:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=0,
-                price=55,
+                count=0,
+                yes_price=55,
             )
 
     def test_order_request_model_strict(self) -> None:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=10,
-                price=55,
+                count=10,
+                yes_price=55,
                 extra_field="bad",
             )
 
@@ -248,26 +248,36 @@ class TestModelStrictness:
 
     def test_order_status_enum(self) -> None:
         assert OrderStatus.live.value == "live"
+        assert OrderStatus.resting.value == "resting"
         assert OrderStatus.matched.value == "matched"
         assert OrderStatus.cancelled.value == "cancelled"
         assert OrderStatus.expired.value == "expired"
+
+    def test_order_request_requires_action(self) -> None:
+        with pytest.raises(ValidationError):
+            OrderRequest(
+                ticker="KX",
+                side=OrderSide.yes,
+                count=10,
+                yes_price=55,
+            )
 
     def test_order_request_negative_quantity(self) -> None:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=-1,
-                price=55,
+                count=-1,
+                yes_price=55,
             )
 
     def test_order_request_price_zero(self) -> None:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
+                action="buy",
                 side=OrderSide.yes,
-                order_type=OrderType.limit,
-                quantity=10,
-                price=0,
+                count=10,
+                yes_price=0,
             )

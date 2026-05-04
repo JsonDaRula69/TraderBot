@@ -198,14 +198,18 @@ class OrderRequest(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     ticker: str
+    action: Literal["buy", "sell"]
     side: OrderSide
-    order_type: OrderType
-    quantity: Annotated[int, Field(ge=1)]
-    price: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
+    order_type: OrderType = OrderType.limit
+    count: Annotated[int, Field(ge=1)]
+    yes_price: Annotated[int, Field(ge=1, le=99, description="Yes price in cents")]
+    client_order_id: str | None = None
+    no_price: Annotated[int, Field(ge=0, le=99)] | None = None
 
 
 class OrderStatus(StrEnum):
     live = "live"
+    resting = "resting"
     matched = "matched"
     cancelled = "cancelled"
     expired = "expired"
