@@ -20,9 +20,13 @@ DB_PATH: Path = Path.home() / ".traderbot" / "traderbot.db"
 def get_connection(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     """Yield a SQLite connection with WAL mode and foreign keys enabled."""
     path = db_path or DB_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     try:
