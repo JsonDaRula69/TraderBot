@@ -44,7 +44,7 @@ class TradingService:
 
     async def cancel_order(self, order_id: str) -> CancelResponse:
         """Cancel an existing order by ID."""
-        response = await self._client._request("DELETE", f"/portfolio/orders/{order_id}")
+        response = await self._client.delete(f"/portfolio/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
         return CancelResponse(

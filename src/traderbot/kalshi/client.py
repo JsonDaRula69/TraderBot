@@ -220,6 +220,9 @@ class KalshiClient:
     async def post(self, path: str, **body: Any) -> httpx.Response:
         return await self._request("POST", path, **body)
 
+    async def delete(self, path: str, **params: Any) -> httpx.Response:
+        return await self._request("DELETE", path, **params)
+
     async def close(self) -> None:
         await self._client.aclose()
 
