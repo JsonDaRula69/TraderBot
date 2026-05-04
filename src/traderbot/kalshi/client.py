@@ -13,6 +13,7 @@ from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
+from traderbot.kalshi.rate_limit import TokenBucketRateLimiter
 from traderbot.kalshi.signing import auth_headers
 
 if TYPE_CHECKING:
@@ -141,7 +142,7 @@ class KalshiClient:
                 config = KalshiConfig()  # type: ignore[call-arg]
 
         self._config = config
-        self._semaphore = asyncio.Semaphore(int(self._config.rate_limit_rps))
+        self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
         self._client = httpx.AsyncClient(base_url=self._config.active_url)
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
@@ -170,38 +171,38 @@ class KalshiClient:
 
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
-            async with self._semaphore:
-                try:
-                    if method.upper() in ("GET", "DELETE"):
-                        response = await self._client.request(
-                            method, path, params=params, headers=headers
-                        )
-                    else:
-                        response = await self._client.request(
-                            method, path, json=params, headers=headers
-                        )
+            await self._rate_limiter.acquire()
+            try:
+                if method.upper() in ("GET", "DELETE"):
+                    response = await self._client.request(
+                        method, path, params=params, headers=headers
+                    )
+                else:
+                    response = await self._client.request(
+                        method, path, json=params, headers=headers
+                    )
 
-                    if response.status_code == 429:
-                        raise RateLimitError(f"Rate limit exceeded: {path}")
+                if response.status_code == 429:
+                    raise RateLimitError(f"Rate limit exceeded: {path}")
 
-                    if response.status_code in (401, 403):
-                        raise AuthenticationError(
-                            f"Auth failure on {path}: HTTP {response.status_code}"
-                        )
+                if response.status_code in (401, 403):
+                    raise AuthenticationError(
+                        f"Auth failure on {path}: HTTP {response.status_code}"
+                    )
 
-                    if response.status_code >= 500:
-                        last_exc = httpx.HTTPStatusError(
-                            f"Server error {response.status_code}",
-                            request=response.request,
-                            response=response,
-                        )
-                    else:
-                        return response
+                if response.status_code >= 500:
+                    last_exc = httpx.HTTPStatusError(
+                        f"Server error {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                else:
+                    return response
 
-                except (RateLimitError, AuthenticationError):
-                    raise
-                except httpx.HTTPError as exc:
-                    last_exc = exc
+            except (RateLimitError, AuthenticationError):
+                raise
+            except httpx.HTTPError as exc:
+                last_exc = exc
 
             if attempt < self._config.max_retries:
                 delay = self._config.retry_base_delay * (2**attempt) + random.uniform(0, 0.5)

@@ -17,6 +17,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.paths import get_data_dir
+
 logger = logging.getLogger(__name__)
 
 _CURRENT_VERSION = 1
@@ -131,4 +133,4 @@ def resolve_state_path(
         return state_path
     if profile_base_dir is not None:
         return Path(profile_base_dir) / "adaptation_state.json"
-    return Path.home() / ".traderbot" / "adaptation_state.json"
+    return get_data_dir() / "adaptation_state.json"

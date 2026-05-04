@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.paths import get_data_dir
+
 from traderbot.kalshi.models import Market, PortfolioState, Trade, TradeRequest
 from traderbot.risk import evaluate_trade
 from traderbot.risk.circuit_breaker import CircuitBreaker, CircuitBreakerState
@@ -95,7 +97,7 @@ class BacktestEngine:
         self._strategy = strategy
         self._initial_bankroll_cents = initial_bankroll_cents
         self._slippage = slippage_model or SlippageModel()
-        self._state_dir = state_dir or Path.home() / ".traderbot"
+        self._state_dir = state_dir or get_data_dir()
 
     async def run(self, start: date, end: date) -> BacktestResult:
         markets = await self._data_loader.get_markets(start, end)

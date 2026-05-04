@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from traderbot.paths import get_data_dir
+
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
 
-_DEFAULT_NEWS_CACHE = Path.home() / ".traderbot" / "news_cache"
+_DEFAULT_NEWS_CACHE = get_data_dir() / "news_cache"
 
 
 def get_news_cache_path(profile: TradingProfile | None = None) -> Path:

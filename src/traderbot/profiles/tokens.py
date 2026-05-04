@@ -8,13 +8,14 @@ import logging
 import os
 import secrets
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
+
+from traderbot.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
 _KEYRING_SERVICE_PREFIX = "traderbot.tokens."
-_TOKENS_FILE = Path.home() / ".traderbot" / "tokens.enc"
+_TOKENS_FILE = get_data_dir() / "tokens.enc"
 
 # Global keyring instance (can be overridden for testing)
 _keyring_instance: Any | None = None
@@ -49,7 +50,7 @@ def _keyring_available() -> bool:
 
 
 def _derive_or_create_key() -> bytes:
-    key_file = Path.home() / ".traderbot" / ".token_key"
+    key_file = get_data_dir() / ".token_key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
     if key_file.exists():
         key_file.chmod(0o600)
