@@ -72,9 +72,20 @@ _Skills define how tools work. This file is for our setup specifics._
 | What | Command |
 |---|---|
 | Audit trail | `traderbot audit --json` |
-| Check/apply updates | `traderbot update` |
-| Manage API credentials | `traderbot auth --help` |
-| One-time setup wizard | `traderbot bootstrap` |
+
+## User-Only Commands
+
+These commands are for the human operator. The agent MUST NOT run them:
+
+| Command | Why User-Only |
+|---|---|
+| `traderbot auth` | Manages API credentials — security boundary |
+| `traderbot profile create/delete` | Profile configuration — structural change |
+| `traderbot profile set-auth` | Stores credentials — security boundary |
+| `traderbot halt --force` | Emergency override — requires human judgment |
+| `traderbot halt --clear` | Clears FULL_STOP breaker — requires human approval |
+| `traderbot update` | System upgrade — should not happen mid-session |
+| `traderbot bootstrap` | One-time setup wizard |
 
 ## Skill Location
 
@@ -130,15 +141,20 @@ TraderBot uses two OpenClaw cron modes:
 }
 ```
 
-## Strategy Note
+## Strategy Reference
 
-Default strategy is `momentum`. Available strategies are defined in `src/traderbot/simulation/strategies/`.
-A dedicated `STRATEGY.md` document is coming — it will detail each strategy's logic, parameters, and when to use which.
+Default strategy is `momentum`. Available strategies:
+- **momentum**: Follows price trends. Buys when statistical indicators show sustained upward/downward movement. Best for trending markets with clear direction.
+- **mean-reversion**: Bets on price returning to historical average. Buys when prices deviate significantly from mean. Best for range-bound, high-volume markets.
+- **conservative**: Reduced position sizing and tighter stops. Lower return ceiling but smaller drawdowns. Best for uncertain markets or early in deployment.
+
+Strategy parameters are configured via CLI. The agent does NOT choose or change strategy autonomously — `traderbot backtest --strategy` and strategy selection are human-initiated.
 
 ## Gotchas
 
 - `traderbot trade` requires price in **cents** (int), not dollars
 - Circuit breaker at HALT/FULL_STOP blocks all new trades
+- Circuit breaker recovery: SLOW → trade at 50% size, HALT → auto-resets at midnight ET, FULL_STOP → requires `traderbot halt --clear` (human must run this)
 - `--json` flag is required for machine-readable output
 - Bayesian adaptation has a 4-update/day cooldown — don't expect updates every heartbeat
 - Backtest `--strategy` flag accepts: `momentum`, `contrarian`, etc. (see `src/traderbot/simulation/strategies/`)
