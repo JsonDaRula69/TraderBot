@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from traderbot.paths import get_chromadb_dir
+
 try:
     import chromadb
 except ImportError:
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIMENSION: int = 1024
-DEFAULT_PERSIST_DIR: Path = Path.home() / ".traderbot" / "chromadb"
+DEFAULT_PERSIST_DIR: Path = get_chromadb_dir()
 DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns", "news_signals", "market_conditions")
 
 SearchResult = tuple[str, str, dict[str, str], float]

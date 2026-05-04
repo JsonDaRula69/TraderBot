@@ -10,12 +10,13 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from traderbot.paths import get_data_dir
 from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
 
 _KEYRING_SERVICE_PREFIX = "traderbot.profiles."
-_PROFILES_FILE = Path.home() / ".traderbot" / "profiles.enc"
+_PROFILES_FILE = get_data_dir() / "profiles.enc"
 _ENCRYPTION_KEY_SERVICE = "traderbot.encryption"
 _ENCRYPTION_KEY_USERNAME = "profile_key"
 
@@ -44,7 +45,7 @@ def _derive_or_create_key() -> bytes:
         except Exception:
             pass
 
-    key_file = Path.home() / ".traderbot" / ".profile_key"
+    key_file = get_data_dir() / ".profile_key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
     if key_file.exists():
         key_file.chmod(0o600)
@@ -120,7 +121,7 @@ class ProfileRegistry:
         except (FileNotFoundError, json.JSONDecodeError):
             return {}
         except Exception:
-            legacy = Path.home() / ".traderbot" / "profiles.json"
+            legacy = get_data_dir() / "profiles.json"
             if legacy.exists():
                 try:
                     data = json.loads(legacy.read_text())
@@ -243,7 +244,7 @@ class ProfileRegistry:
             self._write_profiles_file(data)
 
         if not keep_data and profile is not None:
-            data_dir = Path.home() / profile.base_dir
+            data_dir = Path(profile.base_dir)
             if data_dir.exists():
                 try:
                     shutil.rmtree(data_dir)

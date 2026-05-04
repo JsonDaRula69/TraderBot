@@ -7,11 +7,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from traderbot.kalshi.models import Decision
+from traderbot.paths import get_audit_dir
 
 
 class AuditLogger:
     def __init__(self, log_dir: Path | None = None) -> None:
-        self._log_dir = log_dir or Path.home() / ".traderbot" / "audit"
+        self._log_dir = log_dir or get_audit_dir()
         self._log_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 

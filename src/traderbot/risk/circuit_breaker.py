@@ -8,6 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from traderbot.paths import get_data_dir
+
 
 class BreakerLevel(enum.IntEnum):
     NORMAL = 0
@@ -34,7 +36,7 @@ class CircuitBreakerState(BaseModel):
 
 class CircuitBreaker:
     def __init__(self, state_file: Path | None = None) -> None:
-        self._state_file = state_file or Path.home() / ".traderbot" / "circuit_breaker_state.json"
+        self._state_file = state_file or get_data_dir() / "circuit_breaker_state.json"
         self._state = CircuitBreakerState()
         self._load_state()
 

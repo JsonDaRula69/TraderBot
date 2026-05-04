@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING
 
 from traderbot.db.decisions import init_table as init_decisions_table
 from traderbot.db.positions import init_table as init_positions_table
+from traderbot.paths import get_db_path as _get_db_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-DB_PATH: Path = Path.home() / ".traderbot" / "traderbot.db"
+DB_PATH: Path = _get_db_path()
 
 
 @contextmanager

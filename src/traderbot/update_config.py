@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CONFIG_PATH = Path.home() / ".traderbot" / "update_config.json"
+from traderbot.paths import get_data_dir
+
+CONFIG_PATH = get_data_dir() / "update_config.json"
 
 
 class UpdateConfig(BaseModel):

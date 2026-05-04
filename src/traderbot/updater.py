@@ -12,11 +12,13 @@ from pathlib import Path
 import httpx
 from packaging.version import InvalidVersion, Version
 
+from traderbot.paths import get_data_dir
+
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "JsonDaRula69/TraderBot"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-CACHE_DIR = Path.home() / ".traderbot"
+CACHE_DIR = get_data_dir()
 CACHE_FILE = CACHE_DIR / ".update_check_cache.json"
 
 
