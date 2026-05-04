@@ -114,4 +114,3 @@ def resolve_newsapi_key(
     return None
 
 
-# Made with Bob
