@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _SERVICE_PREFIX = "traderbot."
 
 _REQUIRED_SERVICES: dict[str, list[str]] = {
-    "kalshi": ["api_key", "api_secret"],
+    "kalshi": ["api_key", "private_key_pem"],
 }
 _OPTIONAL_SERVICES: dict[str, list[str]] = {
     "voyage": ["api_key"],
@@ -204,7 +204,7 @@ class AuthManager:
         service_prefix = service.upper()
         if service == "kalshi" and key == "api_key":
             return "KALSHI_API_KEY"
-        if service == "kalshi" and key == "api_secret":
+        if service == "kalshi" and key == "private_key_pem":
             return "KALSHI_API_SECRET"
         if service == "kalshi" and key == "demo_mode":
             return "KALSHI_DEMO_MODE"

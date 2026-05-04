@@ -1,10 +1,11 @@
-"""Kalshi API client with auth, retry, rate limiting, and type normalization."""
+"""Kalshi API client with RSA-PSS auth, retry, rate limiting, and type normalization."""
 
 from __future__ import annotations
 
 import asyncio
 import random
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -12,9 +13,14 @@ from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
+from traderbot.kalshi.signing import auth_headers
 
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
+
+
+class ConfigurationError(Exception):
+    """Raised when required configuration is missing."""
 
 
 class RateLimitError(Exception):
@@ -37,7 +43,8 @@ class KalshiConfig(BaseSettings):
     )
 
     api_key: SecretStr
-    api_secret: SecretStr
+    private_key_pem: SecretStr | None = None
+    private_key_path: Path | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     demo_mode: bool = False
@@ -48,6 +55,18 @@ class KalshiConfig(BaseSettings):
     @property
     def active_url(self) -> str:
         return self.demo_url if self.demo_mode else self.base_url
+
+    def resolve_private_key(self) -> str:
+        """Resolve private key PEM: direct → file → env → raise."""
+        if self.private_key_pem is not None:
+            return self.private_key_pem.get_secret_value()
+        if self.private_key_path is not None:
+            return self.private_key_path.read_text()
+        if not self.demo_mode:
+            raise ConfigurationError(
+                "No private key configured. Set KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH."
+            )
+        return ""
 
 
 # Fields where Kalshi returns strings that must be converted to int cents.
@@ -90,7 +109,7 @@ def _deep_normalize(obj: Any) -> Any:
 
 
 class KalshiClient:
-    """Async Kalshi API client with auth, retries, rate limiting, and normalization."""
+    """Async Kalshi API client with RSA-PSS auth, retries, rate limiting, and normalization."""
 
     def __init__(
         self,
@@ -110,49 +129,31 @@ class KalshiClient:
         """
         if config is None:
             if profile is not None:
-                # Use profile-aware credentials and demo mode
                 from traderbot.profiles.config import resolve_kalshi_credentials
 
-                api_key, api_secret = resolve_kalshi_credentials(profile)
+                api_key, private_key_pem = resolve_kalshi_credentials(profile)
                 config = KalshiConfig(
                     api_key=SecretStr(api_key),
-                    api_secret=SecretStr(api_secret),
+                    private_key_pem=SecretStr(private_key_pem) if private_key_pem else None,
                     demo_mode=profile.demo_mode,
                 )
             else:
-                # Fall back to env vars (backward compatibility)
-                # This will raise ValidationError if KALSHI_API_KEY/KALSHI_API_SECRET not set
                 config = KalshiConfig()  # type: ignore[call-arg]
 
         self._config = config
-        self._session_token: str | None = None
         self._semaphore = asyncio.Semaphore(int(self._config.rate_limit_rps))
         self._client = httpx.AsyncClient(base_url=self._config.active_url)
 
-    async def login(self) -> str:
-        """Authenticate with Kalshi and store the session token.
-
-        Returns:
-            Session token string
-
-        Raises:
-            AuthenticationError: On 401/403 responses
-            httpx.HTTPStatusError: On other non-2xx responses
-        """
-        response = await self._client.post(
-            "/login",
-            json={
-                "api_key": self._config.api_key.get_secret_value(),
-                "api_secret": self._config.api_secret.get_secret_value(),
-            },
+    def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
+        """Build authentication headers for a request."""
+        if self._config.demo_mode:
+            return {"Content-Type": "application/json"}
+        return auth_headers(
+            self._config.api_key.get_secret_value(),
+            self._config.resolve_private_key(),
+            method,
+            path,
         )
-        if response.status_code in (401, 403):
-            raise AuthenticationError(f"Authentication failed: HTTP {response.status_code}")
-        response.raise_for_status()
-        body = response.json()
-        token: str = body["token"]
-        self._session_token = token
-        return token
 
     async def _request(
         self,
@@ -160,23 +161,21 @@ class KalshiClient:
         path: str,
         **params: Any,
     ) -> httpx.Response:
-        """Core request handler with rate limiting, retry, and auth.
+        """Core request handler with rate limiting, retry, and RSA-PSS auth.
 
-        Acquires the rate-limit semaphore, injects the Authorization header,
+        Acquires the rate-limit semaphore, injects signed auth headers,
         and retries with exponential backoff + jitter on transient errors.
         """
-        if self._session_token is None:
-            msg = "Not authenticated — call login() first"
-            raise AuthenticationError(msg)
-
-        headers = {"Authorization": f"Bearer {self._session_token}"}
+        headers = self._build_auth_headers(method, path)
 
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
             async with self._semaphore:
                 try:
-                    if method.upper() == "GET":
-                        response = await self._client.get(path, params=params, headers=headers)
+                    if method.upper() in ("GET", "DELETE"):
+                        response = await self._client.request(
+                            method, path, params=params, headers=headers
+                        )
                     else:
                         response = await self._client.request(
                             method, path, json=params, headers=headers
@@ -204,7 +203,6 @@ class KalshiClient:
                 except httpx.HTTPError as exc:
                     last_exc = exc
 
-            # Exponential backoff with jitter before retry (skip after last attempt).
             if attempt < self._config.max_retries:
                 delay = self._config.retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
                 await asyncio.sleep(delay)
