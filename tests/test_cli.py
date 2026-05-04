@@ -1260,6 +1260,7 @@ class TestBootstrapCommand:
         with (
             patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
             result = runner.invoke(app, ["bootstrap", "--dry-run"])
             assert result.exit_code == 0
@@ -1278,6 +1279,7 @@ class TestBootstrapCommand:
         with (
             patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
             result = runner.invoke(app, ["bootstrap", "--dry-run", "--json"])
             assert result.exit_code == 0
@@ -1304,6 +1306,7 @@ class TestBootstrapCommand:
             patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
             patch("traderbot.auth.AuthManager.set_credential"),
+            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
             result = runner.invoke(app, ["bootstrap", "--json"])
             assert result.exit_code == 0
@@ -1323,6 +1326,7 @@ class TestBootstrapCommand:
         with (
             patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: False)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
+            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
              result = runner.invoke(app, ["bootstrap", "--dry-run"])
              assert result.exit_code == 0
