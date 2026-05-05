@@ -53,6 +53,9 @@ def evaluate_trade(
     if not breaker.get_state().can_trade:
         return 0
 
+    # Intentionally using unsized quantity for conservative position limit check.
+    # This may over-reject trades that would pass with the Kelly-sized quantity.
+    # Future: consider a two-pass approach — soft check with original qty, hard check with sized qty.
     results = run_all_checks(trade_request, portfolio)
     if any(not r.passed for r in results):
         return 0
