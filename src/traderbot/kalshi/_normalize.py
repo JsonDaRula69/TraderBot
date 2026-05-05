@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from traderbot.kalshi.models import Market, OrderBookLevel, Trade
+from traderbot.kalshi.models import Market, MarketCategory, OrderBookLevel, Trade
 
 
 def _to_cents(value: str | int) -> int:
@@ -16,10 +16,32 @@ def _unix_to_datetime(ts: int) -> datetime:
     return datetime.fromtimestamp(ts, tz=UTC)
 
 
+_CATEGORY_MAP: dict[str, MarketCategory] = {
+    "economics": MarketCategory.ECONOMICS,
+    "politics": MarketCategory.POLITICS,
+    "weather": MarketCategory.WEATHER,
+    "sports": MarketCategory.SPORTS,
+    "culture": MarketCategory.CULTURE,
+    "technology": MarketCategory.TECHNOLOGY,
+    "tech": MarketCategory.TECHNOLOGY,
+    "science": MarketCategory.SCIENCE,
+    "crypto": MarketCategory.CRYPTO,
+}
+
+
+def _map_category(raw: str | None) -> MarketCategory | None:
+    """Map a raw Kalshi API category string to MarketCategory enum."""
+    if raw is None:
+        return None
+    return _CATEGORY_MAP.get(raw.lower())
+
+
 def _normalize_market(raw: dict[str, Any]) -> Market:
     close_time_val = raw.get("close_time")
     if isinstance(close_time_val, int):
         close_time_val = _unix_to_datetime(close_time_val)
+
+    category_str = raw.get("category")
 
     return Market(
         ticker=raw["ticker"],
@@ -30,7 +52,8 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         close_time=close_time_val,
         status=raw.get("state", raw.get("status")),
         event_ticker=raw["event_ticker"],
-        category=raw.get("category"),
+        category=category_str,
+        market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),
     )
 

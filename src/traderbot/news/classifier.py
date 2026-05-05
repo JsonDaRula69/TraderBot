@@ -88,15 +88,15 @@ _KEYWORD_CATEGORIES: dict[str, set[NewsCategory]] = {
     "celebrity": {NewsCategory.CULTURE},
     "album": {NewsCategory.CULTURE},
     # Technology
-    "ai": {NewsCategory.TECH},
-    "tech": {NewsCategory.TECH},
-    "software": {NewsCategory.TECH},
-    "chip": {NewsCategory.TECH},
-    "semiconductor": {NewsCategory.TECH},
-    "cyber": {NewsCategory.TECH},
-    "startup": {NewsCategory.TECH},
-    "app": {NewsCategory.TECH},
-    "algorithm": {NewsCategory.TECH},
+    "ai": {NewsCategory.TECHNOLOGY},
+    "tech": {NewsCategory.TECHNOLOGY},
+    "software": {NewsCategory.TECHNOLOGY},
+    "chip": {NewsCategory.TECHNOLOGY},
+    "semiconductor": {NewsCategory.TECHNOLOGY},
+    "cyber": {NewsCategory.TECHNOLOGY},
+    "startup": {NewsCategory.TECHNOLOGY},
+    "app": {NewsCategory.TECHNOLOGY},
+    "algorithm": {NewsCategory.TECHNOLOGY},
     # Science
     "nasa": {NewsCategory.SCIENCE},
     "space": {NewsCategory.SCIENCE},
@@ -114,7 +114,7 @@ _KALSHI_CATEGORIES: list[NewsCategory] = [
     NewsCategory.POLITICS,
     NewsCategory.WEATHER,
     NewsCategory.CULTURE,
-    NewsCategory.TECH,
+    NewsCategory.TECHNOLOGY,
     NewsCategory.SCIENCE,
 ]
 
@@ -136,7 +136,7 @@ _CATEGORY_DESCRIPTIONS: dict[NewsCategory, str] = {
         "Culture and entertainment: Academy Awards, Grammy Awards, movies, music, "
         "celebrity news, television, Emmy Awards, box office, albums, pop culture."
     ),
-    NewsCategory.TECH: (
+    NewsCategory.TECHNOLOGY: (
         "Technology and computing: artificial intelligence, software, semiconductors, "
         "cybersecurity, startups, apps, algorithms, chips, tech companies, innovation."
     ),

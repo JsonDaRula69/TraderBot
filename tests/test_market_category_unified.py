@@ -28,7 +28,6 @@ class TestMarketCategoryValues:
         assert MarketCategory.CULTURE.value == "culture"
         assert MarketCategory.TECHNOLOGY.value == "technology"
         assert MarketCategory.SCIENCE.value == "science"
-        assert MarketCategory.TECH.value == "tech"
         assert MarketCategory.CRYPTO.value == "crypto"
 
 
@@ -69,7 +68,7 @@ class TestMarketCategoryEnumCompleteness:
 
     EXPECTED_CATEGORIES = {
         "ECONOMICS", "POLITICS", "SCIENCE", "WEATHER",
-        "SPORTS", "CRYPTO", "CULTURE",
+        "SPORTS", "CRYPTO", "CULTURE", "TECHNOLOGY",
     }
 
     def test_expected_categories_present(self) -> None:

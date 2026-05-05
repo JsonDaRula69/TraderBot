@@ -71,7 +71,7 @@ def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
         "politics": NewsCategory.POLITICS,
         "weather": NewsCategory.WEATHER,
         "culture": NewsCategory.CULTURE,
-        "tech": NewsCategory.TECH,
+        "technology": NewsCategory.TECHNOLOGY,
         "science": NewsCategory.SCIENCE,
         "uncategorized": NewsCategory.ECONOMICS,
     }
@@ -176,7 +176,7 @@ class TestFullPipeline:
             title="Bullish on tech stocks! Amazing earnings!",
             body="Great quarter for big tech companies.",
             source=NewsSource.TWITTER,
-            category=NewsCategory.TECH,
+            category=NewsCategory.TECHNOLOGY,
             ticker_refs=["QQQ"],
         )
         classifier = NewsClassifier(voyage=None)
@@ -375,8 +375,8 @@ class TestCategoryClassification:
             ("Blizzard warning issued", "", NewsCategory.WEATHER),
             ("Oscar nominations announced", "", NewsCategory.CULTURE),
             ("Box office results this weekend", "", NewsCategory.CULTURE),
-            ("New AI software released", "", NewsCategory.TECH),
-            ("Semiconductor industry booms", "", NewsCategory.TECH),
+            ("New AI software released", "", NewsCategory.TECHNOLOGY),
+            ("Semiconductor industry booms", "", NewsCategory.TECHNOLOGY),
             ("NASA space discovery", "", NewsCategory.SCIENCE),
             ("Genome research breakthrough", "", NewsCategory.SCIENCE),
         ],

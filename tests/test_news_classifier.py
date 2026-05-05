@@ -67,7 +67,7 @@ class TestKeywordFastPath:
     def test_single_tech_keyword(self):
         cls = NewsClassifier()
         result = cls.classify(_item("New AI software released"))
-        assert result.category == NewsCategory.TECH
+        assert result.category == NewsCategory.TECHNOLOGY
 
     def test_single_science_keyword(self):
         cls = NewsClassifier()
@@ -310,7 +310,7 @@ class TestKalshiCategories:
             NewsCategory.POLITICS,
             NewsCategory.WEATHER,
             NewsCategory.CULTURE,
-            NewsCategory.TECH,
+            NewsCategory.TECHNOLOGY,
             NewsCategory.SCIENCE,
         }
         assert set(_KALSHI_CATEGORIES) == expected

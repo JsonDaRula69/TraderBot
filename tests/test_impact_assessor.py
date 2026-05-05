@@ -235,7 +235,7 @@ class TestMarketSensitivity:
             (NewsCategory.POLITICS, 0.7),
             (NewsCategory.WEATHER, 0.6),
             (NewsCategory.CULTURE, 0.3),
-            (NewsCategory.TECH, 0.5),
+            (NewsCategory.TECHNOLOGY, 0.5),
             (NewsCategory.SCIENCE, 0.4),
         ],
     )
