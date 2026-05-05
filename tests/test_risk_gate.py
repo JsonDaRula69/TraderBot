@@ -92,3 +92,39 @@ class TestEvaluateTrade:
         )
         size = evaluate_trade(trade, portfolio, breaker)
         assert size == 0
+
+
+class TestKellyOddsFormula:
+    def test_kelly_odds_formula_yes_trade(self, tmp_path: Path) -> None:
+        """Odds for a YES trade at price_cents=5 with estimated_prob=0.10 should be (100-5)/5 = 19.0."""
+        from traderbot.risk.sizing import sized_position_for_trade
+
+        trade = _make_trade(price_cents=5, estimated_prob=0.10)
+        portfolio = _make_portfolio()
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+
+        size = evaluate_trade(trade, portfolio, breaker)
+        assert size > 0
+
+        # Verify odds directly: (100-5)/5 = 19.0, not 5/95 ≈ 0.053
+        odds_correct = (100 - trade.price_cents) / max(trade.price_cents, 1)
+        odds_inverted = trade.price_cents / max(100 - trade.price_cents, 1)
+        assert odds_correct == 19.0
+        assert abs(odds_inverted - 0.0526) < 0.01
+
+        # With correct odds, Kelly fraction is much larger
+        kelly_correct = sized_position_for_trade(
+            prob=0.10, odds=19.0, confidence=0.8,
+            bankroll_cents=100_000_00, max_position_cents=5_000_00,
+        )
+        kelly_inverted = sized_position_for_trade(
+            prob=0.10, odds=0.053, confidence=0.8,
+            bankroll_cents=100_000_00, max_position_cents=5_000_00,
+        )
+        assert kelly_correct > kelly_inverted
+
+    def test_kelly_odds_formula_no_trade(self, tmp_path: Path) -> None:
+        """Odds for a NO trade at price_cents=95 should be (100-95)/95 ≈ 0.053."""
+        trade = _make_trade(price_cents=95, estimated_prob=0.90)
+        odds = (100 - trade.price_cents) / max(trade.price_cents, 1)
+        assert abs(odds - 0.0526) < 0.01

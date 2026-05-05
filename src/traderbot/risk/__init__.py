@@ -71,7 +71,7 @@ def evaluate_trade(
         max_position_pct = float(HARD_LIMITS["max_position_per_market_pct"])
         risk_multiplier = 1.0
 
-    odds = trade_request.price_cents / max(100 - trade_request.price_cents, 1)
+    odds = (100 - trade_request.price_cents) / max(trade_request.price_cents, 1)
     max_position_cents = int(portfolio.portfolio_value_cents * max_position_pct)
     raw_size = sized_position_for_trade(
         prob=trade_request.estimated_prob,
