@@ -1413,7 +1413,18 @@ def performance(
         winning = sum(1 for d in executed if d.actual_result is True or d.price > 50)
         win_rate = winning / trade_count
         for d in executed:
-            total_pnl += d.price
+            if d.actual_result is None:
+                continue
+            if d.direction == "yes":
+                if d.actual_result:
+                    total_pnl += d.quantity * (100 - d.price)
+                else:
+                    total_pnl -= d.quantity * d.price
+            elif d.direction == "no":
+                if d.actual_result:
+                    total_pnl -= d.quantity * (100 - d.price)
+                else:
+                    total_pnl += d.quantity * d.price
     else:
         win_rate = None
 
