@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from traderbot.kalshi.models import PortfolioState, TradeRequest
 from traderbot.risk.circuit_breaker import CircuitBreaker
@@ -12,11 +14,20 @@ from traderbot.risk.sizing import sized_position_for_trade
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
 
+
+class TradeResult(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    sized_position_cents: int
+    direction: Literal["yes", "no"]
+
+
 __all__ = [
     "HARD_LIMITS",
     "CircuitBreaker",
     "PortfolioState",
     "TradeRequest",
+    "TradeResult",
     "evaluate_trade",
     "run_all_checks",
     "sized_position_for_trade",
@@ -39,11 +50,28 @@ def evaluate_trade(
 
     Returns the sized position in cents (0 if rejected).
     """
+    result = evaluate_trade_full(trade_request, portfolio, breaker, profile)
+    return result.sized_position_cents
+
+
+def evaluate_trade_full(
+    trade_request: TradeRequest,
+    portfolio: PortfolioState,
+    breaker: CircuitBreaker,
+    profile: TradingProfile | None = None,
+) -> TradeResult:
+    """Run the full risk gate and return both sized position and direction.
+
+    Unlike evaluate_trade which returns only the sized position as int,
+    this returns a TradeResult preserving the original trade direction.
+    """
     # Category filtering (profile-aware only)
     if profile is not None and trade_request.market_category is not None and not profile.is_category_enabled(trade_request.market_category):
-        return 0
+        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
-    total_today_loss_cents = portfolio.today_realized_loss_cents + portfolio.today_unrealized_loss_cents
+    total_today_loss_cents = (
+        portfolio.today_realized_loss_cents + portfolio.today_unrealized_loss_cents
+    )
     daily_loss_pct = total_today_loss_cents / max(portfolio.portfolio_value_cents, 1)
     drawdown_pct = (portfolio.peak_value_cents - portfolio.portfolio_value_cents) / max(
         portfolio.peak_value_cents, 1
@@ -51,14 +79,14 @@ def evaluate_trade(
     breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
 
     if not breaker.get_state().can_trade:
-        return 0
+        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
     # Intentionally using unsized quantity for conservative position limit check.
     # This may over-reject trades that would pass with the Kelly-sized quantity.
-    # Future: consider a two-pass approach — soft check with original qty, hard check with sized qty.
+    # Future: consider two-pass — soft check with original qty, hard check with sized qty.
     results = run_all_checks(trade_request, portfolio)
     if any(not r.passed for r in results):
-        return 0
+        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
     # Use profile limits if provided, otherwise use HARD_LIMITS
     if profile is not None:
@@ -80,4 +108,5 @@ def evaluate_trade(
         bankroll_cents=portfolio.portfolio_value_cents,
         max_position_cents=max_position_cents,
     )
-    return int(raw_size * breaker.get_state().position_size_multiplier * risk_multiplier)
+    sized = int(raw_size * breaker.get_state().position_size_multiplier * risk_multiplier)
+    return TradeResult(sized_position_cents=sized, direction=trade_request.direction)

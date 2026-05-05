@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from traderbot.kalshi.models import PortfolioState, TradeRequest
-from traderbot.risk import evaluate_trade
+from traderbot.risk import evaluate_trade, evaluate_trade_full
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
 if TYPE_CHECKING:
@@ -128,3 +128,32 @@ class TestKellyOddsFormula:
         trade = _make_trade(price_cents=95, estimated_prob=0.90)
         odds = (100 - trade.price_cents) / max(trade.price_cents, 1)
         assert abs(odds - 0.0526) < 0.01
+
+
+class TestDirectionPreserved:
+    def test_direction_preserved_yes(self, tmp_path: Path) -> None:
+        """evaluate_trade_full preserves direction='yes' from TradeRequest."""
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+        trade = _make_trade(direction="yes")
+        portfolio = _make_portfolio()
+        result = evaluate_trade_full(trade, portfolio, breaker)
+        assert result.direction == "yes"
+        assert result.sized_position_cents > 0
+
+    def test_direction_preserved_no(self, tmp_path: Path) -> None:
+        """evaluate_trade_full preserves direction='no' from TradeRequest."""
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+        trade = _make_trade(direction="no")
+        portfolio = _make_portfolio()
+        result = evaluate_trade_full(trade, portfolio, breaker)
+        assert result.direction == "no"
+        assert result.sized_position_cents > 0
+
+    def test_direction_preserved_when_rejected(self, tmp_path: Path) -> None:
+        """Direction is preserved even when the trade is rejected."""
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+        trade = _make_trade(direction="no", quantity=100_000)
+        portfolio = _make_portfolio(open_positions_count=100)
+        result = evaluate_trade_full(trade, portfolio, breaker)
+        assert result.direction == "no"
+        assert result.sized_position_cents == 0
