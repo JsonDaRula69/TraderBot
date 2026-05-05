@@ -139,7 +139,7 @@ class TestListOrders:
             "filled_quantity": 5,
         }
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/orders").mock(
+        respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
             return_value=httpx.Response(200, json={"orders": [SAMPLE_ORDER_RAW, order_raw_2]})
         )
         async with KalshiClient(cfg) as client:
@@ -156,7 +156,7 @@ class TestListOrders:
     @respx.mock
     async def test_list_orders_by_ticker(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/portfolio/orders").mock(
+        route = respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
             return_value=httpx.Response(200, json={"orders": [SAMPLE_ORDER_RAW]})
         )
         async with KalshiClient(cfg) as client:
@@ -170,7 +170,7 @@ class TestListOrders:
     @respx.mock
     async def test_list_orders_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/orders").mock(
+        respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
             return_value=httpx.Response(200, json={"orders": []})
         )
         async with KalshiClient(cfg) as client:

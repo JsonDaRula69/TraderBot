@@ -66,7 +66,7 @@ class TradingService:
         if ticker is not None:
             params["ticker"] = ticker
 
-        response = await self._client.get("/portfolio/orders", **params)
+        response = await self._client.get("/portfolio/events/orders", **params)
         response.raise_for_status()
         data = response.json()
         orders_raw = data.get("orders", [])
