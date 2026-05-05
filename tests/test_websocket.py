@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import SecretStr
 
-from traderbot.kalshi.websocket import KalshiWebSocket, WebSocketConfig
+from traderbot.kalshi.websocket import VALID_CHANNELS, KalshiWebSocket, WebSocketConfig
 
 
 def _make_config(**overrides: Any) -> WebSocketConfig:
@@ -59,7 +59,7 @@ class TestKalshiWebSocketSubscribe:
 
         ws_client._ws = mock_ws
 
-        await ws_client.subscribe(["ticker"], "KXBTCD-26MAR31-T55000")
+        await ws_client.subscribe(["ticker"], market_ticker="KXBTCD-26MAR31-T55000")
 
         assert len(sent_messages) == 1
         msg = json.loads(sent_messages[0])
@@ -78,7 +78,7 @@ class TestKalshiWebSocketSubscribe:
 
         ws_client._ws = mock_ws
 
-        await ws_client.unsubscribe(["ticker"], "KXBTCD-26MAR31-T55000")
+        await ws_client.unsubscribe(["ticker"], market_ticker="KXBTCD-26MAR31-T55000")
 
         assert len(sent_messages) == 1
         msg = json.loads(sent_messages[0])
@@ -94,12 +94,166 @@ class TestKalshiWebSocketSubscribe:
 
         ws_client._ws = mock_ws
 
-        await ws_client.subscribe(["ticker"], "TICKER_1")
-        await ws_client.subscribe(["ticker"], "TICKER_2")
+        await ws_client.subscribe(["ticker"], market_ticker="TICKER_1")
+        await ws_client.subscribe(["ticker"], market_ticker="TICKER_2")
 
         msg1 = json.loads(sent_messages[0])
         msg2 = json.loads(sent_messages[1])
         assert msg2["id"] > msg1["id"]
+
+
+class TestV2Channels:
+    @pytest.mark.asyncio
+    async def test_subscribe_orderbook_delta(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        sent_messages: list[str] = []
+        mock_ws.send = AsyncMock(side_effect=lambda data: sent_messages.append(data))
+        ws_client._ws = mock_ws
+
+        await ws_client.subscribe(["orderbook_delta"], market_ticker="KXBTCD-26MAR31-T55000")
+
+        msg = json.loads(sent_messages[0])
+        assert msg["params"]["channels"] == ["orderbook_delta"]
+        assert msg["params"]["market_ticker"] == "KXBTCD-26MAR31-T55000"
+
+    @pytest.mark.asyncio
+    async def test_subscribe_multiple_v2_channels(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        sent_messages: list[str] = []
+        mock_ws.send = AsyncMock(side_effect=lambda data: sent_messages.append(data))
+        ws_client._ws = mock_ws
+
+        await ws_client.subscribe(
+            ["fill", "user_orders", "market_positions"],
+            market_ticker="KXBTCD-26MAR31-T55000",
+        )
+
+        msg = json.loads(sent_messages[0])
+        assert msg["params"]["channels"] == ["fill", "user_orders", "market_positions"]
+
+    @pytest.mark.asyncio
+    async def test_subscribe_market_lifecycle_v2(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        sent_messages: list[str] = []
+        mock_ws.send = AsyncMock(side_effect=lambda data: sent_messages.append(data))
+        ws_client._ws = mock_ws
+
+        await ws_client.subscribe(["market_lifecycle_v2"], market_ticker="KXBTCD-26MAR31-T55000")
+
+        msg = json.loads(sent_messages[0])
+        assert msg["params"]["channels"] == ["market_lifecycle_v2"]
+
+
+class TestMarketTickers:
+    @pytest.mark.asyncio
+    async def test_subscribe_with_market_tickers(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        sent_messages: list[str] = []
+        mock_ws.send = AsyncMock(side_effect=lambda data: sent_messages.append(data))
+        ws_client._ws = mock_ws
+
+        tickers = ["KXBTCD-26MAR31-T55000", "KXBTCD-26MAR31-T60000"]
+        await ws_client.subscribe(["ticker"], market_tickers=tickers)
+
+        msg = json.loads(sent_messages[0])
+        assert msg["cmd"] == "subscribe"
+        assert msg["params"]["channels"] == ["ticker"]
+        assert msg["params"]["market_tickers"] == tickers
+        assert "market_ticker" not in msg["params"]
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_with_market_tickers(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        sent_messages: list[str] = []
+        mock_ws.send = AsyncMock(side_effect=lambda data: sent_messages.append(data))
+        ws_client._ws = mock_ws
+
+        tickers = ["KXBTCD-26MAR31-T55000", "KXBTCD-26MAR31-T60000"]
+        await ws_client.unsubscribe(["ticker"], market_tickers=tickers)
+
+        msg = json.loads(sent_messages[0])
+        assert msg["cmd"] == "unsubscribe"
+        assert msg["params"]["market_tickers"] == tickers
+        assert "market_ticker" not in msg["params"]
+
+    @pytest.mark.asyncio
+    async def test_rejects_both_ticker_params(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        ws_client._ws = mock_ws
+
+        with pytest.raises(ValueError, match="not both"):
+            await ws_client.subscribe(
+                ["ticker"],
+                market_ticker="KXBTCD-26MAR31-T55000",
+                market_tickers=["KXBTCD-26MAR31-T55000"],
+            )
+
+    @pytest.mark.asyncio
+    async def test_rejects_neither_ticker_param(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        ws_client._ws = mock_ws
+
+        with pytest.raises(ValueError, match="Provide market_ticker or market_tickers"):
+            await ws_client.subscribe(["ticker"])
+
+
+class TestChannelValidation:
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_channel_subscribe(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        ws_client._ws = mock_ws
+
+        with pytest.raises(ValueError, match="Invalid channel"):
+            await ws_client.subscribe(["fake_channel"], market_ticker="TICKER")
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_channel_unsubscribe(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        ws_client._ws = mock_ws
+
+        with pytest.raises(ValueError, match="Invalid channel"):
+            await ws_client.unsubscribe(["fake_channel"], market_ticker="TICKER")
+
+    @pytest.mark.asyncio
+    async def test_rejects_mixed_valid_invalid_channels(self) -> None:
+        config = _make_config(demo_mode=True)
+        ws_client = KalshiWebSocket(config)
+        mock_ws = AsyncMock()
+        ws_client._ws = mock_ws
+
+        with pytest.raises(ValueError, match="Invalid channel"):
+            await ws_client.subscribe(["ticker", "bogus"], market_ticker="TICKER")
+
+    def test_valid_channels_contains_all_expected(self) -> None:
+        expected = {
+            "ticker",
+            "orderbook",
+            "market_lifecycle",
+            "orderbook_delta",
+            "market_lifecycle_v2",
+            "fill",
+            "user_orders",
+            "market_positions",
+        }
+        assert expected == VALID_CHANNELS
 
 
 class TestKalshiWebSocketConnect:
