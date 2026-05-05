@@ -410,7 +410,6 @@ class BayesianAdapter:
         self._distribution_states: dict[str, Any] = {}
         if self._state_path is not None:
             self._load_state()
-        self._last_save_success = False
 
     def _check_min_observations(self, observation_count: int) -> None:
         """Raise ValueError if observations below minimum threshold."""
