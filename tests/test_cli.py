@@ -73,6 +73,7 @@ class TestNewsCommand:
 
     @pytest.mark.unit
     def test_news_with_mock_items_json(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -84,7 +85,7 @@ class TestNewsCommand:
                 url="https://example.com/fed",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=["SPX"],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             )
         ]
 
@@ -104,6 +105,7 @@ class TestNewsCommand:
 
     @pytest.mark.unit
     def test_news_with_category_filter_json(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -115,7 +117,7 @@ class TestNewsCommand:
                 url="https://example.com/gdp",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=[],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             ),
             SourcesNewsItem(
                 id="tech-1",
@@ -125,7 +127,7 @@ class TestNewsCommand:
                 url="https://example.com/chip",
                 published_at=datetime(2026, 4, 15, 13, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=[],
-                category="Tech",
+                category=MarketCategory.TECHNOLOGY,
             ),
         ]
 
@@ -143,6 +145,7 @@ class TestNewsCommand:
 
     @pytest.mark.unit
     def test_news_with_source_filter_json(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -154,7 +157,7 @@ class TestNewsCommand:
                 url="https://reddit.com/r/economics",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=[],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             )
         ]
 
@@ -171,6 +174,7 @@ class TestNewsCommand:
 
     @pytest.mark.unit
     def test_news_rich_output(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -182,7 +186,7 @@ class TestNewsCommand:
                 url="https://example.com/fed",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=["SPX"],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             )
         ]
 
@@ -220,6 +224,7 @@ class TestSentimentCommand:
 
     @pytest.mark.unit
     def test_sentiment_with_mock_items_json(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -231,7 +236,7 @@ class TestSentimentCommand:
                 url="https://example.com/btc",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=["BTC"],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             )
         ]
 
@@ -254,6 +259,7 @@ class TestSentimentCommand:
 
     @pytest.mark.unit
     def test_sentiment_with_mock_items_rich(self):
+        from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
 
         fake_items = [
@@ -265,7 +271,7 @@ class TestSentimentCommand:
                 url="https://example.com/btc",
                 published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=["BTC"],
-                category="Economics",
+                category=MarketCategory.ECONOMICS,
             )
         ]
 
@@ -781,6 +787,7 @@ class TestCronSetup:
         assert result.exit_code == 0
         assert "decision_loop" in result.output
         assert "heartbeat_loop" in result.output
+        assert "news_loop" in result.output
         assert "heartbeat_config" in result.output
 
     def test_cron_setup_dry_run_json(self):
@@ -788,10 +795,11 @@ class TestCronSetup:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["agent_id"] == "test-agent"
-        assert len(data["loops"]) == 3
+        assert len(data["loops"]) == 4
         names = [loop["name"] for loop in data["loops"]]
         assert "decision_loop" in names
         assert "heartbeat_loop" in names
+        assert "news_loop" in names
         assert "heartbeat_config" in names
 
     def test_cron_setup_custom_interval(self, tmp_path):
@@ -885,6 +893,52 @@ class TestCronSetup:
         agent_entry = next(a for a in agents_list if a["id"] == "my-agent")
         assert agent_entry["heartbeat"]["every"] == "6h"
         assert agent_entry["heartbeat"]["lightContext"] is True
+
+    def test_cron_setup_dry_run_news_loop_event(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        news_loop = next(l for l in data["loops"] if l["name"] == "news_loop")
+        assert news_loop["event"] == "impact"
+        assert news_loop["registered"] is True
+
+    def test_cron_setup_decision_loop_247_cron(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        decision_loop = next(l for l in data["loops"] if l["name"] == "decision_loop")
+        assert decision_loop["cron"] == "*/5 * * * *"
+
+    def test_cron_setup_news_loop_passes_event_arg(self, tmp_path):
+        config_dir = tmp_path / ".openclaw"
+        config_dir.mkdir()
+
+        calls = []
+
+        def mock_cron_add(args):
+            calls.append(args)
+            return (0, "ok")
+
+        with (
+            patch("traderbot.cli.Path.home", return_value=tmp_path),
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_add", side_effect=mock_cron_add),
+        ):
+            result = runner.invoke(app, ["cron", "setup", "--agent", "my-agent", "--json"])
+            assert result.exit_code == 0
+
+        news_call = next(c for c in calls if "--name" in c and "news_loop" in c)
+        assert "--event" in news_call
+        assert "impact" in news_call
+        assert "--session" in news_call
+        assert "main" in news_call
+
+    def test_cron_setup_no_openclaw_shows_fallback(self):
+        with patch("traderbot.cli.shutil.which", return_value=None):
+            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent"])
+            assert result.exit_code == 1
+            assert "openclaw" in result.output.lower()
+            assert "crontab" in result.output.lower() or "deployment" in result.output.lower()
 
 
 class TestHalt:
