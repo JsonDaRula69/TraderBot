@@ -4,8 +4,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from traderbot.kalshi._normalize import _map_category, _unix_to_datetime
+from traderbot.kalshi.models import Event
+
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
+
+
+def _normalize_event(raw: dict[str, Any]) -> Event:
+    close_time_val = raw.get("close_time")
+    if isinstance(close_time_val, int):
+        close_time_val = _unix_to_datetime(close_time_val)
+
+    category = raw.get("category")
+    market_category = _map_category(category)
+
+    return Event(
+        event_ticker=raw["ticker"],
+        title=raw.get("title", ""),
+        description=raw.get("description", ""),
+        category=category,
+        market_category=market_category,
+        state=raw.get("state", raw.get("status", "")),
+        close_time=close_time_val,
+        markets_count=int(raw.get("markets_count", 0)),
+    )
 
 
 class EventsService:
@@ -18,20 +41,25 @@ class EventsService:
         self,
         cursor: str | None = None,
         limit: int = 100,
-    ) -> list[dict]:
-        """Return a paginated list of events."""
+        state: str | None = None,
+    ) -> list[Event]:
+        """Return a paginated list of events as typed Event models."""
         params: dict[str, Any] = {"limit": limit}
         if cursor is not None:
             params["cursor"] = cursor
+        if state is not None:
+            params["state"] = state
 
         response = await self._client.get("/events", **params)
         response.raise_for_status()
         data = response.json()
-        return data.get("events", [])
+        raw_events = data.get("events", [])
+        return [_normalize_event(e) for e in raw_events]
 
-    async def get_event(self, event_ticker: str) -> dict:
+    async def get_event(self, event_ticker: str) -> Event:
         """Return detail for a single event by ticker."""
         response = await self._client.get(f"/events/{event_ticker}")
         response.raise_for_status()
         data = response.json()
-        return data.get("event", data)
+        raw = data.get("event", data)
+        return _normalize_event(raw)

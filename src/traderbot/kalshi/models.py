@@ -109,6 +109,35 @@ class CutoffTimestamps(BaseModel):
     order_cutoff_ts: datetime | None = None
 
 
+class Event(BaseModel):
+    """Kalshi event — a group of related markets sharing a resolution condition."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
+
+    event_ticker: str
+    title: str
+    description: str = ""
+    category: str | None = None
+    market_category: MarketCategory | None = None
+    state: str = Field(validation_alias=AliasChoices("state", "status"))
+    close_time: datetime | None = None
+    markets_count: int = 0
+
+
+class Settlement(BaseModel):
+    """A settled position with P&L in cents."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    ticker: str
+    side: Literal["yes", "no"]
+    quantity: Annotated[int, Field(ge=0)]
+    price_cents: Annotated[int, Field(ge=0, description="Entry price in cents")]
+    settlement_price_cents: Annotated[int, Field(ge=0, description="Settlement price in cents")]
+    pnl_cents: Annotated[int, Field(description="Profit/loss in cents")]
+    settled_at: datetime | None = None
+
+
 class MarketListResponse(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -183,7 +212,6 @@ class MarketCategory(StrEnum):
     CULTURE = "culture"
     TECHNOLOGY = "technology"
     SCIENCE = "science"
-    TECH = "tech"
     CRYPTO = "crypto"
 
 

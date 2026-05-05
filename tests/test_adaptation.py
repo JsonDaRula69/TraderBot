@@ -21,7 +21,7 @@ NOW = datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC)
 
 class TestMarketCategory:
     def test_all_categories(self):
-        expected = {"politics", "economics", "science", "sports", "crypto", "culture", "tech", "weather", "technology"}
+        expected = {"politics", "economics", "science", "sports", "crypto", "culture", "technology", "weather", "technology"}
         assert set(MarketCategory) == expected
 
     def test_str_enum_values(self):
@@ -48,9 +48,9 @@ class TestPrior:
             Prior(category=MarketCategory.POLITICS, mean=0.5, variance=-0.1, sample_count=5, last_updated=NOW)
 
     def test_sample_count_non_negative(self):
-        Prior(category=MarketCategory.TECH, mean=0.3, variance=0.1, sample_count=0, last_updated=NOW)
+        Prior(category=MarketCategory.TECHNOLOGY, mean=0.3, variance=0.1, sample_count=0, last_updated=NOW)
         with pytest.raises(ValidationError):
-            Prior(category=MarketCategory.TECH, mean=0.3, variance=0.1, sample_count=-1, last_updated=NOW)
+            Prior(category=MarketCategory.TECHNOLOGY, mean=0.3, variance=0.1, sample_count=-1, last_updated=NOW)
 
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
@@ -199,15 +199,15 @@ class TestAdaptationResult:
 
     def test_confidence_bounds(self):
         AdaptationResult(
-            category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
+            category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
         )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=-0.1, reasoning="neg"
+                category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=-0.1, reasoning="neg"
             )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.TECH, direction="maintain", magnitude=0.01, confidence=1.1, reasoning="over"
+                category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=1.1, reasoning="over"
             )
 
     def test_confidence_one_is_valid(self):
