@@ -16,14 +16,18 @@ if TYPE_CHECKING:
 class StrategyProfile(BaseModel):
     """Defines how a strategy scales risk limits and weights signal sources.
 
-    risk_multiplier NEVER overrides HARD_LIMITS — it only scales within them:
-        effective_limit = risk_multiplier * HARD_LIMITS[key]
+    risk_multiplier is a DOWN-SCALING factor — it can only reduce position
+    sizes, never increase them above HARD_LIMITS. A value of 1.0 means the
+    profile operates at full hard-limit capacity; 0.5 means all positions are
+    halved. "Aggressive" uses 0.8 (not 1.0) because aggressive profiles trade
+    more categories (higher concentration risk), offset by slightly smaller
+    per-position sizing.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
     name: str
-    risk_multiplier: Annotated[float, Field(gt=0, le=1.0)]
+    risk_multiplier: Annotated[float, Field(gt=0, le=1.0, description="Down-scaling factor: 1.0=full hard limits, 0.5=half")]
     signal_weights: dict[str, float]
     category_focus: list[str]
     description: str

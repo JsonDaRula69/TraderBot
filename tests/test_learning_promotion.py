@@ -19,7 +19,7 @@ from traderbot.db.learnings import (
 from traderbot.learning import (
     PromotionCandidate,
     _format_promoted_entry,
-    _get_db_pattern_key,
+    get_db_pattern_key,
     _get_db_recurrence_count,
     _get_task_observation_stats,
     init_task_observations_table,
@@ -184,7 +184,7 @@ class TestGetDbPatternKey:
             learning_id = record_pattern(
                 conn, LearningCategory.MARKET_BEHAVIOR, "test", "evidence", 0.5
             )
-            assert _get_db_pattern_key(conn, learning_id) is None
+            assert get_db_pattern_key(conn, learning_id) is None
 
     def test_reads_actual_key(self, tmp_path: Path) -> None:
         db_file = tmp_path / "test.db"
@@ -197,7 +197,7 @@ class TestGetDbPatternKey:
                 "UPDATE learnings SET pattern_key = 'illiquid-slippage' WHERE id = ?", (learning_id,)
             )
             conn.commit()
-            assert _get_db_pattern_key(conn, learning_id) == "illiquid-slippage"
+            assert get_db_pattern_key(conn, learning_id) == "illiquid-slippage"
 
 
 class TestScanForPromotions:
