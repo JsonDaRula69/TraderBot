@@ -110,7 +110,7 @@ class TestGetOrder:
     @respx.mock
     async def test_get_order_success(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/orders/ord-001").mock(
+        respx.get(f"{cfg.active_url}/portfolio/events/orders/ord-001").mock(
             return_value=httpx.Response(200, json={"order": SAMPLE_ORDER_RAW})
         )
         async with KalshiClient(cfg) as client:

@@ -54,7 +54,7 @@ class TradingService:
 
     async def get_order(self, order_id: str) -> TradingOrder:
         """Retrieve a single order by ID."""
-        response = await self._client.get(f"/portfolio/orders/{order_id}")
+        response = await self._client.get(f"/portfolio/events/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
         order_data = data.get("order", data)
