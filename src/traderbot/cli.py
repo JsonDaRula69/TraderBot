@@ -794,12 +794,9 @@ def news(
     """Fetch and display news for tracked markets."""
     from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
-    from traderbot.news.models import NewsCategory
-    from traderbot.news.models import NewsItem as ModelsNewsItem
-    from traderbot.news.models import NewsSource as ModelsNewsSource
+    from traderbot.news.models import NewsCategory, NewsItem, NewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
-    from traderbot.news.sources import NewsSource as SourcesNewsSource
     from traderbot.profiles.config import resolve_newsapi_key
     from traderbot.profiles.runtime import get_current_profile
 
@@ -850,12 +847,12 @@ def news(
         category_filter = profile.enabled_categories
 
     # Validate --source
-    source_filter: SourcesNewsSource | None = None
+    source_filter: NewsSource | None = None
     if source is not None:
         try:
-            source_filter = SourcesNewsSource(source.lower())
+            source_filter = NewsSource(source.lower())
         except ValueError:
-            valid = ", ".join(s.value for s in SourcesNewsSource)
+            valid = ", ".join(s.value for s in NewsSource)
             if json_output:
                 json_lib.dump({"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout)
             else:
@@ -885,46 +882,14 @@ def news(
     cache_path = get_news_cache_path(profile)
     logger.debug("News cache path: %s", cache_path)
 
-    # Map source filter for aggregator
-    source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
-        SourcesNewsSource.NEWSAPI: ModelsNewsSource.NEWSAPI,
-        SourcesNewsSource.TWITTER: ModelsNewsSource.TWITTER,
-        SourcesNewsSource.REDDIT: ModelsNewsSource.REDDIT,
-    }
-
-    async def _fetch() -> list[ModelsNewsItem]:
+    # Map source filter for aggregator — NewsSource is now a single canonical enum
+    async def _fetch() -> list[NewsItem]:
         async with NewsAggregator(
             newsapi_key=newsapi_key, twitter_api_key=twitter_key
         ) as aggregator:
             if source_filter is not None:
-                raw_items = await aggregator.fetch_recent(source_filter, limit=limit)
-            else:
-                raw_items = await aggregator.fetch_all(limit=limit)
-
-        # Convert sources.NewsItem → models.NewsItem
-        models_items: list[ModelsNewsItem] = []
-        for item in raw_items:
-            try:
-                models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
-                try:
-                    cat = NewsCategory(item.category.lower())
-                except ValueError:
-                    cat = NewsCategory.ECONOMICS
-                models_items.append(
-                    ModelsNewsItem(
-                        id=item.id,
-                        title=item.title,
-                        body=item.body,
-                        source=models_source,
-                        url=item.url,
-                        published_at=item.published_at,
-                        ticker_refs=item.ticker_refs,
-                        category=cat,
-                    )
-                )
-            except Exception:
-                continue
-        return models_items
+                return await aggregator.fetch_recent(source_filter, limit=limit)
+            return await aggregator.fetch_all(limit=limit)
 
     try:
         items = asyncio.run(_fetch())
@@ -1008,12 +973,9 @@ def sentiment(
     from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
     from traderbot.news.impact_assessor import ImpactAssessor
-    from traderbot.news.models import NewsCategory
-    from traderbot.news.models import NewsItem as ModelsNewsItem
-    from traderbot.news.models import NewsSource as ModelsNewsSource
+    from traderbot.news.models import NewsCategory, NewsItem, NewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
-    from traderbot.news.sources import NewsSource as SourcesNewsSource
     from traderbot.profiles.config import resolve_newsapi_key
     from traderbot.profiles.runtime import get_current_profile
 
@@ -1031,41 +993,11 @@ def sentiment(
     cache_path = get_news_cache_path(profile)
     logger.debug("News cache path: %s", cache_path)
 
-    source_map: dict[SourcesNewsSource, ModelsNewsSource] = {
-        SourcesNewsSource.NEWSAPI: ModelsNewsSource.NEWSAPI,
-        SourcesNewsSource.TWITTER: ModelsNewsSource.TWITTER,
-        SourcesNewsSource.REDDIT: ModelsNewsSource.REDDIT,
-    }
-
-    async def _fetch() -> list[ModelsNewsItem]:
+    async def _fetch() -> list[NewsItem]:
         async with NewsAggregator(
             newsapi_key=newsapi_key, twitter_api_key=twitter_key
         ) as aggregator:
-            raw_items = await aggregator.fetch_all(limit=50)
-
-        models_items: list[ModelsNewsItem] = []
-        for item in raw_items:
-            try:
-                models_source = source_map.get(item.source, ModelsNewsSource.NEWSAPI)
-                try:
-                    cat = NewsCategory(item.category.lower())
-                except ValueError:
-                    cat = NewsCategory.ECONOMICS
-                models_items.append(
-                    ModelsNewsItem(
-                        id=item.id,
-                        title=item.title,
-                        body=item.body,
-                        source=models_source,
-                        url=item.url,
-                        published_at=item.published_at,
-                        ticker_refs=item.ticker_refs,
-                        category=cat,
-                    )
-                )
-            except Exception:
-                continue
-        return models_items
+            return await aggregator.fetch_all(limit=50)
 
     try:
         items = asyncio.run(_fetch())

@@ -3,21 +3,33 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 — needed at runtime by Pydantic
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.kalshi.models import MarketCategory
-from traderbot.news.sources import NewsSource
+
+
+class NewsSource(StrEnum):
+    """Supported news source identifiers."""
+
+    NEWSAPI = "newsapi"
+    TWITTER = "twitter"
+    REDDIT = "reddit"
+
 
 NewsCategory = MarketCategory
 
 __all__ = ["NewsCategory", "NewsItem", "NewsSource"]
-"""Backward-compatible alias — prefer MarketCategory from kalshi.models."""
 
 
 class NewsItem(BaseModel):
-    """Raw news item from any source."""
+    """Canonical news item from any source.
+
+    This is the single source of truth for news item data across all modules.
+    Source-specific factory methods handle conversion from raw API responses.
+    """
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -27,8 +39,10 @@ class NewsItem(BaseModel):
     source: NewsSource
     url: str
     published_at: datetime
-    ticker_refs: list[str]
-    category: NewsCategory
+    ticker_refs: list[str] = Field(default_factory=list)
+    category: NewsCategory | None = None
+    data_freshness: Literal["realtime", "delayed_24h", "unknown"] = "unknown"
+    content_truncated: bool = False
 
 
 class SentimentResult(BaseModel):

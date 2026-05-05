@@ -7,37 +7,14 @@ import contextlib
 import logging
 import random
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any, ClassVar
 
 import feedparser
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+
+from traderbot.news.models import NewsItem, NewsSource
 
 logger = logging.getLogger(__name__)
-
-
-class NewsSource(StrEnum):
-    """Supported news source identifiers."""
-
-    NEWSAPI = "newsapi"
-    TWITTER = "twitter"
-    REDDIT = "reddit"
-
-
-class NewsItem(BaseModel):
-    """Canonical news item normalised from any source."""
-
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    id: str
-    title: str
-    body: str
-    source: NewsSource
-    url: str
-    published_at: datetime
-    ticker_refs: list[str] = Field(default_factory=list)
-    category: str = "uncategorized"
 
 
 class NewsAPIError(Exception):
@@ -176,7 +153,9 @@ class NewsAggregator:
                                 url=article.get("url", "") or "",
                                 published_at=published_at,
                                 ticker_refs=[],
-                                category="uncategorized",
+                                category=None,
+                                data_freshness="delayed_24h",
+                                content_truncated=True,
                             )
                         )
                     except Exception:
@@ -265,7 +244,9 @@ class NewsAggregator:
                                 url=article.get("url", "") or "",
                                 published_at=published_at,
                                 ticker_refs=[],
-                                category="uncategorized",
+                                category=None,
+                                data_freshness="delayed_24h",
+                                content_truncated=True,
                             )
                         )
                     except Exception:
@@ -409,7 +390,8 @@ class NewsAggregator:
                                 url=entry.get("link", "") or "",
                                 published_at=published_at,
                                 ticker_refs=[],
-                                category=sub,
+                                category=None,
+                                data_freshness="realtime",
                             )
                         )
                     except Exception:
