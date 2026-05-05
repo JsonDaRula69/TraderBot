@@ -2,22 +2,28 @@
   "active_plan": "/Users/djtchill/Desktop/TraderBot_BOB/.sisyphus/plans/comprehensive-audit-remediation.md",
   "started_at": "2026-05-04T08:54:45.185Z",
   "session_ids": [
-    "ses_20dcd8f88ffem6cRa8lHDW7G7p"
+    "ses_20dcd8f88ffem6cRa8lHDW7G7p",
+    "ses_20cd80398ffe2n6cuQAaYHR2Y7",
+    "ses_20cd7a359ffe1R851QQpdlsv2Y",
+    "ses_20cd76100ffeRCTmSm6NoVUJq7"
   ],
   "plan_name": "comprehensive-audit-remediation",
   "worktree_path": null,
   "session_origins": {
-    "ses_20dcd8f88ffem6cRa8lHDW7G7p": "direct"
+    "ses_20dcd8f88ffem6cRa8lHDW7G7p": "direct",
+    "ses_20cd80398ffe2n6cuQAaYHR2Y7": "appended",
+    "ses_20cd7a359ffe1R851QQpdlsv2Y": "appended",
+    "ses_20cd76100ffeRCTmSm6NoVUJq7": "appended"
   },
   "task_sessions": {
     "final-wave:f1": {
       "task_key": "final-wave:f1",
       "task_label": "F1",
       "task_title": "**Plan Compliance Audit** — `oracle`",
-      "session_id": "ses_20d11eb02ffeuNbZVmllSovfSC",
+      "session_id": "ses_20cd6ae54ffek43urIPNkn0uGa",
       "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-05-04T12:49:43.000Z"
+      "category": "unspecified-high",
+      "updated_at": "2026-05-04T13:26:03.808Z"
     }
   }
 }
