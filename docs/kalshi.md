@@ -6,26 +6,23 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 
 | Detail | Value |
 |---|---|
-| **Base URL (production)** | `https://api.kalshi.co/trade-api/v2` |
+| **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
 | **Base URL (demo)** | `https://demo-api.kalshi.co/trade-api/v2` |
-| **Auth method** | RSA-PSS signed JWT headers |
+| **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
 | **Rate limit** | ~10 requests/second |
-| **Official SDK** | `kalshi_python_async` / `kalshi_python_sync` |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
 
 ## Authentication
 
-Kalshi uses request signing with RSA-PSS. The official SDK handles this automatically given an API key ID and a PEM private key.
+Kalshi uses per-request RSA-PSS signing. Each request includes three HTTP headers: `KALSHI-ACCESS-KEY`, `KALSHI-ACCESS-SIGNATURE`, and `KALSHI-ACCESS-TIMESTAMP`. The signature is computed by signing `{timestamp_ms}{METHOD}{path}` with RSA-PSS/SHA256/MGF1.
 
 **Required environment variables:**
 ```bash
-KALSHI_API_KEY=your_key_id          # Not a secret — identifies the user
-KALSHI_PRIVATE_KEY=path/to/key.pem  # The actual secret — never commit
+KALSHI_API_KEY=your_key_id                # Identifies the user — not secret
+KALSHI_PRIVATE_KEY_PEM=-----BEGIN...      # PEM-encoded RSA private key — never commit
 ```
 
-The SDK generates a JWT per request, signing the HTTP method, path, and timestamp. We wrap this in `kalshi/client.py` with retry logic and rate limiting.
-
-**Implementation note**: Always use the official SDK for auth. Never re-implement the signing protocol — it's subtle, has changed before, and the SDK stays current.
+Our `kalshi/signing.py` implements `auth_headers()` which generates the three required headers per request. `kalshi/client.py` calls this on every HTTP request — no session tokens or login step needed.
 
 ## Key Endpoints
 
@@ -33,11 +30,12 @@ The SDK generates a JWT per request, signing the HTTP method, path, and timestam
 
 | Endpoint | Description | Key Parameters |
 |---|---|---|
-| `GET /markets` | List all markets | `limit`, `cursor`, `event_ticker`, `series_ticker`, `state`, `min_close_ts`, `max_close_ts` |
+| `GET /markets` | List all markets | `limit`, `cursor`, `event_ticker`, `series_ticker`, `min_close_ts`, `max_close_ts` |
 | `GET /markets/{ticker}` | Single market detail | — |
 | `GET /markets/{ticker}/orderbook` | Current order book | `depth` |
-| `GET /markets/{ticker}/trades` | Recent trades | `limit`, `cursor` |
+| `GET /markets/trades` | Recent trades | `ticker` (required), `limit`, `cursor` |
 | `GET /events` | List events (groups of markets) | `limit`, `cursor`, `state` |
+| `GET /events/{event_ticker}` | Single event detail | — |
 
 ### Trading (auth required)
 
@@ -60,7 +58,10 @@ The SDK generates a JWT per request, signing the HTTP method, path, and timestam
 
 | Stream | Description |
 |---|---|
-| `wss://api.elections.kalshi.com/trade-api/ws/v2` | Real-time market data, order fills, position updates |
+| `wss://api.elections.kalshi.com/trade-api/ws/v2` | Production real-time data |
+| `wss://demo-api.kalshi.co/trade-api/ws/v2` | Demo real-time data |
+
+WebSocket auth is sent as HTTP headers during the handshake (same RSA-PSS signing as REST). Subscribe format: `{"id": N, "cmd": "subscribe", "params": {"channels": ["ticker"], "market_ticker": "XXX"}}`.
 
 ## Historical Data
 
@@ -98,13 +99,14 @@ Kalshi does **not** provide pre-aggregated candlestick/OHLCV data. To reconstruc
 
 **Data volume consideration**: Popular markets can have tens of thousands of trades. Plan for pagination and local caching.
 
-## SDK Usage Patterns
+## Client Usage
 
-We use `kalshi_python_async` as the foundation. Our `kalshi/client.py` wraps it with:
+Our `kalshi/client.py` implements direct HTTP calls with:
 
+- **Per-request RSA-PSS auth** — `auth_headers()` signs each request via `signing.py`
 - **Automatic retry** with exponential backoff (handles transient 5xx errors)
-- **Rate limiting** (respects 10 req/sec, queues requests when approaching limit)
-- **Type normalization** — converts raw SDK responses to our Pydantic models
+- **Token bucket rate limiter** — respects configured req/sec, queues requests when approaching limit
+- **Type normalization** — converts raw API responses to our Pydantic models
 - **Demo mode** — swaps base URL to demo API for paper trading
 
 ```python
@@ -114,14 +116,14 @@ from traderbot.kalshi import KalshiClient
 client = KalshiClient()  # reads env vars automatically
 markets = await client.list_markets(state="open")
 orderbook = await client.get_orderbook("KXBTCD-26MAR31-T55000")
-result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", side="yes", price=55, quantity=10)
+result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", action="buy", side="yes", yes_price=55, count=10)
 ```
 
 ## Market Data Model
 
 Key Pydantic models in `kalshi/models.py`:
 
-- **Market**: ticker, question, outcome prices, volume, open_interest, close_time, state
+- **Market**: ticker, question, outcome prices, volume, open_interest, close_time, status
 - **OrderBook**: yes/no bids and asks with depth
 - **Trade**: timestamp, price, quantity, side
 - **Order**: id, ticker, side, price, quantity, status, created_time

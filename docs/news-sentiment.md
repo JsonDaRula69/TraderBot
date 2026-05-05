@@ -93,7 +93,7 @@ The pipeline continues with degraded capability rather than failing. All degrade
 |---|---|
 | **Coverage** | 50,000+ sources worldwide |
 | **Update frequency** | Near real-time (minutes) |
-| **Rate limit** | 100 requests/day (free), 1000 (developer) |
+| **Rate limit** | 100/day (free), 1000/day (developer) |
 | **Strength** | Broad coverage, structured data, good for political/economic news |
 | **Weakness** | Paid tier needed for high-frequency queries; no social media |
 
