@@ -336,8 +336,6 @@ class BacktestEngine:
                         estimated_prob=signal.estimated_prob,
                     )
 
-        return portfolio_value_cents, positions
-
     def _compute_result(
         self,
         closed_trades: list[BacktestTrade],
