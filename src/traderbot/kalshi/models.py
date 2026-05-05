@@ -271,3 +271,13 @@ class CancelResponse(BaseModel):
 
     order_id: str
     status: OrderStatus
+
+
+class ExchangeStatus(BaseModel):
+    """Current status of the Kalshi exchange."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    is_open: bool
+    description: str = ""
+    active_markets: Annotated[int, Field(ge=0)] = 0
