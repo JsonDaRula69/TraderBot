@@ -39,7 +39,7 @@ class KeyringKalshiConfig(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     private_key_pem: SecretStr | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
@@ -53,9 +53,9 @@ class KeyringKalshiConfig(BaseSettings):
         return self.demo_url if self.demo_mode else self.base_url
 
     def resolve_api_key(self) -> str | None:
-        """Resolve api_key: keyring first, then env/config."""
+        """Resolve api_key: keyring first, then env/config. Returns raw string or None."""
         if self.api_key is not None:
-            return self.api_key
+            return self.api_key.get_secret_value()
         secret = _resolve_from_keyring("api_key")
         if secret is not None:
             return secret.get_secret_value()
