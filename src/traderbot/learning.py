@@ -171,7 +171,7 @@ def _get_db_recurrence_count(conn: sqlite3.Connection, learning_id: int) -> int:
     return row["recurrence_count"]
 
 
-def _get_db_pattern_key(conn: sqlite3.Connection, learning_id: int) -> str | None:
+def get_db_pattern_key(conn: sqlite3.Connection, learning_id: int) -> str | None:
     """Read pattern_key directly from the DB row."""
     row = conn.execute(
         "SELECT pattern_key FROM learnings WHERE id = ?", (learning_id,)
@@ -327,7 +327,7 @@ def promote_learning(
         last_observed=first_obs,
     )
 
-    return write_promoted_entry(candidate, learnings_dir, pattern_key=_get_db_pattern_key(conn, learning_id))
+    return write_promoted_entry(candidate, learnings_dir, pattern_key=get_db_pattern_key(conn, learning_id))
 
 
 def run_promotion_cycle(

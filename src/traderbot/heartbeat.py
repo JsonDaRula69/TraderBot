@@ -274,9 +274,9 @@ def step_learning_promotion(
         )
 
     for candidate in candidates:
-        from traderbot.learning import _get_db_pattern_key
+        from traderbot.learning import get_db_pattern_key
 
-        pattern_key = _get_db_pattern_key(conn, candidate.learning.id)
+        pattern_key = get_db_pattern_key(conn, candidate.learning.id)
         result = promote_learning(conn, candidate.learning.id)
         if result is not None:
             promoted_keys.append(pattern_key or f"learning-{candidate.learning.id}")
@@ -399,7 +399,7 @@ def run_heartbeat_cycle(
     system_health = step_system_health(conn)
     steps_completed.append("system_health")
 
-    # Step 8: Update check (respects user-configured interval and enabled flag)
+    # Step 7: Update check (respects user-configured interval and enabled flag)
     from traderbot.update_config import UpdateConfig as _UpdateConfig
 
     _update_cfg = _UpdateConfig.load()
@@ -422,7 +422,7 @@ def run_heartbeat_cycle(
         steps_completed=steps_completed,
     )
 
-    # Step 7: Write HEARTBEAT_DATA.md
+    # Step 8: Write HEARTBEAT_DATA.md
     hb_path = heartbeat_path or DEFAULT_HEARTBEAT_PATH
     if not dry_run:
         _write_heartbeat_md(hb_path, result)
