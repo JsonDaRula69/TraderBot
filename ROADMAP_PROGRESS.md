@@ -1,6 +1,6 @@
 # TraderBot Roadmap Progress
 
-**Last updated**: v0.10.05 (2026-04-26)
+**Last updated**: v0.10.08 (2026-05-05)
 **Current focus**: All phases complete
 
 ---
@@ -218,7 +218,7 @@
 
 | Metric | Value |
 |---|---|
-| Version | 0.08.32 |
+| Version | 0.10.08 |
 | Total tests | 1544 |
 | Coverage | 99% |
 | Ruff errors | 0 |
