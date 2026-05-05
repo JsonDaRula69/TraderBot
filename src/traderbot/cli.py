@@ -68,97 +68,9 @@ def _with_db(db_path, func):
 
 
 def _get_strategy(name: str):
-    from traderbot.simulation.engine import Context, Signal
+    from traderbot.simulation.strategies import get_strategy as _get_strat
 
-    class MomentumStrategy:
-        def on_market_open(self, market, context: Context) -> list[Signal]:
-            if market.volume < 100:
-                return []
-            prices = market.outcome_prices
-            yes_price = float(prices[0]) if prices else 0.5
-            edge = abs(yes_price - 0.5)
-            if edge < 0.03:
-                return []
-            direction = "yes" if yes_price > 0.5 else "no"
-            prob = yes_price if direction == "yes" else 1.0 - yes_price
-            return [
-                Signal(
-                    ticker=market.ticker,
-                    direction=direction,
-                    quantity=1,
-                    price_cents=int(yes_price * 100),
-                    estimated_prob=prob,
-                    confidence=min(edge * 2, 1.0),
-                )
-            ]
-
-        def on_trade(self, trade, context: Context) -> list[Signal]:
-            return []
-
-        def on_settle(self, market, outcome, context: Context) -> None:
-            pass
-
-    if name == "momentum":
-        return MomentumStrategy()
-
-    class MeanReversionStrategy:
-        def on_market_open(self, market, context: Context) -> list[Signal]:
-            prices = market.outcome_prices
-            yes_price = float(prices[0]) if prices else 0.5
-            if 0.35 < yes_price < 0.65:
-                return []
-            direction = "no" if yes_price > 0.65 else "yes"
-            prob = 1.0 - yes_price if direction == "no" else yes_price
-            return [
-                Signal(
-                    ticker=market.ticker,
-                    direction=direction,
-                    quantity=1,
-                    price_cents=int(yes_price * 100),
-                    estimated_prob=prob,
-                    confidence=0.5,
-                )
-            ]
-
-        def on_trade(self, trade, context: Context) -> list[Signal]:
-            return []
-
-        def on_settle(self, market, outcome, context: Context) -> None:
-            pass
-
-    if name == "mean_reversion":
-        return MeanReversionStrategy()
-
-    class ConservativeStrategy:
-        def on_market_open(self, market, context: Context) -> list[Signal]:
-            prices = market.outcome_prices
-            yes_price = float(prices[0]) if prices else 0.5
-            edge = abs(yes_price - 0.5)
-            if edge < 0.10 or market.volume < 500:
-                return []
-            direction = "yes" if yes_price > 0.5 else "no"
-            prob = yes_price if direction == "yes" else 1.0 - yes_price
-            return [
-                Signal(
-                    ticker=market.ticker,
-                    direction=direction,
-                    quantity=1,
-                    price_cents=int(yes_price * 100),
-                    estimated_prob=prob,
-                    confidence=min(edge, 1.0),
-                )
-            ]
-
-        def on_trade(self, trade, context: Context) -> list[Signal]:
-            return []
-
-        def on_settle(self, market, outcome, context: Context) -> None:
-            pass
-
-    if name == "conservative":
-        return ConservativeStrategy()
-
-    return MomentumStrategy()
+    return _get_strat(name)
 
 
 @app.command()
@@ -253,17 +165,109 @@ def analyze(
 
 @app.command()
 def signals(
+    category: Annotated[
+        str | None, typer.Option("--category", help="Filter by market category")
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max markets to scan")] = 10,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """NOT YET IMPLEMENTED — stub for Phase 4. Show active signals across tracked markets."""
-    if json_output:
-        json_lib.dump(
-            {"note": "Signal generation requires tracked markets and price data"}, sys.stdout
-        )
+    """Compute and display trading signals across open markets."""
+    from traderbot.analysis.odds import implied_probability
+    from traderbot.analysis.signals import generate_signal
+    from traderbot.kalshi.models import MarketCategory
+
+    console = Console()
+
+    category_enum: MarketCategory | None = None
+    if category is not None:
+        try:
+            category_enum = MarketCategory(category.lower())
+        except ValueError:
+            valid = ", ".join(c.value for c in MarketCategory)
+            if json_output:
+                json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
+            else:
+                err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
+            raise typer.Exit(code=1) from None
+
+    try:
+        from traderbot.kalshi.client import KalshiClient
+        from traderbot.kalshi.markets import MarketService
+
+        client = KalshiClient()
+        service = MarketService(client)
+        markets = asyncio.run(service.list_markets(limit=limit, state="open"))
+    except Exception:
+        if json_output:
+            json_lib.dump({"note": "Signal generation requires API connection"}, sys.stdout)
+        else:
+            console.print("[yellow]Signal generation requires API connection.[/yellow]")
         return
-    Console().print("Signal generation requires tracked markets with price data.")
+
+    if category_enum is not None:
+        markets = [m for m in markets if m.market_category == category_enum]
+
+    if not markets:
+        if json_output:
+            json_lib.dump([], sys.stdout)
+        else:
+            console.print("[yellow]No open markets found.[/yellow]")
+        return
+
+    results: list[dict] = []
+    for market in markets:
+        try:
+            orderbook = asyncio.run(service.get_orderbook(market.ticker))
+        except Exception:
+            continue
+
+        prob = implied_probability(orderbook)
+        prices_int = [int(float(p) * 100) for p in market.outcome_prices]
+        signal = generate_signal(
+            ticker=market.ticker,
+            prices=prices_int,
+            trades=[],
+            orderbook=orderbook,
+            estimated_prob=prob.yes_prob,
+        )
+        results.append(
+            {
+                "ticker": market.ticker,
+                "category": market.market_category.value if market.market_category else (market.category or "uncategorized"),
+                "direction": signal.direction,
+                "confidence": round(signal.confidence, 3),
+                "estimated_prob": round(signal.estimated_prob, 3),
+                "edge_cents": signal.edge_cents,
+                "sources": [
+                    {"name": s.name, "weight": s.weight, "direction": s.direction, "strength": round(s.strength, 3)}
+                    for s in signal.sources
+                ],
+            }
+        )
+
+    if json_output:
+        json_lib.dump(results, sys.stdout, default=str)
+        return
+
+    table = Table(title="Active Signals")
+    table.add_column("Ticker", style="cyan")
+    table.add_column("Category")
+    table.add_column("Direction")
+    table.add_column("Confidence", justify="right")
+    table.add_column("Prob", justify="right")
+    table.add_column("Edge", justify="right")
+    for r in results:
+        table.add_row(
+            r["ticker"],
+            r["category"],
+            r["direction"],
+            f"{r['confidence']:.1%}",
+            f"{r['estimated_prob']:.1%}",
+            f"{r['edge_cents']}¢",
+        )
+    console.print(table)
 
 
 @app.command()
@@ -1224,11 +1228,25 @@ def paper(
     db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Paper trade a strategy with simulated orders."""
+    """Run a paper trading session against the Kalshi demo API.
+
+    Connects to the demo API, fetches open markets, runs the specified
+    strategy through risk checks, and tracks simulated positions and P&L.
+    Press Ctrl+C to stop early and see final results.
+    """
+    import asyncio
+    import time
+
     from traderbot.kalshi.demo import DemoAdapter
+    from traderbot.kalshi.markets import MarketService
+    from traderbot.simulation.engine import Signal
     from traderbot.simulation.paper_trader import PaperTrader
+    from traderbot.simulation.strategies import get_strategy
 
     console = Console()
+    err_console = Console(stderr=True)
+
+    strat = get_strategy(strategy)
 
     try:
         demo = DemoAdapter()
@@ -1243,16 +1261,76 @@ def paper(
     from traderbot.profiles import get_current_profile
 
     profile = get_current_profile()
+    client = demo.get_client()
+    market_service = MarketService(client)
 
     with get_connection(db_path) as conn:
         init_schema(conn)
         trader = PaperTrader(demo, conn, profile=profile)
-        portfolio = trader.get_portfolio()
-        pnl = trader.get_pnl()
+
+        console.print(f"[bold]Paper Trading[/bold] — {strategy} ({duration}min)")
+        console.print(f"  Starting cash: ${trader.get_portfolio().cash_cents / 100:.2f}")
+
+        start_time = time.time()
+        end_time = start_time + duration * 60
+        iteration = 0
+
+        try:
+            while time.time() < end_time:
+                iteration += 1
+                try:
+                    markets = asyncio.run(market_service.list_markets(limit=5, state="open"))
+                except Exception:
+                    console.print("[yellow]Could not fetch markets, retrying...[/yellow]")
+                    time.sleep(30)
+                    continue
+
+                for market in markets:
+                    try:
+                        orderbook = asyncio.run(market_service.get_orderbook(market.ticker))
+
+                        prices = [int(float(p) * 100) for p in market.outcome_prices]
+                        from traderbot.kalshi.models import Trade as _Trade
+
+                        signals = strat.on_market_open(market, trader.get_portfolio())
+                        for sig in signals:
+                            result = asyncio.run(
+                                trader.submit_order(
+                                    ticker=sig.ticker,
+                                    side=sig.direction,
+                                    quantity=sig.quantity,
+                                    price_cents=sig.price_cents,
+                                    edge_estimate=sig.estimated_prob - 0.5 if sig.estimated_prob else 0.05,
+                                )
+                            )
+                            if result is not None:
+                                console.print(
+                                    f"  [green]FILL[/green] {sig.direction.upper()} "
+                                    f"{result.quantity}x {sig.ticker} @ {result.price_cents}¢"
+                                )
+                    except Exception:
+                        continue
+
+                elapsed_min = (time.time() - start_time) / 60
+                portfolio = trader.get_portfolio()
+                pnl = trader.get_pnl()
+                console.print(
+                    f"  [{iteration}] Cash: ${portfolio.cash_cents / 100:.2f} "
+                    f"Pos: {len(portfolio.positions)} P&L: ${pnl / 100:+.2f} "
+                    f"({elapsed_min:.1f}/{duration}min)"
+                )
+                time.sleep(60)
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Paper trading stopped by user.[/yellow]")
+
+    portfolio = trader.get_portfolio()
+    pnl = trader.get_pnl()
 
     result = {
         "strategy": strategy,
         "duration_minutes": duration,
+        "iterations": iteration,
         "cash_cents": portfolio.cash_cents,
         "position_count": len(portfolio.positions),
         "pnl_cents": pnl,
@@ -1263,7 +1341,8 @@ def paper(
         json_lib.dump(result, sys.stdout, default=str)
         return
 
-    console.print(f"[bold]Paper Trading[/bold] \u2014 {strategy} ({duration}min)")
+    console.print(f"\n[bold]Paper Trading Summary[/bold]")
+    console.print(f"  Strategy:    {strategy}")
     console.print(f"  Cash:       ${portfolio.cash_cents / 100:.2f}")
     console.print(f"  P&L:        ${pnl / 100:+.2f}")
     console.print(f"  Positions:  {len(portfolio.positions)}")
