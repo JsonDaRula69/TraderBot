@@ -80,3 +80,15 @@ class TestEvaluateTrade:
 
         slow_size = evaluate_trade(trade, slow_portfolio, slow_breaker)
         assert 0 < slow_size < normal_size
+
+    def test_circuit_breaker_uses_total_loss_including_unrealized(self, tmp_path: Path) -> None:
+        """Circuit breaker should trip HALT when unrealized + realized loss crosses 2%."""
+        breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
+        # Realized loss 1% + unrealized loss 1.5% = 2.5% total → HALT
+        trade = _make_trade()
+        portfolio = _make_portfolio(
+            today_realized_loss_cents=1_000_00,
+            today_unrealized_loss_cents=1_500_00,
+        )
+        size = evaluate_trade(trade, portfolio, breaker)
+        assert size == 0
