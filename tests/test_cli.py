@@ -502,6 +502,24 @@ class TestSignals:
         data = json.loads(result.output)
         assert "note" in data
 
+    @pytest.mark.unit
+    def test_signals_price_no_double_conversion(self):
+        """Verify outcome_prices (cent strings) are not multiplied by 100."""
+        from traderbot.kalshi.models import Market
+
+        market = Market(
+            ticker="KXBTCD-26MAR31-T55000",
+            question="BTC above $55k?",
+            outcome_prices=["60", "40"],
+            volume=1000,
+            open_interest=500,
+            close_time=datetime(2026, 3, 31, tzinfo=UTC),
+            status="open",
+            event_ticker="KXBTCD-26MAR31",
+        )
+        prices_int = [int(p) for p in market.outcome_prices]
+        assert prices_int == [60, 40], f"Expected [60, 40] cent prices, got {prices_int}"
+
 
 class TestTrade:
     def test_trade_rejected_with_defaults(self):

@@ -224,7 +224,7 @@ def signals(
             continue
 
         prob = implied_probability(orderbook)
-        prices_int = [int(float(p) * 100) for p in market.outcome_prices]
+        prices_int = [int(p) for p in market.outcome_prices]
         signal = generate_signal(
             ticker=market.ticker,
             prices=prices_int,
@@ -1289,7 +1289,7 @@ def paper(
                     try:
                         orderbook = asyncio.run(market_service.get_orderbook(market.ticker))
 
-                        prices = [int(float(p) * 100) for p in market.outcome_prices]
+                        prices = [int(p) for p in market.outcome_prices]
                         from traderbot.kalshi.models import Trade as _Trade
 
                         signals = strat.on_market_open(market, trader.get_portfolio())
