@@ -247,6 +247,15 @@ class TestExactThresholds:
         assert FULL_STOP_THRESHOLD == HARD_LIMITS["max_drawdown_pct"]
 
 
+class TestBreakerChecksIncludeUnrealizedLosses:
+    def test_breaker_checks_include_unrealized_losses(self, cb: CircuitBreaker) -> None:
+        """daily_loss_pct passed to breaker must include unrealized losses."""
+        # 1% realized + 1% unrealized = 2% total → HALT
+        state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.0)
+        assert state.level == BreakerLevel.HALT
+        assert state.can_trade is False
+
+
 class TestCircuitBreakerStateExtraForbidden:
     def test_extra_field_rejected(self) -> None:
         import pytest

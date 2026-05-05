@@ -43,7 +43,8 @@ def evaluate_trade(
     if profile is not None and trade_request.market_category is not None and not profile.is_category_enabled(trade_request.market_category):
         return 0
 
-    daily_loss_pct = portfolio.today_realized_loss_cents / max(portfolio.portfolio_value_cents, 1)
+    total_today_loss_cents = portfolio.today_realized_loss_cents + portfolio.today_unrealized_loss_cents
+    daily_loss_pct = total_today_loss_cents / max(portfolio.portfolio_value_cents, 1)
     drawdown_pct = (portfolio.peak_value_cents - portfolio.portfolio_value_cents) / max(
         portfolio.peak_value_cents, 1
     )
