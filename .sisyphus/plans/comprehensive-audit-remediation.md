@@ -1080,7 +1080,7 @@ Max Concurrent: 10 (Wave 3)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.3. Fix docs/news-sentiment.md rate limit (1000 → 100/day free) — **HUMAN APPROVED**
+- [x] 4.3. Fix docs/news-sentiment.md rate limit (1000 → 100/day free) — **HUMAN APPROVED**
 
   **What to do**: Correct rate limit documentation in `docs/news-sentiment.md:96`
 
@@ -1122,19 +1122,19 @@ Max Concurrent: 10 (Wave 3)
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 4.10. Resolve simulation/strategies/ directory mismatch — **HUMAN APPROVED — USE SYMLINK**
+- [x] 4.10. Resolve simulation/strategies/ directory mismatch — **HUMAN APPROVED — USE SYMLINK**
 
   **What to do**: Create a symlink `src/traderbot/simulation/strategies/` pointing to the actual strategy modules location (or create the directory with an `__init__.py` if the referenced modules don't exist elsewhere). TOOLS.md references `src/traderbot/simulation/strategies/` but directory doesn't exist — add symlink to bridge the mismatch.
 
   **Recommended Agent Profile**: `quick` | **Parallelization**: Wave 4
 
-- [ ] 5.1. Update docs/kalshi.md — **HUMAN APPROVED**
+- [x] 5.1. Update docs/kalshi.md — **HUMAN APPROVED**
 
   **What to do**: Update with corrected URLs, auth mechanism, endpoint field names, historical cutoff, and events
 
   **Recommended Agent Profile**: `writing` | **Parallelization**: Wave 5
 
-- [ ] 5.2. Update docs/simulation.md — **HUMAN APPROVED**
+- [x] 5.2. Update docs/simulation.md — **HUMAN APPROVED**
 
   **What to do**: Update with real Brier score implementation details
 

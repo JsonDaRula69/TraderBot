@@ -152,19 +152,19 @@ When a strategy passes paper trading validation:
 |---|---|---|
 | **Win Rate** | % of trades that were profitable | winning_trades / total_trades |
 | **Avg P&L per Trade** | Mean profit/loss across all trades | sum(pnl) / n_trades |
-| **Sharpe Ratio** | Risk-adjusted return (annualized) | mean(excess_return) / std(excess_return) × √252 |
+| **Sharpe Ratio** | Risk-adjusted return (annualized, Bessel-corrected) | mean(excess_return) / std(excess_return, ddof=1) × √252 |
 | **Max Drawdown** | Largest peak-to-trough decline | max(peak - trough) / peak |
 | **Calmar Ratio** | Return vs. max drawdown | annualized_return / max_drawdown |
 | **Edge Realization** | Predicted edge vs. actual outcome | mean(predicted_edge - actual_edge) |
 
 ### Prediction Market Specific Metrics
 
-| Metric | Description |
-|---|---|
-| **Brier Score** | Accuracy of probability estimates (lower = better) |
-| **Calibration** | When we estimate 70% probability, do we win ~70% of the time? |
-| **Edge capture** | What fraction of identified edge do we actually capture after slippage? |
-| **Fill rate** | What % of our orders actually get filled? |
+| Metric | Description | Computation |
+163:|---|---|---|
+| **Brier Score** | Accuracy of probability estimates (lower = better) | Mean of (predicted_prob - actual_outcome)² across all closed trades. For yes positions, predicted = entry_price/100; for no positions, predicted = 1 - entry_price/100. Actual = 1 if profitable, 0 if loss. |
+| **Calibration** | When we estimate 70% probability, do we win ~70% of the time? | Group predictions into probability bins, compare predicted vs. observed frequencies |
+| **Edge capture** | What fraction of identified edge do we actually capture after slippage? | mean(realized_edge) / mean(predicted_edge) |
+| **Fill rate** | What % of our orders actually get filled? | filled_orders / total_orders |
 
 ### Strategy Comparison
 
@@ -189,13 +189,7 @@ class StrategyProfile(BaseModel):
     description: str                   # What this profile is designed for
 ```
 
-**Critical constraint**: `risk_multiplier` NEVER overrides `HARD_LIMITS`. The effective limit for any risk parameter is:
-
-```
-effective_limit = risk_multiplier * HARD_LIMITS[key]
-```
-
-This ensures the Conservative profile cannot exceed 50% of hard limits, the Moderate profile stays within hard limits (1.0x), and the Aggressive profile operates at 80% of hard limits — never above.
+**Critical constraint**: `risk_multiplier` NEVER overrides `HARD_LIMITS`. For ceiling-type limits, the effective limit is `min(risk_multiplier * HARD_LIMITS[key], HARD_LIMITS[key])`. For floor-type limits (min_liquidity, min_edge), the effective limit uses `max()` so the multiplier cannot make the floor less restrictive.
 
 ### Preset Profiles
 

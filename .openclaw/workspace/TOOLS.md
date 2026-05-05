@@ -157,6 +157,6 @@ Strategy parameters are configured via CLI. The agent does NOT choose or change 
 - Circuit breaker recovery: SLOW → trade at 50% size, HALT → auto-resets at midnight ET, FULL_STOP → requires `traderbot halt --clear` (human must run this)
 - `--json` flag is required for machine-readable output
 - Bayesian adaptation has a 4-update/day cooldown — don't expect updates every heartbeat
-- Backtest `--strategy` flag accepts: `momentum`, `contrarian`, etc. (see `src/traderbot/simulation/strategies/`)
+- Backtest `--strategy` flag accepts: `momentum`, `contrarian`, etc. (strategy modules in `src/traderbot/simulation/strategies/`)
 - `traderbot profile discover-agents` scans OpenClaw workspace to map agents ↔ profiles
 - Portfolio is divided equally across enabled markets (not max 10% per market)
