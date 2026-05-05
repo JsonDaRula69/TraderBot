@@ -11,6 +11,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.signing import auth_headers
 
+VALID_CHANNELS: frozenset[str] = frozenset({
+    # V1 channels
+    "ticker",
+    "orderbook",
+    "market_lifecycle",
+    # V2 channels
+    "orderbook_delta",
+    "market_lifecycle_v2",
+    "fill",
+    "user_orders",
+    "market_positions",
+})
+
 
 class WebSocketConfig(BaseSettings):
     """Configuration for Kalshi WebSocket client."""
@@ -68,40 +81,74 @@ class KalshiWebSocket:
             additional_headers=headers,
         )
 
-    async def subscribe(self, channels: list[str], market_ticker: str) -> None:
-        """Subscribe to channels for a specific market.
+    async def subscribe(
+        self,
+        channels: list[str],
+        market_ticker: str | None = None,
+        market_tickers: list[str] | None = None,
+    ) -> None:
+        """Subscribe to channels for one or more markets.
 
         Args:
-            channels: List of channel names (e.g., ["ticker", "orderbook"])
-            market_ticker: Market ticker symbol
+            channels: Channel names (must be in VALID_CHANNELS).
+            market_ticker: Single market ticker symbol (mutually exclusive with market_tickers).
+            market_tickers: Multiple market ticker symbols (mutually exclusive with market_ticker).
+
+        Raises:
+            ValueError: If channels contain invalid names or neither/both ticker params are provided.
         """
+        invalid = [c for c in channels if c not in VALID_CHANNELS]
+        if invalid:
+            raise ValueError(f"Invalid channel(s): {invalid}. Valid: {sorted(VALID_CHANNELS)}")
+
+        if market_ticker is not None and market_tickers is not None:
+            raise ValueError("Provide market_ticker or market_tickers, not both.")
+        if market_ticker is None and market_tickers is None:
+            raise ValueError("Provide market_ticker or market_tickers.")
+
         self._message_id += 1
-        msg = {
-            "id": self._message_id,
-            "cmd": "subscribe",
-            "params": {
-                "channels": channels,
-                "market_ticker": market_ticker,
-            },
-        }
+        params: dict[str, Any] = {"channels": channels}
+        if market_tickers is not None:
+            params["market_tickers"] = market_tickers
+        else:
+            params["market_ticker"] = market_ticker
+
+        msg = {"id": self._message_id, "cmd": "subscribe", "params": params}
         await self._ws.send(json.dumps(msg))
 
-    async def unsubscribe(self, channels: list[str], market_ticker: str) -> None:
-        """Unsubscribe from channels for a specific market.
+    async def unsubscribe(
+        self,
+        channels: list[str],
+        market_ticker: str | None = None,
+        market_tickers: list[str] | None = None,
+    ) -> None:
+        """Unsubscribe from channels for one or more markets.
 
         Args:
-            channels: List of channel names
-            market_ticker: Market ticker symbol
+            channels: Channel names (must be in VALID_CHANNELS).
+            market_ticker: Single market ticker symbol (mutually exclusive with market_tickers).
+            market_tickers: Multiple market ticker symbols (mutually exclusive with market_ticker).
+
+        Raises:
+            ValueError: If channels contain invalid names or neither/both ticker params are provided.
         """
+        invalid = [c for c in channels if c not in VALID_CHANNELS]
+        if invalid:
+            raise ValueError(f"Invalid channel(s): {invalid}. Valid: {sorted(VALID_CHANNELS)}")
+
+        if market_ticker is not None and market_tickers is not None:
+            raise ValueError("Provide market_ticker or market_tickers, not both.")
+        if market_ticker is None and market_tickers is None:
+            raise ValueError("Provide market_ticker or market_tickers.")
+
         self._message_id += 1
-        msg = {
-            "id": self._message_id,
-            "cmd": "unsubscribe",
-            "params": {
-                "channels": channels,
-                "market_ticker": market_ticker,
-            },
-        }
+        params: dict[str, Any] = {"channels": channels}
+        if market_tickers is not None:
+            params["market_tickers"] = market_tickers
+        else:
+            params["market_ticker"] = market_ticker
+
+        msg = {"id": self._message_id, "cmd": "unsubscribe", "params": params}
         await self._ws.send(json.dumps(msg))
 
     async def receive(self) -> dict[str, Any]:
