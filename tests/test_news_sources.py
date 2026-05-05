@@ -9,7 +9,9 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from traderbot.news.sources import NewsAPIError, NewsAggregator, NewsItem, NewsSource
+from traderbot.kalshi.models import MarketCategory
+from traderbot.news.models import NewsItem, NewsSource
+from traderbot.news.sources import NewsAPIError, NewsAggregator
 
 
 def _newsapi_article(
@@ -84,7 +86,7 @@ class TestNewsItem:
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert item.ticker_refs == []
-        assert item.category == "uncategorized"
+        assert item.category is None
 
     def test_create_full(self):
         item = NewsItem(
@@ -95,7 +97,7 @@ class TestNewsItem:
             url="https://example.com",
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
             ticker_refs=["BTC", "ETH"],
-            category="crypto",
+            category=MarketCategory.CRYPTO,
         )
         assert item.source == NewsSource.TWITTER
         assert item.ticker_refs == ["BTC", "ETH"]
@@ -126,7 +128,6 @@ class TestNewsAggregatorInit:
         assert NewsAggregator._SOURCE_PRIORITY == [
             NewsSource.NEWSAPI,
             NewsSource.REDDIT,
-            NewsSource.TWITTER,
         ]
 
 

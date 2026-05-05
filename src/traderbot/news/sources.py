@@ -26,10 +26,9 @@ class NewsAggregator:
 
     # Source fetch priority order (fastest/breaking → slowest/analysis)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
-    NewsSource.NEWSAPI,
+        NewsSource.NEWSAPI,
         NewsSource.REDDIT,
-        NewsSource.TWITTER,
-]
+    ]
 
     def __init__(
         self,
@@ -89,10 +88,13 @@ class NewsAggregator:
             logger.warning("NEWSAPI_KEY not set, skipping NewsAPI")
             return []
 
+        if self.rate_limit_remaining is not None and self.rate_limit_remaining <= 0:
+            logger.warning("NewsAPI rate limit exhausted (%d remaining), skipping", self.rate_limit_remaining)
+            return []
+
         params: dict[str, Any] = {
             "apiKey": self._newsapi_key,
             "pageSize": min(limit, 100),
-            "language": "en",
         }
 
         max_retries = 3
@@ -105,6 +107,7 @@ class NewsAggregator:
                     f"{self._newsapi_base}/top-headlines",
                     params=params,
                 )
+                self._capture_rate_limits(response)
 
                 if response.status_code == 429:
                     if attempt < max_retries:
@@ -273,6 +276,14 @@ class NewsAggregator:
             with contextlib.suppress(ValueError, TypeError):
                 self.rate_limit_remaining = int(response.headers["X-RateLimit-Remaining"])
 
+    def is_rate_limited(self) -> bool:
+        """Check if rate limit has been exhausted."""
+        return self.rate_limit_remaining is not None and self.rate_limit_remaining <= 0
+
+    def remaining_requests(self) -> int | None:
+        """Return remaining NewsAPI requests, or None if unknown."""
+        return self.rate_limit_remaining
+
     async def get_everything(
         self,
         query: str,
@@ -298,6 +309,13 @@ class NewsAggregator:
         """
         if not self._newsapi_key:
             raise NewsAPIError("NEWSAPI_KEY not set")
+
+        if self.is_rate_limited():
+            raise NewsAPIError("NewsAPI rate limit exhausted")
+
+        if "sources" in kwargs and "language" in kwargs:
+            logger.warning("NewsAPI /everything: 'sources' excludes 'language', removing language")
+            del kwargs["language"]
 
         params: dict[str, Any] = {
             "apiKey": self._newsapi_key,
@@ -344,12 +362,15 @@ class NewsAggregator:
         raise NewsAPIError("NewsAPI request failed after retries")
 
     async def _fetch_twitter(self, limit: int) -> list[NewsItem]:
-        """Stub — returns empty until Twitter API credentials are configured."""
+        """Stub — not yet implemented. Requires Twitter/X API v2 credentials.
+
+        TODO: Implement using Twitter API v2 filtered stream or recent search.
+        Will require TWITTER_API_KEY, TWITTER_API_SECRET, and TWITTER_BEARER_TOKEN.
+        """
         if not self._twitter_api_key:
-            logger.warning("TWITTER_API_KEY not set, Twitter source unavailable")
+            logger.debug("TWITTER_API_KEY not set, Twitter source skipped")
             return []
-        # Future: implement Twitter/X API v2 integration
-        logger.warning("Twitter API integration not yet implemented")
+        logger.warning("Twitter API integration not yet implemented despite TWITTER_API_KEY being set")
         return []
 
     async def _fetch_reddit(self, limit: int) -> list[NewsItem]:
