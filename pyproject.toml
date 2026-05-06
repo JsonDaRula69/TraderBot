@@ -41,6 +41,9 @@ traderbot = "traderbot.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
 
+[tool.uv]
+constraint-dependencies = ["onnxruntime<1.24"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
