@@ -13,9 +13,8 @@ def _make_orderbook(best_yes: int = 50, best_no: int = 50) -> object:
 
 
 def _make_trades(count: int = 20, price: int = 50) -> list:
-    from datetime import UTC, datetime, timedelta
     from traderbot.kalshi.models import Trade
-
+    from datetime import UTC, datetime, timedelta
     now = datetime.now(UTC)
     return [
         Trade(ticker="KX_TEST", price=price, quantity=10, side="yes", timestamp=now - timedelta(minutes=i))
@@ -49,9 +48,8 @@ class TestGenerateSignalWithoutSentiment:
 
     def test_three_sources_when_no_sentiment(self) -> None:
         prices = list(range(40, 60))
-        trades = _make_trades()
         ob = _make_orderbook()
-        signal = generate_signal("KX_TEST", prices, trades, ob, 0.55)
+        signal = generate_signal("KX_TEST", prices, ob, 0.55)
         assert isinstance(signal, CombinedSignal)
         assert signal.direction in ("yes", "no", "neutral")
         assert 0.0 <= signal.confidence <= 1.0
@@ -68,33 +66,29 @@ class TestGenerateSignalWithSentiment:
 
     def test_four_sources_with_positive_sentiment(self) -> None:
         prices = list(range(40, 60))
-        trades = _make_trades()
         ob = _make_orderbook()
-        signal = generate_signal("KX_TEST", prices, trades, ob, 0.55, news_sentiment=0.5)
+        signal = generate_signal("KX_TEST", prices, ob, 0.55, news_sentiment=0.5)
         assert len(signal.sources) == 4
         names = [s.name for s in signal.sources]
         assert "sentiment" in names
 
     def test_negative_sentiment_direction(self) -> None:
         prices = list(range(40, 60))
-        trades = _make_trades()
         ob = _make_orderbook()
-        signal = generate_signal("KX_TEST", prices, trades, ob, 0.55, news_sentiment=-0.3)
+        signal = generate_signal("KX_TEST", prices, ob, 0.55, news_sentiment=-0.3)
         sent = next(s for s in signal.sources if s.name == "sentiment")
         assert sent.direction == "no"
 
     def test_small_sentiment_direction_neutral(self) -> None:
         prices = list(range(40, 60))
-        trades = _make_trades()
         ob = _make_orderbook()
-        signal = generate_signal("KX_TEST", prices, trades, ob, 0.55, news_sentiment=0.05)
+        signal = generate_signal("KX_TEST", prices, ob, 0.55, news_sentiment=0.05)
         sent = next(s for s in signal.sources if s.name == "sentiment")
         assert sent.direction == "neutral"
 
     def test_positive_sentiment_direction_yes(self) -> None:
         prices = list(range(40, 60))
-        trades = _make_trades()
         ob = _make_orderbook()
-        signal = generate_signal("KX_TEST", prices, trades, ob, 0.55, news_sentiment=0.5)
+        signal = generate_signal("KX_TEST", prices, ob, 0.55, news_sentiment=0.5)
         sent = next(s for s in signal.sources if s.name == "sentiment")
         assert sent.direction == "yes"

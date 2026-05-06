@@ -99,7 +99,6 @@ def test_generate_signal_declining_trend() -> None:
     signal = generate_signal(
         ticker="KX-TEST",
         prices=prices,
-        trades=[_make_trade(p, 1) for p in prices[-5:]],
         orderbook=ob,
         estimated_prob=0.55,
     )
@@ -140,7 +139,6 @@ def test_generate_signal_oversold_rsi() -> None:
     signal = generate_signal(
         ticker="KX-OVERSOLD",
         prices=low_prices,
-        trades=[_make_trade(p, 1) for p in low_prices[-5:]],
         orderbook=ob,
         estimated_prob=0.30,
     )
@@ -156,7 +154,6 @@ def test_generate_signal_edge_detection() -> None:
     signal = generate_signal(
         ticker="KX-EDGE",
         prices=[55] * 30,
-        trades=[_make_trade(55, 1)],
         orderbook=ob,
         estimated_prob=0.80,
     )
@@ -172,7 +169,6 @@ def test_generate_signal_short_prices_momentum_neutral() -> None:
     signal = generate_signal(
         ticker="KX-SHORT",
         prices=prices,
-        trades=[_make_trade(51, 1)],
         orderbook=ob,
         estimated_prob=0.50,
     )
@@ -187,7 +183,6 @@ def test_generate_signal_edge_cents() -> None:
     signal = generate_signal(
         ticker="KX-EC",
         prices=[50] * 30,
-        trades=[_make_trade(50, 1)],
         orderbook=ob,
         estimated_prob=0.75,
     )
@@ -227,7 +222,6 @@ def test_generate_signal_price_below_bollinger_lower() -> None:
     signal = generate_signal(
         ticker="KX-BB-LOW",
         prices=prices,
-        trades=[_make_trade(p, 1) for p in prices[-5:]],
         orderbook=ob,
         estimated_prob=0.55,
     )
@@ -268,7 +262,6 @@ def test_generate_signal_price_above_bollinger_upper() -> None:
     signal = generate_signal(
         ticker="KX-BB-HIGH",
         prices=prices,
-        trades=[_make_trade(p, 1) for p in prices[-5:]],
         orderbook=ob,
         estimated_prob=0.45,
     )
@@ -285,7 +278,6 @@ def test_generate_signal_momentum_bullish_ema() -> None:
     signal = generate_signal(
         ticker="KX-MOM-YES",
         prices=prices,
-        trades=[_make_trade(p, 1) for p in prices[-5:]],
         orderbook=ob,
         estimated_prob=0.55,
     )

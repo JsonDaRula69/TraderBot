@@ -108,6 +108,7 @@ def bollinger_bands(prices: list[int], period: int = 20, k: float = 2.0) -> Boll
 
 def volume_weighted_price(trades: list[Trade]) -> int:
     """Volume-weighted average price, returned as int cents."""
+    # TODO: Wire into generate_signal()
     if not trades:
         raise ValueError("trades must not be empty")
     total_value = sum(t.price * t.quantity for t in trades)

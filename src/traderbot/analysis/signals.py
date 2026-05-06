@@ -10,7 +10,7 @@ from traderbot.analysis.indicators import bollinger_bands, ema, rsi
 from traderbot.analysis.odds import detect_edge
 
 if TYPE_CHECKING:
-    from traderbot.kalshi.models import OrderBook, Trade
+    from traderbot.kalshi.models import OrderBook
 
 
 class SignalSource(BaseModel):
@@ -69,7 +69,6 @@ def default_weights(include_sentiment: bool = False) -> dict[str, float]:
 def generate_signal(
     ticker: str,
     prices: list[int],
-    trades: list[Trade],
     orderbook: OrderBook,
     estimated_prob: float,
     news_sentiment: float | None = None,
