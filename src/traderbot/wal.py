@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SESSION_STATE_PATH = Path(".openclaw/workspace/SESSION-STATE.md")
+DEFAULT_SESSION_STATE_PATH = Path(__file__).resolve().parent.parent / ".openclaw" / "workspace" / "SESSION-STATE.md"
 
 
 class WalStatus(StrEnum):
@@ -302,11 +302,13 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         return False
 
     fd = open(path, "r+")  # noqa: SIM115 - fcntl.flock requires manual fd
+    fd_closed = False
     try:
         try:
             fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as err:
             fd.close()
+            fd_closed = True
             logger.error("Concurrent WAL writer during status update for %s", intent_id)
             raise ConcurrentWriteError(
                 f"Another writer is active, cannot update {intent_id}"
@@ -321,8 +323,6 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
 
         match = pattern.search(content)
         if not match:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-            fd.close()
             logger.warning("WAL entry %s not found for status update", intent_id)
             return False
 
@@ -332,13 +332,10 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         fd.truncate()
         fd.write(new_content)
         fd.flush()
-        fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-        fd.close()
-    except Exception:
-        with contextlib.suppress(OSError):
+    finally:
+        if not fd_closed:
             fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-        fd.close()
-        raise
+            fd.close()
 
     logger.info("WAL entry %s status updated to %s", intent_id, status.value)
     return True

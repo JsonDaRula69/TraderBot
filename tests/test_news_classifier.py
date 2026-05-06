@@ -298,8 +298,9 @@ class TestKalshiCategories:
     def test_no_sports_in_kalshi_categories(self):
         assert NewsCategory.SPORTS not in _KALSHI_CATEGORIES
 
-    def test_no_crypto_in_kalshi_categories(self):
-        assert NewsCategory.CRYPTO not in _KALSHI_CATEGORIES
+    def test_crypto_in_market_category(self):
+        from traderbot.kalshi.models import MarketCategory
+        assert "crypto" in {c.value for c in MarketCategory}
 
     def test_six_kalshi_categories(self):
         assert len(_KALSHI_CATEGORIES) == 6

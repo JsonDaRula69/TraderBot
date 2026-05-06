@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import statistics
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HEARTBEAT_PATH = Path(".openclaw/workspace/HEARTBEAT_DATA.md")
+DEFAULT_HEARTBEAT_PATH = Path(__file__).resolve().parent.parent / ".openclaw" / "workspace" / "HEARTBEAT_DATA.md"
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +140,7 @@ def step_performance_review(
     decisions: list[DbDecision],
     since: datetime | None = None,
 ) -> PerformanceReview:
-    """Step 1: Aggregate trade outcomes, compute win rate, P&L, avg confidence."""
+    """Step 1: Aggregate trade outcomes, compute win rate, P&L, avg confidence, Sharpe, and max drawdown."""
     executed = [d for d in decisions if d.outcome == "executed"]
     if not executed:
         return PerformanceReview()
@@ -147,17 +148,45 @@ def step_performance_review(
     wins = 0
     total_pnl = 0
     confidence_sum = 0.0
+    trade_returns: list[float] = []
+    cumulative_value = 0.0
+    peak_value = 0.0
+    max_drawdown = 0.0
+
     for d in executed:
         confidence_sum += d.confidence
+        trade_return = 0.0
         if d.actual_result is True:
             wins += 1
-            total_pnl += (100 - d.price) * d.quantity
+            trade_return = (100 - d.price) * d.quantity
+            total_pnl += trade_return
         elif d.actual_result is False:
-            total_pnl -= d.price * d.quantity
+            trade_return = -(d.price * d.quantity)
+            total_pnl += trade_return
+
+        cumulative_value += trade_return
+        if cumulative_value > peak_value:
+            peak_value = cumulative_value
+        drawdown = (peak_value - cumulative_value) / peak_value if peak_value != 0 else 0.0
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
+
+        trade_returns.append(trade_return)
 
     trade_count = len(executed)
     win_rate = wins / trade_count if trade_count else 0.0
     avg_confidence = confidence_sum / trade_count if trade_count else 0.0
+    max_drawdown_pct = max_drawdown * 100
+
+    sharpe_ratio: float | None = None
+    if len(trade_returns) > 1:
+        mean_return = statistics.mean(trade_returns)
+        try:
+            std_return = statistics.stdev(trade_returns)
+        except statistics.StatisticsError:
+            std_return = 0.0
+        if std_return > 0:
+            sharpe_ratio = mean_return / std_return
 
     deviation_flag = ""
     if win_rate > 0.7:
@@ -170,6 +199,8 @@ def step_performance_review(
         win_rate=win_rate,
         total_pnl_cents=total_pnl,
         avg_confidence=avg_confidence,
+        sharpe_ratio=sharpe_ratio,
+        max_drawdown_pct=max_drawdown_pct,
         deviation_flag=deviation_flag,
     )
 

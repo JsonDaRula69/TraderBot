@@ -80,7 +80,7 @@ class TestCategoryFiltering:
             enabled_categories=[],
         )
         assert open_profile.is_category_enabled(MarketCategory.ECONOMICS) is True
-        assert open_profile.is_category_enabled(MarketCategory.CRYPTO) is True
+        assert open_profile.is_category_enabled(MarketCategory.TECHNOLOGY) is True
 
 
 class TestCredentialResolution:

@@ -1,7 +1,9 @@
+<!-- TRADERBOT_BOOT_START -->
+<!-- ASK_THEN_MERGE -->
 # BOOT.md
 
 Run `traderbot --version` on startup to verify the CLI is available.
-If the command fails, notify the user: "TraderBot CLI not found. Run: uv pip install -e /path/to/TraderBot_BOB"
+If the command fails, notify the user: "TraderBot CLI not found. Run: uv pip install -e ."
 Then reply with NO_REPLY.
 
 ## Full Boot Sequence
@@ -62,3 +64,4 @@ BOOT COMPLETE
 ```
 
 If circuit breaker is HALT/FULL_STOP or there are pending actions from a crashed session, reply with the summary and highlight the issue. Otherwise, proceed normally.
+<!-- TRADERBOT_BOOT_END -->

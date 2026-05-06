@@ -6,11 +6,13 @@
 	<key>Label</key>
 	<string>com.traderbot.agent.AGENT_ID</string>
 
-	<!-- ProgramArguments: venv binary path, heartbeat command -->
+	<!-- ProgramArguments: sources .env then runs main agent loop (scan with continuous flag).
+	     Heartbeat is triggered by OpenClaw Gateway, not self-polled. -->
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/USERNAME/traderbot/.venv/bin/traderbot</string>
-		<string>heartbeat</string>
+		<string>/bin/bash</string>
+		<string>-c</string>
+		<string>set -a; source /Users/USERNAME/.traderbot/.env; set +a; exec /Users/USERNAME/traderbot/.venv/bin/traderbot scan --continuous</string>
 	</array>
 
 	<!-- EnvironmentVariables: TOKEN_PLACEHOLDER replaced by installer -->

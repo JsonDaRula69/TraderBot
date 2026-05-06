@@ -615,7 +615,7 @@ def test_profile_auth_json(runner, registry, mock_keyring):
     data = json.loads(result.stdout)
     assert len(data) == 1
     assert data[0]["service"] == "kalshi"
-    assert data[0]["key"] == "key-id-123"
+    assert data[0]["key"] == "****-123"
 
 
 def test_profile_auth_nonexistent_profile(runner, registry, mock_keyring):

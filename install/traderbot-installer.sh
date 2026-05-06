@@ -429,6 +429,7 @@ setup_api_credentials() {
     mkdir -p "${HOME}/.traderbot"
     local env_file="${HOME}/.traderbot/.env"
     touch "$env_file"
+    chmod 600 "$env_file"
 
     local REPLY=""
 
@@ -450,6 +451,21 @@ setup_api_credentials() {
             _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
         fi
         echo "Kalshi credentials stored."
+        echo
+        echo "Select Kalshi API tier:"
+        echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
+        echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
+        echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
+        echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
+        echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
+        read -r -p "Tier [1]: " kalshi_tier
+        case "$kalshi_tier" in
+            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
+            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
+            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
+            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
+            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
+        esac
     fi
 
     # --- NewsAPI (optional) ---
@@ -458,8 +474,17 @@ setup_api_credentials() {
     local newsapi_key=""
     read -r -p "NewsAPI key (press Enter to skip): " newsapi_key
     if [[ -n "$newsapi_key" ]]; then
-        _env_set "$env_file" "NEWSAPI_KEY" "$newsapi_key"
+        _env_set "$env_file" "NEWSAPI_API_KEY" "$newsapi_key"
         echo "NewsAPI key stored."
+        echo
+        echo "Select NewsAPI tier:"
+        echo "  1) Free      (100 requests/day)"
+        echo "  2) Business  (2,500 requests/day)"
+        read -r -p "Tier [1]: " newsapi_tier
+        case "$newsapi_tier" in
+            2) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "2500" ;;
+            *) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "100" ;;
+        esac
     else
         echo "Skipped. Set later with: traderbot auth set-key newsapi api_key"
     fi
@@ -550,24 +575,42 @@ interactive_config_flow() {
     esac
 
     echo "Select market categories (enter numbers, space-separated):"
-    echo "  1) Politics"
-    echo "  2) Economics"
-    echo "  3) Sports"
-    echo "  4) Crypto"
-    echo "  5) Science/Tech"
-    echo "  6) Weather"
-    echo "  7) Culture"
-    echo "  8) All categories"
-    read -r -p "Choice [8]: " cat_choice
+    echo "  1) Economics"
+    echo "  2) Politics"
+    echo "  3) Weather"
+    echo "  4) Sports"
+    echo "  5) Culture"
+    echo "  6) Technology"
+    echo "  7) Science"
+    echo "  8) Crypto"
+    echo "  9) Commodities"
+    echo " 10) Companies"
+    echo " 11) Elections"
+    echo " 12) Entertainment"
+    echo " 13) Financials"
+    echo " 14) Health"
+    echo " 15) Mentions"
+    echo " 16) Social"
+    echo " 17) All categories"
+    read -r -p "Choice [17]: " cat_choice
     case "$cat_choice" in
-        1) profile_categories="politics" ;;
-        2) profile_categories="economics" ;;
-        3) profile_categories="sports" ;;
-        4) profile_categories="crypto" ;;
-        5) profile_categories="science" ;;
-        6) profile_categories="weather" ;;
-        7) profile_categories="culture" ;;
-        *) profile_categories="politics,economics,sports,crypto,science,weather,culture" ;;
+        1) profile_categories="economics" ;;
+        2) profile_categories="politics" ;;
+        3) profile_categories="weather" ;;
+        4) profile_categories="sports" ;;
+        5) profile_categories="culture" ;;
+        6) profile_categories="technology" ;;
+        7) profile_categories="science" ;;
+        8) profile_categories="crypto" ;;
+        9) profile_categories="commodities" ;;
+        10) profile_categories="companies" ;;
+        11) profile_categories="elections" ;;
+        12) profile_categories="entertainment" ;;
+        13) profile_categories="financials" ;;
+        14) profile_categories="health" ;;
+        15) profile_categories="mentions" ;;
+        16) profile_categories="social" ;;
+        *) profile_categories="economics,politics,weather,sports,culture,technology,science,crypto,commodities,companies,elections,entertainment,financials,health,mentions,social" ;;
     esac
 
     if command -v traderbot &>/dev/null; then
@@ -674,14 +717,25 @@ interactive_config_flow() {
 
     echo
     echo "=== Verification ==="
-    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && command -v traderbot &>/dev/null; then
-        if traderbot heartbeat --json 2>/dev/null; then
+    local tb_bin=""
+    if command -v traderbot &>/dev/null; then
+        tb_bin="traderbot"
+    elif [[ -x "${INSTALL_DIR}/.venv/bin/traderbot" ]]; then
+        tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+    fi
+
+    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && [[ -n "$tb_bin" ]]; then
+        if "$tb_bin" heartbeat --json 2>/dev/null; then
             echo "Heartbeat verification: PASSED"
         else
             echo "Heartbeat verification: FAILED (check credentials)"
         fi
     else
-        echo "No profile token set. Verification skipped."
+        if [[ -z "$tb_bin" ]]; then
+            echo "TraderBot not found. Verification skipped."
+        else
+            echo "No profile token set. Verification skipped."
+        fi
     fi
 }
 
@@ -733,8 +787,15 @@ with open('$config_path', 'w') as f:
         fi
     fi
 
+    # Expand placeholders in config
+    if [[ -f "$config_path" ]]; then
+        sed -i "s|__HOME_PLACEHOLDER__|$HOME|g" "$config_path"
+        sed -i "s|__PROJECT_ROOT_PLACEHOLDER__|$INSTALL_DIR|g" "$config_path"
+        sed -i "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
+    fi
+
     if [[ -d "$workspace_src" ]]; then
-        local agent_ws_dir="${HOME}/.openclaw/workspace/economics"
+        local agent_ws_dir="${HOME}/.openclaw/workspace/${profile_name:-economics}"
         mkdir -p "$agent_ws_dir"
         for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md BOOTSTRAP.md; do
             if [[ -f "${workspace_src}/${f}" ]]; then

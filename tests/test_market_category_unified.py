@@ -29,6 +29,14 @@ class TestMarketCategoryValues:
         assert MarketCategory.TECHNOLOGY.value == "technology"
         assert MarketCategory.SCIENCE.value == "science"
         assert MarketCategory.CRYPTO.value == "crypto"
+        assert MarketCategory.COMMODITIES.value == "commodities"
+        assert MarketCategory.COMPANIES.value == "companies"
+        assert MarketCategory.ELECTIONS.value == "elections"
+        assert MarketCategory.ENTERTAINMENT.value == "entertainment"
+        assert MarketCategory.FINANCIALS.value == "financials"
+        assert MarketCategory.HEALTH.value == "health"
+        assert MarketCategory.MENTIONS.value == "mentions"
+        assert MarketCategory.SOCIAL.value == "social"
 
 
 class TestNewsCategoryAlias:
@@ -60,7 +68,8 @@ class TestMarketCategoryLowercase:
         assert MarketCategory.ECONOMICS.value == "economics"
         assert MarketCategory.POLITICS.value == "politics"
         assert MarketCategory.SCIENCE.value == "science"
-        assert MarketCategory.HEALTH.value == "health" if hasattr(MarketCategory, "HEALTH") else True
+        assert MarketCategory.HEALTH.value == "health"
+        assert MarketCategory.CRYPTO.value == "crypto"
 
 
 class TestMarketCategoryEnumCompleteness:
@@ -68,7 +77,9 @@ class TestMarketCategoryEnumCompleteness:
 
     EXPECTED_CATEGORIES = {
         "ECONOMICS", "POLITICS", "SCIENCE", "WEATHER",
-        "SPORTS", "CRYPTO", "CULTURE", "TECHNOLOGY",
+        "SPORTS", "CULTURE", "TECHNOLOGY",
+        "CRYPTO", "COMMODITIES", "COMPANIES", "ELECTIONS",
+        "ENTERTAINMENT", "FINANCIALS", "HEALTH", "MENTIONS", "SOCIAL",
     }
 
     def test_expected_categories_present(self) -> None:

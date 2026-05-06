@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from traderbot.kalshi._normalize import _to_cents
 from traderbot.kalshi.models import Fill, Position, Settlement
 
 if TYPE_CHECKING:
@@ -85,16 +86,29 @@ class PortfolioService:
                     if isinstance(settled_val, int)
                     else None
                 )
+
+                price_cents = _to_cents(
+                    raw.get("price_dollars") or raw.get("price_fp") or 0
+                )
+
+                settlement_price_cents = _to_cents(
+                    raw.get("settlement_price_dollars") or raw.get("settlement_price_fp") or 0
+                )
+
+                pnl_cents = _to_cents(
+                    raw.get("pnl_dollars") or raw.get("pnl_fp") or 0
+                )
+
+                quantity = int(raw.get("count_fp") or 0)
+
                 settlements.append(
                     Settlement(
                         ticker=raw.get("ticker", ""),
                         side=raw.get("side", "yes"),
-                        quantity=int(raw.get("count", raw.get("quantity", 0))),
-                        price_cents=int(raw.get("yes_price", raw.get("price", 0))),
-                        settlement_price_cents=int(
-                            raw.get("settlement_price", raw.get("price", 0))
-                        ),
-                        pnl_cents=int(raw.get("pnl", raw.get("realized_pnl", 0))),
+                        quantity=quantity,
+                        price_cents=price_cents,
+                        settlement_price_cents=settlement_price_cents,
+                        pnl_cents=pnl_cents,
                         settled_at=settled_at,
                     )
                 )

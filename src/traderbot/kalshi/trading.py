@@ -6,6 +6,7 @@ from traderbot.kalshi.client import KalshiClient
 from traderbot.kalshi.models import (
     CancelResponse,
     OrderRequest,
+    OrderResult,
     OrderSide,
     OrderSideV2,
     OrderStatus,
@@ -20,14 +21,20 @@ class TradingService:
     def __init__(self, client: KalshiClient) -> None:
         self._client = client
 
-    async def place_order(self, order_request: OrderRequest) -> TradingOrder:
-        """Submit a new order and return the created order."""
+    async def place_order(self, order_request: OrderRequest) -> OrderResult:
+        """Submit a new order and return the V2 create response."""
         body = order_request.to_v2_body()
         response = await self._client.post("/portfolio/events/orders", **body)
         response.raise_for_status()
         data = response.json()
-        order_data = data.get("order", data)
-        return self._parse_order(order_data)
+        return OrderResult(
+            order_id=data["order_id"],
+            client_order_id=data.get("client_order_id"),
+            fill_count=data.get("fill_count", "0"),
+            remaining_count=data.get("remaining_count", "0"),
+            average_fill_price=data.get("average_fill_price"),
+            ts_ms=data.get("ts_ms"),
+        )
 
     async def cancel_order(self, order_id: str) -> CancelResponse:
         """Cancel an existing order by ID."""
@@ -36,12 +43,13 @@ class TradingService:
         data = response.json()
         return CancelResponse(
             order_id=data["order_id"],
-            status=OrderStatus(data["status"]),
+            status=None,
+            reduced_by=data.get("reduced_by"),
         )
 
     async def get_order(self, order_id: str) -> TradingOrder:
         """Retrieve a single order by ID."""
-        response = await self._client.get(f"/portfolio/events/orders/{order_id}")
+        response = await self._client.get(f"/portfolio/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
         order_data = data.get("order", data)
@@ -53,7 +61,7 @@ class TradingService:
         if ticker is not None:
             params["ticker"] = ticker
 
-        response = await self._client.get("/portfolio/events/orders", **params)
+        response = await self._client.get("/portfolio/orders", **params)
         response.raise_for_status()
         data = response.json()
         orders_raw = data.get("orders", [])
@@ -68,13 +76,18 @@ class TradingService:
 
             created_time = datetime.fromtimestamp(created_time, tz=UTC)
 
-        # V2 price: price_dollars or price_fp, in dollars; convert to cents
-        price_dollars = raw.get("price_dollars") or raw.get("price_fp")
+        # Legacy Order schema: yes_price_dollars/no_price_dollars, price_dollars/price_fp
+        price_dollars = (
+            raw.get("yes_price_dollars")
+            or raw.get("no_price_dollars")
+            or raw.get("price_dollars")
+            or raw.get("price_fp")
+        )
         price = round(float(price_dollars) * 100) if price_dollars is not None else 0
 
-        # V2 quantity: count_fp
-        count_fp = raw.get("count_fp")
-        quantity = int(count_fp) if count_fp is not None else 0
+        # Legacy Order schema: initial_count_fp, falling back to count_fp
+        initial_count = raw.get("initial_count_fp") or raw.get("count_fp")
+        quantity = int(initial_count) if initial_count is not None else 0
 
         # Map V2 bid/ask → internal yes/no
         raw_side = raw.get("side", "yes")
@@ -85,6 +98,10 @@ class TradingService:
         else:
             side = OrderSide(raw_side)
 
+        # Legacy fill count: fill_count_fp (string) or filled_quantity (int)
+        fill_count_fp = raw.get("fill_count_fp")
+        filled_quantity = int(fill_count_fp) if fill_count_fp is not None else int(raw.get("filled_quantity", 0))
+
         return TradingOrder(
             order_id=raw["order_id"],
             ticker=raw["ticker"],
@@ -94,5 +111,5 @@ class TradingService:
             price=price,
             status=OrderStatus(raw.get("status", "live")),
             created_time=created_time,
-            filled_quantity=int(raw.get("filled_quantity", 0)),
+            filled_quantity=filled_quantity,
         )

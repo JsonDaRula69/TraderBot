@@ -4,9 +4,9 @@
 # Uses %i as the instance/username for the agent.
 #
 # USAGE:
-#   install-service.sh <agent_name> <profile_token>
+#   install-service.sh <agent_name>
 #
-# The installer replaces <PROFILE_TOKEN> and adjusts paths.
+# The installer creates ~/.traderbot/.env with the profile token.
 # VENV_PATH: /home/%i/traderbot/.venv/bin/traderbot
 # CONFIG_DIR: /home/%i/.traderbot/
 
@@ -21,11 +21,13 @@ Type=simple
 User=%i
 WorkingDirectory=/home/%i/traderbot
 
-Environment=TRADERBOT_PROFILE_TOKEN=<PROFILE_TOKEN>
+EnvironmentFile=%h/.traderbot/.env
+# Installer replaces placeholder: Environment=TRADERBOT_PROFILE_TOKEN=<PROFILE_TOKEN>
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
-ExecStart=/bin/bash -c 'while true; do /home/%i/traderbot/.venv/bin/traderbot heartbeat; sleep 300; done'
+# Heartbeat is triggered by OpenClaw Gateway, not self-polled.
+ExecStart=/home/%i/traderbot/.venv/bin/traderbot scan --continuous
 
 Restart=on-failure
 RestartSec=10

@@ -27,8 +27,19 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
     exit 1
 fi
 
+ENV_FILE="${HOME}/.traderbot/.env"
+mkdir -p "${HOME}/.traderbot"
+touch "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^TRADERBOT_PROFILE_TOKEN=.*|TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
+else
+    echo "TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
+fi
+
 VENV_BIN="${HOME}/traderbot/.venv/bin/traderbot"
-sed -e "s|<PROFILE_TOKEN>|$PROFILE_TOKEN|g" -e "s|/home/%i/traderbot/.venv/bin/traderbot|$VENV_BIN|g" "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
+sed -e "s|/home/%i/traderbot/.venv/bin/traderbot|$VENV_BIN|g" "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
 
 if command -v systemd-analyze &>/dev/null; then
     if ! systemd-analyze verify "/tmp/traderbot-agent@$AGENT_NAME.service" 2>/dev/null; then

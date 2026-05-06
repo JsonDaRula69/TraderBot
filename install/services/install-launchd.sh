@@ -22,7 +22,7 @@ if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
 fi
 
 USER_NAME="$(whoami)"
-if [[ "$USER_NAME" =~ AGENT_ID ]] || [[ "$USER_NAME" =~ USERNAME ]] || [[ "$USER_NAME" =~ TOKEN_PLACEHOLDER ]]; then
+if [[ "$USER_NAME" =~ AGENT_ID ]] || [[ "$USER_NAME" =~ USERNAME ]]; then
     echo "Error: Username '$USER_NAME' conflicts with plist template placeholders." >&2
     exit 1
 fi
@@ -33,11 +33,21 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
     exit 1
 fi
 
+ENV_FILE="${HOME}/.traderbot/.env"
+mkdir -p "${HOME}/.traderbot"
+touch "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+    sed -i "" "s|^TRADERBOT_PROFILE_TOKEN=.*|TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
+else
+    echo "TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
+fi
+
 PLIST_FILE="/Library/LaunchDaemons/com.traderbot.agent.$AGENT_NAME.plist"
 USER_NAME="$(whoami)"
 
 sed -e "s/AGENT_ID/$AGENT_NAME/g" \
-    -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" \
     -e "s/USERNAME/$USER_NAME/g" \
     "$TEMPLATE_FILE" > "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
 

@@ -1,9 +1,0 @@
-list_assignments() not fully supported with real keyring backend
-✓ Assigned token to profile 'qa-test-profile' for agent 'test-agent-qa'
-Token: qZkY6jm27ZLt
-
-Note: Token injection into TOOLS.md is not yet implemented (T10)
-list_assignments() not fully supported with real keyring backend
-No token assignments found
-list_assignments() not fully supported with real keyring backend
-Warning: No token assigned to profile 'qa-test-profile'

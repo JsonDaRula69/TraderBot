@@ -1,3 +1,4 @@
+<!-- TRADERBOT_RULES_START -->
 # AGENTS.md - Agent Workspace
 
 _Home base. Follow these rules every session._
@@ -71,16 +72,27 @@ These are immutable constraints — they cannot be overridden by config, env var
 ### Hard Limits
 
 - **Divide portfolio equally** across enabled markets
-- **Circuit breaker thresholds**: 1% loss → SLOW, 2% → HALT, 10% → FULL_STOP (human-configured, subject to change, not applicable during historical backtesting)
+- **Circuit breaker thresholds**: 1% daily loss → SLOW, 2% → HALT, 10% → FULL_STOP (immutable hard-coded constants in `HARD_LIMITS`)
 - **No short selling** — binary markets only, yes/no positions
 - **Every trade must be logged** — no unrecorded actions
+
+The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/limits.py`):
+
+| Limit | Value | Description |
+|---|---|---|
+| `max_position_per_market_pct` | 5% | Max position in any single market |
+| `max_daily_loss_pct` | 2% | Circuit breaker SLOW at 1%, HALT at 2% |
+| `max_drawdown_pct` | 10% | Full stop when peak drawdown hits 10% |
+| `min_liquidity_threshold` | 1,000 | Minimum open interest in cents |
+| `max_open_positions` | 20 | Maximum concurrent open positions |
+| `min_edge_pct` | 3% | Minimum required edge over market price |
 
 ### Decision Sequence
 
 1. Statistical indicators first (signals module)
 2. Cross-reference with news sentiment (when available)
-3. Compute Kelly-based position sizing
-4. **Run `traderbot evaluate_trade()` — this enforces ALL of:**
+3. The toolkit computes position sizing; agent provides confidence and estimated probability
+4. **Run `traderbot trade` — this runs the full risk pipeline (`evaluate_trade`), enforcing ALL of:**
     - Divide portfolio equally across enabled markets
    - Circuit breaker status (SLOW/HALT/FULL_STOP blocks trades)
    - Daily loss limits
@@ -136,7 +148,7 @@ When the circuit breaker triggers HALT or FULL_STOP:
 
 - **SLOW** (1% daily loss): Agent may continue trading but with reduced position sizes (50% of normal). No human alert required.
 - **HALT** (2% daily loss): All new trades blocked. Agent surfaces alert to human. Trading resumes only when `traderbot halt` returns NORMAL, which happens automatically when the daily loss window resets (midnight ET).
-- **FULL_STOP** (10% daily loss): All new trades blocked. Agent surfaces alert to human. Requires **explicit human intervention** to clear via `traderbot halt --clear`. Agent cannot self-clear FULL_STOP.
+- **FULL_STOP** (10% daily loss): All new trades blocked. Agent surfaces alert to human. Requires **explicit human intervention** — the agent cannot self-clear FULL_STOP.
 
 During HALT/FULL_STOP, the agent:
 - Continues monitoring positions and news
@@ -182,7 +194,6 @@ Some `traderbot` commands are **user-only** — the agent MUST NOT invoke them a
 | `traderbot profile create/delete` | **User only** | Creates/deletes profile configurations |
 | `traderbot profile set-auth` | **User only** | Stores credentials — security boundary |
 | `traderbot halt --force` | **User only** | Emergency override — requires human judgment |
-| `traderbot halt --clear` | **User only** | Clears FULL_STOP breaker — requires human approval |
 | `traderbot update` | **User only** | System upgrade — should not happen mid-session |
 | `traderbot bootstrap` | **User only** | Initial setup wizard — one-time operation |
 
@@ -229,4 +240,26 @@ The 7-step review cycle runs via `traderbot heartbeat --json` and writes output 
 
 ## Market Categories
 
-Agent queries available markets via CLI tool and decides how to filter news based on enabled markets.
+All 16 supported market categories (from `kalshi.models.MarketCategory`):
+
+| Category | Kalshi Value | Description |
+|---|---|---|
+| `ECONOMICS` | economics | Macroeconomic indicators and events |
+| `POLITICS` | politics | Political outcomes and legislation |
+| `WEATHER` | weather | Climate and weather events |
+| `SPORTS` | sports | Sporting event outcomes |
+| `CULTURE` | culture | Cultural events and trends |
+| `TECHNOLOGY` | technology | Technology industry outcomes |
+| `SCIENCE` | science | Scientific discoveries and events |
+| `CRYPTO` | crypto | Cryptocurrency price and events |
+| `COMMODITIES` | commodities | Commodity prices and events |
+| `COMPANIES` | companies | Company-specific outcomes |
+| `ELECTIONS` | elections | Election outcomes |
+| `ENTERTAINMENT` | entertainment | Entertainment industry events |
+| `FINANCIALS` | financials | Financial market outcomes |
+| `HEALTH` | health | Health and medical events |
+| `MENTIONS` | mentions | Kalshi mention counts |
+| `SOCIAL` | social | Social media and viral events |
+
+Agent queries available markets via CLI tool and filters news based on enabled categories.
+<!-- TRADERBOT_RULES_END -->

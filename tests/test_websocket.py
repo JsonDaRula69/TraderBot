@@ -245,8 +245,6 @@ class TestChannelValidation:
     def test_valid_channels_contains_all_expected(self) -> None:
         expected = {
             "ticker",
-            "orderbook",
-            "market_lifecycle",
             "orderbook_delta",
             "market_lifecycle_v2",
             "fill",

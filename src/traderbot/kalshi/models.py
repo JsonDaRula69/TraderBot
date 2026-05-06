@@ -1,12 +1,98 @@
 """Pydantic v2 data models for Kalshi API responses and internal domain objects."""
 
-from __future__ import annotations
-
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
+
+
+class MarketCategory(StrEnum):
+    """Market categories for cross-module use (analysis, simulation, news, etc.).
+
+    Single source of truth — all modules import from here.
+    Values are lowercase to match Kalshi API convention.
+    API variant mappings: "Climate and Weather" → WEATHER,
+    "Science and Technology" → TECHNOLOGY.
+    """
+
+    ECONOMICS = "economics"
+    POLITICS = "politics"
+    WEATHER = "weather"
+    SPORTS = "sports"
+    CULTURE = "culture"
+    TECHNOLOGY = "technology"
+    SCIENCE = "science"
+    CRYPTO = "crypto"
+    COMMODITIES = "commodities"
+    COMPANIES = "companies"
+    ELECTIONS = "elections"
+    ENTERTAINMENT = "entertainment"
+    FINANCIALS = "financials"
+    HEALTH = "health"
+    MENTIONS = "mentions"
+    SOCIAL = "social"
+
+
+class OrderSide(StrEnum):
+    """Internal yes/no side representation."""
+
+    yes = "yes"
+    no = "no"
+
+
+class OrderSideV2(StrEnum):
+    """V2 API-facing side values. bid → OrderSide.yes, ask → OrderSide.no."""
+
+    bid = "bid"
+    ask = "ask"
+
+
+class OrderType(StrEnum):
+    """Order type: limit (default) or market."""
+
+    limit = "limit"
+    market = "market"
+
+
+class OrderStatus(StrEnum):
+    """Order status values.
+
+    V2: 'filled' replaces the legacy 'matched' status.
+    """
+
+    live = "live"
+    resting = "resting"
+    matched = "matched"
+    filled = "filled"
+    cancelled = "cancelled"
+    expired = "expired"
+
+
+class OrderRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    ticker: str
+    side: OrderSideV2
+    count: str
+    price: str
+    client_order_id: str | None = None
+    time_in_force: str = "good_till_canceled"
+    self_trade_prevention_type: str = "taker_at_cross"
+
+    def to_v2_body(self) -> dict[str, str]:
+        """Serialize to V2 API request body."""
+        body: dict[str, str] = {
+            "ticker": self.ticker,
+            "side": self.side.value,
+            "count": self.count,
+            "price": self.price,
+            "client_order_id": self.client_order_id or str(uuid4()),
+            "time_in_force": self.time_in_force,
+            "self_trade_prevention_type": self.self_trade_prevention_type,
+        }
+        return body
 
 
 class OrderBookLevel(BaseModel):
@@ -37,7 +123,7 @@ class Market(BaseModel):
     @field_validator("category", mode="before")
     @classmethod
     def _normalize_category(cls, v: object) -> str | None:
-        if isinstance(v, str) and v not in MarketCategory._value2member_map_:
+        if not isinstance(v, str):
             return None
         return v
 
@@ -205,73 +291,7 @@ class TradeRequest(BaseModel):
         return self.price_cents / 100.0
 
 
-class MarketCategory(StrEnum):
-    """Market categories for cross-module use (analysis, simulation, news, etc.).
 
-    Single source of truth — all modules import from here.
-    Values are lowercase to match Kalshi API convention.
-    """
-
-    ECONOMICS = "economics"
-    POLITICS = "politics"
-    WEATHER = "weather"
-    SPORTS = "sports"
-    CULTURE = "culture"
-    TECHNOLOGY = "technology"
-    SCIENCE = "science"
-    CRYPTO = "crypto"
-
-
-class OrderSide(StrEnum):
-    """Internal representation. Maps from V2 bid/ask via _parse_order().
-
-    Deprecated for new code; use OrderSideV2 for API-facing operations.
-    """
-
-    yes = "yes"
-    no = "no"
-
-
-class OrderType(StrEnum):
-    limit = "limit"
-    market = "market"
-
-
-class OrderRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    ticker: str
-    action: Literal["buy", "sell"]
-    side: OrderSide
-    order_type: OrderType = OrderType.limit
-    count: Annotated[int, Field(ge=1)]
-    price_cents: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
-    client_order_id: str | None = None
-    no_price: Annotated[int, Field(ge=0, le=99)] | None = None
-
-    def to_v2_body(self) -> dict[str, str]:
-        """Serialize to V2 API request body."""
-        body: dict[str, str] = {
-            "ticker": self.ticker,
-            "action": self.action,
-            "side": self.side.value,
-            "count": str(self.count),
-            "price": f"{self.price_cents / 100:.4f}",
-        }
-        if self.client_order_id is not None:
-            body["client_order_id"] = self.client_order_id
-        if self.no_price is not None:
-            body["no_price"] = str(self.no_price)
-        return body
-
-
-class OrderStatus(StrEnum):
-    live = "live"
-    resting = "resting"
-    matched = "matched"
-    filled = "filled"  # V2: replaces "matched"
-    cancelled = "cancelled"
-    expired = "expired"
 
 
 class TradingOrder(BaseModel):
@@ -294,11 +314,25 @@ class OrderResponse(BaseModel):
     order: TradingOrder
 
 
+class OrderResult(BaseModel):
+    """V2 CreateOrderV2Response shape."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    order_id: str
+    client_order_id: str | None = None
+    fill_count: str = "0"
+    remaining_count: str = "0"
+    average_fill_price: str | None = None
+    ts_ms: int | None = None
+
+
 class CancelResponse(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     order_id: str
-    status: OrderStatus
+    status: OrderStatus | None = None
+    reduced_by: str | None = None
 
 
 class ExchangeStatus(BaseModel):

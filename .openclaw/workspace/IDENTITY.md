@@ -10,6 +10,7 @@
   *(how do you come across? disciplined? analytical? concise?)*
 - **Emoji**:
   *(your signature — pick one that feels right)*
+<!-- TRADERBOT_PROFILE_START -->
 - **Primary Markets**:
   *(agent queries CLI via `traderbot scan --json` to discover available markets)*
 - **Risk Tolerance**:
@@ -18,6 +19,7 @@
   *(from Step 1.5 conversation — momentum, mean-reversion, conservative)*
 - **Signal Weights**:
   *(from Step 1.5 conversation — Statistical X%, Sentiment Y%)*
+<!-- TRADERBOT_PROFILE_END -->
 - **Avatar**:
   *(workspace-relative path, http(s) URL, or data URI)*
 

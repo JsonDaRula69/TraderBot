@@ -9,7 +9,7 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 | **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
 | **Base URL (demo)** | `https://demo-api.kalshi.co/trade-api/v2` |
 | **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
-| **Rate limit** | ~10 requests/second |
+| **Rate limit** | Tiered: Basic=20 rps, Advanced=30, Premier=100, Paragon=200, Prime=400 (configurable via `KALSHI_RATE_LIMIT_RPS`) |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
 
 ## Authentication
@@ -41,10 +41,10 @@ Our `kalshi/signing.py` implements `auth_headers()` which generates the three re
 
 | Endpoint | Description |
 |---|---|
-| `POST /portfolio/orders` | Place a new order |
-| `DELETE /portfolio/orders/{order_id}` | Cancel an order |
-| `GET /portfolio/orders` | List resting orders |
-| `GET /portfolio/fills` | List filled orders |
+| `POST /portfolio/events/orders` | Place a new order |
+| `DELETE /portfolio/events/orders/{order_id}` | Cancel an order |
+| `GET /portfolio/events/orders` | List resting orders |
+| `GET /portfolio/events/fills` | List filled orders |
 
 ### Portfolio (auth required)
 
@@ -116,7 +116,7 @@ from traderbot.kalshi import KalshiClient
 client = KalshiClient()  # reads env vars automatically
 markets = await client.list_markets(state="open")
 orderbook = await client.get_orderbook("KXBTCD-26MAR31-T55000")
-result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", action="buy", side="yes", price_cents=55, count=10)
+result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", side="bid", price_dollars="0.55", count=10)
 ```
 
 ## Market Data Model

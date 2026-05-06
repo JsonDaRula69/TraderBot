@@ -1,6 +1,0 @@
-=== QA: Session isolation ===
-All LOOP_DEFINITIONS payload types and sessions:
-  decision_loop: payload_type=agentTurn, session_target=isolated
-  heartbeat_loop: payload_type=agentTurn, session_target=isolated
-  news_loop: payload_type=systemEvent, session_target=main
-VERIFIED: No agentTurn targets main session
