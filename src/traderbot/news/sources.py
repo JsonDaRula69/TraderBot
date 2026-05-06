@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 import random
 from datetime import UTC, datetime
@@ -149,7 +150,7 @@ class NewsAggregator:
                         )
                         items.append(
                             NewsItem(
-                                id=f"newsapi-{article.get('source', {}).get('id', 'unknown')}-{idx}",
+                                id=f"newsapi-{hashlib.md5((article.get('url') or '').encode()).hexdigest()[:8]}-{idx}",
                                 title=article.get("title", "") or "",
                                 body=article.get("description", "") or "",
                                 source=NewsSource.NEWSAPI,
@@ -240,7 +241,7 @@ class NewsAggregator:
                         )
                         items.append(
                             NewsItem(
-                                id=f"newsapi-everything-{idx}-{hash(query) & 0xFFFF}",
+                                id=f"newsapi-everything-{idx}-{hashlib.md5(query.encode()).hexdigest()[:8]}",
                                 title=article.get("title", "") or "",
                                 body=article.get("description", "") or "",
                                 source=NewsSource.NEWSAPI,
