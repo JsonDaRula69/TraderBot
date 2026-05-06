@@ -100,7 +100,7 @@ def init_table(conn: sqlite3.Connection) -> None:
 
 def _migrate_feature_request_columns(conn: sqlite3.Connection) -> None:
     """Add feature-request columns if they don't exist."""
-    cols = {row["name"] for row in conn.execute("PRAGMA table_info(learnings)").fetchall()}
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(learnings)").fetchall()}
     if "pattern_key" not in cols:
         conn.execute("ALTER TABLE learnings ADD COLUMN pattern_key TEXT")
     if "recurrence_count" not in cols:
