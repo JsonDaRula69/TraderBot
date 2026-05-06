@@ -1057,3 +1057,47 @@ class TestTradeRequest:
         raw = tr.model_dump_json(exclude_computed_fields=True)
         restored = TradeRequest.model_validate_json(raw)
         assert restored.price_cents == tr.price_cents
+
+
+class TestMarketCategoryValidator:
+    def test_known_category_passes(self) -> None:
+        market = Market(
+            ticker="KXBTC-26MAR31-T55000",
+            question="Bitcoin above 55000?",
+            outcome_prices=["0.5", "0.5"],
+            volume=1000,
+            open_interest=500,
+            close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
+            status="open",
+            event_ticker="KXBTC-26MAR31",
+            category="crypto",
+        )
+        assert market.category == "crypto"
+
+    def test_unknown_category_becomes_none(self) -> None:
+        market = Market(
+            ticker="KXBTC-26MAR31-T55000",
+            question="Bitcoin above 55000?",
+            outcome_prices=["0.5", "0.5"],
+            volume=1000,
+            open_interest=500,
+            close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
+            status="open",
+            event_ticker="KXBTC-26MAR31",
+            category="unknown_category_xyz",
+        )
+        assert market.category is None
+
+    def test_none_category_passes(self) -> None:
+        market = Market(
+            ticker="KXBTC-26MAR31-T55000",
+            question="Bitcoin above 55000?",
+            outcome_prices=["0.5", "0.5"],
+            volume=1000,
+            open_interest=500,
+            close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
+            status="open",
+            event_ticker="KXBTC-26MAR31",
+            category=None,
+        )
+        assert market.category is None
