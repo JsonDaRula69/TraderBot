@@ -4,19 +4,9 @@
       {
         "id": "traderbot-__PROFILE_NAME__",
         "name": "TraderBot __PROFILE_NAME__",
-        "workspace": "__HOME_PLACEHOLDER__/.openclaw/workspace/__PROFILE_NAME__",
+        "workspace": "__HOME_PLACEHOLDER__/.openclaw/workspace/__AGENT_NAME__",
         "agentDir": "__PROJECT_ROOT_PLACEHOLDER__/.openclaw/workspace"
       }
     ]
-  },
-  "heartbeat": {
-    "every": "30m",
-    "target": "last"
-  },
-  "secrets": [
-    { "source": "env", "provider": "default", "id": "KALSHI_API_KEY" },
-    { "source": "env", "provider": "default", "id": "KALSHI_PRIVATE_KEY_PEM" },
-    { "source": "env", "provider": "default", "id": "NEWSAPI_API_KEY" },
-    { "source": "env", "provider": "default", "id": "VOYAGE_API_KEY" }
-  ]
+  }
 }

@@ -37,6 +37,15 @@ _sed_inplace() {
     fi
 }
 
+_backup_config() {
+    local config_path="$1"
+    if [[ -f "$config_path" ]]; then
+        local backup="${config_path}.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$config_path" "$backup"
+        echo "  Backed up $config_path → $backup"
+    fi
+}
+
 _write_heartbeat_to_config() {
     local agent_id="$1"
     local interval="$2"
@@ -938,6 +947,7 @@ interactive_config_flow() {
 
             local oc_config="${HOME}/.openclaw/openclaw.json"
             if [[ -f "$oc_config" ]]; then
+                _backup_config "$oc_config"
                 _write_heartbeat_to_config "$agent_name" "30m" "$oc_config"
             fi
 
@@ -994,6 +1004,7 @@ merge_openclaw_agent_config() {
         cp "$agent_config" "$config_path"
         echo "Created $config_path from agent config template."
     else
+        _backup_config "$config_path"
         if command -v jq &>/dev/null; then
             local tmp_file
             tmp_file="$(mktemp)"
@@ -1006,17 +1017,16 @@ import json, sys
 config_path, agent_config = sys.argv[1], sys.argv[2]
 with open(config_path) as f: existing = json.load(f)
 with open(agent_config) as f: new = json.load(f)
-for key in ('agents', 'heartbeat'):
-    if key in new:
-        if key == 'agents' and key in existing:
-            existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
-            new_list = existing.get('agents', {}).get('list', [])
-            for a in new['agents'].get('list', []):
-                if a['id'] not in existing_ids:
-                    new_list.append(a)
-            existing.setdefault('agents', {})['list'] = new_list
-        else:
-            existing[key] = new[key]
+if 'agents' in new:
+    existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
+    new_list = existing.get('agents', {}).get('list', [])
+    for a in new['agents'].get('list', []):
+        id_val = a.get('id', '')
+        cleaned = id_val.replace('__PROFILE_NAME__', '${profile_name:-economics}').replace('__AGENT_NAME__', '${agent_name:-economics}').replace('__HOME_PLACEHOLDER__', '$HOME').replace('__PROJECT_ROOT_PLACEHOLDER__', '$INSTALL_DIR')
+        a['id'] = cleaned
+        if a['id'] not in existing_ids:
+            new_list.append(a)
+    existing.setdefault('agents', {})['list'] = new_list
 with open(config_path, 'w') as f:
     json.dump(existing, f, indent=2)
 " "$config_path" "$agent_config"
@@ -1033,6 +1043,7 @@ with open(config_path, 'w') as f:
         _sed_inplace "s|__HOME_PLACEHOLDER__|$HOME|g" "$config_path"
         _sed_inplace "s|__PROJECT_ROOT_PLACEHOLDER__|$INSTALL_DIR|g" "$config_path"
         _sed_inplace "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
+        _sed_inplace "s|__AGENT_NAME__|${agent_name:-economics}|g" "$config_path"
     fi
 
     if [[ -d "$workspace_src" ]]; then
