@@ -756,11 +756,11 @@ interactive_config_flow() {
 
         local key
         while true; do
-            key="$(dd bs=1 count=1 2>/dev/null)"
+            IFS= read -rsn1 key
             if [[ "$key" == $'\x1b' ]]; then
-                key="$(dd bs=1 count=1 2>/dev/null)"
+                IFS= read -rsn1 -t 0.1 key
                 if [[ "$key" == '[' ]]; then
-                    key="$(dd bs=1 count=1 2>/dev/null)"
+                    IFS= read -rsn1 key
                     if [[ "$key" == 'A' ]]; then
                         ((cur > 0)) && ((cur--)) || true
                         _clear_cat_menu
@@ -779,7 +779,7 @@ interactive_config_flow() {
                 fi
                 _clear_cat_menu
                 _render_cat_menu
-            elif [[ "$key" == $'\n' ]] || [[ "$key" == $'\r' ]]; then
+            elif [[ "$key" == $'\n' ]] || [[ "$key" == $'\r' ]] || [[ "$key" == 'q' ]]; then
                 break
             fi
         done
