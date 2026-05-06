@@ -242,6 +242,7 @@ class OrderStatus(StrEnum):
     live = "live"
     resting = "resting"
     matched = "matched"
+    filled = "filled"  # V2: replaces "matched"
     cancelled = "cancelled"
     expired = "expired"
 
