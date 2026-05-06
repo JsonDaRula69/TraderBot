@@ -171,8 +171,8 @@ class TestEffectiveLimit:
         expected = 1.0 * HARD_LIMITS["max_position_per_market_pct"]
         assert MODERATE.effective_limit("max_position_per_market_pct") == expected
 
-    def test_aggressive_at_80_pct(self) -> None:
-        expected = 0.8 * HARD_LIMITS["max_daily_loss_pct"]
+    def test_aggressive_at_full_limit_for_ceilings(self) -> None:
+        expected = 1.0 * HARD_LIMITS["max_daily_loss_pct"]
         assert AGGRESSIVE.effective_limit("max_daily_loss_pct") == expected
 
     def test_effective_limit_never_exceeds_hard_limit(self) -> None:
@@ -210,8 +210,12 @@ class TestPresets:
 
     def test_aggressive_preset(self) -> None:
         assert AGGRESSIVE.name == "Aggressive"
-        assert AGGRESSIVE.risk_multiplier == 0.8
+        assert AGGRESSIVE.risk_multiplier == 1.0
         assert AGGRESSIVE.signal_weights == {"statistical": 0.3, "sentiment": 0.7}
+
+    def test_aggressive_multiplier_equals_or_exceeds_moderate(self) -> None:
+        """AGGRESSIVE risk_multiplier must not produce smaller positions than MODERATE."""
+        assert AGGRESSIVE.risk_multiplier >= MODERATE.risk_multiplier
 
     def test_presets_dict_contains_all(self) -> None:
         assert "Conservative" in PRESETS
@@ -445,18 +449,15 @@ class TestRiskImmutability:
         for key in HARD_LIMITS:
             assert MODERATE.effective_limit(key) == pytest.approx(1.0 * HARD_LIMITS[key])
 
-    def test_aggressive_below_ceilings_at_floors(self) -> None:
-        """Aggressive profile: ceilings scale down, floors stay at hard limit."""
+    def test_aggressive_equals_hard_limits_for_ceilings(self) -> None:
+        """Aggressive profile at multiplier 1.0 equals hard limits for ceilings."""
         _CEILINGS = AGGRESSIVE._CEILING_KEYS
         _FLOORS = AGGRESSIVE._FLOOR_KEYS
         for key in HARD_LIMITS:
             val = AGGRESSIVE.effective_limit(key)
             if key in _CEILINGS:
-                # Ceiling-type: 0.8 * hard limit (more conservative)
-                assert val == pytest.approx(0.8 * HARD_LIMITS[key])
-                assert val < HARD_LIMITS[key]
+                assert val == pytest.approx(1.0 * HARD_LIMITS[key])
             else:
-                # Floor-type (min_*): max(0.8 * hard, hard) = hard limit (can't go below floor)
                 assert val == HARD_LIMITS[key]
 
     def test_custom_profile_cannot_exceed_hard_limits(self) -> None:

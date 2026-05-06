@@ -19,9 +19,8 @@ class StrategyProfile(BaseModel):
     risk_multiplier is a DOWN-SCALING factor — it can only reduce position
     sizes, never increase them above HARD_LIMITS. A value of 1.0 means the
     profile operates at full hard-limit capacity; 0.5 means all positions are
-    halved. "Aggressive" uses 0.8 (not 1.0) because aggressive profiles trade
-    more categories (higher concentration risk), offset by slightly smaller
-    per-position sizing.
+    halved. Aggressive profiles use 1.0, trading all categories at full size
+    within HARD_LIMITS.
     """
 
     model_config = ConfigDict(strict=True, extra="forbid")
@@ -92,7 +91,7 @@ MODERATE = StrategyProfile(
 
 AGGRESSIVE = StrategyProfile(
     name="Aggressive",
-    risk_multiplier=0.8,
+    risk_multiplier=1.0,
     signal_weights={"statistical": 0.3, "sentiment": 0.7},
     category_focus=["economics", "politics", "technology", "science", "sports", "culture"],
     description="Seeks higher returns; tolerates more volatility",
