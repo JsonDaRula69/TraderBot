@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -223,6 +223,11 @@ class MarketCategory(StrEnum):
 
 
 class OrderSide(StrEnum):
+    """Internal representation. Maps from V2 bid/ask via _parse_order().
+
+    Deprecated for new code; use OrderSideV2 for API-facing operations.
+    """
+
     yes = "yes"
     no = "no"
 
@@ -244,19 +249,19 @@ class OrderRequest(BaseModel):
     client_order_id: str | None = None
     no_price: Annotated[int, Field(ge=0, le=99)] | None = None
 
-    def to_v2_body(self) -> dict[str, Any]:
+    def to_v2_body(self) -> dict[str, str]:
         """Serialize to V2 API request body."""
-        body: dict[str, Any] = {
+        body: dict[str, str] = {
             "ticker": self.ticker,
             "action": self.action,
             "side": self.side.value,
-            "count": self.count,
-            "price_dollars": self.price_cents,
+            "count": str(self.count),
+            "price": f"{self.price_cents / 100:.4f}",
         }
         if self.client_order_id is not None:
             body["client_order_id"] = self.client_order_id
         if self.no_price is not None:
-            body["no_price"] = self.no_price
+            body["no_price"] = str(self.no_price)
         return body
 
 
