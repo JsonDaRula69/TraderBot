@@ -134,9 +134,7 @@ class AuthManager:
                 used_env_key = env_key
                 break
         if env_val is None:
-            env_val = self._env_file_get(env_keys)
-            if env_val is not None:
-                used_env_key = env_keys[0]
+            used_env_key, env_val = self._env_file_get(env_keys)
 
         if env_val is not None:
             if service == "kalshi" and key == "private_key_pem" and used_env_key == "KALSHI_PRIVATE_KEY_PATH":
@@ -225,20 +223,20 @@ class AuthManager:
                 result[service_name][key] = cred is not None
         return result
 
-    def _env_file_get(self, env_keys: list[str]) -> str | None:
+    def _env_file_get(self, env_keys: list[str]) -> tuple[str | None, str | None]:
         """Read a value from .env file when not in process environment."""
         env_path = Path.home() / ".traderbot" / ".env"
         if not env_path.is_file():
-            return None
+            return None, None
         for env_key in env_keys:
             prefix = f"{env_key}="
             try:
                 for line in env_path.read_text(encoding="utf-8").splitlines():
                     if line.startswith(prefix) and not line.lstrip().startswith("#"):
-                        return line[len(prefix):].strip()
+                        return env_key, line[len(prefix):].strip()
             except Exception:
                 continue
-        return None
+        return None, None
 
     @staticmethod
     def _service_key_to_env(service: str, key: str) -> list[str]:
