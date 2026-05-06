@@ -283,6 +283,9 @@ def trade(
     ] = False,
 ) -> None:
     """Place a trade through risk checks."""
+    from traderbot.analysis.odds import implied_probability
+    from traderbot.kalshi.client import KalshiClient
+    from traderbot.kalshi.markets import MarketService
     from traderbot.kalshi.models import PortfolioState, TradeRequest
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
@@ -295,16 +298,37 @@ def trade(
     )
 
     console = Console()
+
+    estimated_prob = 0.5
+    edge_estimate = 0.0
+    market_price_cents = price
+    market_open_interest = 0
+
+    try:
+        client = KalshiClient()
+        service = MarketService(client)
+        market = asyncio.run(service.get_market(ticker))
+        orderbook = asyncio.run(service.get_orderbook(ticker))
+        prob = implied_probability(orderbook)
+        market_price_cents = prob.mid_price_cents
+        estimated_prob = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
+        edge_estimate = abs(estimated_prob - (market_price_cents / 100.0))
+        market_open_interest = market.open_interest
+    except Exception:
+        # Without live data, fall through with defaults that will likely
+        # fail liquidity and edge checks — caller should ensure API connectivity.
+        pass
+
     trade_request = TradeRequest(
         ticker=ticker,
         direction=direction,
         quantity=quantity,
         price_cents=price,
-        estimated_prob=0.5,
+        estimated_prob=estimated_prob,
         confidence=0.5,
-        edge_estimate=0.0,
-        market_price_cents=price,
-        market_open_interest=0,
+        edge_estimate=edge_estimate,
+        market_price_cents=market_price_cents,
+        market_open_interest=market_open_interest,
     )
     portfolio = PortfolioState(
         portfolio_value_cents=100_000_00,
