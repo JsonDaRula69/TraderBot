@@ -105,6 +105,7 @@ class PaperTrader:
         slippage_model: PaperSlippageModel | None = None,
         breaker: CircuitBreaker | None = None,
         profile: TradingProfile | None = None,
+        default_open_interest: int = 5000,
     ) -> None:
         if breaker is None:
             from traderbot.risk.circuit_breaker import CircuitBreaker as _CircuitBreaker
@@ -116,6 +117,7 @@ class PaperTrader:
         self._slippage = slippage_model or PaperSlippageModel()
         self._breaker = breaker
         self._profile = profile
+        self._default_open_interest = default_open_interest
         self._realized_pnl_cents = 0
         _init_paper_positions_table(db_conn)
 
@@ -211,7 +213,14 @@ class PaperTrader:
         # by at least edge_estimate (default 5%). This ensures the min_edge check passes.
         market_price_prob = price_cents / 100.0 if price_cents > 0 else 0.5
         est_prob = min(max(market_price_prob + edge_estimate, 0.01), 0.99)
-        market_oi = 5000  # Reasonable default for paper trading
+        market_oi = self._default_open_interest
+        try:
+            market_svc = self._demo.get_market_service()
+            market = await market_svc.get_market(ticker)
+            if market and market.open_interest:
+                market_oi = market.open_interest
+        except Exception:
+            pass  # Use default when market data is unavailable
 
         trade_request = TradeRequest(
             ticker=ticker,
