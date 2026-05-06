@@ -682,6 +682,66 @@ interactive_config_flow() {
     fi
 }
 
+merge_openclaw_agent_config() {
+    local config_path="${HOME}/.openclaw/openclaw.json"
+    local agent_config="${INSTALL_DIR}/install/openclaw-agent-config.json"
+    local workspace_src="${INSTALL_DIR}/.openclaw/workspace"
+
+    if [[ ! -f "$agent_config" ]]; then
+        echo "Warning: Agent config snippet not found at $agent_config" >&2
+        return 1
+    fi
+
+    mkdir -p "${HOME}/.openclaw"
+
+    if [[ ! -f "$config_path" ]]; then
+        cp "$agent_config" "$config_path"
+        echo "Created $config_path from agent config template."
+    else
+        if command -v jq &>/dev/null; then
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
+            echo "Merged agent config into $config_path (using jq)."
+        elif command -v python3 &>/dev/null; then
+            python3 -c "
+import json, sys
+with open('$config_path') as f: existing = json.load(f)
+with open('$agent_config') as f: new = json.load(f)
+for key in ('agents', 'heartbeat'):
+    if key in new:
+        if key == 'agents' and key in existing:
+            existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
+            new_list = existing.get('agents', {}).get('list', [])
+            for a in new['agents'].get('list', []):
+                if a['id'] not in existing_ids:
+                    new_list.append(a)
+            existing.setdefault('agents', {})['list'] = new_list
+        else:
+            existing[key] = new[key]
+with open('$config_path', 'w') as f:
+    json.dump(existing, f, indent=2)
+"
+            echo "Merged agent config into $config_path (using python3)."
+        else
+            echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
+            echo "Manually merge $agent_config into $config_path" >&2
+            return 1
+        fi
+    fi
+
+    if [[ -d "$workspace_src" ]]; then
+        local agent_ws_dir="${HOME}/.openclaw/workspace/economics"
+        mkdir -p "$agent_ws_dir"
+        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md BOOTSTRAP.md; do
+            if [[ -f "${workspace_src}/${f}" ]]; then
+                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
+            fi
+        done
+        echo "Deployed workspace template files to $agent_ws_dir"
+    fi
+}
+
 main() {
     if [[ $# -gt 0 ]]; then
         case "$1" in
@@ -738,6 +798,9 @@ main() {
 
     echo "Running interactive configuration..."
     interactive_config_flow
+
+    echo "Merging OpenClaw agent config..."
+    merge_openclaw_agent_config || true
 
     echo
     echo "Installation complete!"

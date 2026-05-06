@@ -1,0 +1,16 @@
+{
+  "agents": {
+    "list": [
+      {
+        "id": "traderbot-economics",
+        "name": "TraderBot Economics",
+        "workspace": "$HOME/.openclaw/workspace/economics",
+        "agentDir": "$PROJECT_ROOT/.openclaw/workspace"
+      }
+    ]
+  },
+  "heartbeat": {
+    "every": "30m",
+    "target": "last"
+  }
+}
