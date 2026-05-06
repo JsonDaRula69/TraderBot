@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003 — needed at runtime by Pydantic BaseSettings
@@ -12,7 +13,9 @@ import httpx
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from traderbot.kalshi.models import MarketListResponse, TradeListResponse
+from traderbot.kalshi.models import AccountLimits, MarketListResponse, TradeListResponse
+
+logger = logging.getLogger(__name__)
 from traderbot.kalshi.rate_limit import TokenBucketRateLimiter
 from traderbot.kalshi.signing import auth_headers
 
@@ -142,7 +145,15 @@ class KalshiClient:
                 config = KalshiConfig()  # type: ignore[call-arg]
 
         self._config = config
-        self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
+        if self._config.rate_limit_rps == 0 and not self._config.demo_mode:
+            self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=20.0)
+            self._tier_detected = False
+        elif self._config.rate_limit_rps == 0 and self._config.demo_mode:
+            self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=20.0)
+            self._tier_detected = True
+        else:
+            self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
+            self._tier_detected = True
         self._client = httpx.AsyncClient(base_url=self._config.active_url)
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
@@ -162,11 +173,9 @@ class KalshiClient:
         path: str,
         **params: Any,
     ) -> httpx.Response:
-        """Core request handler with rate limiting, retry, and RSA-PSS auth.
-
-        Acquires the rate-limit semaphore, injects signed auth headers,
-        and retries with exponential backoff + jitter on transient errors.
-        """
+        """Core request handler with rate limiting, retry, and RSA-PSS auth."""
+        if not self._tier_detected and not self._config.demo_mode:
+            await self._detect_tier()
         headers = self._build_auth_headers(method, path)
 
         last_exc: Exception | None = None
@@ -221,6 +230,35 @@ class KalshiClient:
 
     async def delete(self, path: str, **params: Any) -> httpx.Response:
         return await self._request("DELETE", path, **params)
+
+    async def get_api_limits(self) -> AccountLimits:
+        """Fetch current API tier limits from GET /account/limits."""
+        from traderbot.kalshi.models import AccountLimits
+
+        resp = await self.get("/account/limits")
+        resp.raise_for_status()
+        data = resp.json()
+        return AccountLimits.model_validate(data)
+
+    async def _detect_tier(self) -> None:
+        """Query GET /account/limits and reconfigure rate limiter."""
+        self._tier_detected = True
+        try:
+            limits = await self.get_api_limits()
+            self._rate_limiter.reconfigure(
+                read_rate=float(limits.read.refill_rate),
+                write_rate=float(limits.write.refill_rate),
+                read_burst=limits.read.bucket_capacity,
+                write_burst=limits.write.bucket_capacity,
+            )
+            logger.info(
+                "Auto-detected Kalshi tier '%s': read=%d/s write=%d/s",
+                limits.usage_tier,
+                limits.read.refill_rate,
+                limits.write.refill_rate,
+            )
+        except Exception as exc:
+            logger.debug("Tier auto-detect failed, using config defaults: %s", exc)
 
     async def close(self) -> None:
         await self._client.aclose()

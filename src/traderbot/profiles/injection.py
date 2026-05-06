@@ -24,7 +24,7 @@ from traderbot.profiles.injection_strategies import (
 logger = logging.getLogger(__name__)
 
 
-def propagate_workspace_files(profile, target_dir: Path) -> None:
+def propagate_workspace_files(profile, target_dir: Path, interactive: bool = True) -> None:
     """Deploy workspace templates using merge strategies per FILE_STRATEGIES."""
     _src_dir = Path(__file__).resolve().parent.parent.parent
     template_dir = _src_dir.parent / ".openclaw" / "workspace"
@@ -65,9 +65,12 @@ def propagate_workspace_files(profile, target_dir: Path) -> None:
         elif strategy == InjectionStrategy.INIT_IF_MISSING:
             init_if_missing(template_content, target_path)
         elif strategy == InjectionStrategy.ASK_THEN_MERGE:
-            markers = FENCED_BLOCK_MARKERS.get(filename)
-            if markers:
-                ask_then_merge(template_content, target_path, markers, filename)
+            if interactive:
+                markers = FENCED_BLOCK_MARKERS.get(filename)
+                if markers:
+                    ask_then_merge(template_content, target_path, markers, filename)
+                else:
+                    init_if_missing(template_content, target_path)
             else:
                 init_if_missing(template_content, target_path)
 

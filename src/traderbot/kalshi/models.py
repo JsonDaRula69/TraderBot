@@ -342,3 +342,22 @@ class ExchangeStatus(BaseModel):
     is_open: bool
     description: str = ""
     active_markets: Annotated[int, Field(ge=0)] = 0
+
+
+class BucketLimit(BaseModel):
+    """Token-bucket budget for one rate-limit bucket (read or write)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    refill_rate: int
+    bucket_capacity: int
+
+
+class AccountLimits(BaseModel):
+    """API tier limits from GET /account/limits."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    usage_tier: str
+    read: BucketLimit
+    write: BucketLimit

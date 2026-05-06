@@ -45,7 +45,7 @@ class KeyringKalshiConfig(BaseSettings):
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     demo_mode: bool = False
-    rate_limit_rps: float = 20.0
+    rate_limit_rps: float = 20.0  # 0 = auto-detect via GET /account/limits
     max_retries: int = 3
     retry_base_delay: float = 1.0
 

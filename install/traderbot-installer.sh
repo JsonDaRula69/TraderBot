@@ -568,18 +568,20 @@ setup_api_credentials() {
         echo "Kalshi credentials stored."
         echo
         echo "Select Kalshi API tier:"
-        echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
-        echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
-        echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
-        echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
-        echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
+        echo "  1) Auto-detect (recommended) — queries GET /account/limits at startup"
+        echo "  2) Basic     — free, 200 read / 100 write tokens/sec"
+        echo "  3) Advanced  — 300 read / 300 write tokens/sec"
+        echo "  4) Premier   — 1000 read / 1000 write tokens/sec"
+        echo "  5) Paragon   — 2000 read / 2000 write tokens/sec"
+        echo "  6) Prime     — 4000 read / 4000 write tokens/sec"
         read -r -p "Tier [1]: " kalshi_tier
         case "$kalshi_tier" in
-            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
-            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
-            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
-            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
-            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
+            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
+            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
+            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
+            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
+            6) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
+            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "0" ;;
         esac
     fi
 
@@ -871,7 +873,7 @@ interactive_config_flow() {
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         set +e
-        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$profile_name" "$agent_name" 2>&1)
+        TOKEN_OUTPUT=$("$tb_cmd" profile assign --non-interactive "$profile_name" "$agent_name" 2>&1)
         local assign_exit=$?
         set -e
         if [[ $assign_exit -ne 0 ]]; then

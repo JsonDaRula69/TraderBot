@@ -2118,6 +2118,9 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
 def profile_assign(
     profile_name: str,
     agent_id: str,
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", "-n", help="Skip interactive prompts (use defaults)"
+    ),
 ) -> None:
     """Assign a token to an agent for profile access."""
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
@@ -2127,14 +2130,12 @@ def profile_assign(
     console = Console()
     registry = ProfileRegistry()
 
-    # Verify profile exists
     if not registry.profile_exists(profile_name):
         console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
         raise typer.Exit(1)
 
     profile = registry.get_profile(profile_name)
 
-    # Generate and assign token
     try:
         token = generate_token()
         assign_token(profile_name, agent_id, token)
@@ -2151,7 +2152,7 @@ def profile_assign(
                 )
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
-                propagate_workspace_files(profile, agent_path)
+                propagate_workspace_files(profile, agent_path, interactive=not non_interactive)
                 inject_token(str(agent_path), token)
                 console.print(
                     f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
