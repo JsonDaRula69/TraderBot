@@ -873,20 +873,20 @@ interactive_config_flow() {
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         set +e
-        TOKEN_OUTPUT=$("$tb_cmd" profile assign --non-interactive --token-only "$profile_name" "$agent_name" 2>&1)
+        local assign_err=""
+        token_value=$("$tb_cmd" profile assign --non-interactive --token-only "$profile_name" "$agent_name" 2>/tmp/tb_assign_err_$$)
         local assign_exit=$?
         set -e
         if [[ $assign_exit -ne 0 ]]; then
-            echo "Error: assign failed (exit code $assign_exit) with output:" >&2
-            echo "$TOKEN_OUTPUT" >&2
+            assign_err=$(cat /tmp/tb_assign_err_$$ 2>/dev/null)
+            echo "Error: assign failed (exit code $assign_exit):" >&2
+            echo "$assign_err" >&2
             echo "Try manually: $tb_cmd profile assign $profile_name $agent_name" >&2
-            TOKEN_OUTPUT=""
             token_value=""
         else
-            token_value="$TOKEN_OUTPUT"
-            echo "Assigning agent $agent_name to profile $profile_name..."
             echo "Token: ****${token_value: -4}"
         fi
+        rm -f /tmp/tb_assign_err_$$
     else
         echo "Assignment skipped. TraderBot not found."
     fi
