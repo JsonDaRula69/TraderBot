@@ -132,6 +132,7 @@ class Market(BaseModel):
         mapping = {
             "active": "open",
             "pending": "open",
+            "initialized": "initialized",
             "closed": "closed",
             "settled": "settled",
             "open": "open",
