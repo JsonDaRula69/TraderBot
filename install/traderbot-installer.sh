@@ -758,6 +758,9 @@ interactive_config_flow() {
 
         _render_cat_menu
 
+        # Drain any buffered input from previous reads
+        while read -rsn1 -t 0.01 drain_key 2>/dev/null; [ -n "$drain_key" ]; do :; done
+
         local key
         while true; do
             read -rsn1 key
