@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from traderbot.simulation.profiles import StrategyProfile
 
 
+class BacktestError(Exception):
+    """Raised when the backtest encounters an invalid state."""
+
+
 @dataclass(frozen=True)
 class Context:
     portfolio: PortfolioState
@@ -283,9 +287,14 @@ class BacktestEngine:
         positions_value = sum(p.entry_price_cents * p.quantity for p in positions.values())
         position_count = len(positions)
 
+        if portfolio_value_cents <= 0:
+            raise BacktestError(f"Portfolio value must be positive, got {portfolio_value_cents}")
+        if peak_value_cents <= 0:
+            raise BacktestError(f"Peak value must be positive, got {peak_value_cents}")
+
         return PortfolioState(
-            portfolio_value_cents=max(1, portfolio_value_cents),
-            peak_value_cents=max(1, peak_value_cents),
+            portfolio_value_cents=portfolio_value_cents,
+            peak_value_cents=peak_value_cents,
             current_positions_value_cents=positions_value,
             today_realized_loss_cents=daily_loss_cents,
             today_unrealized_loss_cents=0,

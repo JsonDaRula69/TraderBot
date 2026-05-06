@@ -17,6 +17,7 @@ from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.simulation.data_loader import DataLoader
 from traderbot.simulation.engine import (
     BacktestEngine,
+    BacktestError,
     BacktestResult,
     Context,
     Signal,
@@ -655,3 +656,59 @@ class TestBacktestEngine:
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
         # With very small bankroll, position limit (5%) = 50 cents, can't buy much
         assert isinstance(result, BacktestResult)
+
+
+class TestBacktestError:
+    async def test_backtest_raises_on_zero_portfolio(self, tmp_path: Path) -> None:
+        market = _make_market(ticker="KX-TEST", settlement_result=True)
+        mock_loader = AsyncMock(spec=DataLoader)
+        mock_loader.get_markets.return_value = [market]
+        mock_loader.get_trades.return_value = []
+        mock_loader.get_outcomes.return_value = {"KX-TEST": True}
+
+        class PassiveStrategy:
+            def on_market_open(self, market: Market, context: Context) -> list[Signal]:
+                return []
+
+            def on_trade(self, trade: Trade, context: Context) -> list[Signal]:
+                return []
+
+            def on_settle(self, market: Market, outcome: bool, context: Context) -> None:
+                pass
+
+        engine = BacktestEngine(
+            data_loader=mock_loader,
+            strategy=PassiveStrategy(),
+            initial_bankroll_cents=0,
+            state_dir=tmp_path,
+        )
+        from datetime import date
+        with pytest.raises(BacktestError, match="Portfolio value must be positive"):
+            await engine.run(date(2026, 1, 1), date(2026, 3, 31))
+
+    async def test_backtest_raises_on_negative_portfolio(self, tmp_path: Path) -> None:
+        market = _make_market(ticker="KX-TEST", settlement_result=True)
+        mock_loader = AsyncMock(spec=DataLoader)
+        mock_loader.get_markets.return_value = [market]
+        mock_loader.get_trades.return_value = []
+        mock_loader.get_outcomes.return_value = {"KX-TEST": True}
+
+        class PassiveStrategy:
+            def on_market_open(self, market: Market, context: Context) -> list[Signal]:
+                return []
+
+            def on_trade(self, trade: Trade, context: Context) -> list[Signal]:
+                return []
+
+            def on_settle(self, market: Market, outcome: bool, context: Context) -> None:
+                pass
+
+        engine = BacktestEngine(
+            data_loader=mock_loader,
+            strategy=PassiveStrategy(),
+            initial_bankroll_cents=-100,
+            state_dir=tmp_path,
+        )
+        from datetime import date
+        with pytest.raises(BacktestError, match="Portfolio value must be positive"):
+            await engine.run(date(2026, 1, 1), date(2026, 3, 31))
