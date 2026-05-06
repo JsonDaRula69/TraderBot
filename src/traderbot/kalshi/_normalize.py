@@ -46,9 +46,14 @@ def _map_category(raw: str | None) -> MarketCategory | None:
 
 
 def _normalize_market(raw: dict[str, Any]) -> Market:
-    close_time_val = raw.get("close_time")
-    if isinstance(close_time_val, int):
-        close_time_val = _unix_to_datetime(close_time_val)
+    raw_close = raw.get("close_time")
+    if isinstance(raw_close, int):
+        close_time_val = _unix_to_datetime(raw_close)
+    elif isinstance(raw_close, str):
+        from datetime import datetime as dt
+        close_time_val = dt.fromisoformat(raw_close.replace("Z", "+00:00"))
+    else:
+        close_time_val = None
 
     category_str = raw.get("category")
 
@@ -59,7 +64,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         volume=int(raw["volume"]) if raw.get("volume") else 0,
         open_interest=int(raw["open_interest"]) if raw.get("open_interest") else 0,
         close_time=close_time_val,
-        status=raw.get("state", raw.get("status")),
+        status=raw.get("state", raw.get("status", "open")),
         event_ticker=raw.get("event_ticker", ""),
         category=category_str,
         market_category=_map_category(category_str),

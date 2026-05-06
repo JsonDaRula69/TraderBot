@@ -106,14 +106,14 @@ class Market(BaseModel):
 
     ticker: str
     question: str
-    outcome_prices: list[str]
-    volume: Annotated[int, Field(ge=0)]
-    open_interest: Annotated[int, Field(ge=0)]
-    close_time: datetime
-    status: Literal["open", "closed", "settled"] = Field(
+    outcome_prices: list[str] | None = None
+    volume: Annotated[int, Field(ge=0)] = 0
+    open_interest: Annotated[int, Field(ge=0)] = 0
+    close_time: datetime | None = None
+    status: str = Field(
         validation_alias=AliasChoices("status", "state"),
     )
-    event_ticker: str
+    event_ticker: str = ""
 
     category: str | None = None
     market_category: MarketCategory | None = None
@@ -125,6 +125,20 @@ class Market(BaseModel):
         if not isinstance(v, str):
             return None
         return v
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, v: object) -> str:
+        mapping = {
+            "active": "open",
+            "pending": "open",
+            "closed": "closed",
+            "settled": "settled",
+            "open": "open",
+        }
+        if isinstance(v, str):
+            return mapping.get(v.lower(), v.lower())
+        return str(v)
 
 
 class OrderBook(BaseModel):
