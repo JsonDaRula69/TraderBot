@@ -61,7 +61,7 @@ class TestPlaceOrder:
                 action="buy",
                 side=OrderSide.yes,
                 count=10,
-                yes_price=55,
+                price_cents=55,
             )
             result = await service.place_order(order_request)
 
@@ -207,7 +207,7 @@ class TestOrderRequestValidation:
                 action="buy",
                 side=OrderSide.yes,
                 count=0,
-                yes_price=55,
+                price_cents=55,
             )
 
     def test_order_request_model_strict(self) -> None:
@@ -217,7 +217,7 @@ class TestOrderRequestValidation:
                 action="buy",
                 side=OrderSide.yes,
                 count=10,
-                yes_price=55,
+                price_cents=55,
                 extra_field="bad",
             )
 
@@ -260,7 +260,7 @@ class TestModelStrictness:
                 ticker="KX",
                 side=OrderSide.yes,
                 count=10,
-                yes_price=55,
+                price_cents=55,
             )
 
     def test_order_request_negative_quantity(self) -> None:
@@ -270,7 +270,7 @@ class TestModelStrictness:
                 action="buy",
                 side=OrderSide.yes,
                 count=-1,
-                yes_price=55,
+                price_cents=55,
             )
 
     def test_order_request_price_zero(self) -> None:

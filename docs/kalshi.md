@@ -116,7 +116,7 @@ from traderbot.kalshi import KalshiClient
 client = KalshiClient()  # reads env vars automatically
 markets = await client.list_markets(state="open")
 orderbook = await client.get_orderbook("KXBTCD-26MAR31-T55000")
-result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", action="buy", side="yes", yes_price=55, count=10)
+result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", action="buy", side="yes", price_cents=55, count=10)
 ```
 
 ## Market Data Model
