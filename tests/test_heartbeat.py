@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
@@ -388,7 +389,7 @@ class TestSystemHealth:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = step_system_health(conn)
+        result = asyncio.run(step_system_health(conn))
         assert result.db_integrity == "ok"
         conn.close()
 
@@ -396,7 +397,7 @@ class TestSystemHealth:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = step_system_health(conn)
+        result = asyncio.run(step_system_health(conn))
         assert result.data_freshness == "no_decisions_yet"
         conn.close()
 
@@ -405,16 +406,27 @@ class TestSystemHealth:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
         _insert_decision(conn, hours_ago=48)
-        result = step_system_health(conn)
+        result = asyncio.run(step_system_health(conn))
         assert any("Stale" in a for a in result.alerts)
         conn.close()
 
     def test_api_unavailable(self):
+        import asyncio
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
         with patch.dict("sys.modules", {"traderbot.kalshi.client": None}):
-            step_system_health(conn)
+            result = asyncio.run(step_system_health(conn))
+        conn.close()
+
+    def test_system_health_db_integrity_without_row_factory(self):
+        import asyncio
+
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY, timestamp TEXT)")
+        with patch.dict("sys.modules", {"traderbot.kalshi.client": None}):
+            result = asyncio.run(step_system_health(conn))
+        assert result.db_integrity == "ok"
         conn.close()
 
 
@@ -429,7 +441,7 @@ class TestHeartbeatCycle:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
         hb_path = Path("/tmp/test_heartbeat_empty.md")
-        result = run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True)
+        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True))
         assert "performance_review" in result.steps_completed
         assert "decision_review" in result.steps_completed
         assert "bayesian_adaptation" in result.steps_completed
@@ -450,7 +462,7 @@ class TestHeartbeatCycle:
         _insert_decision(conn, direction="yes", price=60, actual_result=0, hours_ago=3)
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
-        result = run_heartbeat_cycle(conn, heartbeat_path=hb_path)
+        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         assert result.performance.trade_count == 3
         assert result.decisions.closed_count == 3
         conn.close()
@@ -461,7 +473,7 @@ class TestHeartbeatCycle:
         _init_db(conn)
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
-        run_heartbeat_cycle(conn, heartbeat_path=hb_path)
+        asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         assert hb_path.exists()
         content = hb_path.read_text()
         assert "Heartbeat:" in content
@@ -478,7 +490,7 @@ class TestHeartbeatCycle:
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         before = datetime.now(UTC)
-        run_heartbeat_cycle(conn, heartbeat_path=hb_path)
+        asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         after = datetime.now(UTC)
 
         content = hb_path.read_text()
@@ -494,7 +506,7 @@ class TestHeartbeatCycle:
         _init_db(conn)
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
-        run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True)
+        asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True))
         assert not hb_path.exists()
         conn.close()
 
@@ -516,7 +528,7 @@ class TestHeartbeatCycle:
 
         monkeypatch.setattr("traderbot.updater.fetch_latest_version", mock_fetch)
 
-        result = run_heartbeat_cycle(conn, dry_run=True)
+        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
         assert "update_check" in result.steps_completed
         assert api_called["count"] == 0
         conn.close()
@@ -525,7 +537,7 @@ class TestHeartbeatCycle:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = run_heartbeat_cycle(conn, dry_run=True)
+        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
         expected_order = [
             "performance_review",
             "decision_review",
@@ -631,7 +643,7 @@ class TestEdgeCases:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = run_heartbeat_cycle(conn, dry_run=True)
+        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
         assert result.performance.trade_count == 0
         assert result.decisions.closed_count == 0
         assert result.adaptation.skipped_reason != ""
@@ -642,7 +654,7 @@ class TestEdgeCases:
         conn.row_factory = sqlite3.Row
         _init_db(conn)
         with patch.dict("sys.modules", {"traderbot.kalshi.client": None}):
-            result = step_system_health(conn)
+            result = asyncio.run(step_system_health(conn))
             assert result.api_connectivity in ("unavailable", "not_checked", "unknown")
         conn.close()
 
@@ -668,7 +680,7 @@ class TestEdgeCases:
         _init_db(conn)
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
-        run_heartbeat_cycle(conn, heartbeat_path=hb_path)
+        asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         content = hb_path.read_text()
         assert "NORMAL" in content
         conn.close()
@@ -679,7 +691,33 @@ class TestEdgeCases:
         _init_db(conn)
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
-        run_heartbeat_cycle(conn, heartbeat_path=hb_path)
+        asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         content = hb_path.read_text()
         assert "Alerts" in content
         conn.close()
+
+
+class TestSystemHealthPing:
+    def test_system_health_pings_api(self, tmp_path):
+        import asyncio
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _init_db(conn)
+
+        result = asyncio.run(step_system_health(conn))
+        assert result.api_connectivity in ("ok", "degraded", "unavailable")
+        conn.close()
+
+    def test_system_health_api_unreachable(self, tmp_path):
+        import asyncio
+        from unittest.mock import patch
+
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("unreachable")):
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            _init_db(conn)
+
+            result = asyncio.run(step_system_health(conn))
+            assert result.api_connectivity == "unavailable"
+            conn.close()

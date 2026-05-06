@@ -304,7 +304,7 @@ def step_circuit_breaker_check(
     )
 
 
-def step_system_health(
+async def step_system_health(
     db_conn: sqlite3.Connection,
 ) -> SystemHealthReview:
     """Step 6: Aggregate system health — API connectivity, DB integrity, data freshness."""
@@ -313,7 +313,7 @@ def step_system_health(
     # DB integrity check
     try:
         result = db_conn.execute("PRAGMA integrity_check").fetchone()
-        db_ok = result is not None and result["integrity_check"] == "ok"
+        db_ok = result is not None and result[0] == "ok"
         db_status = "ok" if db_ok else "corrupt"
     except Exception as exc:
         db_status = f"error: {exc}"
@@ -324,8 +324,8 @@ def step_system_health(
         row = db_conn.execute(
             "SELECT MAX(timestamp) as latest FROM decisions"
         ).fetchone()
-        if row is not None and row["latest"] is not None:
-            latest = datetime.fromisoformat(row["latest"])
+        if row is not None and row[0] is not None:
+            latest = datetime.fromisoformat(row[0])
             age_hours = (datetime.now(UTC) - latest).total_seconds() / 3600
             freshness = f"last_data_{age_hours:.1f}h_ago"
             if age_hours > 24:
@@ -335,16 +335,31 @@ def step_system_health(
     except Exception:
         freshness = "unknown"
 
-    # API connectivity check (non-blocking — just report if we tried)
     api_status = "not_checked"
     try:
-        from traderbot.kalshi.client import KalshiClient
+        import asyncio
 
-        _client = KalshiClient  # available, but don't instantiate
-        api_status = "available"
+        from traderbot.kalshi.client import KalshiClient
+        from traderbot.kalshi.config import KalshiConfig
+
+        config = KalshiConfig()
+        client = KalshiClient(config)
+        try:
+            response = await asyncio.wait_for(client.get("/platform/status"), timeout=5.0)
+            status = response.json() if hasattr(response, "json") else response
+            api_ok = isinstance(status, dict) and status.get("status") == "alive"
+        except Exception:
+            try:
+                response = await asyncio.wait_for(client.get("/"), timeout=5.0)
+                api_ok = response.status_code < 500
+            except Exception:
+                api_ok = False
+        finally:
+            await asyncio.wait_for(client.close(), timeout=2.0)
+        api_status = "ok" if api_ok else "degraded"
     except Exception:
         api_status = "unavailable"
-        alerts.append("Kalshi API client unavailable")
+        alerts.append("Kalshi API unreachable")
 
     return SystemHealthReview(
         api_connectivity=api_status,
@@ -359,7 +374,7 @@ def step_system_health(
 # ---------------------------------------------------------------------------
 
 
-def run_heartbeat_cycle(
+async def run_heartbeat_cycle(
     conn: sqlite3.Connection,
     heartbeat_path: Path | None = None,
     state_path: Path | None = None,
@@ -396,7 +411,7 @@ def run_heartbeat_cycle(
     steps_completed.append("circuit_breaker_check")
 
     # Step 6: System health
-    system_health = step_system_health(conn)
+    system_health = await step_system_health(conn)
     steps_completed.append("system_health")
 
     # Step 7: Update check (respects user-configured interval and enabled flag)
