@@ -137,7 +137,7 @@ async def run_profiles(
             slippage_model=engine._slippage,
             state_dir=engine._state_dir,
         )
-        result = await profile_engine.run(start, end)
+        result = await profile_engine.run(start, end, profile=profile.to_trading_profile())
         results[profile.name] = result
     return results
 

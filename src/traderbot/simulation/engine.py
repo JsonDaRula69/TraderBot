@@ -17,6 +17,7 @@ from traderbot.risk.circuit_breaker import CircuitBreaker, CircuitBreakerState
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from traderbot.profiles.models import TradingProfile
     from traderbot.simulation.data_loader import DataLoader
     from traderbot.simulation.profiles import StrategyProfile
 
@@ -97,8 +98,15 @@ class BacktestEngine:
         self._initial_bankroll_cents = initial_bankroll_cents
         self._slippage = slippage_model or SlippageModel()
         self._state_dir = state_dir or get_data_dir()
+        self._profile: TradingProfile | None = None
 
-    async def run(self, start: date, end: date) -> BacktestResult:
+    async def run(
+        self,
+        start: date,
+        end: date,
+        profile: TradingProfile | None = None,
+    ) -> BacktestResult:
+        self._profile = profile
         markets = await self._data_loader.get_markets(start, end)
 
         trades_by_ticker: dict[str, list[Trade]] = {}
@@ -323,7 +331,7 @@ class BacktestEngine:
                 market_open_interest=market.open_interest,
             )
 
-            sized = evaluate_trade(trade_request, context.portfolio, breaker)
+            sized = evaluate_trade(trade_request, context.portfolio, breaker, profile=self._profile)
 
             if sized > 0:
                 actual_quantity = min(signal.quantity, sized // max(fill_price, 1))
