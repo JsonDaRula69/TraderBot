@@ -763,11 +763,11 @@ interactive_config_flow() {
 
         local key
         while true; do
-            read -rsn1 key
+            IFS='' read -rsn1 key
             if [[ "$key" == $'\x1b' ]]; then
-                read -rsn1 -t 0.1 key
+                IFS='' read -rsn1 -t 0.1 key
                 if [[ "$key" == '[' ]]; then
-                    read -rsn1 -t 0.1 key
+                    IFS='' read -rsn1 -t 0.1 key
                     if [[ "$key" == 'A' ]]; then
                         ((cur > 0)) && ((cur--)) || true
                         _clear_cat_menu
