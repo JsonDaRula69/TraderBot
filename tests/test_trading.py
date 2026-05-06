@@ -250,6 +250,7 @@ class TestModelStrictness:
         assert OrderStatus.live.value == "live"
         assert OrderStatus.resting.value == "resting"
         assert OrderStatus.matched.value == "matched"
+        assert OrderStatus.filled.value == "filled"
         assert OrderStatus.cancelled.value == "cancelled"
         assert OrderStatus.expired.value == "expired"
 
