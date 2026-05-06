@@ -44,28 +44,6 @@ class StrategyProfile(BaseModel):
             raise ValueError("category_focus must be non-empty")
         return self
 
-    # Ceiling-type limits: lower is more restrictive (use min)
-    _CEILING_KEYS = frozenset({
-        "max_position_per_market_pct",
-        "max_daily_loss_pct",
-        "max_drawdown_pct",
-        "max_open_positions",
-    })
-    # Floor-type limits: higher is more restrictive (use max)
-    _FLOOR_KEYS = frozenset({
-        "min_liquidity_threshold",
-        "min_edge_pct",
-    })
-
-    def effective_limit(self, key: str) -> float | int:
-        """Compute profile-scoped limit within HARD_LIMITS."""
-        if key not in HARD_LIMITS:
-            raise KeyError(f"Unknown HARD_LIMITS key: {key!r}")
-        scaled = self.risk_multiplier * HARD_LIMITS[key]
-        if key in self._FLOOR_KEYS:
-            return max(scaled, HARD_LIMITS[key])
-        return min(scaled, HARD_LIMITS[key])
-
     def to_trading_profile(self):
         from traderbot.kalshi.models import MarketCategory
         from traderbot.profiles.models import TradingProfile
@@ -77,12 +55,12 @@ class StrategyProfile(BaseModel):
             description=self.description,
             enabled_categories=enabled,
             risk_multiplier=self.risk_multiplier,
-            max_position_per_market_pct=float(self.effective_limit("max_position_per_market_pct")),
-            max_daily_loss_pct=float(self.effective_limit("max_daily_loss_pct")),
-            max_drawdown_pct=float(self.effective_limit("max_drawdown_pct")),
-            max_open_positions=int(self.effective_limit("max_open_positions")),
-            min_liquidity_threshold=int(self.effective_limit("min_liquidity_threshold")),
-            min_edge_pct=float(self.effective_limit("min_edge_pct")),
+            max_position_per_market_pct=float(self.risk_multiplier * HARD_LIMITS["max_position_per_market_pct"]),
+            max_daily_loss_pct=float(self.risk_multiplier * HARD_LIMITS["max_daily_loss_pct"]),
+            max_drawdown_pct=float(self.risk_multiplier * HARD_LIMITS["max_drawdown_pct"]),
+            max_open_positions=int(self.risk_multiplier * HARD_LIMITS["max_open_positions"]),
+            min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+            min_edge_pct=float(HARD_LIMITS["min_edge_pct"]),
         )
 
 

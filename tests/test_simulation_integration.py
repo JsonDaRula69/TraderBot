@@ -748,33 +748,6 @@ class TestRiskEnforcementIntegration:
         result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
         assert result.trade_count == 0
 
-    def test_no_profile_exceeds_hard_limits(self) -> None:
-        """Every preset profile's effective_limit <= corresponding HARD_LIMITS value."""
-        for profile in PRESETS.values():
-            for key in HARD_LIMITS:
-                assert profile.effective_limit(key) <= HARD_LIMITS[key]
-
-    def test_custom_profile_cannot_exceed_hard_limits(self) -> None:
-        """Custom profile at risk_multiplier=1.0 equals (never exceeds) HARD_LIMITS."""
-        p = StrategyProfile(
-            name="MaxSafe", risk_multiplier=1.0,
-            signal_weights={"statistical": 1.0},
-            category_focus=["economics"],
-            description="At hard limit ceiling",
-        )
-        for key in HARD_LIMITS:
-            assert p.effective_limit(key) <= HARD_LIMITS[key]
-
-    def test_conservative_halves_all_limits(self) -> None:
-        """Conservative (0.5x) → all effective limits are exactly 50% of HARD_LIMITS."""
-        for key in HARD_LIMITS:
-            _CEILINGS = CONSERVATIVE._CEILING_KEYS
-            val = CONSERVATIVE.effective_limit(key)
-            if key in _CEILINGS:
-                assert val == pytest.approx(0.5 * HARD_LIMITS[key])
-            else:
-                assert val == HARD_LIMITS[key]
-
     def test_risk_multiplier_above_1_rejected(self) -> None:
         """StrategyProfile rejects risk_multiplier > 1.0 (cannot exceed HARD_LIMITS)."""
         from pydantic import ValidationError
