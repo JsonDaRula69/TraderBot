@@ -497,3 +497,43 @@ class TestWalEntryModel:
         )
         assert entry.action == WalAction.SELL
         assert entry.direction == "no"
+
+
+class TestWALFdSafety:
+    def test_wal_append_entry_file_open_failure(self, tmp_path: Path) -> None:
+        """If open() raises, append_entry should not reference unbound fd."""
+        import unittest.mock
+
+        entry = WalEntry(
+            intent_id="WAL-FDTEST1",
+            timestamp=datetime.now(UTC),
+            action=WalAction.BUY,
+            ticker="KX-TEST",
+            direction="yes",
+            quantity=1,
+            price_cents=50,
+            reason="test",
+        )
+        session_file = tmp_path / "SESSION-STATE.md"
+        session_file.write_text("# Session State\n\n## Pending Actions\n\n(none)\n\n## Completed Actions\n\n(none)\n")
+        with unittest.mock.patch("builtins.open", side_effect=OSError("permission denied")):
+            with pytest.raises(OSError, match="permission denied"):
+                write_intent(session_file, entry)
+
+    def test_wal_update_status_closes_fd(self, tmp_path: Path) -> None:
+        """update_status must always close the file descriptor, even on error paths."""
+        session_file = tmp_path / "SESSION-STATE.md"
+        session_file.write_text(
+            "# Session State\n\n## Pending Actions\n\n"
+            "### intent-1\n- Action: BUY\n- Direction: yes\n- Status: PENDING\n\n"
+            "## Completed Actions\n\n(none)\n"
+        )
+
+        result = update_status(session_file, "intent-1", WalStatus.COMPLETED)
+
+        fd_after = open(session_file, "r")
+        content_after = fd_after.read()
+        fd_after.close()
+
+        assert result is True
+        assert "Status: COMPLETED" in content_after
