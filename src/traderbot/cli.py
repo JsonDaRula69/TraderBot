@@ -2121,16 +2121,19 @@ def profile_assign(
     non_interactive: bool = typer.Option(
         False, "--non-interactive", "-n", help="Skip interactive prompts (use defaults)"
     ),
+    token_only: bool = typer.Option(
+        False, "--token-only", help="Output only the raw token (for scripting)"
+    ),
 ) -> None:
     """Assign a token to an agent for profile access."""
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
 
-    console = Console()
     registry = ProfileRegistry()
 
     if not registry.profile_exists(profile_name):
+        console = Console()
         console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
         raise typer.Exit(1)
 
@@ -2139,31 +2142,44 @@ def profile_assign(
     try:
         token = generate_token()
         assign_token(profile_name, agent_id, token)
-        console.print(
-            f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
-        )
-        console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
+
+        if token_only:
+            print(token)
+        else:
+            console = Console()
+            console.print(
+                f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
+            )
+            console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
 
         try:
             agent_path = _resolve_agent_path(agent_id)
             if not agent_path or not agent_path.exists():
-                console.print(
-                    f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'"
-                )
-                console.print("Token assigned but not injected into TOOLS.md")
+                if not token_only:
+                    console.print(
+                        f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'"
+                    )
+                    console.print("Token assigned but not injected into TOOLS.md")
             else:
                 propagate_workspace_files(profile, agent_path, interactive=not non_interactive)
                 inject_token(str(agent_path), token)
-                console.print(
-                    f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
-                )
+                if not token_only:
+                    console.print(
+                        f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
+                    )
         except FileNotFoundError:
-            console.print("[yellow]Warning:[/yellow] Agent directory not found")
-            console.print("Token assigned but not injected into TOOLS.md")
+            if not token_only:
+                console.print("[yellow]Warning:[/yellow] Agent directory not found")
+                console.print("Token assigned but not injected into TOOLS.md")
         except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
-            console.print("Token assigned but not injected")
+            if not token_only:
+                console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
+                console.print("Token assigned but not injected")
     except ValueError as e:
+        if token_only:
+            print(f"ERROR: {e}", file=sys.stderr)
+            raise typer.Exit(1) from None
+        console = Console()
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
 
