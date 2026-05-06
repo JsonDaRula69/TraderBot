@@ -197,7 +197,7 @@ class TestOrderRequestValidation:
                 action="buy",
                 side=OrderSide.yes,
                 count=10,
-                yes_price=100,
+                price_cents=100,
             )
 
     def test_place_order_zero_quantity(self) -> None:
@@ -280,5 +280,21 @@ class TestModelStrictness:
                 action="buy",
                 side=OrderSide.yes,
                 count=10,
-                yes_price=0,
+                price_cents=0,
             )
+
+    def test_to_v2_body_uses_v2_field_names(self) -> None:
+        req = OrderRequest(
+            ticker="KXBTCD-26MAR31-T55000",
+            action="buy",
+            side=OrderSide.yes,
+            count=10,
+            price_cents=55,
+        )
+        body = req.to_v2_body()
+        assert body["price"] == "0.5500"
+        assert body["count"] == "10"
+        assert body["ticker"] == "KXBTCD-26MAR31-T55000"
+        assert body["side"] == "yes"
+        assert "price_dollars" not in body
+        assert "yes_price" not in body
