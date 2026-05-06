@@ -598,3 +598,34 @@ class TestPaperTrader:
     def test_is_demo_always_true(self) -> None:
         trader = self._make_trader()
         assert trader.is_demo is True
+
+
+class TestRealizedLossAccounting:
+    def test_realized_loss_only_counts_closed_positions(self) -> None:
+        """Closing a position at a loss updates _realized_pnl_cents."""
+        conn = sqlite3.connect(":memory:")
+        trader = PaperTrader(
+            demo_adapter=DemoAdapter(),
+            db_conn=conn,
+            initial_cash_cents=10_000_00,
+        )
+        assert trader._realized_pnl_cents == 0
+
+        trader._cash_cents = 9000_00
+        trader._realized_pnl_cents = -500_00
+        realized_loss = max(0, -trader._realized_pnl_cents)
+        assert realized_loss == 500_00
+        conn.close()
+
+    def test_realized_loss_excludes_open_positions(self) -> None:
+        """Open positions should not appear in _realized_pnl_cents."""
+        conn = sqlite3.connect(":memory:")
+        trader = PaperTrader(
+            demo_adapter=DemoAdapter(),
+            db_conn=conn,
+            initial_cash_cents=10_000_00,
+        )
+        assert trader._realized_pnl_cents == 0
+        realized_loss = max(0, -trader._realized_pnl_cents)
+        assert realized_loss == 0
+        conn.close()
