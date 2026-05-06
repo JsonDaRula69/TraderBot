@@ -545,14 +545,14 @@ setup_api_credentials() {
     if [[ -z "$kalshi_key" ]]; then
         echo "Warning: Kalshi API key is required. Set it later with: traderbot auth set-key kalshi api_key" >&2
     else
-        echo "Kalshi API secret (PEM private key — paste full key ending with END RSA PRIVATE KEY):"
-        echo "(Press Enter on a blank line when done)"
+        echo "Kalshi API secret (PEM private key):"
+        echo "Paste the full key including BEGIN/END markers, then press Enter."
         kalshi_secret=""
-        while IFS= read -r -s line; do
-            if [[ -z "$line" ]]; then
+        while IFS= read -r line; do
+            kalshi_secret="${kalshi_secret}${line}"$'\n'
+            if [[ "$line" == "-----END RSA PRIVATE KEY-----" ]] || [[ "$line" == "-----END PRIVATE KEY-----" ]]; then
                 break
             fi
-            kalshi_secret="${kalshi_secret}${line}"$'\n'
         done
         echo
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
