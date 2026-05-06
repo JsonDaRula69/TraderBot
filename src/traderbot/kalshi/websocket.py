@@ -12,11 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from traderbot.kalshi.signing import auth_headers
 
 VALID_CHANNELS: frozenset[str] = frozenset({
-    # V1 channels
     "ticker",
-    "orderbook",
-    "market_lifecycle",
-    # V2 channels
     "orderbook_delta",
     "market_lifecycle_v2",
     "fill",
