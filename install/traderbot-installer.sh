@@ -917,13 +917,32 @@ interactive_config_flow() {
             local NEWS_MSG="ALERT: High-impact event detected (impact). Run traderbot sentiment impact for analysis."
             local cron_ok=true
 
+            # Resolve delivery target from openclaw config
+            local announce_args=""
+            local oc_config="${HOME}/.openclaw/openclaw.json"
+            if [[ -f "$oc_config" ]]; then
+                local owner_chat_id=""
+                owner_chat_id=$(python3 -c "
+import json
+with open('$oc_config') as f:
+    cfg = json.load(f)
+for entry in cfg.get('commands', {}).get('ownerAllowFrom', []):
+    if entry.startswith('telegram:'):
+        print(entry.split(':', 1)[1])
+        break
+" 2>/dev/null || true)
+                if [[ -n "$owner_chat_id" ]]; then
+                    announce_args="--channel telegram --to $owner_chat_id"
+                fi
+            fi
+
             if openclaw cron add \
                 --name decision_loop \
                 --cron "*/5 * * * *" \
                 --session isolated \
                 --message "$DECISION_MSG" \
                 --agent "$agent_name" \
-                --announce 2>&1; then
+                --announce $announce_args 2>&1; then
                 echo "  ✓ decision_loop registered"
             else
                 echo "  ✗ decision_loop failed" >&2
@@ -936,7 +955,7 @@ interactive_config_flow() {
                 --session isolated \
                 --message "$HEARTBEAT_MSG" \
                 --agent "$agent_name" \
-                --announce 2>&1; then
+                --announce $announce_args 2>&1; then
                 echo "  ✓ heartbeat_loop registered"
             else
                 echo "  ✗ heartbeat_loop failed" >&2
