@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, SecretStr
@@ -102,7 +103,11 @@ class AuthManager:
         kr.set_password(full_service, key, value)
 
     def get_credential(self, service: str, key: str) -> CredentialResult | None:
-        """Retrieve a credential, trying keyring first then .env fallback."""
+        """Retrieve a credential, trying keyring first then .env fallback.
+
+        For KALSHI_PRIVATE_KEY_PATH, reads the file and returns PEM content
+        rather than the path string.
+        """
         full_service = self._full_service(service)
 
         if self.keyring_available:
@@ -128,7 +133,21 @@ class AuthManager:
             if env_val is not None:
                 used_env_key = env_key
                 break
+        if env_val is None:
+            env_val = self._env_file_get(env_keys)
+            if env_val is not None:
+                used_env_key = env_keys[0]
+
         if env_val is not None:
+            if service == "kalshi" and key == "private_key_pem" and used_env_key == "KALSHI_PRIVATE_KEY_PATH":
+                key_path = env_val.strip()
+                p = Path(key_path)
+                if p.is_file():
+                    env_val = p.read_text()
+                else:
+                    logger.warning("KALSHI_PRIVATE_KEY_PATH points to non-existent file: %s", key_path)
+                    return None
+
             assert used_env_key is not None
             if self.keyring_available:
                 logger.warning(
@@ -205,6 +224,21 @@ class AuthManager:
                 cred = self.get_credential(service_name, key)
                 result[service_name][key] = cred is not None
         return result
+
+    def _env_file_get(self, env_keys: list[str]) -> str | None:
+        """Read a value from .env file when not in process environment."""
+        env_path = Path.home() / ".traderbot" / ".env"
+        if not env_path.is_file():
+            return None
+        for env_key in env_keys:
+            prefix = f"{env_key}="
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith(prefix) and not line.lstrip().startswith("#"):
+                        return line[len(prefix):].strip()
+            except Exception:
+                continue
+        return None
 
     @staticmethod
     def _service_key_to_env(service: str, key: str) -> list[str]:
