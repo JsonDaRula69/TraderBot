@@ -894,6 +894,7 @@ interactive_config_flow() {
     if [[ -n "$token_value" ]]; then
         echo "Installing service for agent $agent_name..."
         install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE"
+        export TRADERBOT_PROFILE_TOKEN="$token_value"
     fi
 
     if [[ -n "$agent_name" ]]; then
@@ -933,18 +934,7 @@ interactive_config_flow() {
                 cron_ok=false
             fi
 
-            if openclaw cron add \
-                --name news_loop \
-                --event impact \
-                --session main \
-                --message "$NEWS_MSG" \
-                --agent "$agent_name" \
-                --announce 2>&1; then
-                echo "  ✓ news_loop registered"
-            else
-                echo "  ✗ news_loop failed" >&2
-                cron_ok=false
-            fi
+            echo "  ℹ news_loop is event-driven (no cron schedule) — triggered by impact signals"
 
             local oc_config="${HOME}/.openclaw/openclaw.json"
             if [[ -f "$oc_config" ]]; then
@@ -1046,7 +1036,7 @@ with open(config_path, 'w') as f:
     fi
 
     if [[ -d "$workspace_src" ]]; then
-        local agent_ws_dir="${HOME}/.openclaw/workspace/${profile_name:-economics}"
+        local agent_ws_dir="${HOME}/.openclaw/workspace/${agent_name:-economics}"
         mkdir -p "$agent_ws_dir"
 
         # Immutable files — always overwrite
