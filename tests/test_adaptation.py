@@ -22,7 +22,7 @@ NOW = datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC)
 class TestMarketCategory:
     def test_all_categories(self):
         expected = {
-            "politics", "economics", "science", "sports", "culture", "technology", "weather",
+            "politics", "economics", "science_and_technology", "sports", "weather",
             "crypto", "commodities", "companies", "elections", "entertainment",
             "financials", "health", "mentions", "social",
         }
@@ -31,7 +31,7 @@ class TestMarketCategory:
     def test_str_enum_values(self):
         assert MarketCategory.POLITICS == "politics"
         assert MarketCategory.ECONOMICS == "economics"
-        assert MarketCategory.SCIENCE == "science"
+        assert MarketCategory.SCIENCE_AND_TECHNOLOGY == "science_and_technology"
 
     def test_from_string(self):
         assert MarketCategory("sports") is MarketCategory.SPORTS
@@ -52,9 +52,9 @@ class TestPrior:
             Prior(category=MarketCategory.POLITICS, mean=0.5, variance=-0.1, sample_count=5, last_updated=NOW)
 
     def test_sample_count_non_negative(self):
-        Prior(category=MarketCategory.TECHNOLOGY, mean=0.3, variance=0.1, sample_count=0, last_updated=NOW)
+        Prior(category=MarketCategory.SCIENCE_AND_TECHNOLOGY, mean=0.3, variance=0.1, sample_count=0, last_updated=NOW)
         with pytest.raises(ValidationError):
-            Prior(category=MarketCategory.TECHNOLOGY, mean=0.3, variance=0.1, sample_count=-1, last_updated=NOW)
+            Prior(category=MarketCategory.SCIENCE_AND_TECHNOLOGY, mean=0.3, variance=0.1, sample_count=-1, last_updated=NOW)
 
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
@@ -68,7 +68,7 @@ class TestPrior:
 class TestPosterior:
     def test_valid(self):
         p = Posterior(
-            category=MarketCategory.SCIENCE,
+            category=MarketCategory.SCIENCE_AND_TECHNOLOGY,
             mean=0.5,
             variance=0.04,
             sample_count=12,
@@ -84,7 +84,7 @@ class TestPosterior:
     def test_updated_variance_must_be_positive(self):
         with pytest.raises(ValidationError):
             Posterior(
-                category=MarketCategory.CULTURE,
+                category=MarketCategory.ENTERTAINMENT,
                 mean=0.5,
                 variance=0.04,
                 sample_count=5,
@@ -194,24 +194,24 @@ class TestAdaptationResult:
     def test_magnitude_must_be_positive(self):
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.SCIENCE, direction="increase", magnitude=0, confidence=0.5, reasoning="zero"
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY, direction="increase", magnitude=0, confidence=0.5, reasoning="zero"
             )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.SCIENCE, direction="decrease", magnitude=-0.1, confidence=0.5, reasoning="neg"
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY, direction="decrease", magnitude=-0.1, confidence=0.5, reasoning="neg"
             )
 
     def test_confidence_bounds(self):
         AdaptationResult(
-            category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
+            category=MarketCategory.SCIENCE_AND_TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=0, reasoning="zero"
         )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=-0.1, reasoning="neg"
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=-0.1, reasoning="neg"
             )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=1.1, reasoning="over"
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY, direction="maintain", magnitude=0.01, confidence=1.1, reasoning="over"
             )
 
     def test_confidence_one_is_valid(self):
@@ -222,7 +222,7 @@ class TestAdaptationResult:
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.SCIENCE,
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY,
                 direction="maintain",
                 magnitude=0.01,
                 confidence=0.5,

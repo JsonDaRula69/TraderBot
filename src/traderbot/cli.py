@@ -291,6 +291,7 @@ def trade(
     from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
     from traderbot.kalshi.models import PortfolioState, TradeRequest
+    from traderbot.profiles.runtime import get_current_profile
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
     from traderbot.wal import (
@@ -302,6 +303,8 @@ def trade(
     )
 
     console = Console()
+
+    profile = get_current_profile()
 
     estimated_prob = 0.5
     edge_estimate = 0.0
@@ -357,7 +360,7 @@ def trade(
         confidence=0.5,
     )
 
-    sized = evaluate_trade(trade_request, portfolio, breaker)
+    sized = evaluate_trade(trade_request, portfolio, breaker, profile)
 
     if sized == 0:
         state = breaker.get_state()

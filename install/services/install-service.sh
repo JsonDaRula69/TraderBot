@@ -15,8 +15,8 @@ if [[ ! "$AGENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     exit 1
 fi
 
-if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
-    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric characters allowed." >&2
+if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric, hyphens, and underscores allowed." >&2
     exit 1
 fi
 
@@ -39,7 +39,14 @@ else
 fi
 
 VENV_BIN="${HOME}/traderbot/.venv/bin/traderbot"
-sed -e "s|/home/%i/traderbot/.venv/bin/traderbot|$VENV_BIN|g" "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
+ACTUAL_USER="$(whoami)"
+ACTUAL_HOME="${HOME}"
+sed \
+    -e "s|/home/%i/traderbot/.venv/bin/traderbot|$VENV_BIN|g" \
+    -e "s|^User=%i|User=$ACTUAL_USER|" \
+    -e "s|/home/%i/|/home/$ACTUAL_USER/|g" \
+    -e "s|%h/.traderbot/.env|$ACTUAL_HOME/.traderbot/.env|g" \
+    "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
 
 if command -v systemd-analyze &>/dev/null; then
     if ! systemd-analyze verify "/tmp/traderbot-agent@$AGENT_NAME.service" 2>/dev/null; then

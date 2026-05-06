@@ -34,20 +34,16 @@ class TestCronExpressions:
         assert len(fields) == 5
         minute, hour, _, _, weekday = fields
         assert minute == "*/5"
-        hour_parts = hour.split("-")
-        assert int(hour_parts[0]) == MARKET_OPEN_HOUR
-        assert int(hour_parts[1]) == MARKET_CLOSE_HOUR
-        assert MARKET_CLOSE_HOUR == 16  # Market closes at 4 PM ET = 16:00
-        day_parts = weekday.split("-")
-        assert int(day_parts[0]) == min(MARKET_DAYS)
-        assert int(day_parts[1]) == max(MARKET_DAYS)
+        # Decision loop runs 24/7 (Kalshi markets never close)
+        assert hour == "*"
+        assert weekday == "*"
 
-    def test_heartbeat_loop_cron_every_six_hours(self) -> None:
+    def test_heartbeat_loop_cron_every_thirty_minutes(self) -> None:
         fields = HEARTBEAT_LOOP_CRON.split()
         assert len(fields) == 5
         minute, hour, _, _, _ = fields
-        assert minute == "0"
-        assert hour == "*/6"
+        assert minute == "*/30"
+        assert hour == "*"
 
     def test_news_loop_cron_is_none(self) -> None:
         assert NEWS_LOOP_CRON is None

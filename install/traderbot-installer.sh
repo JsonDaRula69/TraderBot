@@ -17,6 +17,59 @@ trap cleanup EXIT
 trap 'echo "Interrupted."; cleanup; exit 130' SIGINT
 trap 'echo "Terminated."; cleanup; exit 143' SIGTERM
 
+_sed_inplace() {
+    # Portable sed -i across GNU and BSD/macOS
+    if [[ "$OSTYPE" == darwin* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+_write_heartbeat_to_config() {
+    local agent_id="$1"
+    local interval="$2"
+    local config_path="$3"
+
+    if command -v jq &>/dev/null; then
+        local tmp_file
+        tmp_file="$(mktemp)"
+        jq --arg agent "$agent_id" --arg every "$interval" '
+            (.agents.list // []) as $list |
+            if any($list[]; .id == $agent) then
+                .agents.list = [.agents.list[] | if .id == $agent then .heartbeat = {"every": $every, "lightContext": true, "isolatedSession": true} else . end]
+            else
+                .agents.list = ($list + [{"id": $agent, "heartbeat": {"every": $every, "lightContext": true, "isolatedSession": true}}])
+            end
+        ' "$config_path" > "$tmp_file" && mv "$tmp_file" "$config_path"
+        echo "  ✓ heartbeat config written to $config_path"
+    elif command -v python3 &>/dev/null; then
+        python3 -c "
+import json
+agent_id = '$agent_id'
+interval = '$interval'
+config_path = '$config_path'
+with open(config_path) as f:
+    config = json.load(f)
+agents = config.setdefault('agents', {})
+agent_list = agents.setdefault('list', [])
+found = False
+for entry in agent_list:
+    if entry.get('id') == agent_id:
+        entry['heartbeat'] = {'every': interval, 'lightContext': True, 'isolatedSession': True}
+        found = True
+        break
+if not found:
+    agent_list.append({'id': agent_id, 'heartbeat': {'every': interval, 'lightContext': True, 'isolatedSession': True}})
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+print('  ✓ heartbeat config written')
+"
+    else
+        echo "  Warning: Neither jq nor python3 available. Cannot write heartbeat config." >&2
+    fi
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -58,6 +111,18 @@ find_compatible_python() {
     if [[ -f "/usr/bin/python3.12" ]]; then
         candidates+=("/usr/bin/python3.12")
     fi
+    # Homebrew Python 3.12 — Apple Silicon
+    if [[ -f "/opt/homebrew/opt/python@3.12/bin/python3" ]]; then
+        candidates+=("/opt/homebrew/opt/python@3.12/bin/python3")
+    fi
+    # Homebrew Python 3.12 — Intel Mac
+    if [[ -f "/usr/local/opt/python@3.12/bin/python3" ]]; then
+        candidates+=("/usr/local/opt/python@3.12/bin/python3")
+    fi
+    # pyenv / other user-local installs
+    if [[ -f "$HOME/.local/bin/python3" ]]; then
+        candidates+=("$HOME/.local/bin/python3")
+    fi
     # General system python3 (may be 3.12 on recent Ubuntu)
     if [[ -f "/usr/bin/python3" ]]; then
         candidates+=("/usr/bin/python3")
@@ -88,7 +153,7 @@ check_openclaw() {
 }
 
 install_dependencies_debian() {
-    local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev gnome-keyring unzip curl git file python3-pip)
+    local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev gnome-keyring unzip curl git file python3-pip jq)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
@@ -120,12 +185,32 @@ install_dependencies_macos() {
             exit 1
         fi
     fi
-    local py_bin
-    py_bin="$(find_compatible_python 2>/dev/null)" || true
-    if [[ -z "$py_bin" ]]; then
-        echo "Error: Python 3.12 is required (chromadb dependency has no wheels for 3.13+)." >&2
-        echo "Install Python 3.12 from python.org or: brew install python@3.12" >&2
-        exit 1
+
+    if ! command -v brew &>/dev/null; then
+        echo "Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Add brew to PATH (Apple Silicon vs Intel)
+        if [[ -f "/opt/homebrew/bin/brew" ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -f "/usr/local/bin/brew" ]]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+        if ! command -v brew &>/dev/null; then
+            echo "Error: Homebrew installation failed." >&2
+            exit 1
+        fi
+    fi
+
+    echo "Installing python@3.12, git, jq via Homebrew..."
+    if ! brew install python@3.12 git jq; then
+        echo "Warning: brew install python@3.12 failed." >&2
+        echo "Checking for python.org installer of Python 3.12..." >&2
+        local py_bin
+        py_bin="$(find_compatible_python 2>/dev/null)" || true
+        if [[ -z "$py_bin" ]]; then
+            echo "Error: Python 3.12 not available. Install from https://www.python.org/downloads/ and re-run." >&2
+            exit 1
+        fi
     fi
 }
 
@@ -413,6 +498,12 @@ setup_api_credentials() {
         return 1
     fi
 
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "Non-interactive mode — skipping API credential prompts."
+        echo "Set credentials later with: traderbot auth set-key"
+        return 0
+    fi
+
     echo
     echo "=== API Credentials ==="
     echo "Kalshi credentials are required. Other services are optional."
@@ -444,6 +535,9 @@ setup_api_credentials() {
         read -r -p "Kalshi API secret: " -s kalshi_secret
         echo
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
+        if [[ "$use_keyring" == "true" ]] && [[ -n "$kalshi_key" ]]; then
+            "$tb_cmd" auth set-key kalshi api_key "$kalshi_key" 2>/dev/null || true
+        fi
         if [[ -n "$kalshi_secret" ]]; then
             local pem_path="${HOME}/.traderbot/kalshi_key.pem"
             printf '%s' "$kalshi_secret" > "$pem_path"
@@ -541,6 +635,22 @@ setup_api_credentials() {
 }
 
 interactive_config_flow() {
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "=== TraderBot Configuration (non-interactive) ==="
+        profile_name="${TRADERBOT_PROFILE_NAME:-default}"
+        profile_mode="paper"
+        profile_categories="economics,politics,weather,sports,science_and_technology,crypto,commodities,companies,elections,entertainment,financials,health,mentions,social"
+
+        local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+        if [[ -x "$tb_bin" ]]; then
+            "$tb_bin" profile create "$profile_name" --mode "$profile_mode" --categories "$profile_categories" 2>&1 || echo "Warning: profile create failed." >&2
+        fi
+
+        echo "Profile '$profile_name' created (paper mode, all categories)."
+        echo "Set API credentials later with: traderbot auth set-key"
+        return 0
+    fi
+
     if [[ ! -t 0 ]]; then
         if ! exec < /dev/tty; then
             echo "Error: Interactive terminal required for configuration." >&2
@@ -557,7 +667,7 @@ interactive_config_flow() {
         return 0
     fi
 
-    local profile_name=""
+    profile_name=""
     while [[ -z "$profile_name" ]]; do
         read -r -p "Profile name: " profile_name
         if [[ -z "$profile_name" ]]; then
@@ -574,44 +684,130 @@ interactive_config_flow() {
         *) profile_mode="paper" ;;
     esac
 
-    echo "Select market categories (enter numbers, space-separated):"
-    echo "  1) Economics"
-    echo "  2) Politics"
-    echo "  3) Weather"
-    echo "  4) Sports"
-    echo "  5) Culture"
-    echo "  6) Technology"
-    echo "  7) Science"
-    echo "  8) Crypto"
-    echo "  9) Commodities"
-    echo " 10) Companies"
-    echo " 11) Elections"
-    echo " 12) Entertainment"
-    echo " 13) Financials"
-    echo " 14) Health"
-    echo " 15) Mentions"
-    echo " 16) Social"
-    echo " 17) All categories"
-    read -r -p "Choice [17]: " cat_choice
-    case "$cat_choice" in
-        1) profile_categories="economics" ;;
-        2) profile_categories="politics" ;;
-        3) profile_categories="weather" ;;
-        4) profile_categories="sports" ;;
-        5) profile_categories="culture" ;;
-        6) profile_categories="technology" ;;
-        7) profile_categories="science" ;;
-        8) profile_categories="crypto" ;;
-        9) profile_categories="commodities" ;;
-        10) profile_categories="companies" ;;
-        11) profile_categories="elections" ;;
-        12) profile_categories="entertainment" ;;
-        13) profile_categories="financials" ;;
-        14) profile_categories="health" ;;
-        15) profile_categories="mentions" ;;
-        16) profile_categories="social" ;;
-        *) profile_categories="economics,politics,weather,sports,culture,technology,science,crypto,commodities,companies,elections,entertainment,financials,health,mentions,social" ;;
-    esac
+    echo "Select market categories (↑/↓ navigate, SPACE to toggle, ENTER to confirm):"
+    echo
+    local -a CAT_KEYS=(economics politics weather sports science_and_technology crypto commodities companies elections entertainment financials health mentions social)
+    local -a CAT_LABELS=("Economics" "Politics" "Climate and Weather" "Sports" "Science and Technology" "Crypto" "Commodities" "Companies" "Elections" "Entertainment" "Financials" "Health" "Mentions" "Social")
+    local -a CAT_SELECTED=()
+    for _ in "${CAT_KEYS[@]}"; do
+        CAT_SELECTED+=("0")
+    done
+    local cur=0
+
+    if [[ ! -t 0 ]] || [[ -z "${TERM:-}" ]]; then
+        profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
+        echo "Non-interactive mode. Using all categories: $profile_categories"
+    elif [[ "$(uname)" == "Darwin" ]] && ! command -v gdate &>/dev/null; then
+        echo "Select categories (comma-separated numbers, or 'a' for all):"
+        local i=1
+        for label in "${CAT_LABELS[@]}"; do
+            printf "  %2d) %s\n" "$i" "$label"
+            ((i++))
+        done
+        echo "   a) All categories"
+        read -r -p "Choice [a]: " cat_nums
+        if [[ -z "$cat_nums" || "$cat_nums" == "a" ]]; then
+            profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
+        else
+            profile_categories=""
+            local IFS=','
+            for num in $cat_nums; do
+                num="$(echo "$num" | tr -d ' ')"
+                if [[ "$num" -ge 1 ]] && [[ "$num" -le "${#CAT_KEYS[@]}" ]] 2>/dev/null; then
+                    [[ -n "$profile_categories" ]] && profile_categories+=","
+                    profile_categories+="${CAT_KEYS[$((num-1))]}"
+                fi
+            done
+            [[ -z "$profile_categories" ]] && profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
+        fi
+    else
+        local old_tty_settings
+        old_tty_settings="$(stty -g 2>/dev/null)" || true
+        # Save previous EXIT trap to avoid clobbering main script's cleanup
+        local prev_exit_trap
+        prev_exit_trap=$(trap -p EXIT | sed 's/^trap -- //')
+        trap '[[ -n "$old_tty_settings" ]] && stty "$old_tty_settings" 2>/dev/null; echo' EXIT
+
+        stty -echo -icanon min 1 time 0 2>/dev/null || true
+
+        _render_cat_menu() {
+            local i=0
+            printf "\r\033[J"
+            for label in "${CAT_LABELS[@]}"; do
+                if [[ "$i" -eq "$cur" ]]; then
+                    printf "\033[1m"
+                fi
+                if [[ "${CAT_SELECTED[$i]}" == "1" ]]; then
+                    printf "  [✓] %s\033[0m\n" "$label"
+                else
+                    printf "  [ ] %s\033[0m\n" "$label"
+                fi
+                ((i++)) || true
+            done
+            printf "\n  ↑/↓: navigate  SPACE: toggle  ENTER: confirm\n"
+        }
+
+        _clear_cat_menu() {
+            local count=$(( ${#CAT_LABELS[@]} + 2 ))
+            printf "\r\033[%dA" "$count"
+        }
+
+        _render_cat_menu
+
+        local key
+        while true; do
+            key="$(dd bs=1 count=1 2>/dev/null)"
+            if [[ "$key" == $'\x1b' ]]; then
+                key="$(dd bs=1 count=1 2>/dev/null)"
+                if [[ "$key" == '[' ]]; then
+                    key="$(dd bs=1 count=1 2>/dev/null)"
+                    if [[ "$key" == 'A' ]]; then
+                        ((cur > 0)) && ((cur--)) || true
+                        _clear_cat_menu
+                        _render_cat_menu
+                    elif [[ "$key" == 'B' ]]; then
+                        ((cur < ${#CAT_KEYS[@]} - 1)) && ((cur++)) || true
+                        _clear_cat_menu
+                        _render_cat_menu
+                    fi
+                fi
+            elif [[ "$key" == ' ' ]]; then
+                if [[ "${CAT_SELECTED[$cur]}" == "1" ]]; then
+                    CAT_SELECTED[$cur]="0"
+                else
+                    CAT_SELECTED[$cur]="1"
+                fi
+                _clear_cat_menu
+                _render_cat_menu
+            elif [[ "$key" == $'\n' ]] || [[ "$key" == $'\r' ]]; then
+                break
+            fi
+        done
+
+        [[ -n "$old_tty_settings" ]] && stty "$old_tty_settings" 2>/dev/null
+        # Restore previous EXIT trap (or clear if there wasn't one)
+        if [[ -n "$prev_exit_trap" ]]; then
+            eval "trap $prev_exit_trap"
+        else
+            trap - EXIT
+        fi
+
+        profile_categories=""
+        for i in "${!CAT_SELECTED[@]}"; do
+            if [[ "${CAT_SELECTED[$i]}" == "1" ]]; then
+                [[ -n "$profile_categories" ]] && profile_categories+=","
+                profile_categories+="${CAT_KEYS[$i]}"
+            fi
+        done
+
+        if [[ -z "$profile_categories" ]]; then
+            echo "No categories selected. Defaulting to all categories."
+            profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
+        fi
+
+        echo
+        echo "Selected categories: $profile_categories"
+    fi
 
     if command -v traderbot &>/dev/null; then
         if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
@@ -659,7 +855,7 @@ interactive_config_flow() {
     if [[ -z "$agent_name" ]]; then
         echo "Skipping agent assignment. Run later:"
         echo "  openclaw agents add $profile_name"
-        echo "  traderbot profile assign $agent_name $profile_name"
+        echo "  traderbot profile assign $profile_name $agent_name"
         return 0
     fi
 
@@ -674,13 +870,13 @@ interactive_config_flow() {
         if [[ $assign_exit -ne 0 ]]; then
             echo "Error: assign failed (exit code $assign_exit) with output:" >&2
             echo "$TOKEN_OUTPUT" >&2
-            echo "Try manually: $tb_cmd profile assign $agent_name $profile_name" >&2
+            echo "Try manually: $tb_cmd profile assign $profile_name $agent_name" >&2
             TOKEN_OUTPUT=""
         fi
         if [[ -n "$TOKEN_OUTPUT" ]]; then
             echo "$TOKEN_OUTPUT"
             echo
-            token_value=$(echo "$TOKEN_OUTPUT" | grep -oP 'Token: \K\S+' || echo "")
+            token_value=$(echo "$TOKEN_OUTPUT" | sed -n 's/^Token: //p' || echo "")
         fi
     else
         echo "Assignment skipped. TraderBot not found."
@@ -694,24 +890,68 @@ interactive_config_flow() {
     if [[ -n "$agent_name" ]]; then
         echo
         echo "=== Cron Loop Registration ==="
-        echo "Registering heartbeat and decision loops with OpenClaw for agent $agent_name..."
-        if [[ -x "$tb_cmd" ]]; then
-            if "$tb_cmd" cron setup --agent "$agent_name" --json 2>&1; then
-                echo "Cron loops registered."
+        echo "Registering decision, heartbeat, and news loops with OpenClaw for agent $agent_name..."
+
+        if command -v openclaw &>/dev/null; then
+            local DECISION_MSG="AUTONOMOUS: Run traderbot decision loop. Read SESSION-STATE.md for tracked markets. Execute analysis, risk-check, and trades within guard rails. Log all decisions."
+            local HEARTBEAT_MSG="HEARTBEAT: Run traderbot self-improvement cycle. Check circuit breaker, review recent decisions, update Bayesian parameters, promote learnings. Write HEARTBEAT_DATA.md."
+            local NEWS_MSG="ALERT: High-impact event detected (impact). Run traderbot sentiment impact for analysis."
+            local cron_ok=true
+
+            if openclaw cron add \
+                --name decision_loop \
+                --cron "*/5 * * * *" \
+                --session isolated \
+                --message "$DECISION_MSG" \
+                --agent "$agent_name" \
+                --announce 2>&1; then
+                echo "  ✓ decision_loop registered"
             else
-                echo "Warning: cron setup failed. Register manually with:" >&2
-                echo "  $tb_cmd cron setup --agent $agent_name" >&2
+                echo "  ✗ decision_loop failed" >&2
+                cron_ok=false
             fi
-        elif command -v traderbot &>/dev/null; then
-            if traderbot cron setup --agent "$agent_name" 2>&1; then
-                echo "Cron loops registered."
+
+            if openclaw cron add \
+                --name heartbeat_loop \
+                --every "30m" \
+                --session isolated \
+                --message "$HEARTBEAT_MSG" \
+                --agent "$agent_name" \
+                --announce 2>&1; then
+                echo "  ✓ heartbeat_loop registered"
             else
-                echo "Warning: cron setup failed. Register manually with:" >&2
-                echo "  traderbot cron setup --agent $agent_name" >&2
+                echo "  ✗ heartbeat_loop failed" >&2
+                cron_ok=false
+            fi
+
+            if openclaw cron add \
+                --name news_loop \
+                --event impact \
+                --session main \
+                --message "$NEWS_MSG" \
+                --agent "$agent_name" \
+                --announce 2>&1; then
+                echo "  ✓ news_loop registered"
+            else
+                echo "  ✗ news_loop failed" >&2
+                cron_ok=false
+            fi
+
+            local oc_config="${HOME}/.openclaw/openclaw.json"
+            if [[ -f "$oc_config" ]]; then
+                _write_heartbeat_to_config "$agent_name" "30m" "$oc_config"
+            fi
+
+            if [[ "$cron_ok" != "true" ]]; then
+                echo "Warning: Some cron loops failed to register." >&2
+                echo "Register manually with: openclaw cron add --agent $agent_name --name <loop_name>" >&2
             fi
         else
-            echo "TraderBot not found. Register cron loops manually:" >&2
-            echo "  traderbot cron setup --agent $agent_name" >&2
+            echo "Warning: openclaw not found. Cron loop registration skipped." >&2
+            echo "Install OpenClaw and register loops manually:" >&2
+            echo "  openclaw cron add --name decision_loop --cron '*/5 * * * *' --session isolated --agent $agent_name --announce" >&2
+            echo "  openclaw cron add --name heartbeat_loop --every 30m --session isolated --agent $agent_name --announce" >&2
+            echo "  openclaw cron add --name news_loop --event impact --session main --agent $agent_name --announce" >&2
         fi
     fi
 
@@ -725,7 +965,7 @@ interactive_config_flow() {
     fi
 
     if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && [[ -n "$tb_bin" ]]; then
-        if "$tb_bin" heartbeat --json 2>/dev/null; then
+            if "$tb_bin" heartbeat --dry-run --json 2>/dev/null; then
             echo "Heartbeat verification: PASSED"
         else
             echo "Heartbeat verification: FAILED (check credentials)"
@@ -763,8 +1003,9 @@ merge_openclaw_agent_config() {
         elif command -v python3 &>/dev/null; then
             python3 -c "
 import json, sys
-with open('$config_path') as f: existing = json.load(f)
-with open('$agent_config') as f: new = json.load(f)
+config_path, agent_config = sys.argv[1], sys.argv[2]
+with open(config_path) as f: existing = json.load(f)
+with open(agent_config) as f: new = json.load(f)
 for key in ('agents', 'heartbeat'):
     if key in new:
         if key == 'agents' and key in existing:
@@ -776,9 +1017,9 @@ for key in ('agents', 'heartbeat'):
             existing.setdefault('agents', {})['list'] = new_list
         else:
             existing[key] = new[key]
-with open('$config_path', 'w') as f:
+with open(config_path, 'w') as f:
     json.dump(existing, f, indent=2)
-"
+" "$config_path" "$agent_config"
             echo "Merged agent config into $config_path (using python3)."
         else
             echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
@@ -789,19 +1030,48 @@ with open('$config_path', 'w') as f:
 
     # Expand placeholders in config
     if [[ -f "$config_path" ]]; then
-        sed -i "s|__HOME_PLACEHOLDER__|$HOME|g" "$config_path"
-        sed -i "s|__PROJECT_ROOT_PLACEHOLDER__|$INSTALL_DIR|g" "$config_path"
-        sed -i "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
+        _sed_inplace "s|__HOME_PLACEHOLDER__|$HOME|g" "$config_path"
+        _sed_inplace "s|__PROJECT_ROOT_PLACEHOLDER__|$INSTALL_DIR|g" "$config_path"
+        _sed_inplace "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
     fi
 
     if [[ -d "$workspace_src" ]]; then
         local agent_ws_dir="${HOME}/.openclaw/workspace/${profile_name:-economics}"
         mkdir -p "$agent_ws_dir"
-        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md BOOTSTRAP.md; do
+
+        # Immutable files — always overwrite
+        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md; do
             if [[ -f "${workspace_src}/${f}" ]]; then
                 cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
             fi
         done
+
+        # Merge-only files — skip if target exists
+        for f in IDENTITY.md; do
+            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
+                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
+            fi
+        done
+
+        # Fresh-deploy-only files — skip if target exists
+        for f in BOOTSTRAP.md BOOT.md; do
+            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
+                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
+            fi
+        done
+
+        # Init-if-missing files — only create on fresh deploy
+        for f in USER.md MEMORY.md SESSION-STATE.md HEARTBEAT_DATA.md; do
+            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
+                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
+            fi
+        done
+
+        # .learnings directory — only on fresh deploy
+        if [[ -d "${workspace_src}/.learnings" ]] && [[ ! -d "${agent_ws_dir}/.learnings" ]]; then
+            cp -r "${workspace_src}/.learnings" "${agent_ws_dir}/.learnings"
+        fi
+
         echo "Deployed workspace template files to $agent_ws_dir"
     fi
 }
@@ -839,8 +1109,20 @@ main() {
 
     echo "Checking for OpenClaw..."
     if ! check_openclaw; then
-        echo "Error: OpenClaw not found." >&2
-        echo "Please install OpenClaw first: https://github.com/openclaw/openclaw" >&2
+        echo "" >&2
+        echo "┌─────────────────────────────────────────────────────────┐" >&2
+        echo "│  OpenClaw Gateway Required                             │" >&2
+        echo "│                                                         │" >&2
+        echo "│  TraderBot agents run as OpenClaw agents. The gateway  │" >&2
+        echo "│  manages scheduling (cron), heartbeats, and sessions.  │" >&2
+        echo "│                                                         │" >&2
+        echo "│  Install: https://github.com/openclaw/openclaw         │" >&2
+        echo "│                                                         │" >&2
+        echo "│  After installing OpenClaw:                             │" >&2
+        echo "│    1. Run: openclaw init                                │" >&2
+        echo "│    2. Configure your agent workspace                    │" >&2
+        echo "│    3. Re-run this installer                             │" >&2
+        echo "└─────────────────────────────────────────────────────────┘" >&2
         exit 1
     fi
 

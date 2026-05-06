@@ -81,23 +81,32 @@ def evaluate_trade_full(
     if not breaker.get_state().can_trade:
         return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
-    # Intentionally using unsized quantity for conservative position limit check.
-    # This may over-reject trades that would pass with the Kelly-sized quantity.
-    # Future: consider two-pass — soft check with original qty, hard check with sized qty.
-    results = run_all_checks(trade_request, portfolio)
-    if any(not r.passed for r in results):
-        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
-
-    # Use profile limits if provided, otherwise use HARD_LIMITS
+    # Compute effective limits: profile-aware if profile is set, otherwise HARD_LIMITS
     if profile is not None:
         from traderbot.risk.agent_limits import AgentRiskLimits
 
         agent_limits = AgentRiskLimits(profile)
+        effective_limits: dict[str, float | int] = {
+            "max_position_per_market_pct": agent_limits.max_position_per_market_pct,
+            "max_daily_loss_pct": agent_limits.max_daily_loss_pct,
+            "max_drawdown_pct": agent_limits.max_drawdown_pct,
+            "min_liquidity_threshold": agent_limits.min_liquidity_threshold,
+            "max_open_positions": agent_limits.max_open_positions,
+            "min_edge_pct": agent_limits.min_edge_pct,
+        }
         max_position_pct = agent_limits.max_position_per_market_pct
         risk_multiplier = profile.risk_multiplier
     else:
+        effective_limits = dict(HARD_LIMITS)
         max_position_pct = float(HARD_LIMITS["max_position_per_market_pct"])
         risk_multiplier = 1.0
+
+    # Intentionally using unsized quantity for conservative position limit check.
+    # This may over-reject trades that would pass with the Kelly-sized quantity.
+    # Future: consider two-pass — soft check with original qty, hard check with sized qty.
+    results = run_all_checks(trade_request, portfolio, limits=effective_limits)
+    if any(not r.passed for r in results):
+        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
     odds = (100 - trade_request.price_cents) / max(trade_request.price_cents, 1)
     max_position_cents = int(portfolio.portfolio_value_cents * max_position_pct)

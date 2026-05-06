@@ -4,7 +4,7 @@ Defines Decision Loop, Heartbeat Loop, and News Loop as programmatic
 Pydantic models with cron expressions and JSON payloads.
 
 Decision Loop: isolated agentTurn every 5 min during market hours
-Heartbeat Loop: isolated agentTurn every 6 hours
+Heartbeat Loop: isolated agentTurn every 30 min
 News Loop: systemEvent on high-impact news (impact > 0.7)
 """
 
@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 DECISION_LOOP_CRON = "*/5 * * * *"  # every 5 minutes, 24/7 — Kalshi prediction markets never close
-HEARTBEAT_LOOP_CRON = "0 */6 * * *"
+HEARTBEAT_LOOP_CRON = "*/30 * * * *"
 NEWS_LOOP_CRON = None
 
 NEWS_IMPACT_THRESHOLD = 0.7
@@ -105,7 +105,7 @@ class DecisionLoopConfig(CronLoopConfig):
 
 
 class HeartbeatLoopConfig(CronLoopConfig):
-    """Heartbeat Loop: isolated agentTurn every 6 hours."""
+    """Heartbeat Loop: isolated agentTurn every 30 min."""
 
     name: str = "heartbeat_loop"
     cron_expression: str | None = HEARTBEAT_LOOP_CRON

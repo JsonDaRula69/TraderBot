@@ -25,9 +25,7 @@ class TestMarketCategoryValues:
         assert MarketCategory.POLITICS.value == "politics"
         assert MarketCategory.WEATHER.value == "weather"
         assert MarketCategory.SPORTS.value == "sports"
-        assert MarketCategory.CULTURE.value == "culture"
-        assert MarketCategory.TECHNOLOGY.value == "technology"
-        assert MarketCategory.SCIENCE.value == "science"
+        assert MarketCategory.SCIENCE_AND_TECHNOLOGY.value == "science_and_technology"
         assert MarketCategory.CRYPTO.value == "crypto"
         assert MarketCategory.COMMODITIES.value == "commodities"
         assert MarketCategory.COMPANIES.value == "companies"
@@ -67,7 +65,7 @@ class TestMarketCategoryLowercase:
     def test_specific_lowercase_values(self) -> None:
         assert MarketCategory.ECONOMICS.value == "economics"
         assert MarketCategory.POLITICS.value == "politics"
-        assert MarketCategory.SCIENCE.value == "science"
+        assert MarketCategory.SCIENCE_AND_TECHNOLOGY.value == "science_and_technology"
         assert MarketCategory.HEALTH.value == "health"
         assert MarketCategory.CRYPTO.value == "crypto"
 
@@ -76,9 +74,8 @@ class TestMarketCategoryEnumCompleteness:
     """Verify MarketCategory has the expected categories."""
 
     EXPECTED_CATEGORIES = {
-        "ECONOMICS", "POLITICS", "SCIENCE", "WEATHER",
-        "SPORTS", "CULTURE", "TECHNOLOGY",
-        "CRYPTO", "COMMODITIES", "COMPANIES", "ELECTIONS",
+        "ECONOMICS", "POLITICS", "SCIENCE_AND_TECHNOLOGY", "WEATHER",
+        "SPORTS", "CRYPTO", "COMMODITIES", "COMPANIES", "ELECTIONS",
         "ENTERTAINMENT", "FINANCIALS", "HEALTH", "MENTIONS", "SOCIAL",
     }
 

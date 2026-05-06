@@ -16,6 +16,7 @@ from traderbot.learning import (
     HEARTBEAT_INTERVAL_HOURS,
     scan_for_promotions,
 )
+from traderbot.paths import get_workspace_dir
 from traderbot.risk.circuit_breaker import CircuitBreaker
 from traderbot.simulation.adaptation import (
     WEAK_BETA,
@@ -29,7 +30,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HEARTBEAT_PATH = Path(__file__).resolve().parent.parent / ".openclaw" / "workspace" / "HEARTBEAT_DATA.md"
+
+def _default_heartbeat_path() -> Path:
+    return get_workspace_dir() / "HEARTBEAT_DATA.md"
+
+
+DEFAULT_HEARTBEAT_PATH = _default_heartbeat_path()
 
 
 # ---------------------------------------------------------------------------

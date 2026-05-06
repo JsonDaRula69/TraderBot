@@ -14,16 +14,15 @@ class MarketCategory(StrEnum):
     Single source of truth — all modules import from here.
     Values are lowercase to match Kalshi API convention.
     API variant mappings: "Climate and Weather" → WEATHER,
-    "Science and Technology" → TECHNOLOGY.
+    "Science and Technology" → SCIENCE_AND_TECHNOLOGY,
+    "technology" → SCIENCE_AND_TECHNOLOGY, "science" → SCIENCE_AND_TECHNOLOGY.
     """
 
     ECONOMICS = "economics"
     POLITICS = "politics"
     WEATHER = "weather"
     SPORTS = "sports"
-    CULTURE = "culture"
-    TECHNOLOGY = "technology"
-    SCIENCE = "science"
+    SCIENCE_AND_TECHNOLOGY = "science_and_technology"
     CRYPTO = "crypto"
     COMMODITIES = "commodities"
     COMPANIES = "companies"
