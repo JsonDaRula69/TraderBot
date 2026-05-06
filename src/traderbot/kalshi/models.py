@@ -245,6 +245,7 @@ class OrderRequest(BaseModel):
     no_price: Annotated[int, Field(ge=0, le=99)] | None = None
 
     def to_v2_body(self) -> dict[str, Any]:
+        """Serialize to V2 API request body."""
         body: dict[str, Any] = {
             "ticker": self.ticker,
             "action": self.action,
