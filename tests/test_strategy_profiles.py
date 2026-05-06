@@ -171,8 +171,8 @@ class TestEffectiveLimit:
         expected = 1.0 * HARD_LIMITS["max_position_per_market_pct"]
         assert MODERATE.effective_limit("max_position_per_market_pct") == expected
 
-    def test_aggressive_at_80_pct(self) -> None:
-        expected = 0.8 * HARD_LIMITS["max_daily_loss_pct"]
+    def test_aggressive_at_full_limit_for_ceilings(self) -> None:
+        expected = 1.0 * HARD_LIMITS["max_daily_loss_pct"]
         assert AGGRESSIVE.effective_limit("max_daily_loss_pct") == expected
 
     def test_effective_limit_never_exceeds_hard_limit(self) -> None:
@@ -210,8 +210,12 @@ class TestPresets:
 
     def test_aggressive_preset(self) -> None:
         assert AGGRESSIVE.name == "Aggressive"
-        assert AGGRESSIVE.risk_multiplier == 0.8
+        assert AGGRESSIVE.risk_multiplier == 1.0
         assert AGGRESSIVE.signal_weights == {"statistical": 0.3, "sentiment": 0.7}
+
+    def test_aggressive_multiplier_equals_or_exceeds_moderate(self) -> None:
+        """AGGRESSIVE risk_multiplier must not produce smaller positions than MODERATE."""
+        assert AGGRESSIVE.risk_multiplier >= MODERATE.risk_multiplier
 
     def test_presets_dict_contains_all(self) -> None:
         assert "Conservative" in PRESETS
@@ -446,17 +450,16 @@ class TestRiskImmutability:
             assert MODERATE.effective_limit(key) == pytest.approx(1.0 * HARD_LIMITS[key])
 
     def test_aggressive_below_ceilings_at_floors(self) -> None:
-        """Aggressive profile: ceilings scale down, floors stay at hard limit."""
+        """Aggressive profile: ceilings at full limit, floors stay at hard limit."""
         _CEILINGS = AGGRESSIVE._CEILING_KEYS
         _FLOORS = AGGRESSIVE._FLOOR_KEYS
         for key in HARD_LIMITS:
             val = AGGRESSIVE.effective_limit(key)
             if key in _CEILINGS:
-                # Ceiling-type: 0.8 * hard limit (more conservative)
-                assert val == pytest.approx(0.8 * HARD_LIMITS[key])
-                assert val < HARD_LIMITS[key]
+                # Ceiling-type: 1.0 * hard limit (aggressive = full size)
+                assert val == pytest.approx(1.0 * HARD_LIMITS[key])
             else:
-                # Floor-type (min_*): max(0.8 * hard, hard) = hard limit (can't go below floor)
+                # Floor-type (min_*): max(1.0 * hard, hard) = hard limit
                 assert val == HARD_LIMITS[key]
 
     def test_custom_profile_cannot_exceed_hard_limits(self) -> None:
@@ -469,3 +472,61 @@ class TestRiskImmutability:
         )
         for key in HARD_LIMITS:
             assert p.effective_limit(key) <= HARD_LIMITS[key]
+
+
+class TestProfilesProduceDifferentResults:
+    """Conservative positions must be smaller than Aggressive positions."""
+
+    async def test_conservative_smaller_than_aggressive(self, tmp_path: Path) -> None:
+        SMALL_BANKROLL = 100_000  # $1,000 — small enough that risk sizing constrains quantity
+        market = _make_market(
+            ticker="KX-DIFF",
+            settlement_result=True,
+            volume=10000,
+            open_interest=5000,
+        )
+        trade = Trade(
+            ticker="KX-DIFF",
+            price=55,
+            quantity=100,
+            side="yes",
+            timestamp=datetime(2026, 2, 1, 12, 0, 0, tzinfo=UTC),
+        )
+
+        class BuyStrategy:
+            def on_market_open(self, market: Market, context: Context) -> list[Signal]:
+                return []
+            def on_trade(self, trade: Trade, context: Context) -> list[Signal]:
+                return [
+                    Signal(
+                        ticker="KX-DIFF",
+                        direction="yes",
+                        quantity=100,
+                        price_cents=55,
+                        estimated_prob=0.70,
+                        confidence=0.8,
+                    )
+                ]
+            def on_settle(self, market: Market, outcome: bool, context: Context) -> None:
+                pass
+
+        loader = AsyncMock(spec=DataLoader)
+        loader.get_markets.return_value = [market]
+        loader.get_trades.return_value = [trade]
+        loader.get_outcomes.return_value = {"KX-DIFF": True}
+
+        results = await run_profiles(
+            engine=BacktestEngine(
+                data_loader=loader,
+                strategy=BuyStrategy(),
+                initial_bankroll_cents=SMALL_BANKROLL,
+                state_dir=tmp_path,
+            ),
+            profiles=[CONSERVATIVE, AGGRESSIVE],
+            start=date(2026, 1, 1),
+            end=date(2026, 3, 31),
+        )
+
+        assert results["Conservative"].trade_count > 0
+        assert results["Aggressive"].trade_count > 0
+        assert abs(results["Conservative"].total_pnl_cents) < abs(results["Aggressive"].total_pnl_cents)
