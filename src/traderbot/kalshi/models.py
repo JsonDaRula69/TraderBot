@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class OrderBookLevel(BaseModel):
@@ -33,6 +33,13 @@ class Market(BaseModel):
     category: str | None = None
     market_category: MarketCategory | None = None
     settlement_result: bool | None = None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, v: object) -> str | None:
+        if isinstance(v, str) and v not in MarketCategory._value2member_map_:
+            return None
+        return v
 
 
 class OrderBook(BaseModel):
@@ -233,9 +240,23 @@ class OrderRequest(BaseModel):
     side: OrderSide
     order_type: OrderType = OrderType.limit
     count: Annotated[int, Field(ge=1)]
-    yes_price: Annotated[int, Field(ge=1, le=99, description="Yes price in cents")]
+    price_cents: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
     client_order_id: str | None = None
     no_price: Annotated[int, Field(ge=0, le=99)] | None = None
+
+    def to_v2_body(self) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "ticker": self.ticker,
+            "action": self.action,
+            "side": self.side.value,
+            "count": self.count,
+            "price_dollars": self.price_cents,
+        }
+        if self.client_order_id is not None:
+            body["client_order_id"] = self.client_order_id
+        if self.no_price is not None:
+            body["no_price"] = self.no_price
+        return body
 
 
 class OrderStatus(StrEnum):
