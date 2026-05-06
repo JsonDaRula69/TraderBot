@@ -81,7 +81,7 @@ class GenericAnalyzer:
             data_sources.append("odds")
 
         if prices and trades and orderbook is not None:
-            combined = generate_signal(ticker, prices, trades, orderbook, estimated_prob)
+            combined = generate_signal(ticker, prices, orderbook, estimated_prob)
             confidence = combined.confidence
             signals.append(f"combined={combined.direction},conf={combined.confidence:.2f}")
             data_sources.append("signals")

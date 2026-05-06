@@ -228,7 +228,6 @@ def signals(
         signal = generate_signal(
             ticker=market.ticker,
             prices=prices_int,
-            trades=[],
             orderbook=orderbook,
             estimated_prob=prob.yes_prob,
         )
@@ -684,9 +683,9 @@ def heartbeat(
         else:
             state_path = resolve_state_path(state_path=Path(".traderbot/adaptation_state.json"))
 
-        return run_heartbeat_cycle(
+        return asyncio.run(run_heartbeat_cycle(
             conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run
-        )
+        ))
 
     try:
         result = _with_db(db_path, _run)

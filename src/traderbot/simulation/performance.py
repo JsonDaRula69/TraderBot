@@ -132,7 +132,6 @@ def compute_calmar(
     if not trades:
         return None
     total_pnl = sum(t.pnl_cents for t in trades)
-    initial_bankroll_cents + total_pnl
     if initial_bankroll_cents <= 0:
         return None
     annualized_return = (total_pnl / initial_bankroll_cents) * (252 / max(len(trades), 1))
