@@ -721,15 +721,6 @@ interactive_config_flow() {
             [[ -z "$profile_categories" ]] && profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
         fi
     else
-        local old_tty_settings
-        old_tty_settings="$(stty -g 2>/dev/null)" || true
-        # Save previous EXIT trap to avoid clobbering main script's cleanup
-        local prev_exit_trap
-        prev_exit_trap=$(trap -p EXIT | sed 's/^trap -- //')
-        trap '[[ -n "$old_tty_settings" ]] && stty "$old_tty_settings" 2>/dev/null; echo' EXIT
-
-        stty -echo -icanon min 1 time 0 2>/dev/null || true
-
         _render_cat_menu() {
             local i=0
             printf "\r\033[J"
@@ -760,7 +751,7 @@ interactive_config_flow() {
             if [[ "$key" == $'\x1b' ]]; then
                 IFS= read -rsn1 -t 0.1 key
                 if [[ "$key" == '[' ]]; then
-                    IFS= read -rsn1 key
+                    IFS= read -rsn1 -t 0.1 key
                     if [[ "$key" == 'A' ]]; then
                         ((cur > 0)) && ((cur--)) || true
                         _clear_cat_menu
@@ -779,18 +770,10 @@ interactive_config_flow() {
                 fi
                 _clear_cat_menu
                 _render_cat_menu
-            elif [[ "$key" == $'\n' ]] || [[ "$key" == $'\r' ]] || [[ "$key" == 'q' ]]; then
+            elif [[ -z "$key" ]] || [[ "$key" == $'\r' ]] || [[ "$key" == 'q' ]]; then
                 break
             fi
         done
-
-        [[ -n "$old_tty_settings" ]] && stty "$old_tty_settings" 2>/dev/null
-        # Restore previous EXIT trap (or clear if there wasn't one)
-        if [[ -n "$prev_exit_trap" ]]; then
-            eval "trap $prev_exit_trap"
-        else
-            trap - EXIT
-        fi
 
         profile_categories=""
         for i in "${!CAT_SELECTED[@]}"; do
