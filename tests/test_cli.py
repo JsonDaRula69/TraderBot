@@ -574,6 +574,37 @@ class TestTrade:
             assert data["outcome"] == "executed"
             assert data["sized_position_cents"] == 5000
 
+    @pytest.mark.unit
+    def test_trade_command_passes_risk_checks_with_live_data(self):
+        """With mocked MarketService returning realistic data, trade should pass liquidity and edge checks."""
+        from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel
+
+        market = Market(
+            ticker="KXBTCD-26MAR31-T55000",
+            question="BTC above $55k?",
+            outcome_prices=["60", "40"],
+            volume=1000,
+            open_interest=5000,
+            close_time=datetime(2026, 3, 31, tzinfo=timezone.utc),
+            status="open",
+            event_ticker="KXBTCD-26MAR31",
+        )
+        orderbook = OrderBook(
+            yes_bids=[OrderBookLevel(price=58, size=200)],
+            no_bids=[OrderBookLevel(price=42, size=150)],
+        )
+
+        with (
+            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.markets.MarketService.get_market", return_value=market),
+            patch("traderbot.kalshi.markets.MarketService.get_orderbook", return_value=orderbook),
+        ):
+            result = runner.invoke(
+                app,
+                ["trade", "KXBTCD-26MAR31-T55000", "--direction", "yes", "--quantity", "1", "--price", "60"],
+            )
+            assert result.exit_code == 0
+
 
 class TestPositions:
     def test_positions_json_empty(self, tmp_path):
