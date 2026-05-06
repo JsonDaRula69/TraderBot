@@ -1,20 +1,17 @@
 """Order placement service — create, cancel, and track Kalshi portfolio orders."""
 
-from __future__ import annotations
+from typing import Any
 
-from typing import TYPE_CHECKING, Any
-
+from traderbot.kalshi.client import KalshiClient
 from traderbot.kalshi.models import (
     CancelResponse,
     OrderRequest,
     OrderSide,
+    OrderSideV2,
     OrderStatus,
     OrderType,
     TradingOrder,
 )
-
-if TYPE_CHECKING:
-    from traderbot.kalshi.client import KalshiClient
 
 
 class TradingService:
@@ -26,7 +23,7 @@ class TradingService:
     async def place_order(self, order_request: OrderRequest) -> TradingOrder:
         """Submit a new order and return the created order."""
         body = order_request.to_v2_body()
-        response = await self._client.post("/portfolio/orders", **body)
+        response = await self._client.post("/portfolio/events/orders", **body)
         response.raise_for_status()
         data = response.json()
         order_data = data.get("order", data)
@@ -34,7 +31,7 @@ class TradingService:
 
     async def cancel_order(self, order_id: str) -> CancelResponse:
         """Cancel an existing order by ID."""
-        response = await self._client.delete(f"/portfolio/orders/{order_id}")
+        response = await self._client.delete(f"/portfolio/events/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
         return CancelResponse(
@@ -71,13 +68,30 @@ class TradingService:
 
             created_time = datetime.fromtimestamp(created_time, tz=UTC)
 
+        # V2 price: price_dollars or price_fp, in dollars; convert to cents
+        price_dollars = raw.get("price_dollars") or raw.get("price_fp")
+        price = round(float(price_dollars) * 100) if price_dollars is not None else 0
+
+        # V2 quantity: count_fp
+        count_fp = raw.get("count_fp")
+        quantity = int(count_fp) if count_fp is not None else 0
+
+        # Map V2 bid/ask → internal yes/no
+        raw_side = raw.get("side", "yes")
+        if raw_side in (OrderSideV2.bid.value, OrderSideV2.bid):
+            side = OrderSide.yes
+        elif raw_side in (OrderSideV2.ask.value, OrderSideV2.ask):
+            side = OrderSide.no
+        else:
+            side = OrderSide(raw_side)
+
         return TradingOrder(
             order_id=raw["order_id"],
             ticker=raw["ticker"],
-            side=OrderSide(raw.get("side", "yes")),
+            side=side,
             order_type=OrderType(raw.get("order_type", "limit")),
-            quantity=int(raw.get("count", raw.get("quantity", 0))),
-            price=int(raw.get("yes_price", raw.get("price", 0))),
+            quantity=quantity,
+            price=price,
             status=OrderStatus(raw.get("status", "live")),
             created_time=created_time,
             filled_quantity=int(raw.get("filled_quantity", 0)),

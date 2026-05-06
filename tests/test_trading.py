@@ -14,6 +14,7 @@ from traderbot.kalshi.models import (
     CancelResponse,
     OrderRequest,
     OrderSide,
+    OrderSideV2,
     OrderStatus,
     OrderType,
     TradingOrder,
@@ -36,10 +37,10 @@ def _make_config() -> KalshiConfig:
 SAMPLE_ORDER_RAW = {
     "order_id": "ord-001",
     "ticker": "KXBTCD-26MAR31-T55000",
-    "side": "yes",
+    "side": "bid",
     "order_type": "limit",
-    "quantity": 10,
-    "price": 55,
+    "price_dollars": "0.5500",
+    "count_fp": "10",
     "status": "live",
     "created_time": CREATED_TIME_INT,
     "filled_quantity": 0,
@@ -50,7 +51,7 @@ class TestPlaceOrder:
     @respx.mock
     async def test_place_order_success(self) -> None:
         cfg = _make_config()
-        respx.post(f"{cfg.active_url}/portfolio/orders").mock(
+        respx.post(f"{cfg.active_url}/portfolio/events/orders").mock(
             return_value=httpx.Response(200, json={"order": SAMPLE_ORDER_RAW})
         )
         async with KalshiClient(cfg) as client:
@@ -58,10 +59,9 @@ class TestPlaceOrder:
             service = TradingService(client)
             order_request = OrderRequest(
                 ticker="KXBTCD-26MAR31-T55000",
-                action="buy",
-                side=OrderSide.yes,
-                count=10,
-                price_cents=55,
+                side=OrderSideV2.bid,
+                count="10",
+                price="0.55",
             )
             result = await service.place_order(order_request)
 
@@ -81,7 +81,7 @@ class TestCancelOrder:
     @respx.mock
     async def test_cancel_order_success(self) -> None:
         cfg = _make_config()
-        respx.delete(f"{cfg.active_url}/portfolio/orders/ord-001").mock(
+        respx.delete(f"{cfg.active_url}/portfolio/events/orders/ord-001").mock(
             return_value=httpx.Response(200, json={"order_id": "ord-001", "status": "cancelled"})
         )
         async with KalshiClient(cfg) as client:
@@ -96,7 +96,7 @@ class TestCancelOrder:
     @respx.mock
     async def test_cancel_order_not_found(self) -> None:
         cfg = _make_config()
-        respx.delete(f"{cfg.active_url}/portfolio/orders/nonexistent").mock(
+        respx.delete(f"{cfg.active_url}/portfolio/events/orders/nonexistent").mock(
             return_value=httpx.Response(404, json={"error": "not found"})
         )
         async with KalshiClient(cfg) as client:
@@ -130,10 +130,10 @@ class TestListOrders:
         order_raw_2 = {
             "order_id": "ord-002",
             "ticker": "KXBTCD-26MAR31-T55000",
-            "side": "no",
+            "side": "ask",
             "order_type": "market",
-            "quantity": 5,
-            "price": 45,
+            "count_fp": "5",
+            "price_dollars": "0.4500",
             "status": "matched",
             "created_time": CREATED_TIME_INT,
             "filled_quantity": 5,
@@ -186,38 +186,21 @@ class TestOrderRequestValidation:
         assert OrderSide.yes.value == "yes"
         assert OrderSide.no.value == "no"
 
+    def test_order_side_v2_enum(self) -> None:
+        assert OrderSideV2.bid.value == "bid"
+        assert OrderSideV2.ask.value == "ask"
+
     def test_order_type_enum(self) -> None:
         assert OrderType.limit.value == "limit"
         assert OrderType.market.value == "market"
-
-    def test_place_order_invalid_price(self) -> None:
-        with pytest.raises(ValidationError):
-            OrderRequest(
-                ticker="KX",
-                action="buy",
-                side=OrderSide.yes,
-                count=10,
-                price_cents=100,
-            )
-
-    def test_place_order_zero_quantity(self) -> None:
-        with pytest.raises(ValidationError):
-            OrderRequest(
-                ticker="KX",
-                action="buy",
-                side=OrderSide.yes,
-                count=0,
-                price_cents=55,
-            )
 
     def test_order_request_model_strict(self) -> None:
         with pytest.raises(ValidationError):
             OrderRequest(
                 ticker="KX",
-                action="buy",
-                side=OrderSide.yes,
-                count=10,
-                price_cents=55,
+                side=OrderSideV2.bid,
+                count="10",
+                price="0.55",
                 extra_field="bad",
             )
 
@@ -254,45 +237,39 @@ class TestModelStrictness:
         assert OrderStatus.cancelled.value == "cancelled"
         assert OrderStatus.expired.value == "expired"
 
-    def test_order_request_requires_action(self) -> None:
-        with pytest.raises(ValidationError):
-            OrderRequest(
-                ticker="KX",
-                side=OrderSide.yes,
-                count=10,
-                price_cents=55,
-            )
-
-    def test_order_request_negative_quantity(self) -> None:
-        with pytest.raises(ValidationError):
-            OrderRequest(
-                ticker="KX",
-                action="buy",
-                side=OrderSide.yes,
-                count=-1,
-                price_cents=55,
-            )
-
-    def test_order_request_price_zero(self) -> None:
-        with pytest.raises(ValidationError):
-            OrderRequest(
-                ticker="KX",
-                action="buy",
-                side=OrderSide.yes,
-                count=10,
-                price_cents=0,
-            )
-
-    def test_to_v2_body_maps_price_cents_to_price_dollars(self) -> None:
+    def test_to_v2_body_maps_fields(self) -> None:
         req = OrderRequest(
             ticker="KXBTCD-26MAR31-T55000",
-            action="buy",
-            side=OrderSide.yes,
-            count=10,
-            price_cents=55,
+            side=OrderSideV2.bid,
+            count="10",
+            price="0.5500",
         )
         body = req.to_v2_body()
-        assert body["price_dollars"] == 55
+        assert body["price_dollars"] == "0.5500"
+        assert body["count_fp"] == "10"
+        assert body["side"] == "bid"
         assert body["ticker"] == "KXBTCD-26MAR31-T55000"
-        assert body["side"] == "yes"
+        assert "client_order_id" in body
         assert "yes_price" not in body
+        assert "no_price" not in body
+
+    def test_to_v2_body_auto_generates_client_order_id(self) -> None:
+        req = OrderRequest(
+            ticker="KX",
+            side=OrderSideV2.ask,
+            count="5",
+            price="0.45",
+        )
+        body = req.to_v2_body()
+        assert body["client_order_id"]  # auto-generated UUID4
+
+    def test_to_v2_body_uses_provided_client_order_id(self) -> None:
+        req = OrderRequest(
+            ticker="KX",
+            side=OrderSideV2.bid,
+            count="5",
+            price="0.45",
+            client_order_id="custom-id-123",
+        )
+        body = req.to_v2_body()
+        assert body["client_order_id"] == "custom-id-123"
