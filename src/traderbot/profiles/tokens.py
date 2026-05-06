@@ -39,12 +39,16 @@ def set_keyring(keyring_module: Any) -> None:
 
 
 def _keyring_available() -> bool:
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        return False
     try:
         kr = _get_keyring()
         if hasattr(kr, "get_keyring"):
             backend = kr.get_keyring()
             backend_name = type(backend).__name__
             if "Fail" in backend_name or "Null" in backend_name:
+                return False
+            if "SecretService" in backend_name and not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
                 return False
         kr.set_password("__traderbot_probe__", "test", "probe")
         kr.delete_password("__traderbot_probe__", "test")
