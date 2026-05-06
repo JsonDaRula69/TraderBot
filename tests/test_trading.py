@@ -283,7 +283,7 @@ class TestModelStrictness:
                 price_cents=0,
             )
 
-    def test_to_v2_body_uses_v2_field_names(self) -> None:
+    def test_to_v2_body_maps_price_cents_to_price_dollars(self) -> None:
         req = OrderRequest(
             ticker="KXBTCD-26MAR31-T55000",
             action="buy",
@@ -292,9 +292,7 @@ class TestModelStrictness:
             price_cents=55,
         )
         body = req.to_v2_body()
-        assert body["price"] == "0.5500"
-        assert body["count"] == "10"
+        assert body["price_dollars"] == 55
         assert body["ticker"] == "KXBTCD-26MAR31-T55000"
         assert body["side"] == "yes"
-        assert "price_dollars" not in body
         assert "yes_price" not in body

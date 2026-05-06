@@ -244,19 +244,19 @@ class OrderRequest(BaseModel):
     client_order_id: str | None = None
     no_price: Annotated[int, Field(ge=0, le=99)] | None = None
 
-    def to_v2_body(self) -> dict[str, str]:
+    def to_v2_body(self) -> dict[str, Any]:
         """Serialize to V2 API request body."""
-        body: dict[str, str] = {
+        body: dict[str, Any] = {
             "ticker": self.ticker,
             "action": self.action,
             "side": self.side.value,
-            "count": str(self.count),
-            "price": f"{self.price_cents / 100:.4f}",
+            "count": self.count,
+            "price_dollars": self.price_cents,
         }
         if self.client_order_id is not None:
             body["client_order_id"] = self.client_order_id
         if self.no_price is not None:
-            body["no_price"] = str(self.no_price)
+            body["no_price"] = self.no_price
         return body
 
 
