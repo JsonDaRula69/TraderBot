@@ -139,6 +139,24 @@ class TestPerformanceReview:
         assert result.win_rate == 0.0
         assert result.total_pnl_cents == -60
 
+    def test_performance_review_no_position_win(self):
+        decisions = [
+            _make_decision(id=1, direction="no", price=40, actual_result=False),
+        ]
+        result = step_performance_review(decisions)
+        assert result.trade_count == 1
+        assert result.win_rate == 1.0
+        assert result.total_pnl_cents == 60
+
+    def test_performance_review_yes_position_loss(self):
+        decisions = [
+            _make_decision(id=1, direction="yes", price=60, actual_result=False),
+        ]
+        result = step_performance_review(decisions)
+        assert result.trade_count == 1
+        assert result.win_rate == 0.0
+        assert result.total_pnl_cents == -60
+
     def test_mixed_trades(self):
         decisions = [
             _make_decision(id=1, direction="yes", price=40, actual_result=True),

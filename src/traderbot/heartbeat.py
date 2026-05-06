@@ -149,10 +149,13 @@ def step_performance_review(
     confidence_sum = 0.0
     for d in executed:
         confidence_sum += d.confidence
-        if d.actual_result is True:
+        winning = (d.direction == "yes" and d.actual_result is True) or (
+            d.direction == "no" and d.actual_result is False
+        )
+        if winning:
             wins += 1
             total_pnl += (100 - d.price) * d.quantity
-        elif d.actual_result is False:
+        elif d.actual_result is not None:
             total_pnl -= d.price * d.quantity
 
     trade_count = len(executed)
