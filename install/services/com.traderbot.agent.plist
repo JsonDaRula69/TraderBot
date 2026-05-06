@@ -6,13 +6,13 @@
 	<key>Label</key>
 	<string>com.traderbot.agent.AGENT_ID</string>
 
-	<!-- ProgramArguments: sources .env then runs main agent loop (scan with continuous flag).
-	     Heartbeat is triggered by OpenClaw Gateway, not self-polled. -->
+	<!-- ProgramArguments: sources .env then runs a single healthcheck.
+	     Scheduling (decision loop, heartbeat, news) is managed by OpenClaw Gateway. -->
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
 		<string>-c</string>
-		<string>set -a; source /Users/USERNAME/.traderbot/.env; set +a; exec /Users/USERNAME/traderbot/.venv/bin/traderbot scan --continuous</string>
+		<string>set -a; source /Users/USERNAME/.traderbot/.env; set +a; exec /Users/USERNAME/traderbot/.venv/bin/traderbot heartbeat --dry-run --json</string>
 	</array>
 
 	<!-- EnvironmentVariables: TOKEN_PLACEHOLDER replaced by installer -->
@@ -33,11 +33,9 @@
 	<key>RunAtLoad</key>
 	<true/>
 
+	<!-- This is a oneshot healthcheck, not a persistent daemon. -->
 	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
+	<false/>
 
 	<!-- StandardOutPath / StandardErrorPath: AGENT_ID replaced by installer -->
 	<key>StandardOutPath</key>

@@ -6,33 +6,32 @@
 # USAGE:
 #   install-service.sh <agent_name>
 #
+# This service runs a single healthcheck on boot to verify that the
+# TraderBot agent profile and Kalshi API credentials are configured.
+# Scheduling is handled by OpenClaw Gateway (cron loops), not this service.
+#
 # The installer creates ~/.traderbot/.env with the profile token.
 # VENV_PATH: /home/%i/traderbot/.venv/bin/traderbot
 # CONFIG_DIR: /home/%i/.traderbot/
 
 [Unit]
-Description=TraderBot Agent (%i)
+Description=TraderBot Agent Healthcheck (%i)
 Documentation=https://github.com/JsonDaRula69/TraderBot
 After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=%i
 WorkingDirectory=/home/%i/traderbot
 
 EnvironmentFile=%h/.traderbot/.env
-# Installer replaces placeholder: Environment=TRADERBOT_PROFILE_TOKEN=<PROFILE_TOKEN>
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
-# Heartbeat is triggered by OpenClaw Gateway, not self-polled.
-ExecStart=/home/%i/traderbot/.venv/bin/traderbot scan --continuous
-
-Restart=on-failure
-RestartSec=10
-StartLimitInterval=300
-StartLimitBurst=5
+# Run a single heartbeat healthcheck to verify profile and credentials.
+# Scheduling (decision loop, heartbeat, news) is managed by OpenClaw Gateway.
+ExecStart=/home/%i/traderbot/.venv/bin/traderbot heartbeat --dry-run --json
 
 StandardOutput=journal
 StandardError=journal
