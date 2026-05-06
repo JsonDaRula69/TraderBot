@@ -1,7 +1,5 @@
 """Internal normalization helpers shared across kalshi modules."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +7,9 @@ from traderbot.kalshi.models import Market, MarketCategory, OrderBookLevel, Trad
 
 
 def _to_cents(value: str | int) -> int:
+    """Convert a value to integer cents. Handles fixed-point dollar strings like '0.55' → 55."""
+    if isinstance(value, str):
+        return int(round(float(value) * 100))
     return int(value)
 
 
@@ -20,12 +21,21 @@ _CATEGORY_MAP: dict[str, MarketCategory] = {
     "economics": MarketCategory.ECONOMICS,
     "politics": MarketCategory.POLITICS,
     "weather": MarketCategory.WEATHER,
+    "climate and weather": MarketCategory.WEATHER,
     "sports": MarketCategory.SPORTS,
     "culture": MarketCategory.CULTURE,
     "technology": MarketCategory.TECHNOLOGY,
-    "tech": MarketCategory.TECHNOLOGY,
+    "science and technology": MarketCategory.TECHNOLOGY,
     "science": MarketCategory.SCIENCE,
     "crypto": MarketCategory.CRYPTO,
+    "commodities": MarketCategory.COMMODITIES,
+    "companies": MarketCategory.COMPANIES,
+    "elections": MarketCategory.ELECTIONS,
+    "entertainment": MarketCategory.ENTERTAINMENT,
+    "financials": MarketCategory.FINANCIALS,
+    "health": MarketCategory.HEALTH,
+    "mentions": MarketCategory.MENTIONS,
+    "social": MarketCategory.SOCIAL,
 }
 
 
@@ -67,10 +77,16 @@ def _normalize_trade(raw: dict[str, Any]) -> Trade:
     if isinstance(ts_val, int):
         ts_val = _unix_to_datetime(ts_val)
 
+    price = _to_cents(
+        raw.get("price_dollars") or raw.get("price_fp") or 0
+    )
+
+    quantity = int(raw.get("count_fp") or 0)
+
     return Trade(
         ticker=raw["ticker"],
-        price=_to_cents(raw.get("yes_price", raw.get("price", 0))),
-        quantity=int(raw.get("count", raw.get("quantity", 0))),
+        price=price,
+        quantity=quantity,
         side=raw.get("side", "yes"),
         timestamp=ts_val,
     )

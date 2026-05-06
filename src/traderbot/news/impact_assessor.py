@@ -77,6 +77,14 @@ CATEGORY_SENSITIVITY: dict[NewsCategory, float] = {
     NewsCategory.SCIENCE: 0.4,
     NewsCategory.SPORTS: 0.4,
     NewsCategory.CRYPTO: 0.8,
+    NewsCategory.COMMODITIES: 0.7,
+    NewsCategory.COMPANIES: 0.6,
+    NewsCategory.ELECTIONS: 0.9,
+    NewsCategory.ENTERTAINMENT: 0.4,
+    NewsCategory.FINANCIALS: 0.8,
+    NewsCategory.HEALTH: 0.5,
+    NewsCategory.MENTIONS: 0.3,
+    NewsCategory.SOCIAL: 0.2,
 }
 
 # ── Timeframe labels ─────────────────────────────────────────────────

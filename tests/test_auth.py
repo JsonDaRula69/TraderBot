@@ -255,10 +255,13 @@ class TestKeyringKalshiConfig:
 
 class TestEnvMapping:
     def test_kalshi_api_key_env_mapping(self) -> None:
-        assert AuthManager._service_key_to_env("kalshi", "api_key") == "KALSHI_API_KEY"
+        assert AuthManager._service_key_to_env("kalshi", "api_key") == ["KALSHI_API_KEY"]
 
     def test_kalshi_private_key_pem_env_mapping(self) -> None:
-        assert AuthManager._service_key_to_env("kalshi", "private_key_pem") == "KALSHI_PRIVATE_KEY_PEM"
+        assert AuthManager._service_key_to_env("kalshi", "private_key_pem") == [
+            "KALSHI_PRIVATE_KEY_PEM",
+            "KALSHI_PRIVATE_KEY_PATH",
+        ]
 
     def test_generic_service_env_mapping(self) -> None:
-        assert AuthManager._service_key_to_env("voyage", "api_key") == "VOYAGE_API_KEY"
+        assert AuthManager._service_key_to_env("voyage", "api_key") == ["VOYAGE_API_KEY"]

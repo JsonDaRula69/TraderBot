@@ -1,3 +1,0 @@
-=== VERSION file ===
-0.04.11=== pyproject.toml version ===
-version = "0.04.11"

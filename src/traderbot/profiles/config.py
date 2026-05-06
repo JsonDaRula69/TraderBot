@@ -105,10 +105,11 @@ def resolve_newsapi_key(
             logger.info("Using global NewsAPI credentials")
         return key_result.value.get_secret_value()
 
-    env_key = os.environ.get("NEWSAPI_KEY")
-    if env_key is not None:
-        logger.debug("Using NewsAPI key from NEWSAPI_KEY environment variable")
-        return env_key
+    for env_name in ("NEWSAPI_API_KEY", "NEWSAPI_KEY"):
+        env_key = os.environ.get(env_name)
+        if env_key is not None:
+            logger.debug("Using NewsAPI key from %s environment variable", env_name)
+            return env_key
 
     logger.warning("No NewsAPI key found in profile, global, or environment")
     return None

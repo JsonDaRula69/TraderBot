@@ -38,4 +38,4 @@ After running `traderbot heartbeat --json`:
 
 ## Data Output
 
-The 7-step review data is written to `HEARTBEAT_DATA.md` by `traderbot heartbeat` (not this file).
+The 7-step review data is written to `HEARTBEAT_DATA.md` by `traderbot heartbeat --json` (not this file).

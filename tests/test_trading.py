@@ -13,6 +13,7 @@ from traderbot.kalshi.client import KalshiClient, KalshiConfig
 from traderbot.kalshi.models import (
     CancelResponse,
     OrderRequest,
+    OrderResult,
     OrderSide,
     OrderSideV2,
     OrderStatus,
@@ -39,20 +40,28 @@ SAMPLE_ORDER_RAW = {
     "ticker": "KXBTCD-26MAR31-T55000",
     "side": "bid",
     "order_type": "limit",
-    "price_dollars": "0.5500",
-    "count_fp": "10",
+    "yes_price_dollars": "0.5500",
+    "initial_count_fp": "10",
+    "fill_count_fp": "0",
     "status": "live",
     "created_time": CREATED_TIME_INT,
-    "filled_quantity": 0,
 }
 
 
 class TestPlaceOrder:
     @respx.mock
     async def test_place_order_success(self) -> None:
+        v2_create_response = {
+            "order_id": "ord-001",
+            "client_order_id": "client-abc",
+            "fill_count": "0",
+            "remaining_count": "10",
+            "average_fill_price": None,
+            "ts_ms": 1745150400000,
+        }
         cfg = _make_config()
         respx.post(f"{cfg.active_url}/portfolio/events/orders").mock(
-            return_value=httpx.Response(200, json={"order": SAMPLE_ORDER_RAW})
+            return_value=httpx.Response(200, json=v2_create_response)
         )
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
@@ -65,16 +74,13 @@ class TestPlaceOrder:
             )
             result = await service.place_order(order_request)
 
-        assert isinstance(result, TradingOrder)
+        assert isinstance(result, OrderResult)
         assert result.order_id == "ord-001"
-        assert result.ticker == "KXBTCD-26MAR31-T55000"
-        assert result.side == OrderSide.yes
-        assert result.order_type == OrderType.limit
-        assert result.quantity == 10
-        assert result.price == 55
-        assert result.status == OrderStatus.live
-        assert result.created_time == CREATED_TIME_DT
-        assert result.filled_quantity == 0
+        assert result.client_order_id == "client-abc"
+        assert result.fill_count == "0"
+        assert result.remaining_count == "10"
+        assert result.average_fill_price is None
+        assert result.ts_ms == 1745150400000
 
 
 class TestCancelOrder:
@@ -82,7 +88,7 @@ class TestCancelOrder:
     async def test_cancel_order_success(self) -> None:
         cfg = _make_config()
         respx.delete(f"{cfg.active_url}/portfolio/events/orders/ord-001").mock(
-            return_value=httpx.Response(200, json={"order_id": "ord-001", "status": "cancelled"})
+            return_value=httpx.Response(200, json={"order_id": "ord-001", "client_order_id": "client-abc", "reduced_by": "0", "ts_ms": 1745150401000})
         )
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
@@ -91,7 +97,8 @@ class TestCancelOrder:
 
         assert isinstance(result, CancelResponse)
         assert result.order_id == "ord-001"
-        assert result.status == OrderStatus.cancelled
+        assert result.status is None
+        assert result.reduced_by == "0"
 
     @respx.mock
     async def test_cancel_order_not_found(self) -> None:
@@ -110,7 +117,7 @@ class TestGetOrder:
     @respx.mock
     async def test_get_order_success(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/events/orders/ord-001").mock(
+        respx.get(f"{cfg.active_url}/portfolio/orders/ord-001").mock(
             return_value=httpx.Response(200, json={"order": SAMPLE_ORDER_RAW})
         )
         async with KalshiClient(cfg) as client:
@@ -132,14 +139,14 @@ class TestListOrders:
             "ticker": "KXBTCD-26MAR31-T55000",
             "side": "ask",
             "order_type": "market",
-            "count_fp": "5",
-            "price_dollars": "0.4500",
+            "initial_count_fp": "5",
+            "no_price_dollars": "0.4500",
+            "fill_count_fp": "5",
             "status": "matched",
             "created_time": CREATED_TIME_INT,
-            "filled_quantity": 5,
         }
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
+        respx.get(f"{cfg.active_url}/portfolio/orders").mock(
             return_value=httpx.Response(200, json={"orders": [SAMPLE_ORDER_RAW, order_raw_2]})
         )
         async with KalshiClient(cfg) as client:
@@ -156,7 +163,7 @@ class TestListOrders:
     @respx.mock
     async def test_list_orders_by_ticker(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
+        route = respx.get(f"{cfg.active_url}/portfolio/orders").mock(
             return_value=httpx.Response(200, json={"orders": [SAMPLE_ORDER_RAW]})
         )
         async with KalshiClient(cfg) as client:
@@ -170,7 +177,7 @@ class TestListOrders:
     @respx.mock
     async def test_list_orders_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/portfolio/events/orders").mock(
+        respx.get(f"{cfg.active_url}/portfolio/orders").mock(
             return_value=httpx.Response(200, json={"orders": []})
         )
         async with KalshiClient(cfg) as client:
@@ -245,13 +252,17 @@ class TestModelStrictness:
             price="0.5500",
         )
         body = req.to_v2_body()
-        assert body["price_dollars"] == "0.5500"
-        assert body["count_fp"] == "10"
+        assert body["price"] == "0.5500"
+        assert body["count"] == "10"
         assert body["side"] == "bid"
         assert body["ticker"] == "KXBTCD-26MAR31-T55000"
         assert "client_order_id" in body
+        assert body["time_in_force"] == "good_till_canceled"
+        assert body["self_trade_prevention_type"] == "taker_at_cross"
         assert "yes_price" not in body
         assert "no_price" not in body
+        assert "count_fp" not in body
+        assert "price_dollars" not in body
 
     def test_to_v2_body_auto_generates_client_order_id(self) -> None:
         req = OrderRequest(
@@ -273,3 +284,100 @@ class TestModelStrictness:
         )
         body = req.to_v2_body()
         assert body["client_order_id"] == "custom-id-123"
+
+
+class TestParseOrder:
+    @staticmethod
+    def _base() -> dict:
+        return {
+            "order_id": "ord-001",
+            "ticker": "KXBTCD-26MAR31-T55000",
+            "side": "bid",
+            "order_type": "limit",
+            "yes_price_dollars": "0.5500",
+            "initial_count_fp": "10",
+            "fill_count_fp": "0",
+            "status": "live",
+            "created_time": CREATED_TIME_INT,
+        }
+
+    def test_all_v2_fields(self) -> None:
+        order = TradingService._parse_order(self._base())
+        assert order.order_id == "ord-001"
+        assert order.ticker == "KXBTCD-26MAR31-T55000"
+        assert order.side == OrderSide.yes
+        assert order.order_type == OrderType.limit
+        assert order.quantity == 10
+        assert order.price == 55
+        assert order.status == OrderStatus.live
+        assert order.created_time == CREATED_TIME_DT
+        assert order.filled_quantity == 0
+
+    def test_price_fp_instead_of_price_dollars(self) -> None:
+        raw = {
+            **self._base(),
+            "yes_price_dollars": None,
+            "no_price_dollars": None,
+            "price_dollars": None,
+            "price_fp": "0.6600",
+        }
+        order = TradingService._parse_order(raw)
+        assert order.price == 66
+
+    def test_bid_side_maps_to_yes(self) -> None:
+        raw = {**self._base(), "side": "bid"}
+        order = TradingService._parse_order(raw)
+        assert order.side == OrderSide.yes
+
+    def test_ask_side_maps_to_no(self) -> None:
+        raw = {**self._base(), "side": "ask"}
+        order = TradingService._parse_order(raw)
+        assert order.side == OrderSide.no
+
+    def test_missing_created_time_raises_validation_error(self) -> None:
+        raw = self._base()
+        del raw["created_time"]
+        with pytest.raises(ValidationError):
+            TradingService._parse_order(raw)
+
+    def test_unknown_order_type_raises_value_error(self) -> None:
+        raw = {**self._base(), "order_type": "weird_custom_type"}
+        with pytest.raises(ValueError, match="is not a valid OrderType"):
+            TradingService._parse_order(raw)
+
+    def test_unknown_side_falls_back_to_raw_value(self) -> None:
+        """When side is not bid/ask, it passes through OrderSide(raw_side)."""
+        raw = {**self._base(), "side": "no"}
+        order = TradingService._parse_order(raw)
+        assert order.side == OrderSide.no
+
+    def test_empty_price_raises_validation_error(self) -> None:
+        raw = {**self._base(), "yes_price_dollars": None, "no_price_dollars": None, "price_dollars": None, "price_fp": None}
+        with pytest.raises(ValidationError):
+            TradingService._parse_order(raw)
+
+    def test_empty_count_returns_zero(self) -> None:
+        raw = {**self._base(), "initial_count_fp": None, "count_fp": None}
+        order = TradingService._parse_order(raw)
+        assert order.quantity == 0
+
+    def test_status_defaults_to_live(self) -> None:
+        raw = self._base().copy()
+        del raw["status"]
+        order = TradingService._parse_order(raw)
+        assert order.status == OrderStatus.live
+
+    def test_created_time_str_rejected_by_model(self) -> None:
+        raw = {**self._base(), "created_time": "2025-04-20T12:00:00Z"}
+        with pytest.raises(ValidationError):
+            TradingService._parse_order(raw)
+
+    def test_ask_enum_value_maps_to_no(self) -> None:
+        raw = {**self._base(), "side": OrderSideV2.ask}
+        order = TradingService._parse_order(raw)
+        assert order.side == OrderSide.no
+
+    def test_bid_enum_value_maps_to_yes(self) -> None:
+        raw = {**self._base(), "side": OrderSideV2.bid}
+        order = TradingService._parse_order(raw)
+        assert order.side == OrderSide.yes

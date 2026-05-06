@@ -39,7 +39,7 @@ def get_current_profile(keyring_module: Any = None) -> TradingProfile | None:
     # Resolve token to (profile_name, agent_id)
     resolution = resolve_token(token)
     if resolution is None:
-        logger.warning("Invalid or revoked token: %s", token)
+        logger.warning("Invalid or revoked token: %s", "****" + token[-4:] if len(token) > 4 else "****")
         return None
 
     profile_name, agent_id = resolution

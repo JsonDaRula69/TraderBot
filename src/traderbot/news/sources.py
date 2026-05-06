@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import hashlib
 import logging
+import os
 import random
 from datetime import UTC, datetime
 from typing import Any, ClassVar
@@ -22,8 +23,18 @@ class NewsAPIError(Exception):
     """Raised when the NewsAPI returns an error response."""
 
 
+class NewsAPIAuthError(Exception):
+    """Raised when NewsAPI returns 401 — permanent auth failure, no retry."""
+
+
+class NewsAPIBudgetExceeded(Exception):
+    """Raised when the client-side daily budget (100 req/day) is exhausted."""
+
+
 class NewsAggregator:
     """Fetch and aggregate news from multiple sources with graceful degradation."""
+
+    _MAX_PAGE_SIZE: ClassVar[int] = 100
 
     # Source fetch priority order (fastest/breaking → slowest/analysis)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
@@ -37,6 +48,7 @@ class NewsAggregator:
         twitter_api_key: str | None = None,
         reddit_subreddits: list[str] | None = None,
         http_client: httpx.AsyncClient | None = None,
+        daily_budget: int | None = None,
     ) -> None:
         self._newsapi_key = newsapi_key
         self._twitter_api_key = twitter_api_key
@@ -49,6 +61,21 @@ class NewsAggregator:
         self._newsapi_base = "https://newsapi.org/v2"
         self.rate_limit_limit: int | None = None
         self.rate_limit_remaining: int | None = None
+        self._daily_budget: int = daily_budget or int(os.environ.get("NEWSAPI_DAILY_BUDGET", "100"))
+        self._daily_request_count: int = 0
+        self._budget_reset_date: str = ""
+
+    def _check_daily_budget(self) -> None:
+        """Enforce client-side daily request budget, resetting at midnight UTC."""
+        today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+        if today != self._budget_reset_date:
+            self._budget_reset_date = today
+            self._daily_request_count = 0
+        if self._daily_request_count >= self._daily_budget:
+            raise NewsAPIBudgetExceeded(
+                f"Daily budget exhausted ({self._daily_request_count} requests today)"
+            )
+        self._daily_request_count += 1
 
     async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None) -> list[NewsItem]:
         """Fetch recent items from a single source."""
@@ -86,16 +113,19 @@ class NewsAggregator:
     async def _fetch_newsapi(self, limit: int) -> list[NewsItem]:
         """Fetch top headlines from NewsAPI with 429 retry/backoff."""
         if not self._newsapi_key:
-            logger.warning("NEWSAPI_KEY not set, skipping NewsAPI")
+            logger.warning("NEWSAPI_API_KEY not set, skipping NewsAPI")
             return []
 
         if self.rate_limit_remaining is not None and self.rate_limit_remaining <= 0:
             logger.warning("NewsAPI rate limit exhausted (%d remaining), skipping", self.rate_limit_remaining)
             return []
 
+        self._check_daily_budget()
+
+        headers: dict[str, str] = {"X-Api-Key": self._newsapi_key}
         params: dict[str, Any] = {
-            "apiKey": self._newsapi_key,
-            "pageSize": min(limit, 100),
+            "pageSize": min(limit, self._MAX_PAGE_SIZE),
+            "country": "us",  # required by NewsAPI — at least one of country/category/sources/q
         }
 
         max_retries = 3
@@ -107,6 +137,7 @@ class NewsAggregator:
                 response = await self._client.get(
                     f"{self._newsapi_base}/top-headlines",
                     params=params,
+                    headers=headers,
                 )
                 self._capture_rate_limits(response)
 
@@ -123,6 +154,9 @@ class NewsAggregator:
                         continue
                     logger.error("NewsAPI rate limit exhausted after %d retries", max_retries)
                     return []
+
+                if response.status_code == 401:
+                    raise NewsAPIAuthError("NewsAPI auth failed: invalid API key")
 
                 if response.status_code != 200:
                     try:
@@ -180,11 +214,13 @@ class NewsAggregator:
     async def _fetch_everything(self, query: str, limit: int = 20) -> list[NewsItem]:
         """Fetch articles matching query via NewsAPI /everything endpoint."""
         if not self._newsapi_key:
-            logger.warning("NEWSAPI_KEY not set, skipping NewsAPI everything")
+            logger.warning("NEWSAPI_API_KEY not set, skipping NewsAPI everything")
             return []
 
+        self._check_daily_budget()
+
+        headers: dict[str, str] = {"X-Api-Key": self._newsapi_key}
         params: dict[str, Any] = {
-            "apiKey": self._newsapi_key,
             "q": query,
             "pageSize": min(limit, 100),
             "sortBy": "publishedAt",
@@ -200,6 +236,7 @@ class NewsAggregator:
                 response = await self._client.get(
                     f"{self._newsapi_base}/everything",
                     params=params,
+                    headers=headers,
                 )
                 self._capture_rate_limits(response)
 
@@ -214,6 +251,9 @@ class NewsAggregator:
                         continue
                     logger.error("NewsAPI everything rate limit exhausted")
                     return []
+
+                if response.status_code == 401:
+                    raise NewsAPIAuthError("NewsAPI auth failed: invalid API key")
 
                 if response.status_code != 200:
                     try:
@@ -268,6 +308,10 @@ class NewsAggregator:
             logger.error("NewsAPI everything request failed: %s", last_exc)
         return []
 
+    # NOTE: X-RateLimit-* headers are NOT documented by NewsAPI (as of 2026).
+    # If NewsAPI doesn't send them, this is a no-op — rate limits are still
+    # enforced reactively via 429 responses.
+
     def _capture_rate_limits(self, response: httpx.Response) -> None:
         """Extract rate-limit headers from NewsAPI response."""
         if "X-RateLimit-Limit" in response.headers:
@@ -309,19 +353,17 @@ class NewsAggregator:
             NewsAPIError: On non-200 responses with API error message.
         """
         if not self._newsapi_key:
-            raise NewsAPIError("NEWSAPI_KEY not set")
+            raise NewsAPIError("NEWSAPI_API_KEY not set")
 
         if self.is_rate_limited():
             raise NewsAPIError("NewsAPI rate limit exhausted")
 
-        if "sources" in kwargs and "language" in kwargs:
-            logger.warning("NewsAPI /everything: 'sources' excludes 'language', removing language")
-            del kwargs["language"]
+        self._check_daily_budget()
 
+        headers: dict[str, str] = {"X-Api-Key": self._newsapi_key}
         params: dict[str, Any] = {
-            "apiKey": self._newsapi_key,
             "q": query,
-            "pageSize": min(page_size, 100),
+            "pageSize": min(page_size, self._MAX_PAGE_SIZE),
             "page": page,
             "sortBy": sort_by,
             "language": "en",
@@ -333,6 +375,7 @@ class NewsAggregator:
                 response = await self._client.get(
                     f"{self._newsapi_base}/everything",
                     params=params,
+                    headers=headers,
                 )
                 self._capture_rate_limits(response)
 
@@ -343,6 +386,9 @@ class NewsAggregator:
                         await asyncio.sleep(delay)
                         continue
                     raise NewsAPIError("NewsAPI rate limit exhausted after retries")
+
+                if response.status_code == 401:
+                    raise NewsAPIAuthError("NewsAPI auth failed: invalid API key")
 
                 if response.status_code != 200:
                     try:

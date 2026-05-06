@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+from traderbot.kalshi._normalize import _normalize_trade as normalize_trade_raw
 from traderbot.kalshi.models import (
     CutoffTimestamps,
     Decision,
@@ -1074,7 +1075,7 @@ class TestMarketCategoryValidator:
         )
         assert market.category == "crypto"
 
-    def test_unknown_category_becomes_none(self) -> None:
+    def test_unknown_category_passes_through(self) -> None:
         market = Market(
             ticker="KXBTC-26MAR31-T55000",
             question="Bitcoin above 55000?",
@@ -1086,7 +1087,7 @@ class TestMarketCategoryValidator:
             event_ticker="KXBTC-26MAR31",
             category="unknown_category_xyz",
         )
-        assert market.category is None
+        assert market.category == "unknown_category_xyz"
 
     def test_none_category_passes(self) -> None:
         market = Market(
@@ -1101,3 +1102,95 @@ class TestMarketCategoryValidator:
             category=None,
         )
         assert market.category is None
+
+
+class TestNormalizeTrade:
+    def test_price_dollars_fixed_point_to_cents(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.5500",
+            "count_fp": "10",
+            "side": "yes",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.price == 55
+        assert trade.quantity == 10
+        assert trade.side == "yes"
+        assert trade.ticker == "KX-TEST"
+
+    def test_price_fp_fallback(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_fp": "0.4500",
+            "count_fp": "5",
+            "side": "no",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.price == 45
+        assert trade.side == "no"
+
+    def test_missing_price_defaults_to_zero(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "count_fp": "10",
+            "side": "yes",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.price == 0
+
+    def test_missing_count_defaults_to_zero(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.5500",
+            "side": "yes",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.quantity == 0
+
+    def test_missing_side_defaults_to_yes(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.5500",
+            "count_fp": "10",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.side == "yes"
+
+    def test_timestamp_int_converted_to_datetime(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.5500",
+            "count_fp": "10",
+            "side": "yes",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.timestamp == datetime(2025, 4, 20, 12, 0, 0, tzinfo=UTC)
+
+    def test_created_time_fallback_for_missing_timestamp(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.5500",
+            "count_fp": "10",
+            "side": "yes",
+            "created_time": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.timestamp is not None
+
+    def test_price_fp_overrides_price_dollars_when_both_none(self) -> None:
+        raw = {
+            "ticker": "KX-TEST",
+            "price_dollars": "0.0000",
+            "price_fp": None,
+            "count_fp": "10",
+            "side": "yes",
+            "timestamp": 1745150400,
+        }
+        trade = normalize_trade_raw(raw)
+        assert trade.price == 0

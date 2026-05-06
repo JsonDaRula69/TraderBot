@@ -13,6 +13,7 @@ class TokenBucketRateLimiter:
 
     def __init__(self, tokens_per_second: float, burst_capacity: int | None = None) -> None:
         self._rate = tokens_per_second
+        self.tokens_per_second = tokens_per_second
         self._burst = burst_capacity or int(tokens_per_second * 2)
         self._tokens = float(self._burst)
         self._last_refill = time.monotonic()

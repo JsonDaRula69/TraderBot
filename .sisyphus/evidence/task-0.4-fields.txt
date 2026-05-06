@@ -1,1 +1,0 @@
-action=buy, count=5, yes_price=50

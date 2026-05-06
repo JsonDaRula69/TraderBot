@@ -15,6 +15,11 @@ from rich.table import Table
 
 logger = logging.getLogger(__name__)
 
+
+def _mask_token(token: str) -> str:
+    """Mask a token, showing only the last 4 characters."""
+    return "****" + token[-4:] if len(token) > 4 else "****"
+
 app = typer.Typer(
     name="traderbot",
     help="Autonomous prediction market investment toolkit for Kalshi.",
@@ -572,6 +577,7 @@ def bootstrap(
             existing = env_path.read_text() if env_path.exists() else ""
             new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
             env_path.write_text(new_content)
+            os.chmod(env_path, 0o600)
             console.print(f"[dim]Credentials written to {env_path}[/dim]")
 
     # Step 5: Create SQLite DB at configured path
@@ -2111,8 +2117,6 @@ def profile_assign(
     agent_id: str,
 ) -> None:
     """Assign a token to an agent for profile access."""
-    from pathlib import Path
-
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
@@ -2125,6 +2129,8 @@ def profile_assign(
         console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
         raise typer.Exit(1)
 
+    profile = registry.get_profile(profile_name)
+
     # Generate and assign token
     try:
         token = generate_token()
@@ -2132,7 +2138,7 @@ def profile_assign(
         console.print(
             f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
         )
-        console.print(f"Token: [bold]{token[:4]}{'*' * (len(token) - 4)}[/bold]")
+        console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
 
         try:
             agent_path = _resolve_agent_path(agent_id)
@@ -2142,10 +2148,7 @@ def profile_assign(
                 )
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
-                workspace_template = Path.cwd() / ".openclaw" / "workspace"
-                if not workspace_template.exists():
-                    workspace_template = Path.home() / ".openclaw" / "workspace"
-                propagate_workspace_files(agent_path, workspace_template)
+                propagate_workspace_files(profile, agent_path)
                 inject_token(str(agent_path), token)
                 console.print(
                     f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
@@ -2215,7 +2218,10 @@ def profile_assignments(
         return
 
     if json_output:
-        print(json_lib.dumps(assignments, indent=2))
+        masked_assignments = [
+            {**a, "token": _mask_token(a["token"])} for a in assignments
+        ]
+        print(json_lib.dumps(masked_assignments, indent=2))
     else:
         table = Table(title="Token Assignments")
         table.add_column("Profile", style="cyan")
@@ -2227,7 +2233,7 @@ def profile_assignments(
             table.add_row(
                 assignment["profile"],
                 assignment["agent"],
-                assignment["token"],
+                _mask_token(assignment["token"]),
                 assignment["created_at"],
             )
 
@@ -2415,7 +2421,7 @@ def profile_auth(
                 creds_list.append(
                     {
                         "service": svc,
-                        "key": creds[0],
+                        "key": _mask_token(creds[0]),
                     }
                 )
         print(json_lib.dumps(creds_list, indent=2))
@@ -2523,7 +2529,7 @@ def cron_setup(
     ] = False,
 ) -> None:
     """Register decision, heartbeat, and news cron loops with OpenClaw for an agent."""
-    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload
+    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload, NewsLoopPayload
 
     console = Console()
 
@@ -2544,11 +2550,12 @@ def cron_setup(
 
     decision_payload = DecisionLoopPayload()
     heartbeat_payload = HeartbeatLoopPayload()
+    news_payload = NewsLoopPayload(topic="impact", impact_score=0.7)
 
     cron_jobs = [
         {
             "name": "decision_loop",
-            "cron_expr": "*/5 9-16 * * 1-5",
+            "cron_expr": "*/5 * * * *",
             "session": "isolated",
             "message": decision_payload.message,
         },
@@ -2557,6 +2564,12 @@ def cron_setup(
             "every": heartbeat_interval,
             "session": "isolated",
             "message": heartbeat_payload.message,
+        },
+        {
+            "name": "news_loop",
+            "event": "impact",
+            "session": "main",
+            "message": news_payload.message,
         },
     ]
 
@@ -2569,6 +2582,8 @@ def cron_setup(
         if dry_run:
             if "cron_expr" in job:
                 job_result["cron"] = job["cron_expr"]
+            elif "event" in job:
+                job_result["event"] = job["event"]
             else:
                 job_result["every"] = job["every"]
             job_result["message"] = job["message"]
@@ -2587,6 +2602,8 @@ def cron_setup(
             args.extend(["--channel", channel, "--to", to])
         if "cron_expr" in job:
             args.extend(["--cron", job["cron_expr"]])
+        elif "event" in job:
+            args.extend(["--event", job["event"]])
         else:
             args.extend(["--every", job["every"]])
 

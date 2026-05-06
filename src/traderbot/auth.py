@@ -120,18 +120,26 @@ class AuthManager:
                     key,
                 )
 
-        env_key = self._service_key_to_env(service, key)
-        env_val = os.environ.get(env_key)
+        env_keys = self._service_key_to_env(service, key)
+        env_val = None
+        used_env_key = None
+        for env_key in env_keys:
+            env_val = os.environ.get(env_key)
+            if env_val is not None:
+                used_env_key = env_key
+                break
         if env_val is not None:
+            assert used_env_key is not None
             if self.keyring_available:
                 logger.warning(
-                    "Credential %s/%s not in keyring; using .env fallback",
+                    "Credential %s/%s not in keyring; using .env fallback (%s)",
                     service,
                     key,
+                    used_env_key,
                 )
             else:
                 logger.warning(
-                    "Keyring unavailable; reading %s from environment", env_key
+                    "Keyring unavailable; reading %s from environment", used_env_key
                 )
             return CredentialResult(
                 service=service, key=key, value=SecretStr(env_val), source="env"
@@ -176,8 +184,8 @@ class AuthManager:
             existing_keys = set(already.keys) if already else set()
             found_keys: list[str] = list(existing_keys)
             for key in keys:
-                env_key = self._service_key_to_env(service_name, key)
-                if os.environ.get(env_key) is not None and key not in found_keys:
+                env_keys = self._service_key_to_env(service_name, key)
+                if any(os.environ.get(ek) is not None for ek in env_keys) and key not in found_keys:
                     found_keys.append(key)
             if found_keys:
                 already_entry = next((s for s in services if s.name == service_name), None)
@@ -199,16 +207,22 @@ class AuthManager:
         return result
 
     @staticmethod
-    def _service_key_to_env(service: str, key: str) -> str:
-        """Map service/key to environment variable name."""
-        service_prefix = service.upper()
+    def _service_key_to_env(service: str, key: str) -> list[str]:
+        """Map service/key to environment variable name(s) in priority order.
+
+        Returns a list where the first element is the canonical env var name
+        and subsequent elements are fallback aliases.
+        """
         if service == "kalshi" and key == "api_key":
-            return "KALSHI_API_KEY"
+            return ["KALSHI_API_KEY"]
         if service == "kalshi" and key == "private_key_pem":
-            return "KALSHI_PRIVATE_KEY_PEM"
+            return ["KALSHI_PRIVATE_KEY_PEM", "KALSHI_PRIVATE_KEY_PATH"]
         if service == "kalshi" and key == "demo_mode":
-            return "KALSHI_DEMO_MODE"
-        return f"{service_prefix}_{key.upper()}"
+            return ["KALSHI_DEMO_MODE"]
+        if service == "newsapi" and key == "api_key":
+            return ["NEWSAPI_API_KEY", "NEWSAPI_KEY"]
+        service_prefix = service.upper()
+        return [f"{service_prefix}_{key.upper()}"]
 
 
 def get_credential(service: str, key: str) -> SecretStr | None:

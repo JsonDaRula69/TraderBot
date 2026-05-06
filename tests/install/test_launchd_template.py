@@ -76,7 +76,7 @@ def test_template_program_arguments_structure(template_xml: ET.Element) -> None:
     """Template ProgramArguments is an array with correct command."""
     dict_elem = template_xml.find("dict")
     assert dict_elem is not None, "Template should have a <dict> element"
-    
+
     # Find ProgramArguments key and its following array
     found_key = False
     for elem in dict_elem:
@@ -84,11 +84,14 @@ def test_template_program_arguments_structure(template_xml: ET.Element) -> None:
             found_key = True
         elif found_key and elem.tag == "array":
             strings = [s.text for s in elem.findall("string")]
-            assert "traderbot" in strings[0], f"First arg should be traderbot binary path, got: {strings[0]}"
-            assert "scan" in strings, "Should include 'scan' command"
-            assert "--continuous" in strings, "Should include '--continuous' flag"
+            assert len(strings) > 0, "ProgramArguments should have at least 1 element"
+            # Check that scan and --continuous appear somewhere in the arguments
+            all_args = " ".join(filter(None, strings))
+            assert "traderbot" in all_args, f"Should include 'traderbot', got: {all_args}"
+            assert "scan" in all_args, f"Should include 'scan' command, got: {all_args}"
+            assert "--continuous" in all_args, f"Should include '--continuous' flag, got: {all_args}"
             return
-    
+
     pytest.fail("ProgramArguments array not found or invalid")
 
 

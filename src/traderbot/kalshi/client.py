@@ -39,7 +39,7 @@ class KalshiConfig(BaseSettings):
         strict=True,
         extra="forbid",
         env_prefix="KALSHI_",
-        env_file=".env",
+        env_file=str(Path.home() / ".traderbot" / ".env"),
         env_file_encoding="utf-8",
     )
 
@@ -49,7 +49,7 @@ class KalshiConfig(BaseSettings):
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     demo_mode: bool = False
-    rate_limit_rps: float = 5.0
+    rate_limit_rps: float = 20.0
     max_retries: int = 3
     retry_base_delay: float = 1.0
 

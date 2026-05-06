@@ -97,7 +97,7 @@ class TestNewsItem:
             url="https://example.com",
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
             ticker_refs=["BTC", "ETH"],
-            category=MarketCategory.CRYPTO,
+            category=MarketCategory.TECHNOLOGY,
         )
         assert item.source == NewsSource.TWITTER
         assert item.ticker_refs == ["BTC", "ETH"]

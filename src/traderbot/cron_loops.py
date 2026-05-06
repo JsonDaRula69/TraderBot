@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DECISION_LOOP_CRON = "*/5 9-16 * * 1-5"  # 9am–4pm ET, Mon–Fri; should_run_decision_loop() is a runtime guard
+DECISION_LOOP_CRON = "*/5 * * * *"  # every 5 minutes, 24/7 — Kalshi prediction markets never close
 HEARTBEAT_LOOP_CRON = "0 */6 * * *"
 NEWS_LOOP_CRON = None
 

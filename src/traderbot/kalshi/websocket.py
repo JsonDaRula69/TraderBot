@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import websockets
@@ -28,7 +29,7 @@ class WebSocketConfig(BaseSettings):
         strict=True,
         extra="forbid",
         env_prefix="KALSHI_",
-        env_file=".env",
+        env_file=str(Path.home() / ".traderbot" / ".env"),
         env_file_encoding="utf-8",
     )
 

@@ -21,13 +21,17 @@ NOW = datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC)
 
 class TestMarketCategory:
     def test_all_categories(self):
-        expected = {"politics", "economics", "science", "sports", "crypto", "culture", "technology", "weather", "technology"}
+        expected = {
+            "politics", "economics", "science", "sports", "culture", "technology", "weather",
+            "crypto", "commodities", "companies", "elections", "entertainment",
+            "financials", "health", "mentions", "social",
+        }
         assert set(MarketCategory) == expected
 
     def test_str_enum_values(self):
         assert MarketCategory.POLITICS == "politics"
         assert MarketCategory.ECONOMICS == "economics"
-        assert MarketCategory.CRYPTO == "crypto"
+        assert MarketCategory.SCIENCE == "science"
 
     def test_from_string(self):
         assert MarketCategory("sports") is MarketCategory.SPORTS
@@ -106,7 +110,7 @@ class TestPosterior:
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
             Posterior(
-                category=MarketCategory.CRYPTO,
+                category=MarketCategory.SPORTS,
                 mean=0.5,
                 variance=0.04,
                 sample_count=5,
@@ -190,11 +194,11 @@ class TestAdaptationResult:
     def test_magnitude_must_be_positive(self):
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.CRYPTO, direction="increase", magnitude=0, confidence=0.5, reasoning="zero"
+                category=MarketCategory.SCIENCE, direction="increase", magnitude=0, confidence=0.5, reasoning="zero"
             )
         with pytest.raises(ValidationError):
             AdaptationResult(
-                category=MarketCategory.CRYPTO, direction="decrease", magnitude=-0.1, confidence=0.5, reasoning="neg"
+                category=MarketCategory.SCIENCE, direction="decrease", magnitude=-0.1, confidence=0.5, reasoning="neg"
             )
 
     def test_confidence_bounds(self):

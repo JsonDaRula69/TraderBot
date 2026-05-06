@@ -14,6 +14,10 @@ from traderbot.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
+def _mask_token(token: str) -> str:
+    return "****" + token[-4:] if len(token) > 4 else "****"
+
+
 _KEYRING_SERVICE_PREFIX = "traderbot.tokens."
 _TOKENS_FILE = get_data_dir() / "tokens.enc"
 
@@ -155,14 +159,14 @@ def revoke_token(token: str) -> None:
         service = f"{_KEYRING_SERVICE_PREFIX}{token}"
         try:
             kr.delete_password(service, "token")
-            logger.info("Revoked token: %s", token)
+            logger.info("Revoked token: %s", _mask_token(token))
         except Exception as e:
             logger.debug("Failed to revoke token (may not exist): %s", e)
     else:
         tokens = _load_tokens_file()
         tokens = [t for t in tokens if t["token"] != token]
         _save_tokens_file(tokens)
-        logger.info("Revoked token: %s", token)
+        logger.info("Revoked token: %s", _mask_token(token))
 
 
 def list_assignments() -> list[dict[str, str]]:
@@ -184,7 +188,7 @@ def list_assignments() -> list[dict[str, str]]:
                                 "created_at": data["created_at"],
                             })
                     except Exception as e:
-                        logger.warning("Failed to parse token data for %s: %s", token, e)
+                        logger.warning("Failed to parse token data for %s: %s", _mask_token(token), e)
         else:
             logger.warning("list_assignments() not fully supported with real keyring backend")
         return assignments
