@@ -214,30 +214,6 @@ class BacktestEngine:
 
         return self._compute_result(closed_trades, positions, portfolio_value_cents)
 
-    async def run_profiles(
-        self,
-        profiles: list[StrategyProfile],
-        start: date,
-        end: date,
-    ) -> dict[str, BacktestResult]:
-        """Run multiple profiles on the same historical data for comparison.
-
-        Each profile gets isolated position tracking and its own Context.
-        HARD_LIMITS remain immutable — profiles only scale within them.
-        """
-        results: dict[str, BacktestResult] = {}
-        for profile in profiles:
-            profile_engine = BacktestEngine(
-                data_loader=self._data_loader,
-                strategy=self._strategy,
-                initial_bankroll_cents=self._initial_bankroll_cents,
-                slippage_model=self._slippage,
-                state_dir=self._state_dir,
-            )
-            result = await profile_engine.run(start, end)
-            results[profile.name] = result
-        return results
-
     def _build_event_stream(
         self,
         markets: list[Market],
