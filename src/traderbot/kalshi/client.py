@@ -160,9 +160,11 @@ class KalshiClient:
         """Build authentication headers for a request."""
         if self._config.demo_mode:
             return {"Content-Type": "application/json"}
+        private_key = self._config.resolve_private_key()
+        pem_str = private_key.get_secret_value() if isinstance(private_key, SecretStr) else private_key
         return auth_headers(
             self._config.api_key.get_secret_value(),
-            self._config.resolve_private_key(),
+            pem_str,
             method,
             path,
         )
