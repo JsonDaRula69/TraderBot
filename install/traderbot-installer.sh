@@ -575,6 +575,12 @@ setup_api_credentials() {
             _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
         fi
         echo "Kalshi credentials stored."
+        if [[ "${mode_choice:-1}" == "2" ]]; then
+            _env_set "$env_file" "KALSHI_DEMO_MODE" "false"
+        else
+            _env_set "$env_file" "KALSHI_DEMO_MODE" "true"
+            echo "Demo mode enabled — using demo-api.kalshi.co."
+        fi
         echo
         echo "Select Kalshi API tier:"
         echo "  1) Auto-detect (recommended) — queries GET /account/limits at startup"

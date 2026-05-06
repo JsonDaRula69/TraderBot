@@ -97,11 +97,11 @@ def scan(
         service = MarketService(client)
         result = asyncio.run(service.list_markets(limit=limit, category=category))
         markets = result.markets
-    except Exception:
+    except Exception as exc:
         if json_output:
             json_lib.dump([], sys.stdout)
         else:
-            console.print("Scanning markets... (requires API connection)")
+            console.print(f"[red]Error scanning markets:[/red] {exc}")
         return
 
     if json_output:
