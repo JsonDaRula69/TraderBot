@@ -6,12 +6,11 @@
 	<key>Label</key>
 	<string>com.traderbot.agent.AGENT_ID</string>
 
-	<!-- ProgramArguments: venv binary path, scan command, continuous mode flag -->
+	<!-- ProgramArguments: venv binary path, heartbeat command -->
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/USERNAME/traderbot/.venv/bin/traderbot</string>
-		<string>scan</string>
-		<string>--continuous</string>
+		<string>heartbeat</string>
 	</array>
 
 	<!-- EnvironmentVariables: TOKEN_PLACEHOLDER replaced by installer -->

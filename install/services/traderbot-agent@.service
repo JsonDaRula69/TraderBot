@@ -25,7 +25,7 @@ Environment=TRADERBOT_PROFILE_TOKEN=<PROFILE_TOKEN>
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
-ExecStart=/home/%i/traderbot/.venv/bin/traderbot scan --continuous
+ExecStart=/bin/bash -c 'while true; do /home/%i/traderbot/.venv/bin/traderbot heartbeat; sleep 300; done'
 
 Restart=on-failure
 RestartSec=10
