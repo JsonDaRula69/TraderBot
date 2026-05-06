@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.risk import evaluate_trade
+from traderbot.simulation.engine import BacktestError
 
 if TYPE_CHECKING:
     import sqlite3
@@ -200,9 +201,12 @@ class PaperTrader:
 
         from traderbot.kalshi.models import PortfolioState, TradeRequest
 
+        if self._cash_cents <= 0:
+            raise BacktestError(f"Cash balance must be positive, got {self._cash_cents}")
+
         portfolio = PortfolioState(
-            portfolio_value_cents=max(self._cash_cents, 1),
-            peak_value_cents=max(self._cash_cents, 1),
+            portfolio_value_cents=self._cash_cents,
+            peak_value_cents=self._cash_cents,
             current_positions_value_cents=self._position_value_cents(),
             today_realized_loss_cents=max(0, -self._realized_pnl_cents),
             today_unrealized_loss_cents=0,
