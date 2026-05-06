@@ -86,9 +86,13 @@ class TradingProfile(BaseModel):
     @computed_field
     @property
     def base_dir(self) -> str:
-        """Base directory for profile state files."""
+        """Base directory for profile state files.
+
+        Each profile gets its own subdirectory under the mode directory,
+        ensuring data isolation between agents sharing the same mode.
+        """
         from traderbot.paths import get_data_dir
-        return str(get_data_dir() / f"{self.mode}")
+        return str(get_data_dir() / self.mode / self.name)
 
     @computed_field
     @property

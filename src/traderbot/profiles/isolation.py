@@ -17,7 +17,7 @@ def get_profile_db_path(profile: TradingProfile, db_name: str) -> Path:
         db_name: Name of the database file (e.g., "decisions.db")
 
     Returns:
-        Path to the database file (e.g., ".traderbot-paper/db/decisions.db")
+        Path to the database file (e.g., ".traderbot/paper/economics-agent/db/decisions.db")
     """
     return Path(profile.base_dir) / "db" / db_name
 
@@ -29,7 +29,7 @@ def get_profile_chroma_path(profile: TradingProfile) -> Path:
         profile: The trading profile
 
     Returns:
-        Path to the ChromaDB directory (e.g., ".traderbot-paper/chroma")
+        Path to the ChromaDB directory (e.g., ".traderbot/paper/economics-agent/chroma")
     """
     return Path(profile.base_dir) / "chroma"
 
@@ -41,7 +41,7 @@ def get_profile_audit_path(profile: TradingProfile) -> Path:
         profile: The trading profile
 
     Returns:
-        Path to the audit directory (e.g., ".traderbot-paper/audit")
+        Path to the audit directory (e.g., ".traderbot/paper/economics-agent/audit")
     """
     return Path(profile.base_dir) / "audit"
 

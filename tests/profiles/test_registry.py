@@ -158,8 +158,8 @@ def test_delete_profile_remove_data(
     monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: data_root)
 
     # Recreate profile so base_dir resolves to our temp path
-    base_dir_path = data_root / "paper"
-    base_dir_path.mkdir()
+    base_dir_path = data_root / "paper" / "test-profile"
+    base_dir_path.mkdir(parents=True)
     test_file = base_dir_path / "test.db"
     test_file.write_text("test data")
 
