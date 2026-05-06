@@ -77,9 +77,8 @@ def test_market_category_values() -> None:
     assert MarketCategory.POLITICS == "politics"
     assert MarketCategory.WEATHER == "weather"
     assert MarketCategory.SPORTS == "sports"
-    assert MarketCategory.CULTURE == "culture"
-    assert MarketCategory.TECHNOLOGY == "technology"
-    assert MarketCategory.SCIENCE == "science"
+    assert MarketCategory.ENTERTAINMENT == "entertainment"
+    assert MarketCategory.SCIENCE_AND_TECHNOLOGY == "science_and_technology"
 
 
 # --- GenericAnalyzer ---
@@ -231,9 +230,9 @@ def test_analysis_imports_market_category() -> None:
     from traderbot.analysis import CategorySignals
 
     cs = CategorySignals(
-        category=MarketCategory.SCIENCE,
+        category=MarketCategory.SCIENCE_AND_TECHNOLOGY,
         signals=["test"],
         confidence=0.5,
         data_sources=["test"],
     )
-    assert cs.category == MarketCategory.SCIENCE
+    assert cs.category == MarketCategory.SCIENCE_AND_TECHNOLOGY

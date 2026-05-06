@@ -110,7 +110,7 @@ def test_empty_enabled_categories_permits_all():
     assert profile.is_category_enabled(MarketCategory.ECONOMICS)
     assert profile.is_category_enabled(MarketCategory.POLITICS)
     assert profile.is_category_enabled(MarketCategory.SPORTS)
-    assert profile.is_category_enabled(MarketCategory.TECHNOLOGY)
+    assert profile.is_category_enabled(MarketCategory.SCIENCE_AND_TECHNOLOGY)
 
 
 def test_specific_enabled_categories():
@@ -131,7 +131,7 @@ def test_specific_enabled_categories():
     assert profile.is_category_enabled(MarketCategory.ECONOMICS)
     assert profile.is_category_enabled(MarketCategory.POLITICS)
     assert not profile.is_category_enabled(MarketCategory.SPORTS)
-    assert not profile.is_category_enabled(MarketCategory.TECHNOLOGY)
+    assert not profile.is_category_enabled(MarketCategory.SCIENCE_AND_TECHNOLOGY)
 
 
 def test_category_not_in_list():

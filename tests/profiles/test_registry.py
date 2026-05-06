@@ -254,12 +254,12 @@ def test_update_profile_categories(
 
     updated = registry.update_profile(
         "test-profile",
-        enabled_categories=["politics", "economics", "science"],
+        enabled_categories=["politics", "economics", "science_and_technology"],
     )
 
     assert MarketCategory.POLITICS in updated.enabled_categories
     assert MarketCategory.ECONOMICS in updated.enabled_categories
-    assert MarketCategory.SCIENCE in updated.enabled_categories
+    assert MarketCategory.SCIENCE_AND_TECHNOLOGY in updated.enabled_categories
     assert len(updated.enabled_categories) == 3
 
 

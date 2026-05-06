@@ -9,6 +9,7 @@ Test scenarios:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -183,11 +184,11 @@ class TestFullPipelineE2E:
             from traderbot.heartbeat import run_heartbeat_cycle
 
             hb_path = tmp_path / "HEARTBEAT_DATA.md"
-            result = run_heartbeat_cycle(
+            result = asyncio.run(run_heartbeat_cycle(
                 conn,
                 heartbeat_path=hb_path,
                 dry_run=True,
-            )
+            ))
 
             # Verify all 8 steps completed
             expected_steps = [
@@ -301,7 +302,7 @@ class TestFullPipelineE2E:
         with get_connection(db_path) as conn:
             _init_db(conn)
 
-            health = step_system_health(conn)
+            health = asyncio.run(step_system_health(conn))
             assert health.db_integrity == "ok"
 
     def test_promotion_in_heartbeat_pipeline(self, tmp_path: Path) -> None:
@@ -657,11 +658,11 @@ class TestGracefulDegradation:
             from traderbot.heartbeat import run_heartbeat_cycle
 
             hb_path = tmp_path / "HEARTBEAT_DATA.md"
-            result = run_heartbeat_cycle(
+            result = asyncio.run(run_heartbeat_cycle(
                 conn,
                 heartbeat_path=hb_path,
                 dry_run=True,
-            )
+            ))
 
             # Should not crash, all steps should complete
             assert "performance_review" in result.steps_completed
@@ -942,11 +943,11 @@ class TestBayesianHeartbeatIntegration:
             from traderbot.heartbeat import run_heartbeat_cycle
 
             hb_path = tmp_path / "HEARTBEAT_DATA.md"
-            result = run_heartbeat_cycle(
+            result = asyncio.run(run_heartbeat_cycle(
                 conn,
                 heartbeat_path=hb_path,
                 dry_run=True,
-            )
+            ))
 
             # Verify all steps ran
             assert len(result.steps_completed) == 8

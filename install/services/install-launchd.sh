@@ -16,8 +16,8 @@ if [[ ! "$AGENT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     exit 1
 fi
 
-if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9]+$ ]]; then
-    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric characters allowed." >&2
+if [[ ! "$PROFILE_TOKEN" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: PROFILE_TOKEN contains invalid characters. Only alphanumeric, hyphens, and underscores allowed." >&2
     exit 1
 fi
 
@@ -49,6 +49,7 @@ USER_NAME="$(whoami)"
 
 sed -e "s/AGENT_ID/$AGENT_NAME/g" \
     -e "s/USERNAME/$USER_NAME/g" \
+    -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" \
     "$TEMPLATE_FILE" > "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
 
 if command -v plutil &>/dev/null; then
@@ -61,6 +62,6 @@ fi
 
 sudo cp "/tmp/com.traderbot.agent.$AGENT_NAME.plist" "$PLIST_FILE"
 rm -f "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
-sudo launchctl bootstrap "system/com.traderbot.agent.$AGENT_NAME" 2>/dev/null || \
+sudo launchctl bootstrap system "$PLIST_FILE" 2>/dev/null || \
     sudo launchctl load "$PLIST_FILE" 2>/dev/null || true
 echo "LaunchDaemon installed and loaded for agent: $AGENT_NAME (starts at boot, no login required)"

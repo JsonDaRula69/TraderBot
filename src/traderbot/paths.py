@@ -30,6 +30,11 @@ def get_logs_dir() -> Path:
     return get_data_dir() / "logs"
 
 
+def get_workspace_dir() -> Path:
+    """Return the OpenClaw workspace directory (relative to CWD)."""
+    return Path.cwd() / ".openclaw" / "workspace"
+
+
 def ensure_data_dir() -> Path:
     """Create data directory if it doesn't exist and return it."""
     path = get_data_dir()

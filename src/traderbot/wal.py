@@ -14,9 +14,16 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.paths import get_workspace_dir
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_SESSION_STATE_PATH = Path(__file__).resolve().parent.parent / ".openclaw" / "workspace" / "SESSION-STATE.md"
+
+def _default_session_state_path() -> Path:
+    return get_workspace_dir() / "SESSION-STATE.md"
+
+
+DEFAULT_SESSION_STATE_PATH = _default_session_state_path()
 
 
 class WalStatus(StrEnum):

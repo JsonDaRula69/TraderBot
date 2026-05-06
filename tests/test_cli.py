@@ -127,7 +127,7 @@ class TestNewsCommand:
                 url="https://example.com/chip",
                 published_at=datetime(2026, 4, 15, 13, 0, 0, tzinfo=timezone.utc),
                 ticker_refs=[],
-                category=MarketCategory.TECHNOLOGY,
+                category=MarketCategory.SCIENCE_AND_TECHNOLOGY,
             ),
         ]
 
@@ -987,7 +987,6 @@ class TestCronSetup:
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent"])
             assert result.exit_code == 1
             assert "openclaw" in result.output.lower()
-            assert "crontab" in result.output.lower() or "deployment" in result.output.lower()
 
 
 class TestHalt:

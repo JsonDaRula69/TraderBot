@@ -77,45 +77,43 @@ _KEYWORD_CATEGORIES: dict[str, set[NewsCategory]] = {
     "cyclone": {NewsCategory.WEATHER},
     "monsoon": {NewsCategory.WEATHER},
     "wildfire": {NewsCategory.WEATHER},
-    # Culture
-    "oscar": {NewsCategory.CULTURE},
-    "grammy": {NewsCategory.CULTURE},
-    "movie": {NewsCategory.CULTURE},
-    "music": {NewsCategory.CULTURE},
-    "entertainment": {NewsCategory.CULTURE},
-    "emmy": {NewsCategory.CULTURE},
-    "box office": {NewsCategory.CULTURE},
-    "celebrity": {NewsCategory.CULTURE},
-    "album": {NewsCategory.CULTURE},
-    # Technology
-    "ai": {NewsCategory.TECHNOLOGY},
-    "tech": {NewsCategory.TECHNOLOGY},
-    "software": {NewsCategory.TECHNOLOGY},
-    "chip": {NewsCategory.TECHNOLOGY},
-    "semiconductor": {NewsCategory.TECHNOLOGY},
-    "cyber": {NewsCategory.TECHNOLOGY},
-    "startup": {NewsCategory.TECHNOLOGY},
-    "app": {NewsCategory.TECHNOLOGY},
-    "algorithm": {NewsCategory.TECHNOLOGY},
-    # Science
-    "nasa": {NewsCategory.SCIENCE},
-    "space": {NewsCategory.SCIENCE},
-    "research": {NewsCategory.SCIENCE},
-    "discovery": {NewsCategory.SCIENCE},
-    "experiment": {NewsCategory.SCIENCE},
-    "laboratory": {NewsCategory.SCIENCE},
-    "quantum": {NewsCategory.SCIENCE},
-    "genome": {NewsCategory.SCIENCE},
+    # Entertainment
+    "oscar": {NewsCategory.ENTERTAINMENT},
+    "grammy": {NewsCategory.ENTERTAINMENT},
+    "movie": {NewsCategory.ENTERTAINMENT},
+    "music": {NewsCategory.ENTERTAINMENT},
+    "entertainment": {NewsCategory.ENTERTAINMENT},
+    "emmy": {NewsCategory.ENTERTAINMENT},
+    "box office": {NewsCategory.ENTERTAINMENT},
+    "celebrity": {NewsCategory.ENTERTAINMENT},
+    "album": {NewsCategory.ENTERTAINMENT},
+    # Science and Technology (Kalshi combines these into one category)
+    "ai": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "tech": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "software": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "chip": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "semiconductor": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "cyber": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "startup": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "app": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "algorithm": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "nasa": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "space": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "research": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "discovery": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "experiment": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "laboratory": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "quantum": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
+    "genome": {NewsCategory.SCIENCE_AND_TECHNOLOGY},
 }
 
-# Kalshi-relevant categories only (no SPORTS, no CRYPTO per spec)
+# Kalshi-relevant categories (no SPORTS, no CRYPTO per spec — SPORTS has limited markets, CRYPTO is high-volatility and handled separately)
 _KALSHI_CATEGORIES: list[NewsCategory] = [
     NewsCategory.ECONOMICS,
     NewsCategory.POLITICS,
     NewsCategory.WEATHER,
-    NewsCategory.CULTURE,
-    NewsCategory.TECHNOLOGY,
-    NewsCategory.SCIENCE,
+    NewsCategory.ENTERTAINMENT,
+    NewsCategory.SCIENCE_AND_TECHNOLOGY,
 ]
 
 # Canonical descriptions for embedding similarity
@@ -132,17 +130,14 @@ _CATEGORY_DESCRIPTIONS: dict[NewsCategory, str] = {
         "Weather and natural disasters: hurricanes, tornadoes, storms, floods, droughts, "
         "extreme temperatures, blizzards, cyclones, wildfires, monsoons."
     ),
-    NewsCategory.CULTURE: (
-        "Culture and entertainment: Academy Awards, Grammy Awards, movies, music, "
+    NewsCategory.ENTERTAINMENT: (
+        "Entertainment and culture: Academy Awards, Grammy Awards, movies, music, "
         "celebrity news, television, Emmy Awards, box office, albums, pop culture."
     ),
-    NewsCategory.TECHNOLOGY: (
-        "Technology and computing: artificial intelligence, software, semiconductors, "
-        "cybersecurity, startups, apps, algorithms, chips, tech companies, innovation."
-    ),
-    NewsCategory.SCIENCE: (
-        "Science and space: NASA missions, space exploration, scientific research, "
-        "discoveries, experiments, quantum physics, genomics, laboratory findings."
+    NewsCategory.SCIENCE_AND_TECHNOLOGY: (
+        "Science, technology, and computing: NASA missions, space exploration, scientific research, "
+        "artificial intelligence, software, semiconductors, cybersecurity, startups, algorithms, "
+        "quantum physics, genomics, tech companies, innovation, discoveries."
     ),
 }
 

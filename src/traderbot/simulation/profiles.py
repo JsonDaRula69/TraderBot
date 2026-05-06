@@ -76,7 +76,7 @@ MODERATE = StrategyProfile(
     name="Moderate",
     risk_multiplier=1.0,
     signal_weights={"statistical": 0.5, "sentiment": 0.5},
-    category_focus=["economics", "politics", "technology"],
+    category_focus=["economics", "politics", "science_and_technology"],
     description="Balanced approach; default profile",
 )
 
@@ -84,7 +84,7 @@ AGGRESSIVE = StrategyProfile(
     name="Aggressive",
     risk_multiplier=0.8,
     signal_weights={"statistical": 0.3, "sentiment": 0.7},
-    category_focus=["economics", "politics", "technology", "science", "sports", "culture"],
+    category_focus=["economics", "politics", "science_and_technology", "sports", "entertainment"],
     description="Seeks higher returns; tolerates more volatility",
 )
 

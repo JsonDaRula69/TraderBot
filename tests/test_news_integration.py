@@ -28,7 +28,7 @@ from traderbot.news.sources import NewsSource as SourcesNewsSource
 
 
 def _sources_item(**overrides: object) -> SourcesNewsItem:
-    """Create a sources.NewsItem (lowercase enum, bare str category)."""
+    """Create a sources.NewsItem (enum-typed source and category)."""
     base: dict[str, object] = {
         "id": "newsapi-test-0",
         "title": "Fed raises interest rates amid inflation concerns",
@@ -37,7 +37,7 @@ def _sources_item(**overrides: object) -> SourcesNewsItem:
         "url": "https://example.com/fed-rates",
         "published_at": datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC),
         "ticker_refs": ["SPY", "TLT"],
-        "category": "Economics",
+        "category": NewsCategory.ECONOMICS,
     }
     base.update(overrides)
     return SourcesNewsItem.model_validate(base)
@@ -60,30 +60,16 @@ def _models_item(**overrides: object) -> NewsItem:
 
 
 def convert_sources_to_models_item(src: SourcesNewsItem) -> NewsItem:
-    """Convert sources.NewsItem to models.NewsItem for the classifier pipeline."""
-    source_map: dict[SourcesNewsSource, NewsSource] = {
-        SourcesNewsSource.NEWSAPI: NewsSource.NEWSAPI,
-        SourcesNewsSource.TWITTER: NewsSource.TWITTER,
-        SourcesNewsSource.REDDIT: NewsSource.REDDIT,
-    }
-    category_map: dict[str, NewsCategory] = {
-        "economics": NewsCategory.ECONOMICS,
-        "politics": NewsCategory.POLITICS,
-        "weather": NewsCategory.WEATHER,
-        "culture": NewsCategory.CULTURE,
-        "technology": NewsCategory.TECHNOLOGY,
-        "science": NewsCategory.SCIENCE,
-        "uncategorized": NewsCategory.ECONOMICS,
-    }
+    """Pass-through helper — both source and target are models.NewsItem."""
     return NewsItem(
         id=src.id,
         title=src.title,
         body=src.body,
-        source=source_map[src.source],
+        source=src.source,
         url=src.url,
         published_at=src.published_at,
         ticker_refs=src.ticker_refs,
-        category=category_map.get(src.category.lower(), NewsCategory.ECONOMICS),
+        category=src.category,
     )
 
 
@@ -176,7 +162,7 @@ class TestFullPipeline:
             title="Bullish on tech stocks! Amazing earnings!",
             body="Great quarter for big tech companies.",
             source=NewsSource.TWITTER,
-            category=NewsCategory.TECHNOLOGY,
+            category=NewsCategory.SCIENCE_AND_TECHNOLOGY,
             ticker_refs=["QQQ"],
         )
         classifier = NewsClassifier(voyage=None)
@@ -373,12 +359,12 @@ class TestCategoryClassification:
             ("Election day results", "", NewsCategory.POLITICS),
             ("Hurricane approaching coast", "", NewsCategory.WEATHER),
             ("Blizzard warning issued", "", NewsCategory.WEATHER),
-            ("Oscar nominations announced", "", NewsCategory.CULTURE),
-            ("Box office results this weekend", "", NewsCategory.CULTURE),
-            ("New AI software released", "", NewsCategory.TECHNOLOGY),
-            ("Semiconductor industry booms", "", NewsCategory.TECHNOLOGY),
-            ("NASA space discovery", "", NewsCategory.SCIENCE),
-            ("Genome research breakthrough", "", NewsCategory.SCIENCE),
+            ("Oscar nominations announced", "", NewsCategory.ENTERTAINMENT),
+            ("Box office results this weekend", "", NewsCategory.ENTERTAINMENT),
+            ("New AI software released", "", NewsCategory.SCIENCE_AND_TECHNOLOGY),
+            ("Semiconductor industry booms", "", NewsCategory.SCIENCE_AND_TECHNOLOGY),
+            ("NASA space discovery", "", NewsCategory.SCIENCE_AND_TECHNOLOGY),
+            ("Genome research breakthrough", "", NewsCategory.SCIENCE_AND_TECHNOLOGY),
         ],
     )
     def test_keyword_classification(self, title: str, body: str, expected_category: NewsCategory):
@@ -566,8 +552,8 @@ class TestImpactAssessmentPipeline:
         )
         econ_impact = ImpactAssessor().assess(item, classified, sentiment)
 
-        culture_item = _models_item(id="c-1", category=NewsCategory.CULTURE)
-        culture_classified = ClassifiedNews(news_item=culture_item, category=NewsCategory.CULTURE)
+        culture_item = _models_item(id="c-1", category=NewsCategory.ENTERTAINMENT)
+        culture_classified = ClassifiedNews(news_item=culture_item, category=NewsCategory.ENTERTAINMENT)
         culture_impact = ImpactAssessor().assess(culture_item, culture_classified, sentiment)
         assert econ_impact.magnitude > culture_impact.magnitude
 
@@ -619,7 +605,6 @@ class TestNewsItemConversion:
     """Sources.NewsItem converts correctly to models.NewsItem for classifier."""
 
     def test_basic_conversion(self):
-        """Source news item fields map correctly to model news item."""
         src = _sources_item(
             id="newsapi-src-1",
             title="Fed raises rates",
@@ -627,7 +612,7 @@ class TestNewsItemConversion:
             source=SourcesNewsSource.NEWSAPI,
             url="https://example.com/fed",
             ticker_refs=["SPY"],
-            category="Economics",
+            category=NewsCategory.ECONOMICS,
         )
         converted = convert_sources_to_models_item(src)
         assert converted.id == "newsapi-src-1"
@@ -639,30 +624,27 @@ class TestNewsItemConversion:
         assert converted.category == NewsCategory.ECONOMICS
 
     def test_twitter_source_conversion(self):
-        """Twitter source converts to capitalized enum."""
         src = _sources_item(
             source=SourcesNewsSource.TWITTER,
-            category="Tech",
+            category=NewsCategory.SCIENCE_AND_TECHNOLOGY,
         )
         converted = convert_sources_to_models_item(src)
         assert converted.source == NewsSource.TWITTER
-        assert converted.category == NewsCategory.TECH
+        assert converted.category == NewsCategory.SCIENCE_AND_TECHNOLOGY
 
     def test_reddit_source_conversion(self):
-        """Reddit source converts to capitalized enum."""
         src = _sources_item(
             source=SourcesNewsSource.REDDIT,
-            category="Politics",
+            category=NewsCategory.POLITICS,
         )
         converted = convert_sources_to_models_item(src)
         assert converted.source == NewsSource.REDDIT
         assert converted.category == NewsCategory.POLITICS
 
-    def test_uncategorized_defaults_to_economics(self):
-        """Uncategorized source items default to Economics."""
-        src = _sources_item(category="uncategorized")
+    def test_null_category_stays_null(self):
+        src = _sources_item(category=None)
         converted = convert_sources_to_models_item(src)
-        assert converted.category == NewsCategory.ECONOMICS
+        assert converted.category is None
 
     def test_default_ticker_refs(self):
         """Default ticker_refs is empty list."""
@@ -671,11 +653,10 @@ class TestNewsItemConversion:
         assert converted.ticker_refs == []
 
     def test_converted_item_passes_classifier(self):
-        """Converted item can be classified without error."""
         src = _sources_item(
             title="Hurricane warning issued for Gulf Coast",
             body="Category 4 hurricane expected to make landfall.",
-            category="Weather",
+            category=NewsCategory.WEATHER,
         )
         converted = convert_sources_to_models_item(src)
         classifier = NewsClassifier(voyage=None)
@@ -683,11 +664,10 @@ class TestNewsItemConversion:
         assert result.category == NewsCategory.WEATHER
 
     def test_converted_item_passes_full_pipeline(self):
-        """Converted item flows through classify → score → assess."""
         src = _sources_item(
             title="Fed inflation CPI data released",
             body="Consumer prices rose more than expected.",
-            category="Economics",
+            category=NewsCategory.ECONOMICS,
             ticker_refs=["SPY", "TLT"],
         )
         converted = convert_sources_to_models_item(src)
@@ -719,7 +699,7 @@ class TestNewsItemConversion:
             url="https://example.com/senate",
             published_at=datetime(2026, 4, 21, 12, 0, 0, tzinfo=UTC),
             ticker_refs=[],
-            category="Politics",
+            category=NewsCategory.POLITICS,
         )
 
         mock_client = AsyncMock()

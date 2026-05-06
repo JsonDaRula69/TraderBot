@@ -62,17 +62,17 @@ class TestKeywordFastPath:
     def test_single_culture_keyword(self):
         cls = NewsClassifier()
         result = cls.classify(_item("Oscar nominations announced"))
-        assert result.category == NewsCategory.CULTURE
+        assert result.category == NewsCategory.ENTERTAINMENT
 
     def test_single_tech_keyword(self):
         cls = NewsClassifier()
         result = cls.classify(_item("New AI software released"))
-        assert result.category == NewsCategory.TECHNOLOGY
+        assert result.category == NewsCategory.SCIENCE_AND_TECHNOLOGY
 
     def test_single_science_keyword(self):
         cls = NewsClassifier()
         result = cls.classify(_item("NASA space discovery announced"))
-        assert result.category == NewsCategory.SCIENCE
+        assert result.category == NewsCategory.SCIENCE_AND_TECHNOLOGY
 
     def test_keyword_in_body(self):
         cls = NewsClassifier()
@@ -302,17 +302,16 @@ class TestKalshiCategories:
         from traderbot.kalshi.models import MarketCategory
         assert "crypto" in {c.value for c in MarketCategory}
 
-    def test_six_kalshi_categories(self):
-        assert len(_KALSHI_CATEGORIES) == 6
+    def test_five_kalshi_categories(self):
+        assert len(_KALSHI_CATEGORIES) == 5
 
-    def test_all_six_present(self):
+    def test_all_five_present(self):
         expected = {
             NewsCategory.ECONOMICS,
             NewsCategory.POLITICS,
             NewsCategory.WEATHER,
-            NewsCategory.CULTURE,
-            NewsCategory.TECHNOLOGY,
-            NewsCategory.SCIENCE,
+            NewsCategory.ENTERTAINMENT,
+            NewsCategory.SCIENCE_AND_TECHNOLOGY,
         }
         assert set(_KALSHI_CATEGORIES) == expected
 
@@ -375,7 +374,7 @@ class TestCaseInsensitive:
     def test_mixed_case_keyword(self):
         cls = NewsClassifier()
         result = cls.classify(_item("Nasa Space Discovery"))
-        assert result.category == NewsCategory.SCIENCE
+        assert result.category == NewsCategory.SCIENCE_AND_TECHNOLOGY
 
 
 class TestMultiwordKeywords:
@@ -395,4 +394,4 @@ class TestMultiwordKeywords:
     def test_box_office(self):
         cls = NewsClassifier()
         meta = cls.classify_with_metadata(_item("Box office results this weekend"))
-        assert meta.category == NewsCategory.CULTURE
+        assert meta.category == NewsCategory.ENTERTAINMENT
