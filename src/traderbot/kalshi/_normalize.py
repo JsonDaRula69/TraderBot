@@ -54,13 +54,13 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
 
     return Market(
         ticker=raw["ticker"],
-        question=raw["question"],
-        outcome_prices=raw["outcome_prices"],
-        volume=int(raw["volume"]),
-        open_interest=int(raw["open_interest"]),
+        question=raw.get("question", raw.get("title", "")),
+        outcome_prices=raw.get("outcome_prices"),
+        volume=int(raw["volume"]) if raw.get("volume") else 0,
+        open_interest=int(raw["open_interest"]) if raw.get("open_interest") else 0,
         close_time=close_time_val,
         status=raw.get("state", raw.get("status")),
-        event_ticker=raw["event_ticker"],
+        event_ticker=raw.get("event_ticker", ""),
         category=category_str,
         market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),
