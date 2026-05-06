@@ -6,11 +6,22 @@ TRADERBOT_REPO="${TRADERBOT_REPO:-JsonDaRula69/TraderBot}"
 TRADERBOT_ORG="${TRADERBOT_ORG:-JsonDaRula69}"
 INSTALL_DIR="${HOME}/traderbot"
 SUPPORTED_DISTROS="ubuntu|debian|raspbian"
-_CLEANUP_TEMP_DIR=""
+_TRADERBOT_TEMP_FILES=""
+
+_register_temp() {
+    _TRADERBOT_TEMP_FILES="${_TRADERBOT_TEMP_FILES:+${_TRADERBOT_TEMP_FILES} }$1"
+}
 
 cleanup() {
-    if [[ -n "$_CLEANUP_TEMP_DIR" ]] && [[ -d "$_CLEANUP_TEMP_DIR" ]]; then
-        rm -rf "$_CLEANUP_TEMP_DIR"
+    for f in $_TRADERBOT_TEMP_FILES; do
+        if [[ -d "$f" ]]; then
+            rm -rf "$f"
+        elif [[ -f "$f" ]]; then
+            rm -f "$f"
+        fi
+    done
+    if [[ "${BASH_SOURCE[0]}" == /tmp/* ]]; then
+        rm -f "${BASH_SOURCE[0]}"
     fi
 }
 trap cleanup EXIT
@@ -34,6 +45,7 @@ _write_heartbeat_to_config() {
     if command -v jq &>/dev/null; then
         local tmp_file
         tmp_file="$(mktemp)"
+        _register_temp "$tmp_file"
         jq --arg agent "$agent_id" --arg every "$interval" '
             (.agents.list // []) as $list |
             if any($list[]; .id == $agent) then
@@ -282,7 +294,7 @@ install_traderbot() {
                 echo "git clone failed, trying ZIP fallback..."
                 local temp_dir
                 temp_dir="$(mktemp -d)"
-                _CLEANUP_TEMP_DIR="$temp_dir"
+                _register_temp "$temp_dir"
 
                 local http_code
                 http_code="$(curl -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
@@ -478,6 +490,7 @@ _env_set() {
     if grep -q "^${key}=" "$env_file" 2>/dev/null; then
         local tmp_file
         tmp_file="$(mktemp)"
+        _register_temp "$tmp_file"
         while IFS= read -r line || [[ -n "$line" ]]; do
             if [[ "$line" == "${key}="* ]]; then
                 echo "${key}=${value}"
@@ -981,6 +994,7 @@ merge_openclaw_agent_config() {
         if command -v jq &>/dev/null; then
             local tmp_file
             tmp_file="$(mktemp)"
+            _register_temp "$tmp_file"
             jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
             echo "Merged agent config into $config_path (using jq)."
         elif command -v python3 &>/dev/null; then
