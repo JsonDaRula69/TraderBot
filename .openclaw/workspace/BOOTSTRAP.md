@@ -187,22 +187,22 @@ This writes `HEARTBEAT_DATA.md` with your baseline state.
 
 After your first heartbeat, register your scheduled loops so OpenClaw wakes you on cadence:
 ```
-traderbot cron setup --agent <your-agent-id>
+openclaw cron add --agent <your-agent-id>
 ```
 
 This registers:
 - **Decision Loop** — isolated agentTurn every 5 min during market hours (Mon–Fri 9am–3pm ET)
 - **Heartbeat Loop** — isolated agentTurn every 6 hours (self-improvement cycle)
-- **Heartbeat config** — written to `~/.openclaw/config.json` so the gateway knows your interval
+- **Heartbeat config** — written to `~/.openclaw/openclaw.json` so the gateway knows your interval
 
 To preview without registering:
 ```
-traderbot cron setup --agent <your-agent-id> --dry-run
+openclaw cron add --agent <your-agent-id> --dry-run
 ```
 
 To customize the heartbeat interval:
 ```
-traderbot cron setup --agent <your-agent-id> --heartbeat-every 30m
+openclaw cron add --agent <your-agent-id> --heartbeat-every 30m
 ```
 
 ## Step 6.5: Initial Training (Backtest → Paper → Live)
@@ -232,14 +232,16 @@ traderbot compare --json
 - **Fill Rate**: % of orders that filled (avoid <80%)
 
 **⚠️ Training Mode Rules:**
-- Risk limit violations (circuit breaker, position size) will generate **warnings** but NOT stop execution
-- This is paper money — the goal is to learn, not to enforce
-- If you hit HARD_LIMITS, note it in `.learnings/ERRORS.md` but continue
+- `evaluate_trade()` REJECTS trades that fail risk checks — even in paper trading, circuit-breaker and position-size violations are enforced
+- This is paper money — the goal is to learn, but risk guards still apply
+- If you hit HARD_LIMITS, note it in `.learnings/ERRORS.md` and adjust strategy
 - Keep running backtests until you achieve **≥5% profit** consistently over **72 hours** of simulated time
 
 ### Phase 2: Paper Trade (Simulated Live Training)
 
 > "Now let me practice in real-time with fake money."
+
+**Note:** `traderbot trade` requires live market data — there are no hardcoded defaults. Ensure you have a working Kalshi API connection before proceeding.
 
 Run paper trading for 72 hours (4320 minutes):
 ```
