@@ -2696,6 +2696,143 @@ def _check_updates_on_startup() -> None:
         pass
 
 
+@app.command()
+def uninstall(
+    remove_data: Annotated[
+        bool | None,
+        typer.Option("--remove-data", help="Remove user data too (profiles, DBs, .env)"),
+    ] = None,
+) -> None:
+    """Remove all TraderBot system files, services, and OpenClaw integration.
+
+    System files are always removed (install dir, symlink, services, cron).
+    User data (profiles, DBs, .env, keys) is preserved unless --remove-data is set
+    or you confirm interactively.
+    """
+    import platform
+    import subprocess
+
+    console = Console()
+    install_dir = Path.home() / "traderbot"
+    data_dir = Path.home() / ".traderbot"
+    symlink = Path("/usr/local/bin/traderbot")
+
+    removed: list[str] = []
+    skipped: list[str] = []
+
+    console.print("\n[bold red]TraderBot Uninstaller[/bold red]\n")
+
+    # --- System services ---
+    console.print("[bold]Step 1: Stop and remove services[/bold]")
+    if platform.system() == "Darwin":
+        daemon_dir = Path("/Library/LaunchDaemons")
+        plists = list(daemon_dir.glob("com.traderbot.agent.*.plist")) if daemon_dir.exists() else []
+        for plist in plists:
+            label = plist.stem
+            subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
+            subprocess.run(["sudo", "rm", "-f", str(plist)], capture_output=True)
+            removed.append(str(plist))
+        if not plists:
+            skipped.append("No launchd plists found")
+    else:
+        service_dir = Path("/etc/systemd/system")
+        services = list(service_dir.glob("traderbot-agent@*.service")) if service_dir.exists() else []
+        for svc in services:
+            unit = svc.name
+            subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
+            subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
+            subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+            subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
+            removed.append(str(svc))
+        if not services:
+            skipped.append("No systemd services found")
+
+    # --- OpenClaw cron entries ---
+    console.print("[bold]Step 2: Remove OpenClaw cron entries[/bold]")
+    if shutil.which("openclaw"):
+        for loop_name in ["decision_loop", "heartbeat_loop", "news_loop"]:
+            result = subprocess.run(
+                ["openclaw", "cron", "remove", "--name", loop_name],
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                removed.append(f"cron:{loop_name}")
+            else:
+                skipped.append(f"cron:{loop_name} (not found or failed)")
+    else:
+        skipped.append("OpenClaw not found (cron entries must be removed manually)")
+
+    # --- OpenClaw agent config ---
+    console.print("[bold]Step 3: Remove OpenClaw agent entries[/bold]")
+    oc_config = Path.home() / ".openclaw" / "openclaw.json"
+    if oc_config.exists():
+        try:
+            config_data = json_lib.loads(oc_config.read_text())
+            agents_list = config_data.get("agents", {}).get("list", [])
+            original_count = len(agents_list)
+            filtered = [a for a in agents_list if not a.get("id", "").startswith("traderbot-")]
+            if len(filtered) < original_count:
+                config_data["agents"]["list"] = filtered
+                oc_config.write_text(json_lib.dumps(config_data, indent=2) + "\n")
+                removed.append(f"openclaw.json ({original_count - len(filtered)} agent(s))")
+            else:
+                skipped.append("No TraderBot agents in openclaw.json")
+        except Exception as e:
+            skipped.append(f"openclaw.json parse error: {e}")
+    else:
+        skipped.append("No openclaw.json found")
+
+    # --- Symlink ---
+    console.print("[bold]Step 4: Remove symlink[/bold]")
+    if symlink.is_symlink() or symlink.exists():
+        try:
+            symlink.unlink()
+            removed.append(str(symlink))
+        except PermissionError:
+            subprocess.run(["sudo", "rm", "-f", str(symlink)], capture_output=True)
+            removed.append(str(symlink))
+    else:
+        skipped.append("No /usr/local/bin/traderbot symlink")
+
+    # --- Install directory ---
+    console.print("[bold]Step 5: Remove install directory[/bold]")
+    if install_dir.exists():
+        shutil.rmtree(install_dir)
+        removed.append(str(install_dir))
+    else:
+        skipped.append(f"No install dir at {install_dir}")
+
+    # --- User data ---
+    console.print("[bold]Step 6: User data[/bold]")
+    if remove_data is None:
+        console.print(f"  User data at [cyan]{data_dir}[/cyan] contains profiles, DBs, .env, and PEM keys.")
+        remove_data = typer.confirm("  Remove all user data too?", default=False)
+
+    if remove_data:
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
+            removed.append(str(data_dir))
+        else:
+            skipped.append(f"No data dir at {data_dir}")
+    else:
+        skipped.append(f"User data preserved at {data_dir}")
+
+    # --- Summary ---
+    console.print("\n[bold]Uninstall Summary[/bold]\n")
+    if removed:
+        console.print("[green]Removed:[/green]")
+        for item in removed:
+            console.print(f"  ✓ {item}")
+    if skipped:
+        console.print("[dim]Skipped:[/dim]")
+        for item in skipped:
+            console.print(f"  - {item}")
+
+    console.print("\n[bold green]TraderBot uninstalled.[/bold green]")
+    if not remove_data:
+        console.print(f"[dim]User data preserved at {data_dir}. Remove manually if desired.[/dim]")
+
+
 def main() -> None:
     """Entry point for the traderbot CLI."""
     _check_updates_on_startup()
