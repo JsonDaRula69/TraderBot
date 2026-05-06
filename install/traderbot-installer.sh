@@ -444,7 +444,10 @@ setup_api_credentials() {
         echo
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
         if [[ -n "$kalshi_secret" ]]; then
-            _env_set "$env_file" "KALSHI_PRIVATE_KEY_PEM" "$kalshi_secret"
+            local pem_path="${HOME}/.traderbot/kalshi_key.pem"
+            printf '%s' "$kalshi_secret" > "$pem_path"
+            chmod 600 "$pem_path"
+            _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
         fi
         echo "Kalshi credentials stored."
     fi
