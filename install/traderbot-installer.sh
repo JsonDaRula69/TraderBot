@@ -74,15 +74,16 @@ _write_heartbeat_to_config() {
         local tmp_file
         tmp_file="$(mktemp)"
         _register_temp "$tmp_file"
-        jq --arg agent "$agent_id" --arg every "$interval" '
-            (.agents.list // []) as $list |
-            if any($list[]; .id == $agent) then
+        local found
+        found=$(jq -r --arg agent "$agent_id" 'any(.agents.list // [] | .[]; .id == $agent)' "$config_path" 2>/dev/null || echo "false")
+        if [[ "$found" == "true" ]]; then
+            jq --arg agent "$agent_id" --arg every "$interval" '
                 .agents.list = [.agents.list[] | if .id == $agent then .heartbeat = {"every": $every, "lightContext": true, "isolatedSession": true} else . end]
-            else
-                .agents.list = ($list + [{"id": $agent, "heartbeat": {"every": $every, "lightContext": true, "isolatedSession": true}}])
-            end
-        ' "$config_path" > "$tmp_file" && mv "$tmp_file" "$config_path"
-        echo "  ✓ heartbeat config written to $config_path"
+            ' "$config_path" > "$tmp_file" && mv "$tmp_file" "$config_path"
+            echo "  + heartbeat config written to $config_path"
+        else
+            echo "  - agent '$agent_id' not found in config -- skipping heartbeat write" >&2
+        fi
     elif command -v python3 &>/dev/null; then
         python3 -c "
 import json
@@ -100,10 +101,12 @@ for entry in agent_list:
         found = True
         break
 if not found:
-    agent_list.append({'id': agent_id, 'heartbeat': {'every': interval, 'lightContext': True, 'isolatedSession': True}})
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-print('  ✓ heartbeat config written')
+    print(f\"  - agent '{agent_id}' not found in config -- skipping heartbeat write\")
+else:
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+        f.write('\n')
+    print('  + heartbeat config written')
 "
     else
         echo "  Warning: Neither jq nor python3 available. Cannot write heartbeat config." >&2
@@ -1034,28 +1037,23 @@ for entry in cfg.get('commands', {}).get('ownerAllowFrom', []):
     fi
 }
 
-merge_openclaw_agent_config() {
+deploy_workspace_files() {
     local config_path="${HOME}/.openclaw/openclaw.json"
-    local agent_config="${INSTALL_DIR}/install/openclaw-agent-config.json"
     local workspace_src="${INSTALL_DIR}/.openclaw/workspace"
 
-    if [[ ! -f "$agent_config" ]]; then
-        echo "Warning: Agent config snippet not found at $agent_config" >&2
+    if [[ -z "${agent_name:-}" ]]; then
+        echo "Warning: No agent name specified. Skipping workspace deployment." >&2
         return 1
     fi
 
     mkdir -p "${HOME}/.openclaw"
 
     if [[ ! -f "$config_path" ]]; then
-        # Don't use the minimal agent template as the entire config --
-        # it lacks gateway, session, tools, plugins, channels, etc.
-        # and would leave OpenClaw unusable. Initialize properly first.
         if command -v openclaw &>/dev/null; then
             echo "Initializing OpenClaw config..."
             openclaw init 2>/dev/null || true
         fi
         if [[ ! -f "$config_path" ]]; then
-            # openclaw init failed or unavailable -- create a minimal complete config
             python3 -c "
 import json, sys
 config = {
@@ -1071,121 +1069,77 @@ with open(sys.argv[1], 'w') as f:
 " "$config_path"
             echo "Created minimal OpenClaw config at $config_path."
         fi
-        # Now merge the TraderBot agent into the proper config
-        _backup_config "$config_path"
-        if command -v jq &>/dev/null; then
-            local tmp_file
-            tmp_file="$(mktemp)"
-            _register_temp "$tmp_file"
-            jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
-            echo "Merged agent config into $config_path (using jq)."
-        elif command -v python3 &>/dev/null; then
-            python3 -c "
-import json, sys
-config_path, agent_config = sys.argv[1], sys.argv[2]
-with open(config_path) as f: existing = json.load(f)
-with open(agent_config) as f: new = json.load(f)
-if 'agents' in new:
-    existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
-    new_list = existing.get('agents', {}).get('list', [])
-    for a in new['agents'].get('list', []):
-        id_val = a.get('id', '')
-        cleaned = id_val.replace('__PROFILE_NAME__', '${profile_name:-economics}').replace('__AGENT_NAME__', '${agent_name:-economics}').replace('__HOME_PLACEHOLDER__', '$HOME').replace('__PROJECT_ROOT_PLACEHOLDER__', '$INSTALL_DIR')
-        a['id'] = cleaned
-        if a['id'] not in existing_ids:
-            new_list.append(a)
-    existing.setdefault('agents', {})['list'] = new_list
-with open(config_path, 'w') as f:
-    json.dump(existing, f, indent=2)
-    f.write('\n')
-" "$config_path" "$agent_config"
-            echo "Merged agent config into $config_path (using python3)."
-        else
-            echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
-            echo "Manually merge $agent_config into $config_path" >&2
-            return 1
-        fi
-    else
-        _backup_config "$config_path"
-        if command -v jq &>/dev/null; then
-            local tmp_file
-            tmp_file="$(mktemp)"
-            _register_temp "$tmp_file"
-            jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
-            echo "Merged agent config into $config_path (using jq)."
-        elif command -v python3 &>/dev/null; then
-            python3 -c "
-import json, sys
-config_path, agent_config = sys.argv[1], sys.argv[2]
-with open(config_path) as f: existing = json.load(f)
-with open(agent_config) as f: new = json.load(f)
-if 'agents' in new:
-    existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
-    new_list = existing.get('agents', {}).get('list', [])
-    for a in new['agents'].get('list', []):
-        id_val = a.get('id', '')
-        cleaned = id_val.replace('__PROFILE_NAME__', '${profile_name:-economics}').replace('__AGENT_NAME__', '${agent_name:-economics}').replace('__HOME_PLACEHOLDER__', '$HOME').replace('__PROJECT_ROOT_PLACEHOLDER__', '$INSTALL_DIR')
-        a['id'] = cleaned
-        if a['id'] not in existing_ids:
-            new_list.append(a)
-    existing.setdefault('agents', {})['list'] = new_list
-with open(config_path, 'w') as f:
-    json.dump(existing, f, indent=2)
-" "$config_path" "$agent_config"
-            echo "Merged agent config into $config_path (using python3)."
-        else
-            echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
-            echo "Manually merge $agent_config into $config_path" >&2
-            return 1
-        fi
     fi
 
-    # Expand placeholders in config
-    if [[ -f "$config_path" ]]; then
-        _sed_inplace "s|__HOME_PLACEHOLDER__|$HOME|g" "$config_path"
-        _sed_inplace "s|__PROJECT_ROOT_PLACEHOLDER__|$INSTALL_DIR|g" "$config_path"
-        _sed_inplace "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
-        _sed_inplace "s|__AGENT_NAME__|${agent_name:-economics}|g" "$config_path"
+    # Resolve agent workspace from openclaw.json -- do NOT add or modify agent entries
+    local agent_ws_dir=""
+    if command -v jq &>/dev/null && [[ -f "$config_path" ]]; then
+        local default_ws
+        default_ws=$(jq -r '.agents.defaults.workspace // ""' "$config_path" 2>/dev/null)
+        agent_ws_dir=$(jq -r --arg id "$agent_name" '
+            (.agents.list // [])[] | select(.id == $id) | .workspace // empty
+        ' "$config_path" 2>/dev/null | head -1)
+        if [[ -z "$agent_ws_dir" ]]; then
+            if [[ -n "$default_ws" ]]; then
+                agent_ws_dir="${default_ws}/${agent_name}"
+            else
+                agent_ws_dir="${HOME}/.openclaw/workspace/${agent_name}"
+            fi
+        fi
+    elif command -v python3 &>/dev/null && [[ -f "$config_path" ]]; then
+        agent_ws_dir=$(python3 -c "
+import json, sys, os
+agent_name = sys.argv[1]
+config_path = sys.argv[2]
+with open(config_path) as f:
+    cfg = json.load(f)
+default_ws = cfg.get('agents', {}).get('defaults', {}).get('workspace', os.path.expanduser('~/.openclaw/workspace'))
+for a in cfg.get('agents', {}).get('list', []):
+    if a.get('id') == agent_name:
+        print(a.get('workspace', f'{default_ws}/{agent_name}'))
+        sys.exit(0)
+print(f'{default_ws}/{agent_name}')
+" "$agent_name" "$config_path")
     fi
+    agent_ws_dir="${agent_ws_dir:-${HOME}/.openclaw/workspace/${agent_name}}"
+
+    # Expand ~ in path
+    agent_ws_dir="${agent_ws_dir/#\~/$HOME}"
+
+    echo "Deploying workspace files to $agent_ws_dir"
 
     if [[ -d "$workspace_src" ]]; then
-        local agent_ws_dir="${HOME}/.openclaw/workspace/${agent_name:-economics}"
         mkdir -p "$agent_ws_dir"
 
-        # Immutable files — always overwrite
-        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md; do
+        # Fenced-merge files -- always overwrite (AGENTS.md, SOUL.md, TOOLS.md, HEARTBEAT.md, IDENTITY.md)
+        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md IDENTITY.md; do
             if [[ -f "${workspace_src}/${f}" ]]; then
                 cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
             fi
         done
 
-        # Merge-only files — skip if target exists
-        for f in IDENTITY.md; do
-            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
-                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
-            fi
-        done
-
-        # Fresh-deploy-only files — skip if target exists
+        # Ask-then-merge files -- skip if target exists (BOOTSTRAP.md, BOOT.md)
         for f in BOOTSTRAP.md BOOT.md; do
             if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
                 cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
             fi
         done
 
-        # Init-if-missing files — only create on fresh deploy
+        # Init-if-missing files -- only create on fresh deploy
         for f in USER.md MEMORY.md SESSION-STATE.md HEARTBEAT_DATA.md; do
             if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
                 cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
             fi
         done
 
-        # .learnings directory — only on fresh deploy
+        # .learnings directory -- only on fresh deploy
         if [[ -d "${workspace_src}/.learnings" ]] && [[ ! -d "${agent_ws_dir}/.learnings" ]]; then
             cp -r "${workspace_src}/.learnings" "${agent_ws_dir}/.learnings"
         fi
 
         echo "Deployed workspace template files to $agent_ws_dir"
+    else
+        echo "Warning: No workspace templates found at $workspace_src" >&2
     fi
 }
 
@@ -1259,7 +1213,7 @@ main() {
     interactive_config_flow
 
     echo "Merging OpenClaw agent config..."
-    merge_openclaw_agent_config || true
+    deploy_workspace_files || true
 
     echo
     echo "Installation complete!"

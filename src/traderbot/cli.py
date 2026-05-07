@@ -2790,20 +2790,23 @@ def uninstall(
         skipped.append("OpenClaw not found (cron entries must be removed manually)")
 
     # --- OpenClaw agent config ---
-    console.print("[bold]Step 3: Remove OpenClaw agent entries[/bold]")
+    console.print("[bold]Step 3: Clean TraderBot from OpenClaw agents[/bold]")
     oc_config = Path.home() / ".openclaw" / "openclaw.json"
     if oc_config.exists():
         try:
             config_data = json_lib.loads(oc_config.read_text())
             agents_list = config_data.get("agents", {}).get("list", [])
-            original_count = len(agents_list)
-            filtered = [a for a in agents_list if not a.get("id", "").startswith("traderbot-")]
-            if len(filtered) < original_count:
-                config_data["agents"]["list"] = filtered
+            cleaned = 0
+            for agent in agents_list:
+                if "heartbeat" in agent and agent["heartbeat"].get("lightContext"):
+                    agent.pop("heartbeat", None)
+                    cleaned += 1
+            if cleaned:
+                config_data["agents"]["list"] = agents_list
                 oc_config.write_text(json_lib.dumps(config_data, indent=2) + "\n")
-                removed.append(f"openclaw.json ({original_count - len(filtered)} agent(s))")
+                removed.append(f"openclaw.json (cleaned heartbeat from {cleaned} agent(s))")
             else:
-                skipped.append("No TraderBot agents in openclaw.json")
+                skipped.append("No TraderBot heartbeat config found in agents")
         except Exception as e:
             skipped.append(f"openclaw.json parse error: {e}")
     else:
