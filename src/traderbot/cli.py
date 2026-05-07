@@ -2460,6 +2460,30 @@ def profile_auth(
 
 
 
+def _wait_for_gateway(max_attempts: int = 15) -> bool:
+    """Wait for the OpenClaw gateway to accept connections."""
+    import json as _json
+    import socket
+
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    port = 18789
+    if config_path.exists():
+        try:
+            cfg = _json.loads(config_path.read_text())
+            port = cfg.get("gateway", {}).get("port", 18789)
+        except (ValueError, KeyError):
+            pass
+
+    for attempt in range(max_attempts):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=2):
+                return True
+        except (ConnectionRefusedError, OSError):
+            import time
+            time.sleep(2)
+    return False
+
+
 def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
     """Run `openclaw cron add` and return (exit_code, output)."""
     import subprocess
@@ -2565,7 +2589,10 @@ def cron_setup(
             console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
             raise typer.Exit(1)
 
-        # channel/to validated by XOR check above -- either both provided or neither
+        console.print("[dim]Waiting for OpenClaw gateway...[/dim]")
+        if not _wait_for_gateway():
+            console.print("[yellow]Warning:[/yellow] Gateway not responding on port 18789. Registration may fail.")
+
         bool(channel and to)  # implicit announce when channel+to provided
 
     decision_payload = DecisionLoopPayload()

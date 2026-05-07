@@ -42,8 +42,27 @@ _backup_config() {
     if [[ -f "$config_path" ]]; then
         local backup="${config_path}.bak.$(date +%Y%m%d%H%M%S)"
         cp "$config_path" "$backup"
-        echo "  Backed up $config_path → $backup"
+        echo "  Backed up $config_path -> $backup"
     fi
+}
+
+_wait_for_gateway() {
+    local max_attempts="${1:-10}"
+    local attempt=0
+    local gateway_port=""
+    local oc_config="${HOME}/.openclaw/openclaw.json"
+    if [[ -f "$oc_config" ]] && command -v jq &>/dev/null; then
+        gateway_port=$(jq -r '.gateway.port // 18789' "$oc_config" 2>/dev/null)
+    fi
+    gateway_port="${gateway_port:-18789}"
+    while [[ $attempt -lt $max_attempts ]]; do
+        if nc -z 127.0.0.1 "$gateway_port" 2>/dev/null; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+    return 1
 }
 
 _write_heartbeat_to_config() {
@@ -923,6 +942,8 @@ interactive_config_flow() {
             local NEWS_MSG="ALERT: High-impact event detected (impact). Run traderbot sentiment impact for analysis."
             local cron_ok=true
 
+            _wait_for_gateway 15 || { echo "Warning: OpenClaw gateway not responding. Cron registration may fail." >&2; }
+
             # Resolve delivery target from openclaw config
             local announce_args=""
             local oc_config="${HOME}/.openclaw/openclaw.json"
@@ -949,9 +970,9 @@ for entry in cfg.get('commands', {}).get('ownerAllowFrom', []):
                 --message "$DECISION_MSG" \
                 --agent "$agent_name" \
                 --announce $announce_args 2>&1; then
-                echo "  ✓ decision_loop registered"
+                echo "  + decision_loop registered"
             else
-                echo "  ✗ decision_loop failed" >&2
+                echo "  x decision_loop failed" >&2
                 cron_ok=false
             fi
 
@@ -962,13 +983,13 @@ for entry in cfg.get('commands', {}).get('ownerAllowFrom', []):
                 --message "$HEARTBEAT_MSG" \
                 --agent "$agent_name" \
                 --announce $announce_args 2>&1; then
-                echo "  ✓ heartbeat_loop registered"
+                echo "  + heartbeat_loop registered"
             else
-                echo "  ✗ heartbeat_loop failed" >&2
+                echo "  x heartbeat_loop failed" >&2
                 cron_ok=false
             fi
 
-            echo "  ℹ news_loop is event-driven (no cron schedule) — triggered by impact signals"
+            echo "  i news_loop is event-driven (no cron schedule) -- triggered by impact signals"
 
             local oc_config="${HOME}/.openclaw/openclaw.json"
             if [[ -f "$oc_config" ]]; then
@@ -1026,8 +1047,64 @@ merge_openclaw_agent_config() {
     mkdir -p "${HOME}/.openclaw"
 
     if [[ ! -f "$config_path" ]]; then
-        cp "$agent_config" "$config_path"
-        echo "Created $config_path from agent config template."
+        # Don't use the minimal agent template as the entire config --
+        # it lacks gateway, session, tools, plugins, channels, etc.
+        # and would leave OpenClaw unusable. Initialize properly first.
+        if command -v openclaw &>/dev/null; then
+            echo "Initializing OpenClaw config..."
+            openclaw init 2>/dev/null || true
+        fi
+        if [[ ! -f "$config_path" ]]; then
+            # openclaw init failed or unavailable -- create a minimal complete config
+            python3 -c "
+import json, sys
+config = {
+    'agents': {'defaults': {'workspace': '$HOME/.openclaw/workspace'}, 'list': []},
+    'gateway': {'mode': 'local', 'port': 18789, 'bind': 'loopback'},
+    'session': {'dmScope': 'per-channel-peer'},
+    'tools': {'profile': 'coding'},
+    'plugins': {'entries': {}},
+}
+with open(sys.argv[1], 'w') as f:
+    json.dump(config, f, indent=2)
+    f.write('\n')
+" "$config_path"
+            echo "Created minimal OpenClaw config at $config_path."
+        fi
+        # Now merge the TraderBot agent into the proper config
+        _backup_config "$config_path"
+        if command -v jq &>/dev/null; then
+            local tmp_file
+            tmp_file="$(mktemp)"
+            _register_temp "$tmp_file"
+            jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
+            echo "Merged agent config into $config_path (using jq)."
+        elif command -v python3 &>/dev/null; then
+            python3 -c "
+import json, sys
+config_path, agent_config = sys.argv[1], sys.argv[2]
+with open(config_path) as f: existing = json.load(f)
+with open(agent_config) as f: new = json.load(f)
+if 'agents' in new:
+    existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
+    new_list = existing.get('agents', {}).get('list', [])
+    for a in new['agents'].get('list', []):
+        id_val = a.get('id', '')
+        cleaned = id_val.replace('__PROFILE_NAME__', '${profile_name:-economics}').replace('__AGENT_NAME__', '${agent_name:-economics}').replace('__HOME_PLACEHOLDER__', '$HOME').replace('__PROJECT_ROOT_PLACEHOLDER__', '$INSTALL_DIR')
+        a['id'] = cleaned
+        if a['id'] not in existing_ids:
+            new_list.append(a)
+    existing.setdefault('agents', {})['list'] = new_list
+with open(config_path, 'w') as f:
+    json.dump(existing, f, indent=2)
+    f.write('\n')
+" "$config_path" "$agent_config"
+            echo "Merged agent config into $config_path (using python3)."
+        else
+            echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
+            echo "Manually merge $agent_config into $config_path" >&2
+            return 1
+        fi
     else
         _backup_config "$config_path"
         if command -v jq &>/dev/null; then
