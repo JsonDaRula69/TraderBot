@@ -44,7 +44,7 @@ def main_callback(
         ),
     ] = False,
 ) -> None:
-    """TraderBot — Autonomous prediction market agent."""
+    """TraderBot -- Autonomous prediction market agent."""
 
 
 auth_app = typer.Typer(
@@ -164,8 +164,8 @@ def analyze(
     console.print("\n[bold]Analysis[/bold]")
     console.print(f"  Implied YES prob: {prob.yes_prob:.2%}")
     console.print(f"  Implied NO prob:  {prob.no_prob:.2%}")
-    console.print(f"  Spread:           {prob.spread_cents}¢")
-    console.print(f"  Mid price:        {prob.mid_price_cents}¢")
+    console.print(f"  Spread:           {prob.spread_cents}c")
+    console.print(f"  Mid price:        {prob.mid_price_cents}c")
 
 
 @app.command()
@@ -269,7 +269,7 @@ def signals(
             r["direction"],
             f"{r['confidence']:.1%}",
             f"{r['estimated_prob']:.1%}",
-            f"{r['edge_cents']}¢",
+            f"{r['edge_cents']}c",
         )
     console.print(table)
 
@@ -323,7 +323,7 @@ def trade(
         market_open_interest = market.open_interest
     except Exception:
         # Without live data, fall through with defaults that will likely
-        # fail liquidity and edge checks — caller should ensure API connectivity.
+        # fail liquidity and edge checks -- caller should ensure API connectivity.
         pass
 
     trade_request = TradeRequest(
@@ -389,10 +389,10 @@ def trade(
 
     if result["outcome"] == "executed":
         console.print(
-            f"[green]Trade executed[/green]: {ticker} {direction} — sized ${sized / 100:.2f}"
+            f"[green]Trade executed[/green]: {ticker} {direction} -- sized ${sized / 100:.2f}"
         )
     else:
-        console.print(f"[red]Trade rejected[/red]: {ticker} — {result['reason']}")
+        console.print(f"[red]Trade rejected[/red]: {ticker} -- {result['reason']}")
 
 
 @app.command()
@@ -513,7 +513,7 @@ def bootstrap(
     console = Console()
     steps: dict[str, str | bool] = {}
 
-    # Step 1: Check Python version (3.12.x — chroma-hnswlib has no wheels for 3.13+)
+    # Step 1: Check Python version (3.12.x -- chroma-hnswlib has no wheels for 3.13+)
     py_ok, version_str, _py_version_tuple = _python_version_ok()
     steps["python_version"] = version_str
     steps["python_version_ok"] = py_ok
@@ -521,7 +521,7 @@ def bootstrap(
     if not py_ok:
         if json_output:
             json_lib.dump(
-                {"error": f"Python {version_str} — 3.12.x required (chromadb dependency)", "steps": steps},
+                {"error": f"Python {version_str} -- 3.12.x required (chromadb dependency)", "steps": steps},
                 sys.stdout,
             )
             raise typer.Exit(code=1)
@@ -541,7 +541,7 @@ def bootstrap(
     keyring_ok = mgr.keyring_available
     steps["keyring_available"] = keyring_ok
 
-    # Step 4: Run auth login flow (interactive — skipped in dry-run/JSON mode)
+    # Step 4: Run auth login flow (interactive -- skipped in dry-run/JSON mode)
     if not dry_run and not json_output:
         if not keyring_ok:
             console.print(
@@ -615,40 +615,40 @@ def bootstrap(
 
     console.print("\n[bold]1. Python Version[/bold]")
     if py_ok:
-        console.print(f"  [green]✓[/green] Python {steps['python_version']} (= 3.12)")
+        console.print(f"  [green]+[/green] Python {steps['python_version']} (= 3.12)")
     else:
-        console.print(f"  [red]✗[/red] Python {steps['python_version']} (requires = 3.12)")
+        console.print(f"  [red]x[/red] Python {steps['python_version']} (requires = 3.12)")
 
     console.print("\n[bold]2. Config Directory[/bold]")
     if config_dir_exists or dry_run:
-        console.print(f"  [green]✓[/green] {config_dir}")
+        console.print(f"  [green]+[/green] {config_dir}")
     else:
-        console.print(f"  [green]✓[/green] Created {config_dir}")
+        console.print(f"  [green]+[/green] Created {config_dir}")
 
     console.print("\n[bold]3. Keyring Access[/bold]")
     if keyring_ok:
-        console.print("  [green]✓[/green] OS keyring available")
+        console.print("  [green]+[/green] OS keyring available")
     else:
-        console.print("  [red]✗[/red] Keyring unavailable — use .env fallback")
+        console.print("  [red]x[/red] Keyring unavailable -- use .env fallback")
 
     console.print("\n[bold]4. Credentials[/bold]")
     for service_name, keys in sorted(status.items()):
         for key, ok in keys.items():
-            mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
+            mark = "[green]+[/green]" if ok else "[red]x[/red]"
             console.print(f"  {mark} {service_name}.{key}")
 
     console.print("\n[bold]5. Database[/bold]")
     if dry_run:
         console.print(f"  (dry-run) {db_path}")
     else:
-        console.print(f"  [green]✓[/green] {db_path}")
+        console.print(f"  [green]+[/green] {db_path}")
 
     console.print("\n" + "=" * 40)
     if all_ok:
         console.print("[bold green]Bootstrap complete![/bold green]")
         console.print("\nNext steps:")
-        console.print("  [cyan]traderbot scan[/cyan]               — list open markets")
-        console.print("  [cyan]traderbot backtest --strategy momentum[/cyan] — run a backtest")
+        console.print("  [cyan]traderbot scan[/cyan]               -- list open markets")
+        console.print("  [cyan]traderbot backtest --strategy momentum[/cyan] -- run a backtest")
     else:
         console.print("[bold yellow]Bootstrap partially complete.[/bold yellow]")
         if missing:
@@ -665,7 +665,7 @@ def heartbeat(
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Report only — no state changes")
+        bool, typer.Option("--dry-run", help="Report only -- no state changes")
     ] = False,
 ) -> None:
     """Periodic self-review: performance, adaptation, risk state, and learning promotion."""
@@ -716,7 +716,7 @@ def heartbeat(
     cb = result.circuit_breaker
     health = result.system_health
 
-    console.print(f"\n[bold]Heartbeat[/bold] — {result.timestamp.isoformat()}")
+    console.print(f"\n[bold]Heartbeat[/bold] -- {result.timestamp.isoformat()}")
     console.print(f"  Steps completed: {', '.join(result.steps_completed)}")
 
     console.print("\n[bold]Performance[/bold]")
@@ -725,7 +725,7 @@ def heartbeat(
         f"  Trades: {perf.trade_count}  Win rate: {perf.win_rate:.0%}  P&L: {pnl_str} USD"
     )
     if perf.deviation_flag:
-        console.print(f"  [yellow]⚠[/yellow] {perf.deviation_flag}")
+        console.print(f"  [yellow]![/yellow] {perf.deviation_flag}")
 
     console.print("\n[bold]Decisions[/bold]")
     console.print(
@@ -734,7 +734,7 @@ def heartbeat(
         f"Accuracy: {decision.prediction_accuracy:.0%}"
     )
     if decision.pending_review:
-        console.print(f"  Open: {decision.open_count} — {', '.join(decision.pending_review[:5])}")
+        console.print(f"  Open: {decision.open_count} -- {', '.join(decision.pending_review[:5])}")
 
     console.print("\n[bold]Adaptation[/bold]")
     if adapt.updated:
@@ -745,7 +745,7 @@ def heartbeat(
         )
         console.print(f"  Method: {adapt.method}")
     else:
-        console.print(f"  No update — {adapt.skipped_reason}")
+        console.print(f"  No update -- {adapt.skipped_reason}")
 
     console.print("\n[bold]Learnings[/bold]")
     if lrn.promoted:
@@ -768,9 +768,9 @@ def heartbeat(
     if health.alerts or cb.level != "NORMAL":
         console.print("\n[bold yellow]Alerts[/bold yellow]")
         for alert in health.alerts:
-            console.print(f"  [yellow]⚠[/yellow] {alert}")
+            console.print(f"  [yellow]![/yellow] {alert}")
         if cb.level != "NORMAL":
-            console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
+            console.print(f"  [yellow]![/yellow] Circuit breaker: {cb.level} -- {cb.reason}")
 
 
 @app.command()
@@ -911,14 +911,14 @@ def news(
             console.print(
                 "[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."
             )
-            console.print("Reddit RSS feeds work without keys — try [cyan]--source reddit[/cyan].")
+            console.print("Reddit RSS feeds work without keys -- try [cyan]--source reddit[/cyan].")
         return
 
     # Profile-aware news cache path
     cache_path = get_news_cache_path(profile)
     logger.debug("News cache path: %s", cache_path)
 
-    # Map source filter for aggregator — NewsSource is now a single canonical enum
+    # Map source filter for aggregator -- NewsSource is now a single canonical enum
     async def _fetch() -> list[NewsItem]:
         async with NewsAggregator(
             newsapi_key=newsapi_key, twitter_api_key=twitter_key
@@ -1300,7 +1300,7 @@ def paper(
         init_schema(conn)
         trader = PaperTrader(demo, conn, profile=profile)
 
-        console.print(f"[bold]Paper Trading[/bold] — {strategy} ({duration}min)")
+        console.print(f"[bold]Paper Trading[/bold] -- {strategy} ({duration}min)")
         console.print(f"  Starting cash: ${trader.get_portfolio().cash_cents / 100:.2f}")
 
         start_time = time.time()
@@ -1338,7 +1338,7 @@ def paper(
                             if result is not None:
                                 console.print(
                                     f"  [green]FILL[/green] {sig.direction.upper()} "
-                                    f"{result.quantity}x {sig.ticker} @ {result.price_cents}¢"
+                                    f"{result.quantity}x {sig.ticker} @ {result.price_cents}c"
                                 )
                     except Exception:
                         continue
@@ -1834,7 +1834,7 @@ def auth_check() -> None:
     table.add_column("Status")
     for service_name, keys in sorted(status.items()):
         for key, ok in keys.items():
-            mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
+            mark = "[green]+[/green]" if ok else "[red]x[/red]"
             table.add_row(service_name, key, mark)
     console.print(table)
 
@@ -1861,7 +1861,7 @@ def update_check(
     result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
     if result:
         console.print(
-            f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]"
+            f"[yellow]Update available: v{result['current']} -> v{result['latest']}[/yellow]"
         )
         console.print(f"[dim]Release: {result['url']}[/dim]")
         console.print("[dim]Run 'traderbot update apply' to update.[/dim]")
@@ -1977,7 +1977,7 @@ def profile_create(
         profile = TradingProfile(**profile_data)
         registry = ProfileRegistry()
         registry.create_profile(profile)
-        console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
+        console.print(f"[green]+[/green] Created profile '{name}' in {mode} mode")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
@@ -2064,7 +2064,7 @@ def profile_show(
         if profile.enabled_categories:
             console.print("\n[bold]Enabled Categories:[/bold]")
             for cat in profile.enabled_categories:
-                console.print(f"  • {cat.value}")
+                console.print(f"  - {cat.value}")
         else:
             console.print("\n[bold]Enabled Categories:[/bold] All")
 
@@ -2085,7 +2085,7 @@ def profile_delete(
         return
 
     registry.delete_profile(name, keep_data=keep_data)
-    console.print(f"[green]✓[/green] Deleted profile '{name}'")
+    console.print(f"[green]+[/green] Deleted profile '{name}'")
 
     if not keep_data:
         console.print("[yellow]Note:[/yellow] Data directories were also deleted")
@@ -2148,7 +2148,7 @@ def profile_assign(
         else:
             console = Console()
             console.print(
-                f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
+                f"[green]+[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
             )
             console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
 
@@ -2165,7 +2165,7 @@ def profile_assign(
                 inject_token(str(agent_path), token)
                 if not token_only:
                     console.print(
-                        f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
+                        f"[green]+[/green] Workspace files and token injected into {agent_id}/"
                     )
         except FileNotFoundError:
             if not token_only:
@@ -2207,7 +2207,7 @@ def profile_revoke(
 
     # Revoke token
     revoke_token(token)
-    console.print(f"[green]✓[/green] Revoked token for profile '{profile_name}'")
+    console.print(f"[green]+[/green] Revoked token for profile '{profile_name}'")
 
     # Remove token from agent's TOOLS.md
     if agent_id:
@@ -2215,7 +2215,7 @@ def profile_revoke(
             agent_path = _resolve_agent_path(agent_id)
             if agent_path and agent_path.exists():
                 remove_token_from_tools(str(agent_path))
-                console.print(f"[green]✓[/green] Token removed from {agent_id}/TOOLS.md")
+                console.print(f"[green]+[/green] Token removed from {agent_id}/TOOLS.md")
         except Exception as e:
             console.print(f"[yellow]Warning:[/yellow] Failed to remove token from TOOLS.md: {e}")
 
@@ -2336,7 +2336,7 @@ def profile_update(
 
     try:
         registry.update_profile(name, **update_kwargs)
-        console.print(f"[green]✓[/green] Updated profile '{name}'")
+        console.print(f"[green]+[/green] Updated profile '{name}'")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
@@ -2400,7 +2400,7 @@ def profile_set_auth(
     auth_store = ProfileAuthStore(profile)
     auth_store.set_credentials(service, key, secret)
     console.print(
-        f"[green]✓[/green] Stored credentials for '{service}' on profile '{profile_name}'"
+        f"[green]+[/green] Stored credentials for '{service}' on profile '{profile_name}'"
     )
 
 
@@ -2565,7 +2565,7 @@ def cron_setup(
             console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
             raise typer.Exit(1)
 
-        # channel/to validated by XOR check above — either both provided or neither
+        # channel/to validated by XOR check above -- either both provided or neither
         bool(channel and to)  # implicit announce when channel+to provided
 
     decision_payload = DecisionLoopPayload()
@@ -2664,9 +2664,9 @@ def cron_setup(
     for r in results:
         name = r["name"]
         if r["registered"]:
-            console.print(f"  [green]✓[/green] {name}")
+            console.print(f"  [green]+[/green] {name}")
         else:
-            console.print(f"  [red]✗[/red] {name}: {r.get('error', 'unknown error')}")
+            console.print(f"  [red]x[/red] {name}: {r.get('error', 'unknown error')}")
 
     failed = [r for r in results if not r["registered"]]
     if failed:
@@ -2689,7 +2689,7 @@ def _check_updates_on_startup() -> None:
         result = check_for_updates(check_interval_hours=config.check_interval_hours)
         if result:
             Console().print(
-                f"[dim]Update available: v{result['current']} → v{result['latest']}. "
+                f"[dim]Update available: v{result['current']} -> v{result['latest']}. "
                 f"Run 'traderbot update apply' to update.[/dim]"
             )
     except Exception:
@@ -2822,7 +2822,7 @@ def uninstall(
     if removed:
         console.print("[green]Removed:[/green]")
         for item in removed:
-            console.print(f"  ✓ {item}")
+            console.print(f"  + {item}")
     if skipped:
         console.print("[dim]Skipped:[/dim]")
         for item in skipped:
