@@ -2095,22 +2095,42 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
     """Resolve agent workspace path using OpenClaw multi-agent layout.
 
     Search order:
-    1. ~/.openclaw/workspace-<agentId>/ (OpenClaw per-agent workspace)
-    2. ~/.openclaw/workspace/<agentId>/ (subdirectory layout)
-    3. ~/.openclaw/agents/<agentId>/ (agent state directory)
-    4. .openclaw/workspace/<agentId>/ (project-local, legacy)
+    1. Explicit workspace from openclaw.json agents.list
+    2. ~/.openclaw/workspace-<agentId>/ (OpenClaw per-agent workspace)
+    3. ~/.openclaw/workspace/<agentId>/ (subdirectory layout)
+    4. ~/.openclaw/workspace/ (default workspace, if IDENTITY.md/TOOLS.md present)
+    5. ~/.openclaw/agents/<agentId>/ (agent state directory)
+    6. .openclaw/workspace/<agentId>/ (project-local, legacy)
     """
     from pathlib import Path
+
+    oc_config = Path.home() / ".openclaw" / "openclaw.json"
+    if oc_config.exists():
+        try:
+            import json as _json
+
+            cfg = _json.loads(oc_config.read_text())
+            for entry in cfg.get("agents", {}).get("list", []):
+                if entry.get("id") == agent_id and entry.get("workspace"):
+                    p = Path(entry["workspace"]).expanduser()
+                    if p.exists() and p.is_dir():
+                        return p
+        except Exception:
+            pass
 
     candidates = [
         Path.home() / ".openclaw" / f"workspace-{agent_id}",
         Path.home() / ".openclaw" / "workspace" / agent_id,
+        Path.home() / ".openclaw" / "workspace",
         Path.home() / ".openclaw" / "agents" / agent_id,
         Path.cwd() / ".openclaw" / "workspace" / agent_id,
     ]
+    default_ws = Path.home() / ".openclaw" / "workspace"
     for candidate in candidates:
         if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
-                return candidate
+            if candidate == default_ws and agent_id != "main" and (default_ws / agent_id).exists() and (default_ws / agent_id / "IDENTITY.md").exists():
+                continue
+            return candidate
     return None
 
 

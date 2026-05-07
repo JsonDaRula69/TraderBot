@@ -46,6 +46,58 @@ _backup_config() {
     fi
 }
 
+_configure_exec_policy() {
+    local agent_name="$1"
+    local oc_config="${HOME}/.openclaw/openclaw.json"
+    local approvals_file="${HOME}/.openclaw/exec-approvals.json"
+
+    if ! command -v openclaw &>/dev/null; then
+        return
+    fi
+
+    echo "Configuring exec policy for agent $agent_name..."
+
+    openclaw config set tools.exec.host gateway 2>/dev/null
+    openclaw config set tools.exec.security full 2>/dev/null
+    openclaw config set tools.exec.ask off 2>/dev/null
+
+    if [[ ! -f "$approvals_file" ]]; then
+        cat > "$approvals_file" << 'APPEOF'
+{
+  "version": 1,
+  "socket": {},
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "askFallback": "full"
+  },
+  "agents": {}
+}
+APPEOF
+    else
+        if command -v python3 &>/dev/null; then
+            python3 -c "
+import json, sys
+with open('$approvals_file') as f:
+    d = json.load(f)
+d.setdefault('defaults', {})
+d['defaults']['security'] = 'full'
+d['defaults']['ask'] = 'off'
+d['defaults']['askFallback'] = 'full'
+with open('$approvals_file', 'w') as f:
+    json.dump(d, f, indent=2)
+    f.write('\n')
+" 2>/dev/null
+        fi
+    fi
+
+    if command -v openclaw &>/dev/null; then
+        openclaw approvals allowlist add --agent "$agent_name" "*" 2>/dev/null || true
+    fi
+
+    echo "  + exec policy: security=full, ask=off, host=gateway"
+}
+
 _wait_for_gateway() {
     local max_attempts="${1:-10}"
     local attempt=0
@@ -1004,6 +1056,9 @@ for entry in cfg.get('commands', {}).get('ownerAllowFrom', []):
                 echo "Warning: Some cron loops failed to register." >&2
                 echo "Register manually with: openclaw cron add --agent $agent_name --name <loop_name>" >&2
             fi
+
+            _configure_exec_policy "$agent_name"
+
         else
             echo "Warning: openclaw not found. Cron loop registration skipped." >&2
             echo "Install OpenClaw and register loops manually:" >&2
@@ -1071,40 +1126,65 @@ with open(sys.argv[1], 'w') as f:
         fi
     fi
 
-    # Resolve agent workspace from openclaw.json -- do NOT add or modify agent entries
+    # Resolve agent workspace from openclaw.json -- do NOT add or modify agent entries.
+    # OpenClaw manages agents internally; agents.list may be empty even when agents exist.
+    # Strategy: (1) check agents.list for explicit workspace, (2) ask openclaw CLI,
+    # (3) check if default_workspace itself is the agent dir, (4) fall back to default_workspace/agent_name.
     local agent_ws_dir=""
-    if command -v jq &>/dev/null && [[ -f "$config_path" ]]; then
-        local default_ws
-        default_ws=$(jq -r '.agents.defaults.workspace // ""' "$config_path" 2>/dev/null)
-        agent_ws_dir=$(jq -r --arg id "$agent_name" '
-            (.agents.list // [])[] | select(.id == $id) | .workspace // empty
-        ' "$config_path" 2>/dev/null | head -1)
-        if [[ -z "$agent_ws_dir" ]]; then
-            if [[ -n "$default_ws" ]]; then
-                agent_ws_dir="${default_ws}/${agent_name}"
-            else
-                agent_ws_dir="${HOME}/.openclaw/workspace/${agent_name}"
+    if [[ -f "$config_path" ]]; then
+        if command -v jq &>/dev/null; then
+            local default_ws
+            default_ws=$(jq -r '.agents.defaults.workspace // ""' "$config_path" 2>/dev/null)
+            default_ws="${default_ws/#\~/$HOME}"
+            agent_ws_dir=$(jq -r --arg id "$agent_name" '
+                (.agents.list // [])[] | select(.id == $id) | .workspace // empty
+            ' "$config_path" 2>/dev/null | head -1)
+            if [[ -n "$agent_ws_dir" ]]; then
+                agent_ws_dir="${agent_ws_dir/#\~/$HOME}"
             fi
-        fi
-    elif command -v python3 &>/dev/null && [[ -f "$config_path" ]]; then
-        agent_ws_dir=$(python3 -c "
+        elif command -v python3 &>/dev/null; then
+            agent_ws_dir=$(python3 -c "
 import json, sys, os
 agent_name = sys.argv[1]
 config_path = sys.argv[2]
 with open(config_path) as f:
     cfg = json.load(f)
 default_ws = cfg.get('agents', {}).get('defaults', {}).get('workspace', os.path.expanduser('~/.openclaw/workspace'))
+if default_ws.startswith('~'):
+    default_ws = os.path.expanduser(default_ws)
 for a in cfg.get('agents', {}).get('list', []):
     if a.get('id') == agent_name:
-        print(a.get('workspace', f'{default_ws}/{agent_name}'))
+        ws = a.get('workspace', '')
+        if ws.startswith('~'):
+            ws = os.path.expanduser(ws)
+        print(ws if ws else f'{default_ws}/{agent_name}')
         sys.exit(0)
-print(f'{default_ws}/{agent_name}')
-" "$agent_name" "$config_path")
+print('')
+" "$agent_name" "$config_path" 2>/dev/null)
+        fi
     fi
-    agent_ws_dir="${agent_ws_dir:-${HOME}/.openclaw/workspace/${agent_name}}"
 
-    # Expand ~ in path
-    agent_ws_dir="${agent_ws_dir/#\~/$HOME}"
+    # If not found in config, ask openclaw CLI for the workspace path
+    if [[ -z "$agent_ws_dir" ]] && command -v openclaw &>/dev/null; then
+        local oc_ws
+        oc_ws=$(openclaw agents list 2>/dev/null | grep -A3 "^- ${agent_name}" | grep -i 'workspace' | head -1 | sed 's/.*[: ]\+//' | xargs)
+        if [[ -n "$oc_ws" ]]; then
+            oc_ws="${oc_ws/#\~/$HOME}"
+            if [[ -d "$oc_ws" ]]; then
+                agent_ws_dir="$oc_ws"
+            fi
+        fi
+    fi
+
+    # Final fallback: check default workspace, then default_workspace/agent_name
+    if [[ -z "$agent_ws_dir" ]]; then
+        local default_ws_fallback="${HOME}/.openclaw/workspace"
+        if [[ -f "${default_ws_fallback}/AGENTS.md" ]]; then
+            agent_ws_dir="${default_ws_fallback}"
+        else
+            agent_ws_dir="${default_ws_fallback}/${agent_name}"
+        fi
+    fi
 
     echo "Deploying workspace files to $agent_ws_dir"
 
@@ -1135,6 +1215,23 @@ print(f'{default_ws}/{agent_name}')
         # .learnings directory -- only on fresh deploy
         if [[ -d "${workspace_src}/.learnings" ]] && [[ ! -d "${agent_ws_dir}/.learnings" ]]; then
             cp -r "${workspace_src}/.learnings" "${agent_ws_dir}/.learnings"
+        fi
+
+        # Write profile token to workspace .env so the agent can access it
+        if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]]; then
+            local env_file="${agent_ws_dir}/.env"
+            local env_line="TRADERBOT_PROFILE_TOKEN=${TRADERBOT_PROFILE_TOKEN}"
+            if [[ -f "$env_file" ]]; then
+                if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$env_file" 2>/dev/null; then
+                    _sed_inplace "s|^TRADERBOT_PROFILE_TOKEN=.*|${env_line}|" "$env_file"
+                else
+                    echo "" >> "$env_file"
+                    echo "$env_line" >> "$env_file"
+                fi
+            else
+                echo "$env_line" > "$env_file"
+            fi
+            chmod 600 "$env_file"
         fi
 
         echo "Deployed workspace template files to $agent_ws_dir"

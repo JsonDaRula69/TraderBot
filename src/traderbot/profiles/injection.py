@@ -95,15 +95,15 @@ def _handle_directory_merge(
 
 
 def inject_token(agent_path: str, token: str | None = None) -> None:
-    """Inject profile token reference into agent's TOOLS.md file
+    """Inject profile token reference into agent's TOOLS.md and write .env file.
 
     The token VALUE is never written to TOOLS.md. Instead, a reference to the
     TRADERBOT_PROFILE_TOKEN environment variable is injected so the agent reads
-    it at runtime.
+    it at runtime. The actual token value is written to .env in the agent workspace.
 
     Args:
         agent_path: Path to agent directory (e.g., .openclaw/workspace/agent-id)
-        token: Ignored (kept for backward compatibility).
+        token: Profile token value to write to .env.
 
     Raises:
         FileNotFoundError: If agent directory doesn't exist
@@ -114,7 +114,6 @@ def inject_token(agent_path: str, token: str | None = None) -> None:
 
     tools_path = agent_dir / "TOOLS.md"
 
-    # Read existing content or create minimal content
     if tools_path.exists():
         content = tools_path.read_text()
     else:
@@ -123,7 +122,6 @@ def inject_token(agent_path: str, token: str | None = None) -> None:
     # Token line to inject — reference the env var, not the value
     token_line = "- `TRADERBOT_PROFILE_TOKEN`: Your assigned profile token (read from environment variable, do not modify)"
 
-    # Check if Environment Variables section exists
     env_section_pattern = r"## Environment Variables\s*\n"
     env_section_match = re.search(env_section_pattern, content)
 
@@ -131,11 +129,8 @@ def inject_token(agent_path: str, token: str | None = None) -> None:
         token_pattern = r"- `TRADERBOT_PROFILE_TOKEN[^`]*`:[^\n]+"
 
         if re.search(token_pattern, content):
-            # Replace existing token
             content = re.sub(token_pattern, token_line, content)
         else:
-            # Add token after "The following environment variables are available:" line
-            # or right after the section header if that line doesn't exist
             insert_pattern = r"(## Environment Variables\s*\n(?:The following environment variables are available:\s*\n)?)"
             content = re.sub(
                 insert_pattern,
@@ -144,7 +139,6 @@ def inject_token(agent_path: str, token: str | None = None) -> None:
                 count=1
             )
     else:
-        # Section doesn't exist - create it at the end
         env_section = f"""## Environment Variables
 
 The following environment variables are available:
@@ -153,7 +147,6 @@ The following environment variables are available:
 """
         content = content.rstrip() + "\n\n" + env_section
 
-    # Atomic write using temp file
     with tempfile.NamedTemporaryFile(
         mode='w',
         dir=agent_dir,
@@ -163,8 +156,25 @@ The following environment variables are available:
         tmp_file.write(content)
         tmp_path = Path(tmp_file.name)
 
-    # Rename temp file to TOOLS.md
     tmp_path.replace(tools_path)
+
+    # Write token to workspace .env so agent shell commands can source it
+    if token:
+        env_path = agent_dir / ".env"
+        env_line = f"TRADERBOT_PROFILE_TOKEN={token}\n"
+        if env_path.exists():
+            existing = env_path.read_text()
+            if "TRADERBOT_PROFILE_TOKEN=" in existing:
+                import re as _re
+                existing = _re.sub(r"^TRADERBOT_PROFILE_TOKEN=.*$", env_line.rstrip(), existing, flags=_re.MULTILINE)
+                env_path.write_text(existing)
+            else:
+                if not existing.endswith("\n"):
+                    existing += "\n"
+                env_path.write_text(existing + env_line)
+        else:
+            env_path.write_text(env_line)
+        env_path.chmod(0o600)
 
 
 def remove_token_from_tools(agent_path: str) -> None:

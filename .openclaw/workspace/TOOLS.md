@@ -84,3 +84,8 @@ All monetary values in cents (int). Always use `--json` for machine-readable out
 ## Environment Variables
 
 - `TRADERBOT_PROFILE_TOKEN`: Assigned profile token (set by the system at deploy time, do not modify)
+
+Source the workspace `.env` file before running traderbot commands:
+```sh
+source .env 2>/dev/null || true
+```
