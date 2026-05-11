@@ -78,10 +78,12 @@ class MarketService:
         Limits API calls by capping series and events per series.
         """
         from traderbot.kalshi.events import EventsService
+        from traderbot.kalshi.models import CATEGORY_API_NAMES
 
+        api_category = CATEGORY_API_NAMES.get(category.lower().replace(" ", "_"), category)
         events_svc = EventsService(self._client)
 
-        series_resp = await events_svc.list_series(limit=max_series, category=category)
+        series_resp = await events_svc.list_series(limit=max_series, category=api_category)
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
 

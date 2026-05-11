@@ -105,7 +105,7 @@ class EventsService:
         response = await self._client.get("/series", **params)
         response.raise_for_status()
         data = response.json()
-        raw_series = data.get("series", [])
+        raw_series = data.get("series") or []
         return SeriesListResponse(
             series=[_normalize_series(s) for s in raw_series],
             cursor=data.get("cursor"),

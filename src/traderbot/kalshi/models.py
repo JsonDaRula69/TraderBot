@@ -34,6 +34,26 @@ class MarketCategory(StrEnum):
     SOCIAL = "social"
 
 
+# Kalshi /series and /search/tags_by_categories use title-cased category names.
+# Map our lowercase enum values to the API-expected format.
+CATEGORY_API_NAMES: dict[str, str] = {
+    "economics": "Economics",
+    "politics": "Politics",
+    "weather": "Climate and Weather",
+    "sports": "Sports",
+    "science_and_technology": "Science and Technology",
+    "crypto": "Crypto",
+    "commodities": "Commodities",
+    "companies": "Companies",
+    "elections": "Elections",
+    "entertainment": "Entertainment",
+    "financials": "Financials",
+    "health": "Health",
+    "mentions": "Mentions",
+    "social": "Social",
+}
+
+
 class OrderSide(StrEnum):
     """Internal yes/no side representation."""
 
