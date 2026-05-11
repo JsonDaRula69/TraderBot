@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -183,14 +184,22 @@ def analyze(
     ] = False,
 ) -> None:
     """Get market details, orderbook, and indicators."""
+    from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
 
     console = Console()
-    try:
-        from traderbot.kalshi.client import KalshiClient
 
+    try:
         client = KalshiClient()
-        service = MarketService(client)
+    except Exception as e:
+        if json_output:
+            json_lib.dump({"error": f"API connection failed: {e}"}, sys.stdout)
+        else:
+            console.print(f"[red]API connection failed:[/red] {e}")
+        return
+
+    service = MarketService(client)
+    try:
 
         async def _fetch():
             m = await service.get_market(ticker)
@@ -199,11 +208,23 @@ def analyze(
             return m, o
 
         market, orderbook = asyncio.run(_fetch())
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            if json_output:
+                json_lib.dump({"error": f"Market not found: {ticker}"}, sys.stdout)
+            else:
+                console.print(f"[yellow]Market not found:[/yellow] {ticker}")
+        else:
+            if json_output:
+                json_lib.dump({"error": f"API error: {e.response.status_code}"}, sys.stdout)
+            else:
+                console.print(f"[red]API error:[/red] HTTP {e.response.status_code}")
+        return
+    except Exception as e:
         if json_output:
-            json_lib.dump({}, sys.stdout)
-            return
-        console.print(f"Market analysis for {ticker}... (requires API connection)")
+            json_lib.dump({"error": f"Failed to fetch market data: {e}"}, sys.stdout)
+        else:
+            console.print(f"[red]Error:[/red] {e}")
         return
 
     if json_output:
@@ -223,12 +244,15 @@ def analyze(
 
     from traderbot.analysis.odds import implied_probability
 
-    prob = implied_probability(orderbook)
-    console.print("\n[bold]Analysis[/bold]")
-    console.print(f"  Implied YES prob: {prob.yes_prob:.2%}")
-    console.print(f"  Implied NO prob:  {prob.no_prob:.2%}")
-    console.print(f"  Spread:           {prob.spread_cents}c")
-    console.print(f"  Mid price:        {prob.mid_price_cents}c")
+    try:
+        prob = implied_probability(orderbook)
+        console.print("\n[bold]Analysis[/bold]")
+        console.print(f"  Implied YES prob: {prob.yes_prob:.2%}")
+        console.print(f"  Implied NO prob:  {prob.no_prob:.2%}")
+        console.print(f"  Spread:           {prob.spread_cents}c")
+        console.print(f"  Mid price:        {prob.mid_price_cents}c")
+    except ValueError:
+        console.print("\n[dim]No bids on either side — probability indeterminate.[/dim]")
 
 
 @app.command()
@@ -265,7 +289,15 @@ def signals(
         from traderbot.kalshi.markets import MarketService
 
         client = KalshiClient()
-        service = MarketService(client)
+    except Exception as e:
+        if json_output:
+            json_lib.dump({"error": f"API connection failed: {e}"}, sys.stdout)
+        else:
+            console.print(f"[red]API connection failed:[/red] {e}")
+        return
+
+    service = MarketService(client)
+    try:
 
         async def _fetch_markets():
             result = await service.list_markets(limit=limit, state="open")
@@ -273,11 +305,17 @@ def signals(
             return result
 
         markets = asyncio.run(_fetch_markets())
-    except Exception:
+    except httpx.HTTPStatusError as e:
         if json_output:
-            json_lib.dump({"note": "Signal generation requires API connection"}, sys.stdout)
+            json_lib.dump({"error": f"API error: {e.response.status_code}"}, sys.stdout)
         else:
-            console.print("[yellow]Signal generation requires API connection.[/yellow]")
+            console.print(f"[red]API error:[/red] HTTP {e.response.status_code}")
+        return
+    except Exception as e:
+        if json_output:
+            json_lib.dump({"error": f"Failed to fetch markets: {e}"}, sys.stdout)
+        else:
+            console.print(f"[red]Error:[/red] {e}")
         return
 
     if category_enum is not None:
@@ -305,7 +343,11 @@ def signals(
         except Exception:
             continue
 
-        prob = implied_probability(orderbook)
+        try:
+            prob = implied_probability(orderbook)
+        except ValueError:
+            continue
+
         prices_int = [int(p) for p in market.outcome_prices]
         signal = generate_signal(
             ticker=market.ticker,
@@ -390,7 +432,15 @@ def trade(
 
     try:
         client = KalshiClient()
-        service = MarketService(client)
+    except Exception as e:
+        if json_output:
+            json_lib.dump({"error": f"API connection failed: {e}"}, sys.stdout)
+        else:
+            console.print(f"[red]API connection failed:[/red] {e}")
+        return
+
+    service = MarketService(client)
+    try:
 
         async def _fetch_trade_data():
             m = await service.get_market(ticker)
@@ -404,6 +454,17 @@ def trade(
         estimated_prob = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
         edge_estimate = abs(estimated_prob - (market_price_cents / 100.0))
         market_open_interest = market.open_interest
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            if json_output:
+                json_lib.dump({"error": f"Market not found: {ticker}"}, sys.stdout)
+            else:
+                console.print(f"[yellow]Market not found:[/yellow] {ticker}")
+            return
+        # Non-404 HTTP errors: fall through with defaults
+    except ValueError:
+        # Empty orderbook: fall through with defaults
+        pass
     except Exception:
         # Without live data, fall through with defaults that will likely
         # fail liquidity and edge checks -- caller should ensure API connectivity.
