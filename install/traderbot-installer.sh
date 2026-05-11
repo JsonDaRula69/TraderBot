@@ -1198,8 +1198,9 @@ print('')
             fi
         done
 
-        # Ask-then-merge files -- skip if target exists (BOOTSTRAP.md, BOOT.md)
-        for f in BOOTSTRAP.md BOOT.md; do
+        # Ask-then-merge files -- skip if target exists (BOOTSTRAP.md, BOOT.md.bak)
+        # BOOT.md.bak: staged boot sequence, renamed to BOOT.md by bootstrap on first run
+        for f in BOOTSTRAP.md BOOT.md.bak; do
             if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
                 cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
             fi

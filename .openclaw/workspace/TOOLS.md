@@ -63,6 +63,8 @@
 | `traderbot --version` | Show version |
 | `traderbot halt --json` | Check circuit breaker state |
 | `traderbot halt --force` | Force FULL_STOP (user only) |
+| `traderbot cron setup --agent ID [--channel CH] [--to TARGET] [--heartbeat-every 30m] [--json]` | Register cron loops with OpenClaw |
+| `traderbot cron status [--json]` | Check status of TraderBot cron loops (requires OpenClaw 2026.5.7+) |
 | `traderbot bootstrap` | One-time setup wizard |
 
 ## Market Categories

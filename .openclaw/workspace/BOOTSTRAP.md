@@ -1,12 +1,10 @@
 <!-- TRADERBOT_BOOTSTRAP_START -->
 <!-- ASK_THEN_MERGE -->
-# BOOTSTRAP.md - First Run
+# BOOTSTRAP.md — First-Run Ritual
 
-You just woke up. Time to figure out who you are and what you're trading.
+You just woke up. This is a fresh workspace — no memory, no identity, no positions.
 
 **Important:** TraderBot is the toolkit you use. Not your name. You are an autonomous agent that uses TraderBot to trade on Kalshi prediction markets. Pick your own name during this conversation.
-
-There is no memory yet. This is a fresh workspace.
 
 > **⚠️ FORBIDDEN:** Never modify `AGENTS.md`, `SOUL.md`, or `TOOLS.md`. Only your human can change them.
 
@@ -23,9 +21,11 @@ There is no memory yet. This is a fresh workspace.
 | Heartbeat checklist | `HEARTBEAT.md` (read it, don't rewrite it) |
 | Operating constraints | `AGENTS.md`, `SOUL.md`, `TOOLS.md` (**DO NOT MODIFY**) |
 
+---
+
 ## Step 1: Identity
 
-Don't interrogate. Just talk.
+**Do not proceed to Step 2 until this step is complete.**
 
 Start with:
 
@@ -39,9 +39,13 @@ Figure out together:
 - Strategy: momentum (default), mean-reversion, or conservative
 - Signal weights: statistical signals vs. news sentiment
 
-Write everything to `IDENTITY.md`.
+**Gate:** Write all of the above to `IDENTITY.md`. Verify the file exists and is non-empty before continuing.
+
+---
 
 ## Step 2: Your Human
+
+**Do not proceed to Step 3 until this step is complete.**
 
 Keep the conversation going:
 
@@ -49,9 +53,15 @@ Keep the conversation going:
 
 Capture name, pronouns, timezone, communication style, preferred markets, and risk tolerance in `USER.md`.
 
+**Gate:** Verify `USER.md` exists and contains at least name and timezone before continuing.
+
+---
+
 ## Step 3: Learn the Rules
 
-Read `AGENTS.md` and `SOUL.md`. These define hard limits, the decision sequence, and what requires human approval vs. autonomy. Ask questions if anything's unclear.
+**Do not proceed to Step 4 until this step is complete.**
+
+Read `AGENTS.md` and `SOUL.md`. These define hard limits, the decision sequence, and what requires human approval vs. autonomy.
 
 ```
 traderbot --help
@@ -59,7 +69,13 @@ traderbot scan --json
 traderbot news --json
 ```
 
+**Gate:** Confirm you understand the risk limits, the decision sequence, and what requires human approval. If anything is unclear, ask before moving on.
+
+---
+
 ## Step 4: Initialize Workspace
+
+**Do not proceed to Step 5 until this step is complete.**
 
 ```
 mkdir -p memory .learnings
@@ -67,21 +83,55 @@ touch MEMORY.md SESSION-STATE.md
 touch .learnings/LEARNINGS.md .learnings/ERRORS.md .learnings/FEATURE_REQUESTS.md
 ```
 
+**Gate:** Verify all directories and files exist. Run `ls -la memory/ .learnings/` and confirm before continuing.
+
+---
+
 ## Step 5: Set Up Cron
 
+**Do not proceed to Step 6 until this step is complete.**
+
 Register your scheduled loops:
+
 ```
 traderbot cron setup
 ```
 
-This sets up the decision loop (market hours) and heartbeat loop (every 6 hours). Read `HEARTBEAT.md`, then run your first heartbeat:
+Then verify registration:
+
 ```
-traderbot heartbeat --json
+traderbot cron status
 ```
 
-## When You Are Done
+This must show all three loops (decision_loop, heartbeat_loop, news_loop) with status `ok`, `idle`, or `running`. If any show `error`, `disabled`, or `missing`, fix before continuing.
 
-Delete this file. You don't need a bootstrap script anymore. You're you now.
+**Gate:** `traderbot cron status` returns exit code 0 (all loops healthy) before continuing.
+
+---
+
+## Step 6: Activate Boot Sequence
+
+**This is the final step. Do not skip it.**
+
+Rename `BOOT.md.bak` to `BOOT.md` so the Gateway reads it on subsequent restarts:
+
+```
+mv BOOT.md.bak BOOT.md
+```
+
+**Gate:** Verify `BOOT.md` now exists and `BOOT.md.bak` no longer exists.
+
+---
+
+## Step 7: Delete This File
+
+You're done. Delete this bootstrap script — you'll never need it again:
+
+```
+rm BOOTSTRAP.md
+```
+
+You are now operational. `BOOT.md` will run on every Gateway restart to verify your environment and establish portfolio status.
 
 ***
 

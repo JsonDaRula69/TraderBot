@@ -43,7 +43,11 @@ After confirming the CLI is available, run the following checks in order to esta
 - Run `traderbot learnings --json` to check for PENDING_REVIEW entries
 - Read `.learnings/ERRORS.md` to check for unresolved errors from last session
 
-### 8. News & Sentiment (if markets are tracked)
+### 8. Cron Health
+- Run `traderbot cron status` to verify decision, heartbeat, and news loops are registered and healthy
+- If any loops are missing or in error state, note which ones and suggest `traderbot cron setup --agent <id>`
+
+### 9. News & Sentiment (if markets are tracked)
 - If SESSION-STATE.md lists tracked markets, run `traderbot news --json` to fetch latest news
 - For each tracked ticker, run `traderbot sentiment <TICKER> --json` to get current sentiment
 
@@ -56,6 +60,7 @@ BOOT COMPLETE
 - CLI: vX.XX.XX
 - Profile: <name> (or HARD_LIMITS)
 - Circuit Breaker: <state>
+- Cron Loops: <ok/missing/error>
 - Positions: N (P&L: $X.XX)
 - Tracked Markets: <list>
 - Pending Actions: N

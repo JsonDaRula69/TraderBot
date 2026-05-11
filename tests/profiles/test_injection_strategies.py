@@ -84,7 +84,7 @@ class TestFileStrategies:
             k for k, v in FILE_STRATEGIES.items() if v == InjectionStrategy.ASK_THEN_MERGE
         ]
         assert "BOOTSTRAP.md" in ask
-        assert "BOOT.md" in ask
+        assert "BOOT.md.bak" in ask
         assert "HEARTBEAT.md" in ask
 
     def test_init_if_missing_files(self):
@@ -236,26 +236,42 @@ class TestInitIfMissing:
 
 class TestAskThenMerge:
     def test_interactive_accept(self, tmp_path, template_with_markers):
-        target = tmp_path / "BOOT.md"
-        markers = FENCED_BLOCK_MARKERS["BOOT.md"]
+        target = tmp_path / "BOOT.md.bak"
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
         with patch("builtins.input", return_value="y"):
-            result = ask_then_merge(template_with_markers, target, markers, "BOOT.md")
+            result = ask_then_merge(template_with_markers, target, markers, "BOOT.md.bak")
         assert result is True
 
     def test_interactive_decline(self, tmp_path):
-        target = tmp_path / "BOOT.md"
+        target = tmp_path / "BOOT.md.bak"
         target.write_text("existing")
-        markers = FENCED_BLOCK_MARKERS["BOOT.md"]
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
         with patch("builtins.input", return_value="n"):
-            result = ask_then_merge("content", target, markers, "BOOT.md")
+            result = ask_then_merge("content", target, markers, "BOOT.md.bak")
         assert result is False
         assert target.read_text() == "existing"
 
     def test_interactive_full_yes(self, tmp_path, template_with_markers):
-        target = tmp_path / "BOOT.md"
-        markers = FENCED_BLOCK_MARKERS["BOOT.md"]
+        target = tmp_path / "BOOT.md.bak"
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
         with patch("builtins.input", return_value="yes"):
-            result = ask_then_merge(template_with_markers, target, markers, "BOOT.md")
+            result = ask_then_merge(template_with_markers, target, markers, "BOOT.md.bak")
+        assert result is True
+
+    def test_interactive_decline(self, tmp_path):
+        target = tmp_path / "BOOT.md.bak"
+        target.write_text("existing")
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
+        with patch("builtins.input", return_value="n"):
+            result = ask_then_merge("content", target, markers, "BOOT.md.bak")
+        assert result is False
+        assert target.read_text() == "existing"
+
+    def test_interactive_full_yes(self, tmp_path, template_with_markers):
+        target = tmp_path / "BOOT.md.bak"
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
+        with patch("builtins.input", return_value="yes"):
+            result = ask_then_merge(template_with_markers, target, markers, "BOOT.md.bak")
         assert result is True
 
     def test_noninteractive_falls_back_to_init_if_missing(
@@ -272,13 +288,13 @@ class TestAskThenMerge:
         assert target.exists()
 
     def test_eof_error_returns_false(self, tmp_path):
-        target = tmp_path / "BOOT.md"
+        target = tmp_path / "BOOT.md.bak"
         target.write_text("existing")
-        markers = FENCED_BLOCK_MARKERS["BOOT.md"]
+        markers = FENCED_BLOCK_MARKERS["BOOT.md.bak"]
         with patch("builtins.input", side_effect=EOFError):
             with patch("sys.stdin") as mock_stdin:
                 mock_stdin.isatty.return_value = True
-                result = ask_then_merge("content", target, markers, "BOOT.md")
+                result = ask_then_merge("content", target, markers, "BOOT.md.bak")
         assert result is False
 
     def test_noninteractive_does_not_overwrite_existing(self, tmp_path):

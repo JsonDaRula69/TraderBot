@@ -32,7 +32,7 @@ FENCED_BLOCK_MARKERS: dict[str, tuple[str, str]] = {
     "TOOLS.md": ("<!-- TRADERBOT_TOOLS_START -->", "<!-- TRADERBOT_TOOLS_END -->"),
     "IDENTITY.md": ("<!-- TRADERBOT_PROFILE_START -->", "<!-- TRADERBOT_PROFILE_END -->"),
     "BOOTSTRAP.md": ("<!-- TRADERBOT_BOOTSTRAP_START -->", "<!-- TRADERBOT_BOOTSTRAP_END -->"),
-    "BOOT.md": ("<!-- TRADERBOT_BOOT_START -->", "<!-- TRADERBOT_BOOT_END -->"),
+    "BOOT.md.bak": ("<!-- TRADERBOT_BOOT_START -->", "<!-- TRADERBOT_BOOT_END -->"),
     "HEARTBEAT.md": ("<!-- TRADERBOT_HEARTBEAT_START -->", "<!-- TRADERBOT_HEARTBEAT_END -->"),
 }
 
@@ -42,7 +42,7 @@ FILE_STRATEGIES: dict[str, InjectionStrategy] = {
     "TOOLS.md": InjectionStrategy.FENCED_MERGE,
     "IDENTITY.md": InjectionStrategy.FENCED_MERGE,
     "BOOTSTRAP.md": InjectionStrategy.ASK_THEN_MERGE,
-    "BOOT.md": InjectionStrategy.ASK_THEN_MERGE,
+    "BOOT.md.bak": InjectionStrategy.ASK_THEN_MERGE,
     "HEARTBEAT.md": InjectionStrategy.ASK_THEN_MERGE,
     "USER.md": InjectionStrategy.INIT_IF_MISSING,
     "MEMORY.md": InjectionStrategy.INIT_IF_MISSING,

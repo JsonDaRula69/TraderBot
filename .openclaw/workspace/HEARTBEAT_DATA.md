@@ -3,31 +3,30 @@
 > 7-step self-review output. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: 2026-05-06T12:59:45.355463+00:00
+## Last Heartbeat: *(pending)*
 
 ### Performance
-- Win rate: 0% (0 trades)
-- Daily P&L: +0.00 USD
-- Avg confidence: 0.00
-- Open positions: 0
+- Win rate: *(pending)*
+- Daily P&L: *(pending)*
+- Avg confidence: *(pending)*
+- Open positions: *(pending)*
 
 ### Adaptation
-- No update (no decisions to adapt from)
+- *(pending)*
 
 ### Learnings
-- No promotions this cycle
+- *(pending)*
 
 ### Circuit Breaker
-- Level: NORMAL
-- Can trade: True
-- Daily loss: 0.00%
-- Drawdown: 0.00%
+- Level: *(pending)*
+- Can trade: *(pending)*
+- Daily loss: *(pending)*
+- Drawdown: *(pending)*
 
 ### System Health
-- API: unavailable
-- DB: ok
-- Freshness: no_decisions_yet
+- API: *(pending)*
+- DB: *(pending)*
+- Freshness: *(pending)*
 
 ### Alerts
-- ⚠️ Kalshi API unreachable
-
+- *(none)*

@@ -19,6 +19,9 @@ tasks:
 - name: position-health
   interval: 1h
   prompt: "Run `traderbot positions --json` to check open positions. Flag any with drawdown > 5%."
+- name: cron-health
+  interval: 30m
+  prompt: "Run `traderbot cron status` to verify all TraderBot loops are registered and healthy. If any loop is missing, disabled, or in error state, surface alert to main session."
 
 ## General Instructions
 

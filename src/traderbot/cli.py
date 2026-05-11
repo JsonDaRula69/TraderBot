@@ -2522,6 +2522,45 @@ def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
         return -2, "openclaw cron add timed out"
 
 
+TRADERBOT_CRON_JOB_NAMES = frozenset({"decision_loop", "heartbeat_loop", "news_loop"})
+
+
+def _run_openclaw_cron_list() -> tuple[int, str]:
+    """Run `openclaw cron list --json` and return (exit_code, output)."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["openclaw", "cron", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.returncode, (result.stdout + result.stderr).strip()
+    except FileNotFoundError:
+        return -1, "openclaw CLI not found"
+    except subprocess.TimeoutExpired:
+        return -2, "openclaw cron list timed out"
+
+
+def _run_openclaw_cron_show(job_id: str) -> tuple[int, str]:
+    """Run `openclaw cron show <job_id> --json` and return (exit_code, output)."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["openclaw", "cron", "show", job_id, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.returncode, (result.stdout + result.stderr).strip()
+    except FileNotFoundError:
+        return -1, "openclaw CLI not found"
+    except subprocess.TimeoutExpired:
+        return -2, "openclaw cron show timed out"
+
+
 def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
     """Write heartbeat config for an agent into ~/.openclaw/openclaw.json."""
     import json as _json
@@ -2721,6 +2760,172 @@ def cron_setup(
         raise typer.Exit(1)
 
     console.print("\n[green]All loops registered successfully.[/green]")
+
+    if not dry_run and not failed:
+        list_exit_code, list_output = _run_openclaw_cron_list()
+        if list_exit_code == 0:
+            try:
+                registered_jobs = json_lib.loads(list_output)
+                reg_names = {j.get("name", "") for j in registered_jobs if isinstance(j, dict)}
+                missing_after = TRADERBOT_CRON_JOB_NAMES - reg_names
+                if missing_after:
+                    console.print(f"\n[yellow]Warning:[/yellow] Jobs registered but not found in cron list: {', '.join(sorted(missing_after))}")
+                    console.print("[dim]OpenClaw may need a moment to persist jobs. Run `traderbot cron status` to verify.[/dim]")
+                else:
+                    for j in registered_jobs:
+                        if isinstance(j, dict) and j.get("name", "") in TRADERBOT_CRON_JOB_NAMES:
+                            status = j.get("status", "unknown")
+                            if status in ("error", "disabled"):
+                                console.print(f"[yellow]  ![/yellow] {j['name']}: status={status}")
+            except (json_lib.JSONDecodeError, ValueError):
+                pass
+
+
+@cron_app.command("status")
+def cron_status(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON"),
+    ] = False,
+    agent_id: Annotated[
+        str | None,
+        typer.Option("--agent", help="Filter to jobs for a specific agent ID"),
+    ] = None,
+) -> None:
+    """Check status of TraderBot cron loops registered with OpenClaw."""
+    from traderbot.cron_loops import DECISION_LOOP_CRON, HEARTBEAT_LOOP_CRON
+
+    console = Console()
+
+    if not shutil.which("openclaw"):
+        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
+        console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
+        raise typer.Exit(1)
+
+    expected_loops: dict[str, dict[str, str]] = {
+        "decision_loop": {
+            "schedule": DECISION_LOOP_CRON,
+            "session": "isolated",
+            "kind": "agentTurn",
+        },
+        "heartbeat_loop": {
+            "schedule": HEARTBEAT_LOOP_CRON,
+            "session": "isolated",
+            "kind": "agentTurn",
+        },
+        "news_loop": {
+            "schedule": "event-driven",
+            "session": "main",
+            "kind": "systemEvent",
+        },
+    }
+
+    exit_code, output = _run_openclaw_cron_list()
+
+    if exit_code == -1:
+        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
+        raise typer.Exit(1)
+    if exit_code == -2:
+        console.print("[red]Error:[/red] openclaw cron list timed out")
+        raise typer.Exit(1)
+    if exit_code != 0:
+        console.print(f"[red]Error:[/red] openclaw cron list failed (exit {exit_code}): {output}")
+        raise typer.Exit(1)
+
+    try:
+        all_jobs: list[dict] = json_lib.loads(output)
+    except (json_lib.JSONDecodeError, ValueError):
+        if not output.strip():
+            all_jobs = []
+        else:
+            console.print(f"[red]Error:[/red] Failed to parse openclaw cron list output: {output[:200]}")
+            raise typer.Exit(1)
+
+    traderbot_jobs = [
+        j for j in all_jobs
+        if j.get("name", "") in TRADERBOT_CRON_JOB_NAMES
+        if agent_id is None or j.get("agentId", j.get("agent", "")) == agent_id
+    ]
+
+    registered_names = {j["name"] for j in traderbot_jobs if "name" in j}
+    missing = TRADERBOT_CRON_JOB_NAMES - registered_names
+    extra_tb = registered_names - TRADERBOT_CRON_JOB_NAMES
+
+    status_by_name: dict[str, str] = {}
+    for j in traderbot_jobs:
+        name = j.get("name", "")
+        status_by_name[name] = j.get("status", "unknown")
+
+    loop_results: list[dict[str, str | bool]] = []
+    for name, meta in expected_loops.items():
+        result: dict[str, str | bool] = {
+            "name": name,
+            "expected_schedule": meta["schedule"],
+            "expected_session": meta["session"],
+            "expected_kind": meta["kind"],
+        }
+        if name in registered_names:
+            status_val = status_by_name.get(name, "unknown")
+            result["registered"] = True
+            result["status"] = status_val
+            result["healthy"] = status_val in ("ok", "idle", "running")
+        else:
+            result["registered"] = False
+            result["status"] = "missing"
+            result["healthy"] = False
+        loop_results.append(result)
+
+    for name in extra_tb:
+        match = next(j for j in traderbot_jobs if j.get("name") == name)
+        loop_results.append({
+            "name": name,
+            "registered": True,
+            "status": match.get("status", "unknown"),
+            "healthy": match.get("status", "unknown") in ("ok", "idle", "running"),
+            "expected_schedule": "n/a (extra)",
+        })
+
+    if json_output:
+        has_issues = any(not r.get("healthy", True) for r in loop_results) or bool(missing)
+        print(json_lib.dumps({
+            "agent_id": agent_id,
+            "loops": loop_results,
+            "all_healthy": not has_issues,
+            "missing": sorted(missing),
+        }, indent=2))
+        if has_issues:
+            raise typer.Exit(1)
+        return
+
+    console.print("\n[bold]TraderBot Cron Status[/bold]\n")
+
+    for r in loop_results:
+        name = r["name"]
+        if not r["registered"]:
+            console.print(f"  [red]MISSING[/red]  {name}")
+        elif r.get("healthy"):
+            status_icon = {
+                "ok": "[green]ok[/green]",
+                "idle": "[dim]idle[/dim]",
+                "running": "[blue]running[/blue]",
+            }.get(str(r.get("status", "")), f"[green]{r.get('status', '?')}[/green]")
+            console.print(f"  {status_icon}  {name}")
+        else:
+            console.print(f"  [yellow]{r.get('status', 'unknown'):>10}[/yellow]  {name}")
+
+    if missing:
+        console.print(f"\n[yellow]Missing loops: {', '.join(sorted(missing))}[/yellow]")
+        console.print("[dim]Run `traderbot cron setup --agent <id>` to register missing loops.[/dim]")
+
+    all_healthy = all(r.get("healthy", False) for r in loop_results if r["registered"]) and not missing
+    if all_healthy:
+        console.print("\n[green]All registered loops are healthy.[/green]")
+    elif not missing:
+        console.print("\n[yellow]Some loops have issues. Check `openclaw cron show <job-id> --json` for details.[/yellow]")
+
+    has_issues = not all_healthy
+    if has_issues:
+        raise typer.Exit(1)
 
 
 def _check_updates_on_startup() -> None:

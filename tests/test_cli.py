@@ -989,6 +989,170 @@ class TestCronSetup:
             assert "openclaw" in result.output.lower()
 
 
+class TestCronStatus:
+    def test_cron_status_no_openclaw(self):
+        with patch("traderbot.cli.shutil.which", return_value=None):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "openclaw" in result.output.lower()
+
+    def test_cron_status_all_healthy_human(self):
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
+            {"name": "heartbeat_loop", "status": "ok", "schedule": "*/30 * * * *", "session": "isolated"},
+            {"name": "news_loop", "status": "ok", "schedule": "event-driven", "session": "main"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 0
+            assert "decision_loop" in result.output
+            assert "heartbeat_loop" in result.output
+            assert "news_loop" in result.output
+            assert "All registered loops are healthy." in result.output
+
+    def test_cron_status_all_healthy_json(self):
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
+            {"name": "heartbeat_loop", "status": "running", "schedule": "*/30 * * * *", "session": "isolated"},
+            {"name": "news_loop", "status": "idle", "schedule": "event-driven", "session": "main"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "loops" in data
+            assert data["all_healthy"] is True
+            assert data["missing"] == []
+            names = [l["name"] for l in data["loops"]]
+            assert "decision_loop" in names
+            assert "heartbeat_loop" in names
+            assert "news_loop" in names
+
+    def test_cron_status_missing_loops(self):
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "Missing loops" in result.output
+            assert "heartbeat_loop" in result.output
+            assert "news_loop" in result.output
+
+    def test_cron_status_error_loop(self):
+        mock_jobs = [
+            {"name": "decision_loop", "status": "error", "schedule": "*/5 * * * *", "session": "isolated"},
+            {"name": "heartbeat_loop", "status": "ok", "schedule": "*/30 * * * *", "session": "isolated"},
+            {"name": "news_loop", "status": "ok", "schedule": "event-driven", "session": "main"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "decision_loop" in result.output
+            assert "error" in result.output.lower()
+
+    def test_cron_status_list_command_fails(self):
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(1, "connection refused")),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "connection refused" in result.output.lower()
+
+    def test_cron_status_ignores_non_traderbot_jobs(self):
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
+            {"name": "heartbeat_loop", "status": "ok", "schedule": "*/30 * * * *", "session": "isolated"},
+            {"name": "news_loop", "status": "ok", "schedule": "event-driven", "session": "main"},
+            {"name": "some_other_job", "status": "error", "schedule": "0 8 * * *", "session": "main"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 0
+            assert "some_other_job" not in result.output
+            assert "All registered loops are healthy." in result.output
+
+    def test_cron_status_openclaw_not_found_via_list(self):
+        """Test the -1 return path from _run_openclaw_cron_list (subprocessfile not found)."""
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(-1, "openclaw CLI not found")),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "openclaw" in result.output.lower()
+
+    def test_cron_status_openclaw_timeout(self):
+        """Test the -2 return path from _run_openclaw_cron_list (subprocess timeout)."""
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(-2, "openclaw cron list timed out")),
+        ):
+            result = runner.invoke(app, ["cron", "status"])
+            assert result.exit_code == 1
+            assert "timed out" in result.output.lower()
+
+    def test_cron_status_missing_loops_json(self):
+        """JSON output correctly reports missing loops and all_healthy=False."""
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status", "--json"])
+            assert result.exit_code == 1
+            data = json.loads(result.output)
+            assert data["all_healthy"] is False
+            assert "heartbeat_loop" in data["missing"]
+            assert "news_loop" in data["missing"]
+
+    def test_cron_status_with_agent_filter(self):
+        """--agent flag filters jobs by agentId."""
+        mock_jobs = [
+            {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated", "agentId": "my-agent"},
+            {"name": "heartbeat_loop", "status": "ok", "schedule": "*/30 * * * *", "session": "isolated", "agentId": "my-agent"},
+            {"name": "news_loop", "status": "ok", "schedule": "event-driven", "session": "main", "agentId": "my-agent"},
+            {"name": "decision_loop", "status": "error", "schedule": "*/5 * * * *", "session": "isolated", "agent": "other-agent"},
+        ]
+        mock_output = json.dumps(mock_jobs)
+        with (
+            patch("traderbot.cli.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli._run_openclaw_cron_list", return_value=(0, mock_output)),
+        ):
+            result = runner.invoke(app, ["cron", "status", "--agent", "my-agent", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["agent_id"] == "my-agent"
+            names = [l["name"] for l in data["loops"]]
+            assert "decision_loop" in names
+            assert "heartbeat_loop" in names
+            assert "news_loop" in names
+
+
 class TestHalt:
     def test_halt_shows_status(self):
         result = runner.invoke(app, ["halt"])
