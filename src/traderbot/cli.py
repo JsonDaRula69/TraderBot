@@ -7,14 +7,34 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 
+if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
+
 logger = logging.getLogger(__name__)
+
+err_console = Console(stderr=True)
+
+
+def _require_profile(json_output: bool = False) -> "TradingProfile":
+    """Return active profile or exit with unauthorized error."""
+    from traderbot.profiles.runtime import get_current_profile
+
+    profile = get_current_profile()
+    if profile is not None:
+        return profile
+
+    if json_output:
+        json_lib.dump({"error": "Unauthorized: no profile assigned. Set TRADERBOT_PROFILE_TOKEN."}, sys.stdout)
+    else:
+        err_console.print("[red]Unauthorized:[/red] No profile assigned. Set TRADERBOT_PROFILE_TOKEN.")
+    raise typer.Exit(code=1)
 
 
 def _mask_token(token: str) -> str:
@@ -143,15 +163,52 @@ def scan(
 ) -> None:
     """List open markets from Kalshi. Use --category for category-scoped results."""
     from traderbot.kalshi.markets import MarketService
+    from traderbot.kalshi.models import MarketCategory
 
     console = Console()
+    profile = _require_profile(json_output)
+
+    category_enum: MarketCategory | None = None
+    if category is not None:
+        try:
+            category_enum = MarketCategory(category.lower())
+        except ValueError:
+            valid = ", ".join(c.value for c in MarketCategory)
+            if json_output:
+                json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
+            else:
+                err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
+            raise typer.Exit(code=1) from None
+
+    if (
+        profile is not None
+        and category_enum is not None
+        and profile.enabled_categories
+        and not profile.is_category_enabled(category_enum)
+    ):
+        if json_output:
+            json_lib.dump(
+                {"error": f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"},
+                sys.stdout,
+            )
+        else:
+            err_console.print(
+                f"[red]Category '{category_enum.value}' not enabled for profile '{profile.name}'.[/red] "
+                f"Enabled: {', '.join(c.value for c in profile.enabled_categories)}"
+            )
+        raise typer.Exit(code=1) from None
+
+    # Auto-apply profile categories when no --category given
+    if category_enum is None and profile is not None and profile.enabled_categories:
+        category_enum = profile.enabled_categories[0] if len(profile.enabled_categories) == 1 else None
+
     try:
         from traderbot.kalshi.client import KalshiClient
 
         client = KalshiClient()
         service = MarketService(client)
-        if category:
-            result = asyncio.run(service.list_markets_by_category(category=category))
+        if category_enum is not None:
+            result = asyncio.run(service.list_markets_by_category(category=category_enum.value))
         else:
             result = asyncio.run(service.list_markets(limit=limit, status="open"))
         markets = result.markets
@@ -161,6 +218,10 @@ def scan(
         else:
             console.print(f"[red]Error scanning markets:[/red] {exc}")
         return
+
+    # Filter to profile-enabled categories
+    if profile is not None and profile.enabled_categories and category_enum is None:
+        markets = [m for m in markets if m.market_category in profile.enabled_categories or m.market_category is None]
 
     if json_output:
         json_lib.dump([m.model_dump(mode="json") for m in markets], sys.stdout, default=str)
@@ -188,6 +249,7 @@ def analyze(
     from traderbot.kalshi.markets import MarketService
 
     console = Console()
+    profile = _require_profile(json_output)
 
     try:
         client = KalshiClient()
@@ -225,6 +287,17 @@ def analyze(
             json_lib.dump({"error": f"Failed to fetch market data: {e}"}, sys.stdout)
         else:
             console.print(f"[red]Error:[/red] {e}")
+        return
+
+    if (
+        profile.enabled_categories
+        and market.market_category is not None
+        and not profile.is_category_enabled(market.market_category)
+    ):
+        if json_output:
+            json_lib.dump({"error": f"Category '{market.market_category.value}' not enabled for profile '{profile.name}'"}, sys.stdout)
+        else:
+            err_console.print(f"[red]Unauthorized:[/red] Category '{market.market_category.value}' not enabled for profile '{profile.name}'")
         return
 
     if json_output:
@@ -271,6 +344,7 @@ def signals(
     from traderbot.kalshi.models import MarketCategory
 
     console = Console()
+    profile = _require_profile(json_output)
 
     category_enum: MarketCategory | None = None
     if category is not None:
@@ -283,6 +357,29 @@ def signals(
             else:
                 err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
             raise typer.Exit(code=1) from None
+
+    if (
+        profile.enabled_categories
+        and category_enum is not None
+        and not profile.is_category_enabled(category_enum)
+    ):
+        if json_output:
+            json_lib.dump(
+                {"error": f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"},
+                sys.stdout,
+            )
+        else:
+            err_console.print(
+                f"[red]Category '{category_enum.value}' not enabled for profile '{profile.name}'.[/red] "
+                f"Enabled: {', '.join(c.value for c in profile.enabled_categories)}"
+            )
+        raise typer.Exit(code=1) from None
+
+    if category_enum is None and profile.enabled_categories:
+        if len(profile.enabled_categories) == 1:
+            category_enum = profile.enabled_categories[0]
+        else:
+            category_enum = profile.enabled_categories[0]
 
     try:
         from traderbot.kalshi.client import KalshiClient
@@ -412,7 +509,9 @@ def trade(
     from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
     from traderbot.kalshi.models import PortfolioState, TradeRequest
-    from traderbot.profiles.runtime import get_current_profile
+
+    console = Console()
+    profile = _require_profile(json_output)
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
     from traderbot.wal import (
@@ -424,8 +523,6 @@ def trade(
     )
 
     console = Console()
-
-    profile = get_current_profile()
 
     estimated_prob = 0.5
     edge_estimate = 0.0
@@ -551,6 +648,9 @@ def positions(
     """List current positions from SQLite."""
     from traderbot.db.positions import list_all
 
+    console = Console()
+    _require_profile(json_output)
+
     all_positions = _with_db(db_path, list_all)
 
     if json_output:
@@ -588,6 +688,9 @@ def audit(
     from datetime import datetime
 
     from traderbot.db.decisions import list_by_date_range, list_by_outcome, list_by_ticker
+
+    console = Console()
+    _require_profile(json_output)
 
     start_dt = datetime.fromisoformat(start) if start else None
     end_dt = datetime.fromisoformat(end) if end else None
@@ -818,7 +921,6 @@ def heartbeat(
     from traderbot.db import init_schema
     from traderbot.db.learnings import init_table as init_learnings_table
     from traderbot.heartbeat import DEFAULT_HEARTBEAT_PATH, run_heartbeat_cycle
-    from traderbot.profiles.runtime import get_current_profile
     from traderbot.simulation.adapter_state import resolve_state_path
 
     console = Console()
@@ -831,12 +933,8 @@ def heartbeat(
         init_task_observations_table(conn)
 
         # Compute state path based on profile
-        profile = get_current_profile()
-        state_path = None
-        if profile:
-            state_path = resolve_state_path(profile_base_dir=profile.base_dir)
-        else:
-            state_path = resolve_state_path(state_path=Path(".traderbot/adaptation_state.json"))
+        profile = _require_profile()
+        state_path = resolve_state_path(profile_base_dir=profile.base_dir)
 
         return asyncio.run(run_heartbeat_cycle(
             conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run
@@ -980,14 +1078,10 @@ def news(
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
     from traderbot.profiles.config import resolve_newsapi_key
-    from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
+    profile = _require_profile(json_output)
 
-    # Resolve active profile
-    profile = get_current_profile()
-
-    # Validate --category
     category_enum: NewsCategory | None = None
     if category is not None:
         try:
@@ -1159,17 +1253,15 @@ def sentiment(
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
     from traderbot.profiles.config import resolve_newsapi_key
-    from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
-
-    profile = get_current_profile()
+    profile = _require_profile(json_output)
 
     newsapi_key = resolve_newsapi_key(profile)
     twitter_key = os.environ.get("TWITTER_API_KEY")
 
     category_filter: list[NewsCategory] | None = None
-    if profile is not None and profile.enabled_categories:
+    if profile.enabled_categories:
         category_filter = profile.enabled_categories
 
     cache_path = get_news_cache_path(profile)
@@ -1331,6 +1423,7 @@ def backtest(
     from traderbot.simulation.performance import compute_metrics
 
     console = Console()
+    _require_profile(json_output)
     start = date_type.fromisoformat(from_date)
     end = date_type.fromisoformat(to_date)
 
@@ -1424,6 +1517,7 @@ def paper(
 
     console = Console()
     err_console = Console(stderr=True)
+    profile = _require_profile(json_output)
 
     strat = get_strategy(strategy)
 
@@ -1437,9 +1531,6 @@ def paper(
         return
 
     from traderbot.db import get_connection, init_schema
-    from traderbot.profiles import get_current_profile
-
-    profile = get_current_profile()
     client = demo.get_client()
     market_service = MarketService(client)
 
@@ -1574,6 +1665,7 @@ def compare(
     from traderbot.simulation.profiles import PRESETS, compare_profiles, run_profiles
 
     console = Console()
+    _require_profile(json_output)
     start = date_type.fromisoformat(from_date)
     end = date_type.fromisoformat(to_date)
 
@@ -1673,6 +1765,7 @@ def performance(
     from traderbot.db.decisions import list_by_date_range
 
     console = Console()
+    _require_profile(json_output)
 
     start_dt = datetime.fromisoformat(from_date) if from_date else None
     end_dt = datetime.fromisoformat(to_date) if to_date else None
@@ -1757,6 +1850,7 @@ def learnings(
     from traderbot.learning import promote_learning
 
     console = Console()
+    _require_profile(json_output)
 
     def _run(conn):
         init_table(conn)

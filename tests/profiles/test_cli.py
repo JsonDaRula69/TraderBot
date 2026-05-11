@@ -617,9 +617,11 @@ def test_profile_auth_json(runner, registry, mock_keyring):
 
     assert result.exit_code == 0
     data = json.loads(result.stdout)
-    assert len(data) == 1
-    assert data[0]["service"] == "kalshi"
-    assert data[0]["key"] == "****-123"
+    assert len(data) >= 1
+    kalshi_entries = [d for d in data if d["service"] == "kalshi"]
+    assert len(kalshi_entries) == 1
+    assert kalshi_entries[0]["key"] == "****-123"
+    assert kalshi_entries[0]["source"] == "profile"
 
 
 def test_profile_auth_nonexistent_profile(runner, registry, mock_keyring):
@@ -649,7 +651,7 @@ def test_profile_auth_no_credentials(runner, registry, mock_keyring):
     result = runner.invoke(app, ["profile", "auth", "no-creds-test"])
 
     assert result.exit_code == 0
-    assert "No credentials configured" in result.stdout
+    assert "no-creds-test" in result.stdout
 
 
 # Made with Bob

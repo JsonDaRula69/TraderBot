@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,8 @@ from typer.testing import CliRunner
 
 from traderbot.cli import app
 from traderbot.db.decisions import DbDecision
+from traderbot.profiles.models import TradingProfile
+from traderbot.risk.limits import HARD_LIMITS
 from traderbot.db.decisions import init_table as init_decisions_table
 from traderbot.heartbeat import (
     AdaptationReview,
@@ -558,6 +561,26 @@ class TestHeartbeatCycle:
 
 
 class TestHeartbeatCLI:
+    def _with_profile(self):
+        return patch.dict(os.environ, {"TRADERBOT_PROFILE_TOKEN": "test-token"})
+
+    def _mock_profile(self):
+        return patch("traderbot.profiles.runtime.resolve_token", return_value=("test-profile", "test-agent"))
+
+    def _mock_registry(self):
+        return patch("traderbot.profiles.registry.ProfileRegistry.get_profile", return_value=TradingProfile(
+            name="test-profile",
+            mode="paper",
+            description="Test profile",
+            risk_multiplier=0.5,
+            max_position_per_market_pct=HARD_LIMITS["max_position_per_market_pct"],
+            max_daily_loss_pct=HARD_LIMITS["max_daily_loss_pct"],
+            max_drawdown_pct=HARD_LIMITS["max_drawdown_pct"],
+            max_open_positions=int(HARD_LIMITS["max_open_positions"]),
+            min_liquidity_threshold=int(HARD_LIMITS["min_liquidity_threshold"]),
+            min_edge_pct=HARD_LIMITS["min_edge_pct"],
+        ))
+
     def test_heartbeat_help(self):
         result = runner.invoke(app, ["heartbeat", "--help"])
         assert result.exit_code == 0
@@ -565,7 +588,8 @@ class TestHeartbeatCLI:
         assert "--dry-run" in result.output
 
     def test_heartbeat_json_output(self):
-        result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
+        with self._with_profile(), self._mock_profile(), self._mock_registry():
+            result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "timestamp" in data
@@ -578,7 +602,8 @@ class TestHeartbeatCLI:
         assert "steps_completed" in data
 
     def test_heartbeat_rich_output(self):
-        result = runner.invoke(app, ["heartbeat", "--dry-run"])
+        with self._with_profile(), self._mock_profile(), self._mock_registry():
+            result = runner.invoke(app, ["heartbeat", "--dry-run"])
         assert result.exit_code == 0
         assert "Heartbeat" in result.output
         assert "Performance" in result.output
@@ -586,13 +611,15 @@ class TestHeartbeatCLI:
         assert "Circuit Breaker" in result.output
 
     def test_heartbeat_dry_run_flag(self):
-        result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
+        with self._with_profile(), self._mock_profile(), self._mock_registry():
+            result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "dry_run" in data["adaptation"]["skipped_reason"] or "no decisions" in data["adaptation"]["skipped_reason"]
 
     def test_heartbeat_no_dry_run(self):
-        result = runner.invoke(app, ["heartbeat", "--json"])
+        with self._with_profile(), self._mock_profile(), self._mock_registry():
+            result = runner.invoke(app, ["heartbeat", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data["steps_completed"]) == 8
