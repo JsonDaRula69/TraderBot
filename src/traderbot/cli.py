@@ -208,7 +208,7 @@ def scan(
         client = KalshiClient()
         service = MarketService(client)
         if category_enum is not None:
-            result = asyncio.run(service.list_markets_by_category(category=category_enum.value, max_series=min(limit, 50), max_events_per_series=10))
+            result = asyncio.run(service.list_markets_by_category(category=category_enum.value, max_series=min(limit * 5, 200), max_events_per_series=10))
         else:
             result = asyncio.run(service.list_markets(limit=limit))
         markets = result.markets
@@ -399,7 +399,7 @@ def signals(
     try:
 
         async def _fetch_markets():
-            result = await service.list_markets(limit=limit, status="open")
+            result = await service.list_markets(limit=limit)
             await client.close()
             return result
 
@@ -418,6 +418,8 @@ def signals(
         return
 
     markets = result.markets
+    # V2 API status filter is unreliable — filter client-side for active/open only
+    markets = [m for m in markets if m.status in ("open", "active")]
 
     if category_enum is not None:
         markets = [m for m in markets if m.market_category == category_enum]
@@ -1555,8 +1557,10 @@ def paper(
                     lm_svc = MarketService(lm_client)
 
                     async def _fetch_paper_markets():
-                        m = await lm_svc.list_markets(limit=5, status="open")
+                        m = await lm_svc.list_markets(limit=5)
                         await lm_client.close()
+                        # V2 API status filter is unreliable — filter client-side
+                        m.markets = [mk for mk in m.markets if mk.status in ("open", "active")]
                         return m
 
                     markets = asyncio.run(_fetch_paper_markets())
