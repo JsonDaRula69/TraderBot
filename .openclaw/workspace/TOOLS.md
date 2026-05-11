@@ -46,7 +46,7 @@
 |---|---|
 | `traderbot profile list --json` | List all profiles |
 | `traderbot profile show NAME --json` | Show profile details |
-| `traderbot profile create NAME --risk-multiplier 0.8` | Create profile |
+| `traderbot profile create NAME --risk-multiplier 0.8` | Create profile (`--skip-auth` to import global Kalshi creds) |
 | `traderbot profile delete NAME` | Delete profile |
 | `traderbot profile assign NAME --token TOKEN` | Assign token to agent |
 | `traderbot profile revoke TOKEN` | Revoke a token |
@@ -64,12 +64,32 @@
 | `traderbot halt --json` | Check circuit breaker state |
 | `traderbot halt --force` | Force FULL_STOP (user only) |
 | `traderbot cron status [--json]` | Check status of TraderBot cron loops (requires OpenClaw 2026.5.7+) |
+| `traderbot cron setup --agent ID [--channel CH] [--to TARGET]` | Register TraderBot cron loops with OpenClaw |
+| `traderbot update` | Pull and install latest update from main branch |
+| `traderbot update --check` | Check for available updates (don't install) |
+| `traderbot update --dev` | Update from dev branch (one-time, no config persistence) |
+| `traderbot update configure` | Configure auto-update settings |
 
 ## Market Categories
 
-economics, politics, weather, sports, science_and_technology, crypto, commodities, companies, elections, entertainment, financials, health, mentions, social (14 values)
+| CLI Value | API Name | Description |
+|---|---|---|
+| economics | Economics | Macroeconomic indicators |
+| politics | Politics | Political outcomes |
+| weather | Climate and Weather | Climate and weather events |
+| sports | Sports | Sporting event outcomes |
+| science_and_technology | Science and Technology | Science and tech outcomes |
+| crypto | Crypto | Cryptocurrency |
+| commodities | Commodities | Commodity prices |
+| companies | Companies | Company-specific outcomes |
+| elections | Elections | Election outcomes |
+| entertainment | Entertainment | Entertainment events |
+| financials | Financials | Financial markets |
+| health | Health | Health and medical |
+| mentions | Mentions | Kalshi mention counts |
+| social | Social | Social media trends |
 
-Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories the agent can access.
+Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories the agent can access. Category values for `--category` must match the CLI Value column (lowercase).
 
 ## Modules
 

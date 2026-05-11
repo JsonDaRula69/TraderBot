@@ -247,26 +247,24 @@ The 7-step review cycle runs via `traderbot heartbeat --json` and writes output 
 
 ## Market Categories
 
-All 16 supported market categories (from `kalshi.models.MarketCategory`):
+All 14 supported market categories (from `kalshi.models.MarketCategory`):
 
-| Category | Kalshi Value | Description |
+| Category | API Name | Description |
 |---|---|---|
-| `ECONOMICS` | economics | Macroeconomic indicators and events |
-| `POLITICS` | politics | Political outcomes and legislation |
-| `WEATHER` | weather | Climate and weather events |
-| `SPORTS` | sports | Sporting event outcomes |
-| `CULTURE` | culture | Cultural events and trends |
-| `TECHNOLOGY` | technology | Technology industry outcomes |
-| `SCIENCE` | science | Scientific discoveries and events |
-| `CRYPTO` | crypto | Cryptocurrency price and events |
-| `COMMODITIES` | commodities | Commodity prices and events |
-| `COMPANIES` | companies | Company-specific outcomes |
-| `ELECTIONS` | elections | Election outcomes |
-| `ENTERTAINMENT` | entertainment | Entertainment industry events |
-| `FINANCIALS` | financials | Financial market outcomes |
-| `HEALTH` | health | Health and medical events |
-| `MENTIONS` | mentions | Kalshi mention counts |
-| `SOCIAL` | social | Social media and viral events |
+| `ECONOMICS` | Economics | Macroeconomic indicators and events |
+| `POLITICS` | Politics | Political outcomes and legislation |
+| `WEATHER` | Climate and Weather | Climate and weather events |
+| `SPORTS` | Sports | Sporting event outcomes |
+| `SCIENCE_AND_TECHNOLOGY` | Science and Technology | Science and technology industry outcomes |
+| `CRYPTO` | Crypto | Cryptocurrency price and events |
+| `COMMODITIES` | Commodities | Commodity prices and events |
+| `COMPANIES` | Companies | Company-specific outcomes |
+| `ELECTIONS` | Elections | Election outcomes |
+| `ENTERTAINMENT` | Entertainment | Entertainment industry events |
+| `FINANCIALS` | Financials | Financial market outcomes |
+| `HEALTH` | Health | Health and medical events |
+| `MENTIONS` | Mentions | Kalshi mention counts |
+| `SOCIAL` | Social | Social media and viral events |
 
 Agent queries available markets via CLI tool and filters news based on enabled categories.
 <!-- TRADERBOT_RULES_END -->
