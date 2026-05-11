@@ -381,11 +381,10 @@ async def step_system_health(
         config = KalshiConfig()
         client = KalshiClient(config)
         try:
-            # /platform/status only exists on production API; use /markets as a
-            # universal health endpoint that works on both prod and demo.
-            response = await asyncio.wait_for(
-                client.get("/markets", params={"limit": 1}), timeout=10.0
-            )
+            # Use /markets without params as a health endpoint. It returns 200 on
+            # both prod and demo APIs when auth is working. /platform/status only
+            # exists on prod and returns 404 on demo, which caused false "unavailable".
+            response = await asyncio.wait_for(client.get("/markets"), timeout=10.0)
             api_ok = response.status_code == 200
         except Exception:
             api_ok = False
