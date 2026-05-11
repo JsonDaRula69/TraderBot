@@ -2765,7 +2765,13 @@ def cron_setup(
         list_exit_code, list_output = _run_openclaw_cron_list()
         if list_exit_code == 0:
             try:
-                registered_jobs = json_lib.loads(list_output)
+                parsed = json_lib.loads(list_output)
+                if isinstance(parsed, dict) and "jobs" in parsed:
+                    registered_jobs = parsed["jobs"]
+                elif isinstance(parsed, list):
+                    registered_jobs = parsed
+                else:
+                    registered_jobs = []
                 reg_names = {j.get("name", "") for j in registered_jobs if isinstance(j, dict)}
                 missing_after = TRADERBOT_CRON_JOB_NAMES - reg_names
                 if missing_after:
@@ -2833,13 +2839,22 @@ def cron_status(
         raise typer.Exit(1)
 
     try:
-        all_jobs: list[dict] = json_lib.loads(output)
+        parsed = json_lib.loads(output)
     except (json_lib.JSONDecodeError, ValueError):
         if not output.strip():
-            all_jobs = []
+            parsed = {}
         else:
             console.print(f"[red]Error:[/red] Failed to parse openclaw cron list output: {output[:200]}")
             raise typer.Exit(1)
+
+    # openclaw cron list --json returns {"jobs": [...], "total": N, ...}
+    # not a bare array — unwrap the "jobs" key if present
+    if isinstance(parsed, dict) and "jobs" in parsed:
+        all_jobs = parsed["jobs"]
+    elif isinstance(parsed, list):
+        all_jobs = parsed
+    else:
+        all_jobs = []
 
     traderbot_jobs = [
         j for j in all_jobs
