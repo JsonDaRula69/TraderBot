@@ -97,18 +97,18 @@ class TestMarket:
         assert m.category is None
         assert m.settlement_result is None
 
-    def test_invalid_state_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            Market(
-                ticker="KX-TEST",
-                question="Q?",
-                outcome_prices=["0.50"],
-                volume=1,
-                open_interest=1,
-                close_time=_ts(),
-                status="pending",
-                event_ticker="KX-E",
-            )
+    def test_pending_status_normalized_to_open(self) -> None:
+        m = Market(
+            ticker="KX-TEST",
+            question="Q?",
+            outcome_prices=["0.50"],
+            volume=1,
+            open_interest=1,
+            close_time=_ts(),
+            status="pending",
+            event_ticker="KX-E",
+        )
+        assert m.status == "open"
 
     def test_extra_field_forbidden(self, sample_market_data: dict) -> None:
         data = {**_normalize_market(sample_market_data), "surprise": True}

@@ -231,6 +231,28 @@ class Event(BaseModel):
     markets_count: int = 0
 
 
+class Series(BaseModel):
+    """Kalshi series — a thematic group of events sharing a category."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    ticker: str
+    title: str = ""
+    category: str | None = None
+    market_category: MarketCategory | None = None
+    frequency: str | None = None
+    fee_type: str | None = None
+
+
+class SeriesListResponse(BaseModel):
+    """Paginated response for series listing."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    series: list[Series]
+    cursor: str | None = None
+
+
 class Settlement(BaseModel):
     """A settled position with P&L in cents."""
 

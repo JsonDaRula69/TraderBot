@@ -135,12 +135,12 @@ def _get_strategy(name: str):
 @app.command()
 def scan(
     limit: Annotated[int, typer.Option("--limit", help="Max markets to return")] = 20,
-    category: Annotated[str | None, typer.Option("--category", help="Filter by category")] = None,
+    category: Annotated[str | None, typer.Option("--category", help="Filter by category (e.g. mentions, politics, sports)")] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """List open markets from Kalshi."""
+    """List open markets from Kalshi. Use --category for category-scoped results."""
     from traderbot.kalshi.markets import MarketService
 
     console = Console()
@@ -149,7 +149,10 @@ def scan(
 
         client = KalshiClient()
         service = MarketService(client)
-        result = asyncio.run(service.list_markets(limit=limit, category=category))
+        if category:
+            result = asyncio.run(service.list_markets_by_category(category=category))
+        else:
+            result = asyncio.run(service.list_markets(limit=limit, status="open"))
         markets = result.markets
     except Exception as exc:
         if json_output:

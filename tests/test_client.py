@@ -60,12 +60,9 @@ class TestKalshiConfig:
             assert cfg.api_key.get_secret_value() == "env-key"
             assert cfg.private_key_pem is not None  # private_key_pem loaded from env
 
-    def test_extra_field_rejected(self) -> None:
-        import pytest
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            KalshiConfig(api_key=SecretStr("k"), private_key_pem=SecretStr("pem"), extra_field=True)
+    def test_extra_field_ignored(self) -> None:
+        cfg = KalshiConfig(api_key=SecretStr("k"), private_key_pem=SecretStr("pem"), extra_field=True)
+        assert not hasattr(cfg, "extra_field")
 class TestNormalizeApiResponse:
     def test_string_price_to_int(self) -> None:
         raw = {

@@ -44,16 +44,16 @@ SAMPLE_ORDERBOOK_RAW = {
 
 SAMPLE_TRADE_RAW = {
     "ticker": "KXBTCD-26MAR31-T55000",
-    "yes_price": 65,
-    "count": 10,
+    "price_dollars": "0.65",
+    "count_fp": 10.0,
     "side": "yes",
     "timestamp": TRADE_TS_2025_04_20,
 }
 
 SAMPLE_TRADE_RAW_2 = {
     "ticker": "KXBTCD-26MAR31-T55000",
-    "price": 63,
-    "quantity": 5,
+    "price_fp": 63.0,
+    "count_fp": 5.0,
     "side": "no",
     "created_time": TRADE_TS_2025_04_20,
 }
@@ -87,11 +87,11 @@ class TestListMarkets:
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
             service = MarketService(client)
-            await service.list_markets(category="crypto", status="open")
+            await service.list_markets(status="open", event_ticker="KXBTCD-26MAR31")
 
         request_url = str(route.calls[0].request.url)
-        assert "category=crypto" in request_url
         assert "status=open" in request_url
+        assert "event_ticker=KXBTCD" in request_url
 
     @respx.mock
     async def test_empty_list(self) -> None:
@@ -106,6 +106,89 @@ class TestListMarkets:
 
         assert result.markets == []
         assert result.cursor is None
+
+
+class TestListMarketsByCategory:
+
+    @respx.mock
+    async def test_fetches_series_then_events_then_markets(self) -> None:
+        cfg = _make_config()
+        base = cfg.active_url
+
+        respx.get(f"{base}/series").mock(
+            return_value=httpx.Response(200, json={
+                "series": [{"ticker": "KXTRUMPMENTION", "title": "Trump Mention", "category": "Mentions"}],
+                "cursor": None,
+            })
+        )
+        respx.get(f"{base}/events").mock(
+            return_value=httpx.Response(200, json={
+                "events": [{"ticker": "KXTRUMPMENTION-26MAY11", "title": "What will Trump say?", "category": "Mentions", "state": "open", "markets_count": 2}],
+            })
+        )
+        respx.get(f"{base}/markets").mock(
+            return_value=httpx.Response(200, json={
+                "markets": [
+                    {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
+                    {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-BOBB", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
+                ],
+                "cursor": None,
+            })
+        )
+
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_markets_by_category(category="Mentions")
+
+        assert len(result.markets) == 2
+        assert result.markets[0].category == "Mentions"
+        assert result.markets[0].market_category.value == "mentions"
+        assert result.markets[1].category == "Mentions"
+
+    @respx.mock
+    async def test_no_series_returns_empty(self) -> None:
+        cfg = _make_config()
+        respx.get(f"{cfg.active_url}/series").mock(
+            return_value=httpx.Response(200, json={"series": [], "cursor": None})
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_markets_by_category(category="crypto")
+
+        assert result.markets == []
+
+    @respx.mock
+    async def test_deduplicates_markets_across_events(self) -> None:
+        cfg = _make_config()
+        base = cfg.active_url
+
+        respx.get(f"{base}/series").mock(
+            return_value=httpx.Response(200, json={
+                "series": [{"ticker": "KXTRUMPMENTION", "title": "Trump", "category": "Mentions"}],
+                "cursor": None,
+            })
+        )
+        respx.get(f"{base}/events").mock(
+            return_value=httpx.Response(200, json={
+                "events": [
+                    {"ticker": "KXTRUMPMENTION-26MAY11", "title": "Event 1", "category": "Mentions", "state": "open", "markets_count": 1},
+                    {"ticker": "KXTRUMPMENTION-26MAY10", "title": "Event 2", "category": "Mentions", "state": "open", "markets_count": 1},
+                ],
+            })
+        )
+        market_raw = {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None}
+        respx.get(f"{base}/markets").mock(
+            return_value=httpx.Response(200, json={"markets": [market_raw], "cursor": None})
+        )
+
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_markets_by_category(category="Mentions")
+
+        assert len(result.markets) == 1
 
 
 class TestGetMarket:
@@ -170,8 +253,8 @@ class TestGetOrderbook:
     @respx.mock
     async def test_string_price_normalization(self) -> None:
         orderbook_raw = {
-            "yes_bids": [["64", "100"], ["63", "250"]],
-            "no_bids": [["36", "150"], ["37", "200"]],
+            "yes_bids": [["0.64", "100"], ["0.63", "250"]],
+            "no_bids": [["0.36", "150"], ["0.37", "200"]],
         }
         cfg = _make_config()
         respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
