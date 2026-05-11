@@ -98,6 +98,7 @@ class MarketService:
                 try:
                     result = await self.list_markets(
                         event_ticker=event.event_ticker,
+                        status="open",
                         limit=100,
                     )
                 except Exception:
