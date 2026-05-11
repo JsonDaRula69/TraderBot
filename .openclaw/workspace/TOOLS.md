@@ -84,6 +84,7 @@ All monetary values in cents (int). Always use `--json` for machine-readable out
 ## Environment Variables
 
 - `TRADERBOT_PROFILE_TOKEN`: Assigned profile token (set by the system at deploy time, do not modify)
+- `NEWSAPI_API_KEY`: News API key for `traderbot news` and `traderbot sentiment`. Set in `~/.traderbot/.env` or environment.
 
 Source the workspace `.env` file before running traderbot commands:
 ```sh

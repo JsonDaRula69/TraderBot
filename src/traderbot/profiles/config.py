@@ -96,8 +96,9 @@ def resolve_newsapi_key(
     Resolution order:
     1. If profile provided and has credentials → use profile keyring key
     2. Else → fall back to global AuthManager credentials
-    3. Else → fall back to NEWSAPI_KEY environment variable
-    4. Else → return None
+    3. Else → fall back to global .env file (~/.traderbot/.env)
+    4. Else → fall back to NEWSAPI_API_KEY environment variable
+    5. Else → return None
 
     Args:
         profile: TradingProfile to check for credentials (optional)
@@ -131,6 +132,16 @@ def resolve_newsapi_key(
         if env_key is not None:
             logger.debug("Using NewsAPI key from %s environment variable", env_name)
             return env_key
+
+    from traderbot.paths import get_data_dir
+
+    env_path = get_data_dir() / ".env"
+    if env_path.exists():
+        for env_name in ("NEWSAPI_API_KEY", "NEWSAPI_KEY"):
+            env_value = _env_file_get_value(env_path, env_name)
+            if env_value is not None:
+                logger.debug("Using NewsAPI key from %s in %s", env_name, env_path)
+                return env_value
 
     logger.warning("No NewsAPI key found in profile, global, or environment")
     return None

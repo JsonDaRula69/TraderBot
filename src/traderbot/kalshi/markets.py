@@ -70,9 +70,10 @@ class MarketService:
     ) -> MarketListResponse:
         """List open markets for a given category via /series then /events.
 
-        The V2 /events endpoint ignores the category filter on some API versions,
-        so we use /series?category=X to get series, then fetch events per series
-        with nested markets. This guarantees only the requested category is returned.
+        The V2 /events endpoint doesn't reliably filter by event state or
+        market status, so we fetch events with nested markets and filter
+        client-side for active/open markets only. This guarantees only
+        tradeable markets in the requested category are returned.
         """
         from traderbot.kalshi._normalize import _map_category
         from traderbot.kalshi.models import CATEGORY_API_NAMES
@@ -100,7 +101,6 @@ class MarketService:
         async def _fetch_series_events(series_ticker: str) -> list[dict]:
             params = {
                 "limit": max_events_per_series,
-                "state": "open",
                 "with_nested_markets": "true",
                 "series_ticker": series_ticker,
             }
@@ -113,7 +113,7 @@ class MarketService:
         tasks = [_fetch_series_events(t) for t in series_tickers]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Step 3: Collect markets from events
+        # Step 3: Collect open/active markets from events, filtering client-side
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
 
@@ -129,6 +129,10 @@ class MarketService:
                 )
                 raw_markets = raw_event.get("markets") or []
                 for raw_market in raw_markets:
+                    # Filter client-side: only include active/open markets
+                    market_status = raw_market.get("status", "").lower()
+                    if market_status not in ("active", "open"):
+                        continue
                     market = _normalize_market(raw_market)
                     if market.ticker not in seen_tickers:
                         seen_tickers.add(market.ticker)

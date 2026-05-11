@@ -208,10 +208,12 @@ def scan(
         client = KalshiClient()
         service = MarketService(client)
         if category_enum is not None:
-            result = asyncio.run(service.list_markets_by_category(category=category_enum.value))
+            result = asyncio.run(service.list_markets_by_category(category=category_enum.value, max_series=min(limit, 50), max_events_per_series=10))
         else:
-            result = asyncio.run(service.list_markets(limit=limit, status="open"))
+            result = asyncio.run(service.list_markets(limit=limit))
         markets = result.markets
+        # V2 API status filter is unreliable — filter client-side for active/open only
+        markets = [m for m in markets if m.status in ("open", "active")]
     except Exception as exc:
         if json_output:
             json_lib.dump([], sys.stdout)
@@ -2828,7 +2830,7 @@ def profile_auth(
     if "newsapi" in profile_services:
         newsapi_source = "profile"
     elif global_newsapi_env:
-        newsapi_source = "global"
+        newsapi_source = "global_env"
     elif any(s.name == "newsapi" for s in global_services):
         newsapi_source = "global"
 
