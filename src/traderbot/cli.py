@@ -2522,25 +2522,6 @@ def _wait_for_gateway(max_attempts: int = 15) -> bool:
     return False
 
 
-_OPENCLAW_PATH_DIRS = [
-    str(Path.home() / ".npm-global" / "bin"),
-    str(Path.home() / ".local" / "bin"),
-    "/usr/local/bin",
-]
-
-
-def _openclaw_env() -> dict[str, str]:
-    """Build env with PATH expanded to include common openclaw locations."""
-    import os
-
-    env = os.environ.copy()
-    existing = env.get("PATH", "")
-    additions = ":".join(d for d in _OPENCLAW_PATH_DIRS if Path(d).is_dir())
-    if additions:
-        env["PATH"] = f"{additions}:{existing}" if existing else additions
-    return env
-
-
 _OPENCLAW_EXTRA_PATHS = [
     str(Path.home() / ".npm-global" / "bin"),
     str(Path.home() / ".local" / "bin"),
