@@ -755,11 +755,12 @@ interactive_config_flow() {
 
         local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
         if [[ -x "$tb_bin" ]]; then
-            "$tb_bin" profile create "$profile_name" --mode "$profile_mode" --categories "$profile_categories" 2>&1 || echo "Warning: profile create failed." >&2
+            "$tb_bin" profile create "$profile_name" --mode "$profile_mode" --categories "$profile_categories" --skip-auth 2>&1 || echo "Warning: profile create failed." >&2
         fi
 
         echo "Profile '$profile_name' created (paper mode, all categories)."
-        echo "Set API credentials later with: traderbot auth set-key"
+        echo "Set Kalshi credentials with: traderbot profile set-auth $profile_name kalshi api_key"
+        echo "Set other credentials with: traderbot auth set-key <service> <key>"
         return 0
     fi
 
@@ -909,14 +910,14 @@ interactive_config_flow() {
 
     if command -v traderbot &>/dev/null; then
         if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
-            --categories "$profile_categories" 2>&1; then
-            echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories" >&2
+            --categories "$profile_categories" --skip-auth 2>&1; then
+            echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories --skip-auth" >&2
         fi
     else
         local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
         if [[ -x "$tb_bin" ]]; then
             if ! "$tb_bin" profile create "$profile_name" --mode "$profile_mode" \
-                --categories "$profile_categories" 2>&1; then
+                --categories "$profile_categories" --skip-auth 2>&1; then
                 echo "Warning: profile create failed." >&2
             fi
         else
