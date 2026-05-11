@@ -141,15 +141,15 @@ class TestRSAAuth:
             assert "kalshi-access-timestamp" in route.calls[0].request.headers
 
     @respx.mock
-    async def test_no_auth_headers_in_demo(self) -> None:
-        """Demo mode does not send RSA-PSS auth headers."""
+    async def test_demo_mode_sends_api_key_no_rsa(self) -> None:
+        """Demo mode sends KALSHI-ACCESS-KEY but not RSA-PSS signature headers."""
         cfg = _make_config(demo_mode=True)
         route = respx.get(f"{cfg.active_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": []})
         )
         async with KalshiClient(cfg) as client:
             await client.get("/markets")
-            assert "kalshi-access-key" not in route.calls[0].request.headers
+            assert "kalshi-access-key" in route.calls[0].request.headers
             assert "kalshi-access-signature" not in route.calls[0].request.headers
 
     @respx.mock
@@ -187,8 +187,8 @@ class TestRequest:
 
     @respx.mock
     @respx.mock
-    async def test_demo_mode_skips_auth_headers(self) -> None:
-        """Demo mode sends requests without RSA-PSS auth headers."""
+    async def test_demo_mode_skips_rsa_auth_headers(self) -> None:
+        """Demo mode sends API key but not RSA-PSS signature headers."""
         cfg = _make_config(demo_mode=True)
         route = respx.get(f"{cfg.active_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": []})
@@ -197,7 +197,7 @@ class TestRequest:
             response = await client.get("/markets")
             assert response.status_code == 200
             auth_headers = route.calls[0].request.headers
-            assert "kalshi-access-key" not in auth_headers
+            assert "kalshi-access-key" in auth_headers
             assert "kalshi-access-signature" not in auth_headers
 
     @respx.mock

@@ -158,16 +158,22 @@ class KalshiClient:
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
         """Build authentication headers for a request."""
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        api_key = self._config.api_key.get_secret_value() if self._config.api_key else None
+        if api_key:
+            headers["KALSHI-ACCESS-KEY"] = api_key
         if self._config.demo_mode:
-            return {"Content-Type": "application/json"}
+            return headers
         private_key = self._config.resolve_private_key()
         pem_str = private_key.get_secret_value() if isinstance(private_key, SecretStr) else private_key
-        return auth_headers(
-            self._config.api_key.get_secret_value(),
+        signed = auth_headers(
+            api_key or "",
             pem_str,
             method,
             path,
         )
+        headers.update(signed)
+        return headers
 
     async def _request(
         self,
