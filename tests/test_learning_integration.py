@@ -716,60 +716,94 @@ class TestFeatureRequestPromotion:
 
     def test_manual_promote_feature_request(self, tmp_path: Path) -> None:
         """promote_feature_request sets PENDING_REVIEW and writes FEATURE_REQUESTS.md."""
-        db_file = tmp_path / "test.db"
-        with get_connection(db_file) as conn:
-            _init_db(conn)
+        import traderbot.learning as learning_mod
 
-            fr_id = record_feature_request(
-                conn, "manual-promote", "Manual feature", "ev", "j", "i", Priority.HIGH
-            )
-            conn.execute(
-                "UPDATE learnings SET recurrence_count = 3 WHERE id = ?", (fr_id,)
-            )
-            conn.commit()
+        original_dir = learning_mod.DEFAULT_LEARNINGS_DIR
+        original_file = learning_mod.FEATURE_REQUESTS_FILE
+        try:
+            out_dir = tmp_path / ".openclaw" / "workspace" / ".learnings"
+            learning_mod.DEFAULT_LEARNINGS_DIR = out_dir
+            learning_mod.FEATURE_REQUESTS_FILE = out_dir / "FEATURE_REQUESTS.md"
 
-            promote_feature_request(conn, fr_id)
+            db_file = tmp_path / "test.db"
+            with get_connection(db_file) as conn:
+                _init_db(conn)
 
-            # Check DB status
-            entry = find_by_pattern_key(conn, "manual-promote", LearningCategory.FEATURE_REQUEST)
-            active = [e for e in entry if e.status != LearningStatus.DEPRECATED]
-            assert len(active) == 1
-            assert active[0].status == LearningStatus.PENDING_REVIEW
+                fr_id = record_feature_request(
+                    conn, "manual-promote", "Manual feature", "ev", "j", "i", Priority.HIGH
+                )
+                conn.execute(
+                    "UPDATE learnings SET recurrence_count = 3 WHERE id = ?", (fr_id,)
+                )
+                conn.commit()
+
+                promote_feature_request(conn, fr_id)
+
+                entry = find_by_pattern_key(conn, "manual-promote", LearningCategory.FEATURE_REQUEST)
+                active = [e for e in entry if e.status != LearningStatus.DEPRECATED]
+                assert len(active) == 1
+                assert active[0].status == LearningStatus.PENDING_REVIEW
+        finally:
+            learning_mod.DEFAULT_LEARNINGS_DIR = original_dir
+            learning_mod.FEATURE_REQUESTS_FILE = original_file
 
     def test_feature_requests_md_content(self, tmp_path: Path) -> None:
         """FEATURE_REQUESTS.md contains correct formatted entries."""
-        db_file = tmp_path / "test.db"
-        with get_connection(db_file) as conn:
-            _init_db(conn)
+        import traderbot.learning as learning_mod
 
-            fr_id = record_feature_request(
-                conn, "md-test", "MD format test", "evidence text",
-                "justification text", "impact text", Priority.CRITICAL,
-            )
-            conn.execute(
-                "UPDATE learnings SET recurrence_count = 4 WHERE id = ?", (fr_id,)
-            )
-            conn.commit()
+        original_dir = learning_mod.DEFAULT_LEARNINGS_DIR
+        original_file = learning_mod.FEATURE_REQUESTS_FILE
+        try:
+            out_dir = tmp_path / ".openclaw" / "workspace" / ".learnings"
+            learning_mod.DEFAULT_LEARNINGS_DIR = out_dir
+            learning_mod.FEATURE_REQUESTS_FILE = out_dir / "FEATURE_REQUESTS.md"
 
-            promote_feature_request(conn, fr_id)
+            db_file = tmp_path / "test.db"
+            with get_connection(db_file) as conn:
+                _init_db(conn)
 
-            from traderbot.learning import FEATURE_REQUESTS_FILE
-            assert FEATURE_REQUESTS_FILE.exists()
-            content = FEATURE_REQUESTS_FILE.read_text()
-            assert "# Feature Requests" in content
-            assert "md-test" in content
-            assert "justification text" in content
-            assert "impact text" in content
-            assert "critical" in content
-            assert "pending_review" in content
+                fr_id = record_feature_request(
+                    conn, "md-test", "MD format test", "evidence text",
+                    "justification text", "impact text", Priority.CRITICAL,
+                )
+                conn.execute(
+                    "UPDATE learnings SET recurrence_count = 4 WHERE id = ?", (fr_id,)
+                )
+                conn.commit()
+
+                promote_feature_request(conn, fr_id)
+
+                assert learning_mod.FEATURE_REQUESTS_FILE.exists()
+                content = learning_mod.FEATURE_REQUESTS_FILE.read_text()
+                assert "# Feature Requests" in content
+                assert "md-test" in content
+                assert "justification text" in content
+                assert "impact text" in content
+                assert "critical" in content
+                assert "pending_review" in content
+        finally:
+            learning_mod.DEFAULT_LEARNINGS_DIR = original_dir
+            learning_mod.FEATURE_REQUESTS_FILE = original_file
 
     def test_feature_requests_md_empty_when_no_pending(self, tmp_path: Path) -> None:
         """write_feature_requests_md with empty list writes placeholder."""
-        write_feature_requests_md([])
-        from traderbot.learning import FEATURE_REQUESTS_FILE
-        assert FEATURE_REQUESTS_FILE.exists()
-        content = FEATURE_REQUESTS_FILE.read_text()
-        assert "No pending feature requests" in content
+        import traderbot.learning as learning_mod
+
+        original_dir = learning_mod.DEFAULT_LEARNINGS_DIR
+        original_file = learning_mod.FEATURE_REQUESTS_FILE
+        try:
+            out_dir = tmp_path / ".openclaw" / "workspace" / ".learnings"
+            learning_mod.DEFAULT_LEARNINGS_DIR = out_dir
+            learning_mod.FEATURE_REQUESTS_FILE = out_dir / "FEATURE_REQUESTS.md"
+
+            write_feature_requests_md([])
+
+            assert learning_mod.FEATURE_REQUESTS_FILE.exists()
+            content = learning_mod.FEATURE_REQUESTS_FILE.read_text()
+            assert "No pending feature requests" in content
+        finally:
+            learning_mod.DEFAULT_LEARNINGS_DIR = original_dir
+            learning_mod.FEATURE_REQUESTS_FILE = original_file
 
 
 # ========================================================================
