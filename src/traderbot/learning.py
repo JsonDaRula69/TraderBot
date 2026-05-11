@@ -28,13 +28,15 @@ from traderbot.db.learnings import (
 if TYPE_CHECKING:
     import sqlite3
 
+from traderbot.paths import get_workspace_dir
+
 logger = logging.getLogger(__name__)
 
 PROMOTION_THRESHOLD = 3
 MAX_AGE_DAYS = 30
 HEARTBEAT_INTERVAL_HOURS = 6
 
-DEFAULT_LEARNINGS_DIR = Path(".openclaw/workspace/.learnings")
+DEFAULT_LEARNINGS_DIR = get_workspace_dir() / ".learnings"
 FEATURE_REQUESTS_FILE = DEFAULT_LEARNINGS_DIR / "FEATURE_REQUESTS.md"
 
 

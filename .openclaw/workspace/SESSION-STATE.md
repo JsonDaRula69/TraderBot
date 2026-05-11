@@ -2,8 +2,8 @@
 
 ## Pending Actions
 
-(none)
+*(pending)*
 
 ## Completed Actions
 
-(none)
+*(none)*
