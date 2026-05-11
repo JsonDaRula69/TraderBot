@@ -31,6 +31,21 @@ class ProfileAuthStore:
         """
         self._profile = profile
         self._keyring = keyring_module
+        self._keyring_available: bool | None = None
+
+    @property
+    def keyring_available(self) -> bool:
+        """Check if OS keyring is available for per-profile credential storage."""
+        if self._keyring_available is None:
+            try:
+                import keyring as kr
+                if self._keyring is not None:
+                    kr = self._keyring
+                backend_name = type(kr.get_keyring()).__name__
+                self._keyring_available = "Fail" not in backend_name and "Null" not in backend_name
+            except Exception:
+                self._keyring_available = False
+        return self._keyring_available
 
     def _get_keyring(self) -> Any:
         """Get keyring module (real or mock)."""

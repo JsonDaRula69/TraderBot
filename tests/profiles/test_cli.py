@@ -77,6 +77,7 @@ def test_profile_create_and_list(runner, registry, mock_keyring):
         "profile", "create", "test-profile",
         "--mode", "paper",
         "--description", "Test profile for CLI",
+        "--skip-auth",
     ])
     
     if result.exit_code != 0:
@@ -109,6 +110,7 @@ def test_profile_create_with_options(runner, registry, mock_keyring):
         "--max-open-positions", "15",  # Within 20 HARD_LIMIT
         "--min-liquidity", "1500",  # Above 1000 HARD_LIMIT
         "--min-edge-pct", "0.04",  # 4% (above 3% HARD_LIMIT)
+        "--skip-auth",
     ])
     
     if result.exit_code != 0:
@@ -358,6 +360,7 @@ def test_profile_create_duplicate_fails(runner, registry, mock_keyring):
         "profile", "create", "duplicate",
         "--mode", "paper",
         "--description", "First",
+        "--skip-auth",
     ])
     
     # Try to create duplicate
@@ -365,6 +368,7 @@ def test_profile_create_duplicate_fails(runner, registry, mock_keyring):
         "profile", "create", "duplicate",
         "--mode", "paper",
         "--description", "Second",
+        "--skip-auth",
     ])
     
     assert result.exit_code != 0

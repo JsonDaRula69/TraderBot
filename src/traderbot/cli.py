@@ -2056,6 +2056,7 @@ def profile_create(
     max_open_positions: Annotated[int | None, typer.Option(help="Max open positions")] = None,
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
+    skip_auth: Annotated[bool, typer.Option("--skip-auth", help="Skip Kalshi credential setup")] = False,
 ) -> None:
     """Create a new trading profile with risk parameters."""
     from traderbot.kalshi.models import MarketCategory
@@ -2101,10 +2102,57 @@ def profile_create(
         profile = TradingProfile(**profile_data)
         registry = ProfileRegistry()
         registry.create_profile(profile)
-        console.print(f"[green]+[/green] Created profile '{name}' in {mode} mode")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
+
+    if not skip_auth:
+        console.print(f"[green]+[/green] Created profile '{name}' in {mode} mode")
+        console.print("\n[bold]Kalshi API Credentials[/bold]")
+        console.print("Each profile requires its own Kalshi API key and private key.")
+        console.print("Press Enter to skip (you can set these later with [dim]traderbot profile set-auth[/dim]).")
+
+        from traderbot.profiles.auth import ProfileAuthStore
+
+        auth_store = ProfileAuthStore(profile)
+
+        api_key = typer.prompt("  Kalshi API key", default="", show_default=False)
+        private_key = ""
+        if api_key:
+            private_key = typer.prompt("  Kalshi private key (PEM)", default="", show_default=False)
+
+        if api_key and private_key:
+            if auth_store.keyring_available:
+                auth_store.set_credentials("kalshi", api_key, private_key)
+                console.print(f"[green]+[/green] Stored Kalshi credentials for profile '{name}' in keyring")
+            else:
+                from traderbot.paths import get_data_dir
+
+                env_path = get_data_dir() / ".env"
+                env_lines = []
+                existing = env_path.read_text() if env_path.exists() else ""
+                profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
+
+                kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
+                kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
+
+                env_lines.append(f"{kalshi_api_env}={api_key}")
+                env_lines.append(f"{kalshi_key_env}={private_key}")
+                new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+                env_path.write_text(new_content)
+                os.chmod(env_path, 0o600)
+                console.print(
+                    f"[green]+[/green] Stored Kalshi credentials for profile '{name}' in {env_path}"
+                )
+                console.print(f"[dim]  Env vars: {kalshi_api_env}, {kalshi_key_env}[/dim]")
+        elif api_key and not private_key:
+            console.print("[yellow]Skipped: private key is required with API key[/yellow]")
+        else:
+            console.print(
+                f"[yellow]Skipped: set credentials later with [dim]traderbot profile set-auth {name} kalshi[/dim][/yellow]"
+            )
+    else:
+        console.print(f"[green]+[/green] Created profile '{name}' in {mode} mode")
 
 
 @profile_app.command("list")
@@ -2527,7 +2575,9 @@ def profile_set_auth(
     service: str,
     key: str,
 ) -> None:
-    """Store a credential for a profile (prompts for secret)."""
+    """Store a credential for a profile (prompts for secret).
+    Only Kalshi requires per-profile auth; other services use global credentials.
+    """
     from traderbot.profiles.auth import ProfileAuthStore
     from traderbot.profiles.registry import ProfileRegistry
 
@@ -2539,13 +2589,37 @@ def profile_set_auth(
         console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
         raise typer.Exit(1)
 
+    if service not in ("kalshi",):
+        console.print(
+            f"[yellow]Note:[/yellow] '{service}' uses global credentials (not per-profile). "
+            f"Set via [dim]traderbot auth set-key {service} {key}[/dim] instead."
+        )
+
     secret = typer.prompt("Secret", hide_input=True)
 
     auth_store = ProfileAuthStore(profile)
-    auth_store.set_credentials(service, key, secret)
-    console.print(
-        f"[green]+[/green] Stored credentials for '{service}' on profile '{profile_name}'"
-    )
+    if auth_store.keyring_available:
+        auth_store.set_credentials(service, key, secret)
+        console.print(
+            f"[green]+[/green] Stored credentials for '{service}' on profile '{profile_name}' in keyring"
+        )
+    else:
+        from traderbot.paths import get_data_dir
+
+        env_path = get_data_dir() / ".env"
+        existing = env_path.read_text() if env_path.exists() else ""
+        profile_prefix = profile_name.upper().replace("-", "_").replace(" ", "_")
+        env_key_name = f"{service.upper()}_API_KEY_PROFILE_{profile_prefix}"
+        if service == "kalshi" and key == "private_key_pem":
+            env_key_name = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
+        env_line = f"{env_key_name}={secret}"
+        new_content = existing.rstrip() + "\n" + env_line + "\n"
+        env_path.write_text(new_content)
+        os.chmod(env_path, 0o600)
+        console.print(
+            f"[green]+[/green] Stored credentials for '{service}' on profile '{profile_name}' in {env_path}"
+        )
+        console.print(f"[dim]  Env var: {env_key_name}[/dim]")
 
 
 @profile_app.command("auth")
@@ -2553,8 +2627,10 @@ def profile_auth(
     profile_name: str,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Show configured credentials for a profile."""
+    """Show configured credentials for a profile and global fallback."""
+    from traderbot.auth import AuthManager
     from traderbot.profiles.auth import ProfileAuthStore
+    from traderbot.profiles.config import resolve_kalshi_credentials, resolve_newsapi_key
     from traderbot.profiles.registry import ProfileRegistry
 
     console = Console()
@@ -2566,41 +2642,105 @@ def profile_auth(
         raise typer.Exit(1)
 
     auth_store = ProfileAuthStore(profile)
-    services = auth_store.list_services()
+    profile_services = auth_store.list_services()
+    global_auth = AuthManager()
+    global_services = global_auth.list_services()
 
-    if not services:
-        if not json_output:
-            console.print(
-                f"[yellow]No credentials configured for profile '{profile_name}'[/yellow]"
-            )
+    creds_info: list[dict] = []
+
+    kalshi_status = "missing"
+    try:
+        resolve_kalshi_credentials(profile)
+        kalshi_status = "configured"
+    except ValueError:
+        pass
+
+    kalshi_source = "none"
+    if "kalshi" in profile_services:
+        kalshi_source = "profile"
+    elif any(s.name == "kalshi" for s in global_services):
+        kalshi_source = "global"
+
+    newsapi_status = "missing"
+    newsapi_key = resolve_newsapi_key(profile)
+    if newsapi_key is not None:
+        newsapi_status = "configured"
+    newsapi_source = "none"
+    if "newsapi" in profile_services:
+        newsapi_source = "profile"
+    elif any(s.name == "newsapi" for s in global_services):
+        newsapi_source = "global"
+
+    kalshi_key_display = ""
+    if "kalshi" in profile_services:
+        creds = auth_store.get_credentials("kalshi")
+        if creds:
+            kalshi_key_display = _mask_token(creds[0])
+    elif any(s.name == "kalshi" for s in global_services):
+        result = global_auth.get_credential("kalshi", "api_key")
+        if result:
+            kalshi_key_display = _mask_token(result.value.get_secret_value())
+
+    creds_info.append({
+        "service": "kalshi",
+        "status": kalshi_status,
+        "source": kalshi_source,
+        "key": kalshi_key_display,
+    })
+
+    for svc in ("voyage", "twitter", "reddit"):
+        svc_status = "missing"
+        svc_source = "global"
+        svc_result = global_auth.get_credential(svc, "api_key")
+        if svc == "reddit":
+            svc_result = global_auth.get_credential(svc, "client_id")
+        if svc_result is not None:
+            svc_status = "configured"
         else:
-            print("[]")
-        return
+            svc_source = "none"
+        creds_info.append({
+            "service": svc,
+            "status": svc_status,
+            "source": svc_source,
+            "key": _mask_token(svc_result.value.get_secret_value()) if svc_result else "",
+        })
+
+    creds_info.append({
+        "service": "newsapi",
+        "status": newsapi_status,
+        "source": newsapi_source,
+        "key": _mask_token(newsapi_key) if newsapi_key else "",
+    })
 
     if json_output:
-        creds_list = []
-        for svc in services:
-            creds = auth_store.get_credentials(svc)
-            if creds:
-                creds_list.append(
-                    {
-                        "service": svc,
-                        "key": _mask_token(creds[0]),
-                    }
-                )
-        print(json_lib.dumps(creds_list, indent=2))
+        print(json_lib.dumps(creds_info, indent=2))
     else:
         table = Table(title=f"Credentials for Profile '{profile_name}'")
         table.add_column("Service", style="cyan")
-        table.add_column("Key", style="yellow")
+        table.add_column("Status", style="green")
+        table.add_column("Source", style="yellow")
+        table.add_column("Key", style="dim")
 
-        for svc in services:
-            creds = auth_store.get_credentials(svc)
-            if creds:
-                masked_key = creds[0][:8] + "..." if len(creds[0]) > 8 else "***"
-                table.add_row(svc, masked_key)
+        for info in creds_info:
+            status_style = "green" if info["status"] == "configured" else "red"
+            source_style = "cyan" if info["source"] == "profile" else "yellow" if info["source"] == "global" else "red"
+            table.add_row(
+                info["service"],
+                f"[{status_style}]{info['status']}[/{status_style}]",
+                f"[{source_style}]{info['source']}[/{source_style}]",
+                info["key"],
+            )
 
         console.print(table)
+        console.print(
+            "\n[dim]Source: profile=keyring/scoped-env, global=shared-env, none=not-configured[/dim]"
+        )
+        console.print(
+            f"[dim]Set profile Kalshi creds: traderbot profile set-auth {profile_name} kalshi api_key[/dim]"
+        )
+        console.print(
+            "[dim]Set global creds: traderbot auth login[/dim]"
+        )
 
 
 
