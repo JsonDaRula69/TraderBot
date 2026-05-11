@@ -1128,7 +1128,7 @@ class TestCronStatus:
             assert "All registered loops are healthy." in result.output
 
     def test_cron_status_missing_loops_json(self):
-        """JSON output correctly reports missing loops and all_healthy=False."""
+        """JSON output correctly reports missing cron loops and all_healthy=False."""
         mock_jobs = [
             {"name": "decision_loop", "status": "ok", "schedule": "*/5 * * * *", "session": "isolated"},
         ]
@@ -1142,7 +1142,7 @@ class TestCronStatus:
             data = json.loads(result.output)
             assert data["all_healthy"] is False
             assert "heartbeat_loop" in data["missing"]
-            assert "news_loop" in data["missing"]
+            assert "news_loop" not in data["missing"]
 
     def test_cron_status_with_agent_filter(self):
         """--agent flag filters jobs by agentId."""

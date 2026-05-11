@@ -2522,7 +2522,8 @@ def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
         return -2, "openclaw cron add timed out"
 
 
-TRADERBOT_CRON_JOB_NAMES = frozenset({"decision_loop", "heartbeat_loop", "news_loop"})
+TRADERBOT_CRON_JOB_NAMES = frozenset({"decision_loop", "heartbeat_loop"})
+TRADERBOT_EVENT_JOB_NAMES = frozenset({"news_loop"})
 
 
 def _run_openclaw_cron_list() -> tuple[int, str]:
@@ -2856,15 +2857,16 @@ def cron_status(
     else:
         all_jobs = []
 
+    all_traderbot_names = TRADERBOT_CRON_JOB_NAMES | TRADERBOT_EVENT_JOB_NAMES
     traderbot_jobs = [
         j for j in all_jobs
-        if j.get("name", "") in TRADERBOT_CRON_JOB_NAMES
+        if j.get("name", "") in all_traderbot_names
         if agent_id is None or j.get("agentId", j.get("agent", "")) == agent_id
     ]
 
     registered_names = {j["name"] for j in traderbot_jobs if "name" in j}
-    missing = TRADERBOT_CRON_JOB_NAMES - registered_names
-    extra_tb = registered_names - TRADERBOT_CRON_JOB_NAMES
+    missing_cron = TRADERBOT_CRON_JOB_NAMES - registered_names
+    extra_tb = registered_names - all_traderbot_names
 
     status_by_name: dict[str, str] = {}
     for j in traderbot_jobs:
@@ -2879,7 +2881,11 @@ def cron_status(
             "expected_session": meta["session"],
             "expected_kind": meta["kind"],
         }
-        if name in registered_names:
+        if name in TRADERBOT_EVENT_JOB_NAMES and name not in registered_names:
+            result["registered"] = False
+            result["status"] = "event-driven"
+            result["healthy"] = True
+        elif name in registered_names:
             status_val = status_by_name.get(name, "unknown")
             result["registered"] = True
             result["status"] = status_val
@@ -2901,41 +2907,47 @@ def cron_status(
         })
 
     if json_output:
-        has_issues = any(not r.get("healthy", True) for r in loop_results) or bool(missing)
+        has_issues = any(not r.get("healthy", True) for r in loop_results) or bool(missing_cron)
         print(json_lib.dumps({
             "agent_id": agent_id,
             "loops": loop_results,
             "all_healthy": not has_issues,
-            "missing": sorted(missing),
+            "missing": sorted(missing_cron),
         }, indent=2))
         if has_issues:
             raise typer.Exit(1)
         return
 
+    status_colors = {
+        "ok": "green",
+        "running": "blue",
+        "idle": "dim",
+        "event-driven": "cyan",
+    }
     console.print("\n[bold]TraderBot Cron Status[/bold]\n")
 
     for r in loop_results:
         name = r["name"]
         if not r["registered"]:
-            console.print(f"  [red]MISSING[/red]  {name}")
+            if r.get("status") == "event-driven":
+                console.print(f"  [cyan]event-driven[/cyan]  {name}  [dim](not in cron list)[/dim]")
+            else:
+                console.print(f"  [red]MISSING[/red]  {name}")
         elif r.get("healthy"):
-            status_icon = {
-                "ok": "[green]ok[/green]",
-                "idle": "[dim]idle[/dim]",
-                "running": "[blue]running[/blue]",
-            }.get(str(r.get("status", "")), f"[green]{r.get('status', '?')}[/green]")
-            console.print(f"  {status_icon}  {name}")
+            status = str(r.get("status", "?"))
+            color = status_colors.get(status, "green")
+            console.print(f"  [{color}]{status}[/{color}]  {name}")
         else:
             console.print(f"  [yellow]{r.get('status', 'unknown'):>10}[/yellow]  {name}")
 
-    if missing:
-        console.print(f"\n[yellow]Missing loops: {', '.join(sorted(missing))}[/yellow]")
+    if missing_cron:
+        console.print(f"\n[yellow]Missing loops: {', '.join(sorted(missing_cron))}[/yellow]")
         console.print("[dim]Run `traderbot cron setup --agent <id>` to register missing loops.[/dim]")
 
-    all_healthy = all(r.get("healthy", False) for r in loop_results if r["registered"]) and not missing
+    all_healthy = all(r.get("healthy", False) for r in loop_results if r["registered"]) and not missing_cron
     if all_healthy:
         console.print("\n[green]All registered loops are healthy.[/green]")
-    elif not missing:
+    elif not missing_cron:
         console.print("\n[yellow]Some loops have issues. Check `openclaw cron show <job-id> --json` for details.[/yellow]")
 
     has_issues = not all_healthy
