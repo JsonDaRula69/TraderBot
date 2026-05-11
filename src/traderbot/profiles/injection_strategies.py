@@ -24,6 +24,7 @@ class InjectionStrategy(StrEnum):
     FENCED_MERGE = "fenced_merge"
     INIT_IF_MISSING = "init_if_missing"
     ASK_THEN_MERGE = "ask_then_merge"
+    OVERWRITE_IF_EXISTS = "overwrite_if_exists"
 
 
 FENCED_BLOCK_MARKERS: dict[str, tuple[str, str]] = {
@@ -31,7 +32,6 @@ FENCED_BLOCK_MARKERS: dict[str, tuple[str, str]] = {
     "SOUL.md": ("<!-- TRADERBOT_SOUL_START -->", "<!-- TRADERBOT_SOUL_END -->"),
     "TOOLS.md": ("<!-- TRADERBOT_TOOLS_START -->", "<!-- TRADERBOT_TOOLS_END -->"),
     "IDENTITY.md": ("<!-- TRADERBOT_PROFILE_START -->", "<!-- TRADERBOT_PROFILE_END -->"),
-    "BOOTSTRAP.md": ("<!-- TRADERBOT_BOOTSTRAP_START -->", "<!-- TRADERBOT_BOOTSTRAP_END -->"),
     "BOOT.md.bak": ("<!-- TRADERBOT_BOOT_START -->", "<!-- TRADERBOT_BOOT_END -->"),
     "HEARTBEAT.md": ("<!-- TRADERBOT_HEARTBEAT_START -->", "<!-- TRADERBOT_HEARTBEAT_END -->"),
 }
@@ -41,7 +41,22 @@ FILE_STRATEGIES: dict[str, InjectionStrategy] = {
     "SOUL.md": InjectionStrategy.FENCED_MERGE,
     "TOOLS.md": InjectionStrategy.FENCED_MERGE,
     "IDENTITY.md": InjectionStrategy.FENCED_MERGE,
-    "BOOTSTRAP.md": InjectionStrategy.ASK_THEN_MERGE,
+    "BOOTSTRAP.md": InjectionStrategy.OVERWRITE_IF_EXISTS,
+    "BOOT.md.bak": InjectionStrategy.ASK_THEN_MERGE,
+    "HEARTBEAT.md": InjectionStrategy.ASK_THEN_MERGE,
+    "USER.md": InjectionStrategy.INIT_IF_MISSING,
+    "MEMORY.md": InjectionStrategy.INIT_IF_MISSING,
+    "SESSION-STATE.md": InjectionStrategy.INIT_IF_MISSING,
+    "HEARTBEAT_DATA.md": InjectionStrategy.INIT_IF_MISSING,
+    ".learnings/": InjectionStrategy.INIT_IF_MISSING,
+}
+
+FILE_STRATEGIES: dict[str, InjectionStrategy] = {
+    "AGENTS.md": InjectionStrategy.FENCED_MERGE,
+    "SOUL.md": InjectionStrategy.FENCED_MERGE,
+    "TOOLS.md": InjectionStrategy.FENCED_MERGE,
+    "IDENTITY.md": InjectionStrategy.FENCED_MERGE,
+    "BOOTSTRAP.md": InjectionStrategy.OVERWRITE_IF_EXISTS,
     "BOOT.md.bak": InjectionStrategy.ASK_THEN_MERGE,
     "HEARTBEAT.md": InjectionStrategy.ASK_THEN_MERGE,
     "USER.md": InjectionStrategy.INIT_IF_MISSING,
@@ -113,6 +128,22 @@ def init_if_missing(template_content: str, target_path: Path) -> bool:
     Returns True if file was deployed, False if skipped.
     """
     if target_path.exists():
+        return False
+    target_path.write_text(template_content)
+    return True
+
+
+def overwrite_if_exists(template_content: str, target_path: Path) -> bool:
+    """Overwrite file with template only if it already exists.
+
+    For one-time ritual files like BOOTSTRAP.md that the agent deletes
+    after completion. If the file exists, always refresh it from template
+    (profile may have changed). If absent, the agent already completed
+    the ritual, so do not recreate it.
+
+    Returns True if file was written, False if skipped.
+    """
+    if not target_path.exists():
         return False
     target_path.write_text(template_content)
     return True

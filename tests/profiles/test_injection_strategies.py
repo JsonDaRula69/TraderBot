@@ -18,6 +18,7 @@ from traderbot.profiles.injection_strategies import (
     inject_agents_block,
     inject_profile_into_identity,
     inject_soul_block,
+    overwrite_if_exists,
 )
 from traderbot.profiles.models import TradingProfile
 
@@ -51,7 +52,7 @@ class TestInjectionStrategyEnum:
         assert isinstance(InjectionStrategy.FENCED_MERGE, str)
 
     def test_members(self):
-        assert len(InjectionStrategy) == 3
+        assert len(InjectionStrategy) == 4
 
 
 class TestFencedBlockMarkers:
@@ -83,9 +84,14 @@ class TestFileStrategies:
         ask = [
             k for k, v in FILE_STRATEGIES.items() if v == InjectionStrategy.ASK_THEN_MERGE
         ]
-        assert "BOOTSTRAP.md" in ask
         assert "BOOT.md.bak" in ask
         assert "HEARTBEAT.md" in ask
+
+    def test_overwrite_if_exists_files(self):
+        ow = [
+            k for k, v in FILE_STRATEGIES.items() if v == InjectionStrategy.OVERWRITE_IF_EXISTS
+        ]
+        assert "BOOTSTRAP.md" in ow
 
     def test_init_if_missing_files(self):
         init = [
@@ -101,8 +107,15 @@ class TestFileStrategies:
 
     def test_fenced_files_have_markers(self):
         for key, strategy in FILE_STRATEGIES.items():
-            if strategy == InjectionStrategy.FENCED_MERGE:
+            if strategy == InjectionStrategy.FENCED_MERGE and key in FENCED_BLOCK_MARKERS:
                 assert key in FENCED_BLOCK_MARKERS
+
+    def test_overwrite_if_exists_files_have_no_markers(self):
+        ow = [
+            k for k, v in FILE_STRATEGIES.items() if v == InjectionStrategy.OVERWRITE_IF_EXISTS
+        ]
+        for key in ow:
+            assert key not in FENCED_BLOCK_MARKERS
 
 
 class TestExtractFencedBlock:
@@ -213,6 +226,28 @@ class TestFencedMerge:
         assert "# Existing" in result
 
 
+class TestOverwriteIfExists:
+    def test_writes_when_file_exists(self, tmp_path):
+        target = tmp_path / "BOOTSTRAP.md"
+        target.write_text("old content from previous profile")
+        result = overwrite_if_exists("new template content", target)
+        assert result is True
+        assert target.read_text() == "new template content"
+
+    def test_skips_when_file_absent(self, tmp_path):
+        target = tmp_path / "BOOTSTRAP.md"
+        result = overwrite_if_exists("template content", target)
+        assert result is False
+        assert not target.exists()
+
+    def test_overwrites_with_shorter_content(self, tmp_path):
+        target = tmp_path / "BOOTSTRAP.md"
+        target.write_text("a" * 1000)
+        result = overwrite_if_exists("short", target)
+        assert result is True
+        assert target.read_text() == "short"
+
+
 class TestInitIfMissing:
     def test_deploys_to_absent_file(self, tmp_path):
         target = tmp_path / "USER.md"
@@ -277,12 +312,12 @@ class TestAskThenMerge:
     def test_noninteractive_falls_back_to_init_if_missing(
         self, tmp_path, template_with_markers
     ):
-        target = tmp_path / "BOOTSTRAP.md"
-        markers = FENCED_BLOCK_MARKERS["BOOTSTRAP.md"]
+        target = tmp_path / "HEARTBEAT.md"
+        markers = FENCED_BLOCK_MARKERS["HEARTBEAT.md"]
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.isatty.return_value = False
             result = ask_then_merge(
-                template_with_markers, target, markers, "BOOTSTRAP.md"
+                template_with_markers, target, markers, "HEARTBEAT.md"
             )
         assert result is True
         assert target.exists()

@@ -37,6 +37,11 @@ def _make_mock_aggregator(fake_items: list) -> AsyncMock:
 
 
 class TestNewsCommand:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_news_help(self):
         result = runner.invoke(app, ["news", "--help"])
         assert result.exit_code == 0
@@ -216,6 +221,11 @@ class TestNewsCommand:
 
 
 class TestSentimentCommand:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_sentiment_help(self):
         result = runner.invoke(app, ["sentiment", "--help"])
         assert result.exit_code == 0
@@ -479,6 +489,11 @@ class TestScan:
 
 
 class TestSignals:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     @pytest.mark.unit
     def test_signals_default(self):
         result = runner.invoke(app, ["signals"])
@@ -512,6 +527,23 @@ class TestSignals:
 
 
 class TestTrade:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        mock_profile = MagicMock(
+            enabled_categories=[],
+            risk_multiplier=1.0,
+            max_position_per_market_pct=0.05,
+            max_daily_loss_pct=0.10,
+            max_drawdown_pct=0.15,
+            max_open_positions=10,
+            min_liquidity_threshold=100,
+            min_edge_pct=0.02,
+            name="test",
+        )
+        mock_profile.name = "test"
+        with patch("traderbot.cli._require_profile", return_value=mock_profile):
+            yield
+
     def test_trade_rejected_with_defaults(self):
         result = runner.invoke(
             app, ["trade", "TEST-TICKER", "--direction", "yes", "--quantity", "1", "--price", "50"]
@@ -602,6 +634,11 @@ class TestTrade:
 
 
 class TestPositions:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_positions_json_empty(self, tmp_path):
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["positions", "--db", str(db), "--json"])
@@ -661,6 +698,11 @@ class TestPositions:
 
 
 class TestAudit:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_audit_json_empty(self, tmp_path):
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["audit", "--db", str(db), "--json"])
@@ -813,6 +855,11 @@ class TestAudit:
 
 
 class TestHeartbeat:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_heartbeat(self):
         result = runner.invoke(app, ["heartbeat"])
         assert result.exit_code == 0
@@ -1420,6 +1467,11 @@ class TestPaperCommand:
 
 
 class TestPerformanceCommand:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_performance_help(self):
         result = runner.invoke(app, ["performance", "--help"])
         assert result.exit_code == 0
@@ -1509,6 +1561,11 @@ class TestPerformanceCommand:
 
 
 class TestCompareCommand:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_compare_help(self):
         result = runner.invoke(app, ["compare", "--help"])
         assert result.exit_code == 0
@@ -1721,6 +1778,11 @@ class TestBootstrapCommand:
 
 
 class TestLearnings:
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_learnings_help(self):
         result = runner.invoke(app, ["learnings", "--help"])
         assert result.exit_code == 0

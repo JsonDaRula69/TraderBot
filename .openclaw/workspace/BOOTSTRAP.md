@@ -1,5 +1,3 @@
-<!-- TRADERBOT_BOOTSTRAP_START -->
-<!-- ASK_THEN_MERGE -->
 # BOOTSTRAP.md — First-Run Ritual
 
 You just woke up. This is a fresh workspace — no memory, no identity, no positions.
@@ -149,4 +147,3 @@ You are now operational. `BOOT.md` will run on every Gateway restart to verify y
 ***
 
 *Good luck out there. Make it count.*
-<!-- TRADERBOT_BOOTSTRAP_END -->

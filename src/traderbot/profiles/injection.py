@@ -19,6 +19,7 @@ from traderbot.profiles.injection_strategies import (
     inject_agents_block,
     inject_profile_into_identity,
     inject_soul_block,
+    overwrite_if_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,10 @@ def propagate_workspace_files(profile, target_dir: Path, interactive: bool = Tru
                     init_if_missing(template_content, target_path)
             else:
                 init_if_missing(template_content, target_path)
+        elif strategy == InjectionStrategy.OVERWRITE_IF_EXISTS:
+            overwrite_if_exists(template_content, target_path)
+        elif strategy == InjectionStrategy.OVERWRITE_IF_EXISTS:
+            overwrite_if_exists(template_content, target_path)
 
 
 def _handle_directory_merge(
