@@ -68,38 +68,61 @@ class MarketService:
         max_series: int = 10,
         max_events_per_series: int = 5,
     ) -> MarketListResponse:
-        """List open markets for a given category via /events with nested markets.
+        """List open markets for a given category via /series then /events.
 
-        The V2 /markets endpoint does not support category filtering, but /events
-        accepts category and with_nested_markets params that return markets inline.
-        This reduces 60+ sequential API calls to 1-2 paginated requests.
+        The V2 /events endpoint ignores the category filter on some API versions,
+        so we use /series?category=X to get series, then fetch events per series
+        with nested markets. This guarantees only the requested category is returned.
         """
         from traderbot.kalshi._normalize import _map_category
         from traderbot.kalshi.models import CATEGORY_API_NAMES
 
         api_category = CATEGORY_API_NAMES.get(category.lower().replace(" ", "_"), category)
+
+        # Step 1: Fetch series for the category
+        series_params: dict[str, Any] = {
+            "limit": 100,
+            "category": api_category,
+        }
+        series_response = await self._client.get("/series", **series_params)
+        series_response.raise_for_status()
+        series_data = series_response.json()
+        raw_series_list = series_data.get("series", [])
+
+        if not raw_series_list:
+            return MarketListResponse(markets=[])
+
+        # Step 2: Fetch events with markets for each series (parallel)
+        series_tickers = [s.get("ticker") for s in raw_series_list if s.get("ticker")]
+        series_tickers = series_tickers[:max_series]
+
+        async def _fetch_series_events(series_ticker: str) -> list[dict]:
+            params = {
+                "limit": max_events_per_series,
+                "with_nested_markets": "true",
+                "series_ticker": series_ticker,
+            }
+            resp = await self._client.get("/events", **params)
+            resp.raise_for_status()
+            return resp.json().get("events", [])
+
+        import asyncio
+
+        tasks = [_fetch_series_events(t) for t in series_tickers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Step 3: Collect markets from events
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
 
-        params: dict[str, Any] = {
-            "limit": 200,
-            "category": api_category,
-            "state": "open",
-            "with_nested_markets": "true",
-        }
-        cursor: str | None = None
-
-        for _ in range(10):
-            if cursor is not None:
-                params["cursor"] = cursor
-            response = await self._client.get("/events", **params)
-            response.raise_for_status()
-            data = response.json()
-            raw_events = data.get("events", [])
-
-            for raw_event in raw_events:
+        for result in results:
+            if isinstance(result, Exception):
+                continue
+            for raw_event in result:
                 event_category = raw_event.get("category")
-                event_market_category = _map_category(event_category) if event_category else None
+                event_market_category = (
+                    _map_category(event_category) if event_category else None
+                )
                 raw_markets = raw_event.get("markets") or []
                 for raw_market in raw_markets:
                     market = _normalize_market(raw_market)
@@ -108,10 +131,6 @@ class MarketService:
                         market.category = event_category
                         market.market_category = event_market_category
                         all_markets.append(market)
-
-            cursor = data.get("cursor")
-            if not cursor:
-                break
 
         return MarketListResponse(markets=all_markets)
 

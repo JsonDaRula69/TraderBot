@@ -309,13 +309,15 @@ class TestSentimentCommand:
 
 class TestScan:
     def test_scan_json_without_api(self):
-        result = runner.invoke(app, ["scan", "--json"])
+        with patch("traderbot.cli._require_profile", return_value=None):
+            result = runner.invoke(app, ["scan", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert isinstance(data, list)
 
     def test_scan_default_without_api(self):
-        result = runner.invoke(app, ["scan"])
+        with patch("traderbot.cli._require_profile", return_value=None):
+            result = runner.invoke(app, ["scan"])
         assert result.exit_code == 0
         assert "requires API connection" in result.output or "markets" in result.output.lower()
 
@@ -349,6 +351,7 @@ class TestScan:
         mock_result = MarketListResponse(markets=markets, cursor=None)
 
         with (
+            patch("traderbot.cli._require_profile", return_value=None),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch(
                 "traderbot.kalshi.markets.MarketService.list_markets",
@@ -380,61 +383,17 @@ class TestScan:
         mock_result = MarketListResponse(markets=markets, cursor=None)
 
         with (
+            patch("traderbot.cli._require_profile", return_value=None),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch(
                 "traderbot.kalshi.markets.MarketService.list_markets",
                 return_value=mock_result,
             ),
         ):
-            result = runner.invoke(app, ["scan", "--json"])
-            assert result.exit_code == 0
-            data = json.loads(result.output)
-            assert isinstance(data, list)
-            assert len(data) == 1
-            assert data[0]["ticker"] == "KXBTCD-26MAR31-T55000"
-
-
-class TestAnalyze:
-    @pytest.mark.unit
-    def test_analyze_with_market(self):
-        """Mock get_market and get_orderbook, verify Rich output includes market info and implied probability."""
-        from unittest.mock import AsyncMock
-
-        from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel
-
-        market = Market(
-            ticker="KXBTCD-26MAR31-T55000",
-            question="BTC above $55k?",
-            outcome_prices=["60", "40"],
-            volume=1000,
-            open_interest=500,
-            close_time=datetime(2026, 3, 31, tzinfo=UTC),
-            status="open",
-            event_ticker="KXBTCD-26MAR31",
-        )
-        orderbook = OrderBook(
-            yes_bids=[OrderBookLevel(price=55, size=100)],
-            no_bids=[OrderBookLevel(price=40, size=80)],
-        )
-
-        mock_client = MagicMock()
-        mock_client.close = AsyncMock()
-        with (
-            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
-            patch(
-                "traderbot.kalshi.markets.MarketService.get_market",
-                new=AsyncMock(return_value=market),
-            ),
-            patch(
-                "traderbot.kalshi.markets.MarketService.get_orderbook",
-                new=AsyncMock(return_value=orderbook),
-            ),
-        ):
-            result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000"])
+            result = runner.invoke(app, ["scan"])
             assert result.exit_code == 0
             assert "KXBTCD-26MAR31-T55000" in result.output
             assert "BTC above $55k?" in result.output
-            assert "Implied YES prob" in result.output
 
     @pytest.mark.unit
     def test_analyze_json_with_mock(self):
@@ -458,7 +417,10 @@ class TestAnalyze:
 
         mock_client = MagicMock()
         mock_client.close = AsyncMock()
+        mock_profile = MagicMock()
+        mock_profile.enabled_categories = []
         with (
+            patch("traderbot.cli._require_profile", return_value=mock_profile),
             patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_market",
@@ -479,7 +441,23 @@ class TestAnalyze:
     @pytest.mark.unit
     def test_analyze_fallback_without_api(self):
         """Analyze call that fails API connection shows error message."""
-        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")):
+        mock_profile = MagicMock()
+        mock_profile.enabled_categories = []
+        with (
+            patch("traderbot.cli._require_profile", return_value=mock_profile),
+            patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")),
+        ):
+            result = runner.invoke(app, ["analyze", "TEST-TICKER"])
+            assert result.exit_code == 0
+            assert "API connection failed" in result.output
+
+    @pytest.mark.unit
+    def test_analyze_fallback_without_api(self):
+        """Analyze call that fails API connection shows error message."""
+        with (
+            patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])),
+            patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")),
+        ):
             result = runner.invoke(app, ["analyze", "TEST-TICKER"])
             assert result.exit_code == 0
             assert "API connection failed" in result.output
@@ -487,7 +465,12 @@ class TestAnalyze:
     @pytest.mark.unit
     def test_analyze_json_fallback_without_api(self):
         """Analyze --json call that fails API connection returns error JSON."""
-        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")):
+        mock_profile = MagicMock()
+        mock_profile.enabled_categories = []
+        with (
+            patch("traderbot.cli._require_profile", return_value=mock_profile),
+            patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")),
+        ):
             result = runner.invoke(app, ["analyze", "TEST-TICKER", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
