@@ -141,9 +141,29 @@ class TestRSAAuth:
             assert "kalshi-access-timestamp" in route.calls[0].request.headers
 
     @respx.mock
-    async def test_demo_mode_sends_api_key_no_rsa(self) -> None:
-        """Demo mode sends KALSHI-ACCESS-KEY but not RSA-PSS signature headers."""
+    async def test_demo_mode_sends_full_auth(self) -> None:
+        """Demo mode sends full RSA-PSS auth headers (demo API requires them for authenticated endpoints)."""
         cfg = _make_config(demo_mode=True)
+        route = respx.get(f"{cfg.active_url}/markets").mock(
+            return_value=httpx.Response(200, json={"markets": []})
+        )
+        async with KalshiClient(cfg) as client:
+            await client.get("/markets")
+            assert "kalshi-access-key" in route.calls[0].request.headers
+            assert "kalshi-access-signature" in route.calls[0].request.headers
+            assert "kalshi-access-timestamp" in route.calls[0].request.headers
+
+    @respx.mock
+    async def test_no_private_key_falls_back_to_api_key_only(self) -> None:
+        """When private key is unavailable, sends API key without RSA-PSS signature."""
+        cfg = KalshiConfig(
+            api_key=SecretStr("test-key"),
+            private_key_pem=None,
+            demo_mode=True,
+            rate_limit_rps=10.0,
+            max_retries=3,
+            retry_base_delay=0.01,
+        )
         route = respx.get(f"{cfg.active_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": []})
         )
@@ -187,8 +207,8 @@ class TestRequest:
 
     @respx.mock
     @respx.mock
-    async def test_demo_mode_skips_rsa_auth_headers(self) -> None:
-        """Demo mode sends API key but not RSA-PSS signature headers."""
+    async def test_demo_mode_sends_full_auth(self) -> None:
+        """Demo mode sends full RSA-PSS auth headers (demo API requires them for authenticated endpoints)."""
         cfg = _make_config(demo_mode=True)
         route = respx.get(f"{cfg.active_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": []})
@@ -198,7 +218,8 @@ class TestRequest:
             assert response.status_code == 200
             auth_headers = route.calls[0].request.headers
             assert "kalshi-access-key" in auth_headers
-            assert "kalshi-access-signature" not in auth_headers
+            assert "kalshi-access-signature" in auth_headers
+            assert "kalshi-access-timestamp" in auth_headers
 
     @respx.mock
     async def test_retry_on_500_then_success(self) -> None:

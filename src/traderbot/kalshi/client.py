@@ -157,23 +157,13 @@ class KalshiClient:
         self._client = httpx.AsyncClient(base_url=self._config.active_url)
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
-        """Build authentication headers for a request."""
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        api_key = self._config.api_key.get_secret_value() if self._config.api_key else None
-        if api_key:
-            headers["KALSHI-ACCESS-KEY"] = api_key
-        if self._config.demo_mode:
-            return headers
+        """Build authentication headers including RSA-PSS signature."""
+        api_key = self._config.api_key.get_secret_value() if self._config.api_key else ""
         private_key = self._config.resolve_private_key()
+        if not private_key:
+            return {"Content-Type": "application/json", "KALSHI-ACCESS-KEY": api_key} if api_key else {"Content-Type": "application/json"}
         pem_str = private_key.get_secret_value() if isinstance(private_key, SecretStr) else private_key
-        signed = auth_headers(
-            api_key or "",
-            pem_str,
-            method,
-            path,
-        )
-        headers.update(signed)
-        return headers
+        return auth_headers(api_key, pem_str, method, path)
 
     async def _request(
         self,
