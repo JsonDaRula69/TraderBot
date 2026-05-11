@@ -75,10 +75,12 @@ class MarketService:
         (2) fetching open events for each series via /events,
         (3) fetching markets for each event via /markets.
 
-        Limits API calls by capping series and events per series.
+        API calls in steps 2 and 3 are parallelized with asyncio.gather.
         """
+        import asyncio
+
         from traderbot.kalshi.events import EventsService
-        from traderbot.kalshi.models import CATEGORY_API_NAMES
+        from traderbot.kalshi.models import CATEGORY_API_NAMES, Event
 
         api_category = CATEGORY_API_NAMES.get(category.lower().replace(" ", "_"), category)
         events_svc = EventsService(self._client)
@@ -87,30 +89,44 @@ class MarketService:
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
 
-        for series in series_resp.series:
+        async def _fetch_series_events(series_ticker: str) -> list[Event]:
             try:
-                events = await events_svc.get_events(
+                return await events_svc.get_events(
                     limit=max_events_per_series,
-                    series_ticker=series.ticker,
+                    series_ticker=series_ticker,
                     state="open",
                 )
             except Exception:
-                continue
-            for event in events:
-                try:
-                    result = await self.list_markets(
-                        event_ticker=event.event_ticker,
-                        status="open",
-                        limit=100,
-                    )
-                except Exception:
-                    continue
-                for m in result.markets:
-                    if m.ticker not in seen_tickers:
-                        seen_tickers.add(m.ticker)
-                        m.category = event.category
-                        m.market_category = event.market_category
-                        all_markets.append(m)
+                return []
+
+        events_per_series = await asyncio.gather(
+            *[_fetch_series_events(s.ticker) for s in series_resp.series]
+        )
+
+        async def _fetch_event_markets(event: Event) -> list[Market]:
+            try:
+                result = await self.list_markets(
+                    event_ticker=event.event_ticker,
+                    status="open",
+                    limit=100,
+                )
+            except Exception:
+                return []
+            markets: list[Market] = []
+            for m in result.markets:
+                if m.ticker not in seen_tickers:
+                    seen_tickers.add(m.ticker)
+                    m.category = event.category
+                    m.market_category = event.market_category
+                    markets.append(m)
+            return markets
+
+        all_events = [e for events in events_per_series for e in events]
+        market_batches = await asyncio.gather(
+            *[_fetch_event_markets(e) for e in all_events]
+        )
+        for batch in market_batches:
+            all_markets.extend(batch)
 
         return MarketListResponse(markets=all_markets)
 
