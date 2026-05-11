@@ -67,9 +67,9 @@
 
 ## Market Categories
 
-economics, politics, weather, sports, culture, technology, science, crypto, commodities, companies, elections, entertainment, financials, health, mentions, social (16 values)
+economics, politics, weather, sports, science_and_technology, crypto, commodities, companies, elections, entertainment, financials, health, mentions, social (14 values)
 
-Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories apply.
+Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories the agent can access.
 
 ## Modules
 

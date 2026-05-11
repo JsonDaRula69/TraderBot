@@ -2,8 +2,8 @@
 <!-- ASK_THEN_MERGE -->
 # BOOT.md
 
-Run `traderbot --version` on startup to verify the CLI is available.
-If the command fails, notify the user: "TraderBot CLI not found. Run: uv pip install -e ."
+Run `source .env 2>/dev/null || true` then `traderbot --version` to verify the CLI is available.
+If the command fails, report to your human: "TraderBot CLI not found."
 Then reply with NO_REPLY.
 
 ## Full Boot Sequence
@@ -16,7 +16,7 @@ After confirming the CLI is available, run the following checks in order to esta
 - If no profile is assigned, note: "No profile assigned. Running with HARD_LIMITS defaults."
 
 ### 2. Circuit Breaker Status
-- Run `traderbot halt --json` to check current circuit breaker state (OK, SLOW, HALT, FULL_STOP)
+- Run `traderbot halt --json` to check current circuit breaker state (NORMAL, SLOW, HALT, FULL_STOP)
 - If state is HALT or FULL_STOP, do NOT attempt new trades. Surface alert to user immediately.
 
 ### 3. Portfolio & Position Status
@@ -25,8 +25,8 @@ After confirming the CLI is available, run the following checks in order to esta
 
 ### 4. Available Markets
 - Run `traderbot scan --limit 50 --json` to discover currently open markets
+- If profile has `enabled_categories`, only markets in those categories will appear
 - Note the available market tickers and their categories
-- Cross-reference with enabled categories in the active profile (if any)
 
 ### 5. Session State
 - Read `SESSION-STATE.md` to check:
@@ -45,7 +45,7 @@ After confirming the CLI is available, run the following checks in order to esta
 
 ### 8. Cron Health
 - Run `traderbot cron status` to verify decision, heartbeat, and news loops are registered and healthy
-- If any loops are missing or in error state, note which ones and suggest `traderbot cron setup --agent <id>`
+- If any loops are missing or in error state, note which ones and alert your human
 
 ### 9. News & Sentiment (if markets are tracked)
 - If SESSION-STATE.md lists tracked markets, run `traderbot news --json` to fetch latest news

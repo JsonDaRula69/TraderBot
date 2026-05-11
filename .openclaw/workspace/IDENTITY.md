@@ -12,7 +12,7 @@
   *(your signature — pick one that feels right)*
 <!-- TRADERBOT_PROFILE_START -->
 - **Primary Markets**:
-  *(agent queries CLI via `traderbot scan --json` to discover available markets)*
+  *(run `source .env 2>/dev/null || true` then `traderbot scan --json` to discover available markets)*
 - **Risk Tolerance**:
   *(from conversation — conservative, moderate, aggressive)*
 - **Strategy**:
