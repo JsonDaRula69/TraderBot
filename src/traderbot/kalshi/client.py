@@ -162,8 +162,11 @@ class KalshiClient:
         private_key = self._config.resolve_private_key()
         if not private_key:
             return {"Content-Type": "application/json", "KALSHI-ACCESS-KEY": api_key} if api_key else {"Content-Type": "application/json"}
+        from urllib.parse import urlparse
+        prefix = urlparse(self._config.active_url).path.rstrip("/")
+        sign_path = f"{prefix}{path}"
         pem_str = private_key.get_secret_value() if isinstance(private_key, SecretStr) else private_key
-        return auth_headers(api_key, pem_str, method, path)
+        return auth_headers(api_key, pem_str, method, sign_path)
 
     async def _request(
         self,
