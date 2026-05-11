@@ -376,21 +376,19 @@ async def step_system_health(
     try:
         import asyncio
 
-        from traderbot.kalshi.client import KalshiClient
-        from traderbot.kalshi.config import KalshiConfig
+        from traderbot.kalshi.client import KalshiClient, KalshiConfig
 
         config = KalshiConfig()
         client = KalshiClient(config)
         try:
-            response = await asyncio.wait_for(client.get("/platform/status"), timeout=5.0)
-            status = response.json() if hasattr(response, "json") else response
-            api_ok = isinstance(status, dict) and status.get("status") == "alive"
+            # /platform/status only exists on production API; use /markets as a
+            # universal health endpoint that works on both prod and demo.
+            response = await asyncio.wait_for(
+                client.get("/markets", params={"limit": 1}), timeout=10.0
+            )
+            api_ok = response.status_code == 200
         except Exception:
-            try:
-                response = await asyncio.wait_for(client.get("/"), timeout=5.0)
-                api_ok = response.status_code < 500
-            except Exception:
-                api_ok = False
+            api_ok = False
         finally:
             await asyncio.wait_for(client.close(), timeout=2.0)
         api_status = "ok" if api_ok else "degraded"
