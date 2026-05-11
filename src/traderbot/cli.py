@@ -2192,9 +2192,20 @@ def profile_create(
         "min_edge_pct": min_edge_pct or HARD_LIMITS["min_edge_pct"],
     }
 
+    registry = ProfileRegistry()
+    existing_profiles = registry.list_profiles()
+
+    if name in existing_profiles:
+        overwrite = typer.confirm(
+            f"Profile '{name}' already exists. Overwrite?", default=False
+        )
+        if not overwrite:
+            console.print(f"[yellow]Cancelled.[/yellow] Profile '{name}' not modified.")
+            raise typer.Exit(0)
+        registry.delete_profile(name)
+
     try:
         profile = TradingProfile(**profile_data)
-        registry = ProfileRegistry()
         registry.create_profile(profile)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -2247,6 +2258,48 @@ def profile_create(
             )
     else:
         console.print(f"[green]+[/green] Created profile '{name}' in {mode} mode")
+        from traderbot.auth import AuthManager
+
+        global_auth = AuthManager()
+        global_key = global_auth.get_credential("kalshi", "api_key")
+        global_pem = global_auth.get_credential("kalshi", "private_key_pem")
+        global_pem_val: str | None = None
+        if not global_pem:
+            global_path = global_auth.get_credential("kalshi", "private_key_path")
+            if global_path:
+                from pathlib import Path
+                p = Path(global_path.value.get_secret_value())
+                if p.is_file():
+                    global_pem_val = p.read_text()
+
+        if global_key and (global_pem or global_pem_val):
+            from traderbot.profiles.auth import ProfileAuthStore
+
+            auth_store = ProfileAuthStore(profile)
+            api_key_val = global_key.value.get_secret_value()
+            pem_val = global_pem.value.get_secret_value() if global_pem else global_pem_val
+            assert pem_val is not None
+            if auth_store.keyring_available:
+                auth_store.set_credentials("kalshi", api_key_val, pem_val)
+                console.print(
+                    f"[green]+[/green] Imported global Kalshi credentials for profile '{name}' into keyring"
+                )
+            else:
+                from traderbot.paths import get_data_dir
+
+                env_path = get_data_dir() / ".env"
+                existing = env_path.read_text() if env_path.exists() else ""
+                profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
+                kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
+                kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
+                env_lines = [f"{kalshi_api_env}={api_key_val}", f"{kalshi_key_env}={pem_val}"]
+                new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+                env_path.write_text(new_content)
+                os.chmod(env_path, 0o600)
+                console.print(
+                    f"[green]+[/green] Imported global Kalshi credentials for profile '{name}' into {env_path}"
+                )
+                console.print(f"[dim]  Env vars: {kalshi_api_env}, {kalshi_key_env}[/dim]")
 
 
 @profile_app.command("list")
@@ -2750,8 +2803,19 @@ def profile_auth(
         pass
 
     kalshi_source = "none"
+    profile_prefix = profile_name.upper().replace("-", "_").replace(" ", "_")
+    from traderbot.paths import get_data_dir
+    from traderbot.profiles.config import _env_file_get_value
+
+    env_path = get_data_dir() / ".env"
+    profile_env_key = _env_file_get_value(env_path, f"KALSHI_API_KEY_PROFILE_{profile_prefix}") if env_path.exists() else None
+    global_env_key = _env_file_get_value(env_path, "KALSHI_API_KEY") if env_path.exists() else None
     if "kalshi" in profile_services:
         kalshi_source = "profile"
+    elif profile_env_key:
+        kalshi_source = "profile_env"
+    elif global_env_key:
+        kalshi_source = "global"
     elif any(s.name == "kalshi" for s in global_services):
         kalshi_source = "global"
 
@@ -2760,8 +2824,11 @@ def profile_auth(
     if newsapi_key is not None:
         newsapi_status = "configured"
     newsapi_source = "none"
+    global_newsapi_env = _env_file_get_value(env_path, "NEWSAPI_API_KEY") if env_path.exists() else None
     if "newsapi" in profile_services:
         newsapi_source = "profile"
+    elif global_newsapi_env:
+        newsapi_source = "global"
     elif any(s.name == "newsapi" for s in global_services):
         newsapi_source = "global"
 
@@ -2770,10 +2837,16 @@ def profile_auth(
         creds = auth_store.get_credentials("kalshi")
         if creds:
             kalshi_key_display = _mask_token(creds[0])
-    elif any(s.name == "kalshi" for s in global_services):
+    elif kalshi_source == "profile_env":
+        val = _env_file_get_value(env_path, f"KALSHI_API_KEY_PROFILE_{profile_prefix}")
+        if val:
+            kalshi_key_display = _mask_token(val)
+    elif kalshi_source == "global":
         result = global_auth.get_credential("kalshi", "api_key")
         if result:
             kalshi_key_display = _mask_token(result.value.get_secret_value())
+        if not kalshi_key_display and global_env_key:
+            kalshi_key_display = _mask_token(global_env_key)
 
     creds_info.append({
         "service": "kalshi",
@@ -2817,7 +2890,7 @@ def profile_auth(
 
         for info in creds_info:
             status_style = "green" if info["status"] == "configured" else "red"
-            source_style = "cyan" if info["source"] == "profile" else "yellow" if info["source"] == "global" else "red"
+            source_style = "cyan" if info["source"] in ("profile", "profile_env") else "yellow" if info["source"] == "global" else "red"
             table.add_row(
                 info["service"],
                 f"[{status_style}]{info['status']}[/{status_style}]",

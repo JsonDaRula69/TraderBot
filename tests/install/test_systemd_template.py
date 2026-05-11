@@ -47,18 +47,14 @@ def test_template_unit_section(template_content: str) -> None:
 
 def test_template_service_section(template_content: str) -> None:
     """[Service] section has required directives."""
-    # Extract [Service] section
     service_match = re.search(r"\[Service\](.*?)(?=\[Install\])", template_content, re.DOTALL)
     assert service_match, "[Service] section not found or malformed"
     service_section = service_match.group(1)
 
-    # Check required directives
-    assert "Type=simple" in service_section, "Service type must be simple"
+    assert re.search(r"^Type=oneshot", service_section, re.MULTILINE), "Service type must be oneshot (scheduling via OpenClaw Gateway)"
     assert re.search(r"^User=", service_section, re.MULTILINE), "User directive required"
     assert re.search(r"^WorkingDirectory=", service_section, re.MULTILINE), "WorkingDirectory required"
-    assert re.search(r"^ExecStart=.*traderbot.*scan.*--continuous", service_section, re.MULTILINE), "ExecStart must run traderbot scan --continuous"
-    assert "Restart=on-failure" in service_section, "Must restart on failure"
-    assert re.search(r"^RestartSec=\d+", service_section, re.MULTILINE), "RestartSec must be specified"
+    assert re.search(r"^ExecStart=.*traderbot.*heartbeat", service_section, re.MULTILINE), "ExecStart must run traderbot heartbeat"
     assert "StandardOutput=journal" in service_section, "Must log to journal"
     assert "StandardError=journal" in service_section, "Must log errors to journal"
 
@@ -87,26 +83,25 @@ def test_template_uses_instance_variable(template_content: str) -> None:
 
 
 def test_template_has_profile_token_placeholder(template_content: str) -> None:
-    """Template has TRADERBOT_PROFILE_TOKEN placeholder."""
-    assert "TRADERBOT_PROFILE_TOKEN" in template_content, "Must have TRADERBOT_PROFILE_TOKEN environment variable"
-    assert "<PROFILE_TOKEN>" in template_content, "Must have <PROFILE_TOKEN> placeholder for installer"
+    """Template loads TRADERBOT_PROFILE_TOKEN via EnvironmentFile (secure approach).
+
+    The token is NOT embedded in the service file (which is world-readable).
+    Instead, EnvironmentFile=%h/.traderbot/.env loads it at runtime from
+    a chmod-600 file, keeping the token secret.
+    """
+    assert "EnvironmentFile=" in template_content, "Must use EnvironmentFile to load env vars securely"
+    assert "%h/.traderbot/.env" in template_content, "EnvironmentFile must point to ~/.traderbot/.env"
 
 
-def test_template_has_proper_restart_policy(template_content: str) -> None:
-    """Template has a reasonable restart policy."""
-    # Extract [Service] section
+def test_template_has_proper_security_constraints(template_content: str) -> None:
+    """[Service] section has security hardening directives."""
     service_match = re.search(r"\[Service\](.*?)(?=\[Install\])", template_content, re.DOTALL)
     assert service_match, "[Service] section not found"
     service_section = service_match.group(1)
 
-    # Check restart configuration
-    assert "Restart=on-failure" in service_section, "Should restart on failure"
-
-    # Check RestartSec is reasonable (between 5 and 60 seconds)
-    restart_sec_match = re.search(r"RestartSec=(\d+)", service_section)
-    assert restart_sec_match, "RestartSec not found"
-    restart_sec = int(restart_sec_match.group(1))
-    assert 5 <= restart_sec <= 60, f"RestartSec should be between 5-60 seconds, got {restart_sec}"
+    assert "NoNewPrivileges=true" in service_section, "Must set NoNewPrivileges"
+    assert "PrivateTmp=true" in service_section, "Must set PrivateTmp"
+    assert "ProtectSystem=strict" in service_section, "Must set ProtectSystem=strict"
 
 
 def test_template_has_documentation_comments(template_content: str) -> None:
@@ -137,19 +132,15 @@ def test_template_has_syslog_identifier(template_content: str) -> None:
     assert re.search(r"SyslogIdentifier=.*%i", service_section), "Should have SyslogIdentifier with %i for per-agent logs"
 
 
-def test_template_has_start_limit(template_content: str) -> None:
-    """Template has start limit to prevent restart loops."""
-    # Extract [Service] section
+def test_template_has_execstart_and_envfile(template_content: str) -> None:
+    """Template has ExecStart and EnvironmentFile in [Service] section."""
     service_match = re.search(r"\[Service\](.*?)(?=\[Install\])", template_content, re.DOTALL)
     assert service_match, "[Service] section not found"
     service_section = service_match.group(1)
 
-    # Should have either StartLimitInterval or StartLimitIntervalSec
-    has_start_limit = (
-        "StartLimitInterval" in service_section or
-        "StartLimitIntervalSec" in service_section or
-        "StartLimitBurst" in service_section
-    )
-    assert has_start_limit, "Should have start limit configuration to prevent restart loops"
+    has_execstart = "ExecStart=" in service_section
+    has_envfile = "EnvironmentFile=" in service_section
+    assert has_execstart, "Must have ExecStart directive"
+    assert has_envfile, "Must have EnvironmentFile for secure credential loading"
 
 # Made with Bob

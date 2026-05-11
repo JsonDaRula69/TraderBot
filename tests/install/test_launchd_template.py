@@ -88,8 +88,8 @@ def test_template_program_arguments_structure(template_xml: ET.Element) -> None:
             # Check that scan and --continuous appear somewhere in the arguments
             all_args = " ".join(filter(None, strings))
             assert "traderbot" in all_args, f"Should include 'traderbot', got: {all_args}"
-            assert "scan" in all_args, f"Should include 'scan' command, got: {all_args}"
-            assert "--continuous" in all_args, f"Should include '--continuous' flag, got: {all_args}"
+            assert "heartbeat" in all_args, f"Should include 'heartbeat' command, got: {all_args}"
+            assert ".env" in all_args, f"Should source .env for credentials, got: {all_args}"
             return
 
     pytest.fail("ProgramArguments array not found or invalid")
@@ -148,28 +148,20 @@ def test_template_has_keep_alive(template_xml: ET.Element) -> None:
     assert "KeepAlive" in keys, "Template should have 'KeepAlive' key"
 
 
-def test_template_keep_alive_successful_exit_false(template_xml: ET.Element) -> None:
-    """Template KeepAlive has SuccessfulExit=false."""
+def test_template_keep_alive_false(template_xml: ET.Element) -> None:
+    """KeepAlive is false (oneshot healthcheck, not persistent daemon)."""
     dict_elem = template_xml.find("dict")
     assert dict_elem is not None, "Template should have a <dict> element"
-    
-    # Find KeepAlive key and its following dict
-    found_key = False
-    for elem in dict_elem:
+
+    found_keep_alive = False
+    for i, elem in enumerate(dict_elem):
         if elem.tag == "key" and elem.text == "KeepAlive":
-            found_key = True
-        elif found_key and elem.tag == "dict":
-            # Check for SuccessfulExit key with false value
-            keep_alive_dict = elem
-            found_successful_exit = False
-            for sub_elem in keep_alive_dict:
-                if sub_elem.tag == "key" and sub_elem.text == "SuccessfulExit":
-                    found_successful_exit = True
-                elif found_successful_exit and sub_elem.tag == "false":
-                    return  # Found SuccessfulExit=false
-            pytest.fail("KeepAlive dict should have SuccessfulExit=false")
-    
-    pytest.fail("KeepAlive dict not found")
+            next_elem = dict_elem[i + 1]
+            assert next_elem.tag == "false", "KeepAlive should be false for oneshot service"
+            found_keep_alive = True
+            break
+
+    assert found_keep_alive, "KeepAlive key not found"
 
 
 def test_template_has_standard_out_path(template_xml: ET.Element) -> None:
