@@ -2522,6 +2522,43 @@ def _wait_for_gateway(max_attempts: int = 15) -> bool:
     return False
 
 
+_OPENCLAW_PATH_DIRS = [
+    str(Path.home() / ".npm-global" / "bin"),
+    str(Path.home() / ".local" / "bin"),
+    "/usr/local/bin",
+]
+
+
+def _openclaw_env() -> dict[str, str]:
+    """Build env with PATH expanded to include common openclaw locations."""
+    import os
+
+    env = os.environ.copy()
+    existing = env.get("PATH", "")
+    additions = ":".join(d for d in _OPENCLAW_PATH_DIRS if Path(d).is_dir())
+    if additions:
+        env["PATH"] = f"{additions}:{existing}" if existing else additions
+    return env
+
+
+_OPENCLAW_EXTRA_PATHS = [
+    str(Path.home() / ".npm-global" / "bin"),
+    str(Path.home() / ".local" / "bin"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+]
+
+
+def _openclaw_env() -> dict[str, str]:
+    """Build env dict with expanded PATH for finding openclaw."""
+    import os
+
+    env = os.environ.copy()
+    extra = ":".join(_OPENCLAW_EXTRA_PATHS)
+    env["PATH"] = f"{extra}:{env.get('PATH', '')}"
+    return env
+
+
 def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
     """Run `openclaw cron add` and return (exit_code, output)."""
     import subprocess
@@ -2532,6 +2569,7 @@ def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
             capture_output=True,
             text=True,
             timeout=30,
+            env=_openclaw_env(),
         )
         return result.returncode, (result.stdout + result.stderr).strip()
     except FileNotFoundError:
@@ -2554,6 +2592,7 @@ def _run_openclaw_cron_list() -> tuple[int, str]:
             capture_output=True,
             text=True,
             timeout=30,
+            env=_openclaw_env(),
         )
         return result.returncode, (result.stdout + result.stderr).strip()
     except FileNotFoundError:
@@ -2572,6 +2611,26 @@ def _run_openclaw_cron_show(job_id: str) -> tuple[int, str]:
             capture_output=True,
             text=True,
             timeout=30,
+            env=_openclaw_env(),
+        )
+        return result.returncode, (result.stdout + result.stderr).strip()
+    except FileNotFoundError:
+        return -1, "openclaw CLI not found"
+    except subprocess.TimeoutExpired:
+        return -2, "openclaw cron list timed out"
+
+
+def _run_openclaw_cron_show(job_id: str) -> tuple[int, str]:
+    """Run `openclaw cron show <job_id> --json` and return (exit_code, output)."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["openclaw", "cron", "show", job_id, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_openclaw_env(),
         )
         return result.returncode, (result.stdout + result.stderr).strip()
     except FileNotFoundError:
