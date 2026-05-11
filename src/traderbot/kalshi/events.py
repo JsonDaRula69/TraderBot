@@ -20,7 +20,7 @@ def _normalize_event(raw: dict[str, Any]) -> Event:
     market_category = _map_category(category)
 
     return Event(
-        event_ticker=raw["ticker"],
+        event_ticker=raw.get("event_ticker", raw.get("ticker", "")),
         title=raw.get("title", ""),
         description=raw.get("description", ""),
         category=category,
