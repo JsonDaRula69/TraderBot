@@ -111,27 +111,23 @@ class TestListMarkets:
 class TestListMarketsByCategory:
 
     @respx.mock
-    async def test_fetches_series_then_events_then_markets(self) -> None:
+    async def test_fetches_category_with_nested_markets(self) -> None:
         cfg = _make_config()
         base = cfg.active_url
 
-        respx.get(f"{base}/series").mock(
-            return_value=httpx.Response(200, json={
-                "series": [{"ticker": "KXTRUMPMENTION", "title": "Trump Mention", "category": "Mentions"}],
-                "cursor": None,
-            })
-        )
         respx.get(f"{base}/events").mock(
             return_value=httpx.Response(200, json={
-                "events": [{"ticker": "KXTRUMPMENTION-26MAY11", "title": "What will Trump say?", "category": "Mentions", "state": "open", "markets_count": 2}],
-            })
-        )
-        respx.get(f"{base}/markets").mock(
-            return_value=httpx.Response(200, json={
-                "markets": [
-                    {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
-                    {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-BOBB", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
-                ],
+                "events": [{
+                    "ticker": "KXTRUMPMENTION-26MAY11",
+                    "title": "What will Trump say?",
+                    "category": "Mentions",
+                    "state": "open",
+                    "markets_count": 2,
+                    "markets": [
+                        {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
+                        {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-BOBB", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None},
+                    ],
+                }],
                 "cursor": None,
             })
         )
@@ -147,10 +143,10 @@ class TestListMarketsByCategory:
         assert result.markets[1].category == "Mentions"
 
     @respx.mock
-    async def test_no_series_returns_empty(self) -> None:
+    async def test_no_events_returns_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/series").mock(
-            return_value=httpx.Response(200, json={"series": [], "cursor": None})
+        respx.get(f"{cfg.active_url}/events").mock(
+            return_value=httpx.Response(200, json={"events": [], "cursor": None})
         )
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
@@ -164,23 +160,29 @@ class TestListMarketsByCategory:
         cfg = _make_config()
         base = cfg.active_url
 
-        respx.get(f"{base}/series").mock(
-            return_value=httpx.Response(200, json={
-                "series": [{"ticker": "KXTRUMPMENTION", "title": "Trump", "category": "Mentions"}],
-                "cursor": None,
-            })
-        )
+        market_raw = {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None}
         respx.get(f"{base}/events").mock(
             return_value=httpx.Response(200, json={
                 "events": [
-                    {"ticker": "KXTRUMPMENTION-26MAY11", "title": "Event 1", "category": "Mentions", "state": "open", "markets_count": 1},
-                    {"ticker": "KXTRUMPMENTION-26MAY10", "title": "Event 2", "category": "Mentions", "state": "open", "markets_count": 1},
+                    {
+                        "ticker": "KXTRUMPMENTION-26MAY11",
+                        "title": "Event 1",
+                        "category": "Mentions",
+                        "state": "open",
+                        "markets_count": 1,
+                        "markets": [market_raw],
+                    },
+                    {
+                        "ticker": "KXTRUMPMENTION-26MAY10",
+                        "title": "Event 2",
+                        "category": "Mentions",
+                        "state": "open",
+                        "markets_count": 1,
+                        "markets": [market_raw],
+                    },
                 ],
+                "cursor": None,
             })
-        )
-        market_raw = {**SAMPLE_MARKET_RAW, "ticker": "KXTRUMPMENTION-26MAY11-TRUM", "event_ticker": "KXTRUMPMENTION-26MAY11", "category": None}
-        respx.get(f"{base}/markets").mock(
-            return_value=httpx.Response(200, json={"markets": [market_raw], "cursor": None})
         )
 
         async with KalshiClient(cfg) as client:

@@ -68,65 +68,50 @@ class MarketService:
         max_series: int = 10,
         max_events_per_series: int = 5,
     ) -> MarketListResponse:
-        """List open markets for a given category via series→events→markets chain.
+        """List open markets for a given category via /events with nested markets.
 
-        The V2 /markets endpoint does not support category filtering. This method
-        works around it by: (1) fetching series for the category via /series,
-        (2) fetching open events for each series via /events,
-        (3) fetching markets for each event via /markets.
-
-        API calls in steps 2 and 3 are parallelized with asyncio.gather.
+        The V2 /markets endpoint does not support category filtering, but /events
+        accepts category and with_nested_markets params that return markets inline.
+        This reduces 60+ sequential API calls to 1-2 paginated requests.
         """
-        import asyncio
-
-        from traderbot.kalshi.events import EventsService
-        from traderbot.kalshi.models import CATEGORY_API_NAMES, Event
+        from traderbot.kalshi._normalize import _map_category
+        from traderbot.kalshi.models import CATEGORY_API_NAMES
 
         api_category = CATEGORY_API_NAMES.get(category.lower().replace(" ", "_"), category)
-        events_svc = EventsService(self._client)
-
-        series_resp = await events_svc.list_series(limit=max_series, category=api_category)
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
 
-        async def _fetch_series_events(series_ticker: str) -> list[Event]:
-            try:
-                return await events_svc.get_events(
-                    limit=max_events_per_series,
-                    series_ticker=series_ticker,
-                    state="open",
-                )
-            except Exception:
-                return []
+        params: dict[str, Any] = {
+            "limit": 200,
+            "category": api_category,
+            "state": "open",
+            "with_nested_markets": "true",
+        }
+        cursor: str | None = None
 
-        events_per_series = await asyncio.gather(
-            *[_fetch_series_events(s.ticker) for s in series_resp.series]
-        )
+        for _ in range(10):
+            if cursor is not None:
+                params["cursor"] = cursor
+            response = await self._client.get("/events", **params)
+            response.raise_for_status()
+            data = response.json()
+            raw_events = data.get("events", [])
 
-        async def _fetch_event_markets(event: Event) -> list[Market]:
-            try:
-                result = await self.list_markets(
-                    event_ticker=event.event_ticker,
-                    status="open",
-                    limit=100,
-                )
-            except Exception:
-                return []
-            markets: list[Market] = []
-            for m in result.markets:
-                if m.ticker not in seen_tickers:
-                    seen_tickers.add(m.ticker)
-                    m.category = event.category
-                    m.market_category = event.market_category
-                    markets.append(m)
-            return markets
+            for raw_event in raw_events:
+                event_category = raw_event.get("category")
+                event_market_category = _map_category(event_category) if event_category else None
+                raw_markets = raw_event.get("markets") or []
+                for raw_market in raw_markets:
+                    market = _normalize_market(raw_market)
+                    if market.ticker not in seen_tickers:
+                        seen_tickers.add(market.ticker)
+                        market.category = event_category
+                        market.market_category = event_market_category
+                        all_markets.append(market)
 
-        all_events = [e for events in events_per_series for e in events]
-        market_batches = await asyncio.gather(
-            *[_fetch_event_markets(e) for e in all_events]
-        )
-        for batch in market_batches:
-            all_markets.extend(batch)
+            cursor = data.get("cursor")
+            if not cursor:
+                break
 
         return MarketListResponse(markets=all_markets)
 
