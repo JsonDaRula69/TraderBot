@@ -59,10 +59,64 @@ app.add_typer(update_app, name="update")
 
 
 @update_app.callback(invoke_without_command=True)
-def update_default(ctx: typer.Context) -> None:
-    """Default to 'check' when no subcommand is given."""
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(update_check)
+def update_default(
+    ctx: typer.Context,
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Check only, don't install updates"),
+    ] = False,
+    dev: Annotated[
+        bool,
+        typer.Option("--dev", help="Update from dev branch instead of main"),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Bypass cache and check now"),
+    ] = False,
+    restart: Annotated[
+        bool,
+        typer.Option("--restart", help="Restart after update"),
+    ] = False,
+) -> None:
+    """Default: checks for and installs available updates. --check to check only."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from traderbot.update_config import UpdateConfig
+    from traderbot.updater import apply_update, check_for_updates
+
+    console = Console()
+    branch = "dev" if dev else "main"
+    config = UpdateConfig.load()
+
+    if not config.enabled:
+        console.print("[yellow]Update checking is disabled.[/yellow]")
+        return
+
+    result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
+    if result:
+        console.print(
+            f"[yellow]Update available: v{result['current']} -> v{result['latest']}[/yellow]"
+        )
+        console.print(f"[dim]Release: {result['url']}[/dim]")
+        if check:
+            console.print("[dim]Run 'traderbot update' to install.[/dim]")
+            return
+        console.print(f"[dim]Installing from {branch}...[/dim]")
+        if apply_update(restart=restart, branch=branch):
+            console.print("[green]Update applied successfully.[/green]")
+        else:
+            console.print("[red]Update failed. Check logs for details.[/red]")
+            raise typer.Exit(1)
+    else:
+        console.print("[green]Already up to date.[/green]")
+        if not check and dev:
+            console.print("[dim]Pulling latest from dev branch...[/dim]")
+            if apply_update(restart=restart, branch=branch):
+                console.print("[green]Dev branch pulled successfully.[/green]")
+            else:
+                console.print("[red]Dev pull failed. Check logs for details.[/red]")
+                raise typer.Exit(1)
 
 cron_app = typer.Typer(name="cron", help="Register cron loops and heartbeat with OpenClaw.")
 app.add_typer(cron_app, name="cron")
@@ -1849,45 +1903,6 @@ def auth_check() -> None:
     if missing:
         console.print(f"[yellow]Missing credentials:[/yellow] {', '.join(missing)}")
         console.print("Run [bold]traderbot auth login[/bold] to configure.")
-
-
-@update_app.command("check")
-def update_check(
-    force: Annotated[bool, typer.Option("--force", help="Bypass cache and check now")] = False,
-) -> None:
-    """Check if a newer version is available."""
-    from traderbot.update_config import UpdateConfig
-    from traderbot.updater import check_for_updates
-
-    console = Console()
-    config = UpdateConfig.load()
-    if not config.enabled:
-        console.print("[yellow]Update checking is disabled.[/yellow]")
-        return
-
-    result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
-    if result:
-        console.print(
-            f"[yellow]Update available: v{result['current']} -> v{result['latest']}[/yellow]"
-        )
-        console.print(f"[dim]Release: {result['url']}[/dim]")
-        console.print("[dim]Run 'traderbot update apply' to update.[/dim]")
-    else:
-        console.print("[green]Already up to date.[/green]")
-
-
-@update_app.command("apply")
-def update_apply(
-    restart: Annotated[bool, typer.Option("--restart", help="Restart after update")] = False,
-) -> None:
-    """Apply the latest update."""
-    from traderbot.updater import apply_update
-
-    console = Console()
-    if apply_update(restart=restart):
-        console.print("[green]Update applied successfully.[/green]")
-    else:
-        console.print("[red]Update failed. Check logs for details.[/red]")
 
 
 @update_app.command("configure")

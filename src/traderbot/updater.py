@@ -111,7 +111,7 @@ def check_for_updates(force: bool = False, check_interval_hours: int = 6) -> dic
     return None
 
 
-def apply_update(restart: bool = False) -> bool:
+def apply_update(restart: bool = False, branch: str = "main") -> bool:
     """Apply update by running git pull + pip install. Returns True on success.
 
     Data preservation: all runtime data lives in ~/.traderbot/ (outside repo) and
@@ -138,7 +138,7 @@ def apply_update(restart: bool = False) -> bool:
                 logger.error("Cannot update: uncommitted changes in working tree. Commit or stash first.")
                 return False
 
-        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "pull", "origin", branch], cwd=repo_dir, check=True, capture_output=True)
         pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
         logger.info("Updated successfully to latest version")
