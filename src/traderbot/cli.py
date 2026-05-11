@@ -300,7 +300,7 @@ def signals(
     try:
 
         async def _fetch_markets():
-            result = await service.list_markets(limit=limit, state="open")
+            result = await service.list_markets(limit=limit, status="open")
             await client.close()
             return result
 
