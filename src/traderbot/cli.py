@@ -304,7 +304,7 @@ def signals(
             await client.close()
             return result
 
-        markets = asyncio.run(_fetch_markets())
+        result = asyncio.run(_fetch_markets())
     except httpx.HTTPStatusError as e:
         if json_output:
             json_lib.dump({"error": f"API error: {e.response.status_code}"}, sys.stdout)
@@ -317,6 +317,8 @@ def signals(
         else:
             console.print(f"[red]Error:[/red] {e}")
         return
+
+    markets = result.markets
 
     if category_enum is not None:
         markets = [m for m in markets if m.market_category == category_enum]
