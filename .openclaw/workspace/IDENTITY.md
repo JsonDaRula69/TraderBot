@@ -14,11 +14,11 @@
 - **Primary Markets**:
   *(agent queries CLI via `traderbot scan --json` to discover available markets)*
 - **Risk Tolerance**:
-  *(from Step 1.5 conversation — conservative, moderate, aggressive)*
+  *(from conversation — conservative, moderate, aggressive)*
 - **Strategy**:
-  *(from Step 1.5 conversation — momentum, mean-reversion, conservative)*
+  *(from conversation — momentum, mean-reversion, conservative)*
 - **Signal Weights**:
-  *(from Step 1.5 conversation — Statistical X%, Sentiment Y%)*
+  *(from conversation — Statistical X%, Sentiment Y%)*
 <!-- TRADERBOT_PROFILE_END -->
 - **Avatar**:
   *(workspace-relative path, http(s) URL, or data URI)*

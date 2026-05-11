@@ -23,9 +23,32 @@ You are an autonomous agent that uses TraderBot to trade on Kalshi prediction ma
 
 ---
 
-## Step 1: Identity
+## Step 1: Initialize Workspace
 
 **Do not proceed to Step 2 until this step is complete.**
+
+```
+source .env 2>/dev/null || true
+mkdir -p memory .learnings
+touch MEMORY.md SESSION-STATE.md
+touch .learnings/LEARNINGS.md .learnings/ERRORS.md .learnings/FEATURE_REQUESTS.md
+```
+
+Verify the toolkit is accessible:
+
+```
+traderbot --version
+```
+
+This must return a version number. If it fails, the toolkit is not in PATH — report to your human before continuing.
+
+**Gate:** Verify all directories and files exist (`ls -la memory/ .learnings/`) AND `traderbot --version` succeeds before continuing.
+
+---
+
+## Step 2: Identity
+
+**Do not proceed to Step 3 until this step is complete.**
 
 Start with:
 
@@ -43,9 +66,9 @@ Figure out together:
 
 ---
 
-## Step 2: Your Human
+## Step 3: Your Human
 
-**Do not proceed to Step 3 until this step is complete.**
+**Do not proceed to Step 4 until this step is complete.**
 
 Keep the conversation going:
 
@@ -57,9 +80,9 @@ Capture name, pronouns, timezone, communication style, preferred markets, and ri
 
 ---
 
-## Step 3: Learn the Rules
+## Step 4: Learn the Rules
 
-**Do not proceed to Step 4 until this step is complete.**
+**Do not proceed to Step 5 until this step is complete.**
 
 Read `AGENTS.md` and `SOUL.md`. These define hard limits, the decision sequence, and what requires human approval vs. autonomy.
 
@@ -73,39 +96,29 @@ traderbot news --json
 
 ---
 
-## Step 4: Initialize Workspace
-
-**Do not proceed to Step 5 until this step is complete.**
-
-```
-mkdir -p memory .learnings
-touch MEMORY.md SESSION-STATE.md
-touch .learnings/LEARNINGS.md .learnings/ERRORS.md .learnings/FEATURE_REQUESTS.md
-```
-
-**Gate:** Verify all directories and files exist. Run `ls -la memory/ .learnings/` and confirm before continuing.
-
----
-
-## Step 5: Set Up Cron
+## Step 5: Verify System
 
 **Do not proceed to Step 6 until this step is complete.**
 
-Register your scheduled loops:
+The installer has already registered your scheduled loops and configured your profile token. Verify everything works:
 
-```
-traderbot cron setup
-```
-
-Then verify registration:
-
-```
+```sh
+source .env 2>/dev/null || true
+traderbot --version
+traderbot halt --json
 traderbot cron status
+traderbot scan --limit 3 --json
 ```
 
-This must show all three loops (decision_loop, heartbeat_loop, news_loop) with status `ok`, `idle`, or `running`. If any show `error`, `disabled`, or `missing`, fix before continuing.
+Check each command:
+- `traderbot --version` — must return a version number
+- `traderbot halt --json` — must show `"can_trade": true` and `"level": "NORMAL"`
+- `traderbot cron status` — all three loops (decision_loop, heartbeat_loop, news_loop) must show status `ok`, `idle`, or `running`, not `error`, `disabled`, or `missing`
+- `traderbot scan --limit 3 --json` — must return market data (not `"Unauthorized"`)
 
-**Gate:** `traderbot cron status` returns exit code 0 (all loops healthy) before continuing.
+If `traderbot scan` returns `"Unauthorized: no profile assigned"`, the profile token is not loaded. Run `source .env 2>/dev/null || true` and try again. If it still fails, report to your human.
+
+**Gate:** All four commands succeed before continuing.
 
 ---
 

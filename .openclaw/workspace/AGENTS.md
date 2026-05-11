@@ -7,6 +7,14 @@ _Home base. Follow these rules every session._
 
 ## Session Startup
 
+**Before running any `traderbot` command, source the environment:**
+
+```
+source .env 2>/dev/null || true
+```
+
+This loads `TRADERBOT_PROFILE_TOKEN` and other required variables. Without it, all traderbot commands will fail with "Unauthorized: no profile assigned."
+
 Use runtime-provided startup context first. That context includes:
 
 - `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`
@@ -195,7 +203,6 @@ Some `traderbot` commands are **user-only** — the agent MUST NOT invoke them a
 | `traderbot profile set-auth` | **User only** | Stores credentials — security boundary |
 | `traderbot halt --force` | **User only** | Emergency override — requires human judgment |
 | `traderbot update` | **User only** | System upgrade — should not happen mid-session |
-| `traderbot bootstrap` | **User only** | Initial setup wizard — one-time operation |
 
 Everything else (scan, analyze, trade, positions, signals, news, sentiment, etc.) is agent-accessible within the risk guard rails defined above.
 
