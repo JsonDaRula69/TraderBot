@@ -2530,8 +2530,18 @@ _OPENCLAW_EXTRA_PATHS = [
 ]
 
 
+def _find_openclaw() -> str | None:
+    """Find openclaw binary, checking expanded PATH locations."""
+    import shutil
+
+    for p in _OPENCLAW_EXTRA_PATHS:
+        candidate = Path(p) / "openclaw"
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("openclaw")
+
+
 def _openclaw_env() -> dict[str, str]:
-    """Build env dict with expanded PATH for finding openclaw."""
     import os
 
     env = os.environ.copy()
@@ -2702,9 +2712,9 @@ def cron_setup(
     results: list[dict[str, str | bool]] = []
 
     if not dry_run:
-        if not shutil.which("openclaw"):
-            console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-            console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
+        if not _find_openclaw():
+            console.print("[red]Error:[/red] openclaw CLI not found")
+            console.print("Install OpenClaw: https://github.com/openclaw/openclaw")
             raise typer.Exit(1)
 
         console.print("[dim]Waiting for OpenClaw gateway...[/dim]")
@@ -2862,9 +2872,9 @@ def cron_status(
 
     console = Console()
 
-    if not shutil.which("openclaw"):
-        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-        console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
+    if not _find_openclaw():
+        console.print("[red]Error:[/red] openclaw CLI not found")
+        console.print("Install OpenClaw: https://github.com/openclaw/openclaw")
         raise typer.Exit(1)
 
     expected_loops: dict[str, dict[str, str]] = {
@@ -3086,7 +3096,7 @@ def uninstall(
 
     # --- OpenClaw cron entries ---
     console.print("[bold]Step 2: Remove OpenClaw cron entries[/bold]")
-    if shutil.which("openclaw"):
+    if _find_openclaw():
         for loop_name in ["decision_loop", "heartbeat_loop", "news_loop"]:
             result = subprocess.run(
                 ["openclaw", "cron", "remove", "--name", loop_name],
