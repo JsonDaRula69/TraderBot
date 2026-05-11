@@ -65,8 +65,8 @@ class MarketService:
     async def list_markets_by_category(
         self,
         category: str,
-        max_series: int = 50,
-        max_events_per_series: int = 10,
+        max_series: int = 10,
+        max_events_per_series: int = 5,
     ) -> MarketListResponse:
         """List open markets for a given category via series→events→markets chain.
 
@@ -74,6 +74,8 @@ class MarketService:
         works around it by: (1) fetching series for the category via /series,
         (2) fetching open events for each series via /events,
         (3) fetching markets for each event via /markets.
+
+        Limits API calls by capping series and events per series.
         """
         from traderbot.kalshi.events import EventsService
 
@@ -82,33 +84,30 @@ class MarketService:
         series_resp = await events_svc.list_series(limit=max_series, category=category)
         all_markets: list[Market] = []
         seen_tickers: set[str] = set()
-        cursor = series_resp.cursor
 
-        while True:
-            for series in series_resp.series:
+        for series in series_resp.series:
+            try:
                 events = await events_svc.get_events(
                     limit=max_events_per_series,
                     series_ticker=series.ticker,
                     state="open",
                 )
-                for event in events:
+            except Exception:
+                continue
+            for event in events:
+                try:
                     result = await self.list_markets(
                         event_ticker=event.event_ticker,
                         limit=100,
                     )
-                    for m in result.markets:
-                        if m.ticker not in seen_tickers:
-                            seen_tickers.add(m.ticker)
-                            m.category = event.category
-                            m.market_category = event.market_category
-                            all_markets.append(m)
-
-            if not cursor:
-                break
-            series_resp = await events_svc.list_series(
-                limit=max_series, category=category, cursor=cursor,
-            )
-            cursor = series_resp.cursor
+                except Exception:
+                    continue
+                for m in result.markets:
+                    if m.ticker not in seen_tickers:
+                        seen_tickers.add(m.ticker)
+                        m.category = event.category
+                        m.market_category = event.market_category
+                        all_markets.append(m)
 
         return MarketListResponse(markets=all_markets)
 
