@@ -78,6 +78,7 @@ class MarketService:
         from traderbot.kalshi.models import CATEGORY_API_NAMES
 
         api_category = CATEGORY_API_NAMES.get(category.lower().replace(" ", "_"), category)
+        target_category = api_category.lower()
 
         # Step 1: Fetch series for the category
         series_params: dict[str, Any] = {
@@ -99,6 +100,7 @@ class MarketService:
         async def _fetch_series_events(series_ticker: str) -> list[dict]:
             params = {
                 "limit": max_events_per_series,
+                "state": "open",
                 "with_nested_markets": "true",
                 "series_ticker": series_ticker,
             }
@@ -120,6 +122,8 @@ class MarketService:
                 continue
             for raw_event in result:
                 event_category = raw_event.get("category")
+                if event_category and event_category.lower() != target_category:
+                    continue
                 event_market_category = (
                     _map_category(event_category) if event_category else None
                 )
