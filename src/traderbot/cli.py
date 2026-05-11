@@ -57,6 +57,13 @@ app.add_typer(auth_app, name="auth")
 update_app = typer.Typer(name="update", help="Check and apply TraderBot updates.")
 app.add_typer(update_app, name="update")
 
+
+@update_app.callback(invoke_without_command=True)
+def update_default(ctx: typer.Context) -> None:
+    """Default to 'check' when no subcommand is given."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(update_check)
+
 cron_app = typer.Typer(name="cron", help="Register cron loops and heartbeat with OpenClaw.")
 app.add_typer(cron_app, name="cron")
 
