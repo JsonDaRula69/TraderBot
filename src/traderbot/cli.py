@@ -191,8 +191,14 @@ def analyze(
 
         client = KalshiClient()
         service = MarketService(client)
-        market = asyncio.run(service.get_market(ticker))
-        orderbook = asyncio.run(service.get_orderbook(ticker))
+
+        async def _fetch():
+            m = await service.get_market(ticker)
+            o = await service.get_orderbook(ticker)
+            await client.close()
+            return m, o
+
+        market, orderbook = asyncio.run(_fetch())
     except Exception:
         if json_output:
             json_lib.dump({}, sys.stdout)
@@ -260,7 +266,13 @@ def signals(
 
         client = KalshiClient()
         service = MarketService(client)
-        markets = asyncio.run(service.list_markets(limit=limit, state="open"))
+
+        async def _fetch_markets():
+            result = await service.list_markets(limit=limit, state="open")
+            await client.close()
+            return result
+
+        markets = asyncio.run(_fetch_markets())
     except Exception:
         if json_output:
             json_lib.dump({"note": "Signal generation requires API connection"}, sys.stdout)
@@ -281,7 +293,15 @@ def signals(
     results: list[dict] = []
     for market in markets:
         try:
-            orderbook = asyncio.run(service.get_orderbook(market.ticker))
+            client2 = KalshiClient()
+            svc2 = MarketService(client2)
+
+            async def _fetch_ob():
+                ob = await svc2.get_orderbook(market.ticker)
+                await client2.close()
+                return ob
+
+            orderbook = asyncio.run(_fetch_ob())
         except Exception:
             continue
 
@@ -371,8 +391,14 @@ def trade(
     try:
         client = KalshiClient()
         service = MarketService(client)
-        market = asyncio.run(service.get_market(ticker))
-        orderbook = asyncio.run(service.get_orderbook(ticker))
+
+        async def _fetch_trade_data():
+            m = await service.get_market(ticker)
+            o = await service.get_orderbook(ticker)
+            await client.close()
+            return m, o
+
+        market, orderbook = asyncio.run(_fetch_trade_data())
         prob = implied_probability(orderbook)
         market_price_cents = prob.mid_price_cents
         estimated_prob = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
@@ -1326,6 +1352,7 @@ def paper(
     import asyncio
     import time
 
+    from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.demo import DemoAdapter
     from traderbot.kalshi.markets import MarketService
     from traderbot.simulation.engine import Signal
@@ -1368,7 +1395,15 @@ def paper(
             while time.time() < end_time:
                 iteration += 1
                 try:
-                    markets = asyncio.run(market_service.list_markets(limit=5, state="open"))
+                    lm_client = KalshiClient()
+                    lm_svc = MarketService(lm_client)
+
+                    async def _fetch_paper_markets():
+                        m = await lm_svc.list_markets(limit=5, status="open")
+                        await lm_client.close()
+                        return m
+
+                    markets = asyncio.run(_fetch_paper_markets())
                 except Exception:
                     console.print("[yellow]Could not fetch markets, retrying...[/yellow]")
                     time.sleep(30)
@@ -1376,7 +1411,15 @@ def paper(
 
                 for market in markets:
                     try:
-                        orderbook = asyncio.run(market_service.get_orderbook(market.ticker))
+                        ob_client = KalshiClient()
+                        ob_svc = MarketService(ob_client)
+
+                        async def _fetch_paper_ob():
+                            ob = await ob_svc.get_orderbook(market.ticker)
+                            await ob_client.close()
+                            return ob
+
+                        orderbook = asyncio.run(_fetch_paper_ob())
 
                         prices = [int(p) for p in market.outcome_prices]
                         from traderbot.kalshi.models import Trade as _Trade

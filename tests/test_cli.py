@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timezone
 from typing import ClassVar
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -398,6 +398,8 @@ class TestAnalyze:
     @pytest.mark.unit
     def test_analyze_with_market(self):
         """Mock get_market and get_orderbook, verify Rich output includes market info and implied probability."""
+        from unittest.mock import AsyncMock
+
         from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel
 
         market = Market(
@@ -415,15 +417,17 @@ class TestAnalyze:
             no_bids=[OrderBookLevel(price=40, size=80)],
         )
 
+        mock_client = MagicMock()
+        mock_client.close = AsyncMock()
         with (
-            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_market",
-                return_value=market,
+                new=AsyncMock(return_value=market),
             ),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_orderbook",
-                return_value=orderbook,
+                new=AsyncMock(return_value=orderbook),
             ),
         ):
             result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000"])
@@ -452,15 +456,17 @@ class TestAnalyze:
             no_bids=[OrderBookLevel(price=40, size=80)],
         )
 
+        mock_client = MagicMock()
+        mock_client.close = AsyncMock()
         with (
-            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_market",
-                return_value=market,
+                new=AsyncMock(return_value=market),
             ),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_orderbook",
-                return_value=orderbook,
+                new=AsyncMock(return_value=orderbook),
             ),
         ):
             result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000", "--json"])
