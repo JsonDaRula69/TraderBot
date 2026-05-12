@@ -77,14 +77,11 @@ async def test_coincap_crypto_assets() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ballotpedia_rss_feed() -> None:
+async def test_ballotpedia_deprecated() -> None:
     _requires_internet()
     na = NewsAggregator()
     results = await na._fetch_ballotpedia(limit=5)
-    if not results:
-        pytest.skip("Ballotpedia RSS returned no items")
-    _assert_datapoint(results[0], NewsSource.BALLOTPEDIA)
-    assert results[0].category in (NewsCategory.ELECTIONS, NewsCategory.POLITICS)
+    assert results == [], "Ballotpedia RSS is deprecated and should return empty"
 
 
 @pytest.mark.asyncio

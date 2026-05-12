@@ -21,20 +21,20 @@ from traderbot.profiles.config import resolve_fred_key, resolve_openweather_key
 logger = logging.getLogger(__name__)
 
 NEWSAPI_CATEGORY_QUERIES: dict[NewsCategory, str] = {
-    NewsCategory.ECONOMICS: "economy GDP inflation federal reserve interest rates",
-    NewsCategory.POLITICS: "politics election congress president legislation",
-    NewsCategory.WEATHER: "weather hurricane tornado flood temperature forecast storm",
-    NewsCategory.SPORTS: "sports NFL NBA MLB NHL soccer championship",
-    NewsCategory.SCIENCE_AND_TECHNOLOGY: "technology science AI software space research",
-    NewsCategory.CRYPTO: "cryptocurrency bitcoin ethereum crypto blockchain",
-    NewsCategory.COMMODITIES: "commodities oil gold copper wheat futures",
-    NewsCategory.COMPANIES: "company earnings stocks IPO merger acquisition",
-    NewsCategory.ELECTIONS: "election vote polling primary ballot campaign",
-    NewsCategory.ENTERTAINMENT: "entertainment movie music Oscar Grammy box office",
-    NewsCategory.FINANCIALS: "financial banking markets stocks trading NASDAQ S&P",
-    NewsCategory.HEALTH: "health mental health wellness psychology therapy",
-    NewsCategory.SOCIAL: "social community trending viral breaking news",
-    NewsCategory.MENTIONS: "trending viral celebrity mention",
+    NewsCategory.ECONOMICS: "economy OR GDP OR inflation OR \"federal reserve\" OR \"interest rates\"",
+    NewsCategory.POLITICS: "politics OR election OR congress OR president OR legislation",
+    NewsCategory.WEATHER: "weather OR hurricane OR tornado OR flood OR forecast OR storm",
+    NewsCategory.SPORTS: "sports OR NFL OR NBA OR MLB OR NHL OR soccer OR championship",
+    NewsCategory.SCIENCE_AND_TECHNOLOGY: "technology OR AI OR software OR \"space research\" OR science",
+    NewsCategory.CRYPTO: "cryptocurrency OR bitcoin OR ethereum OR blockchain",
+    NewsCategory.COMMODITIES: "commodities OR oil OR gold OR copper OR wheat OR futures",
+    NewsCategory.COMPANIES: "\"company earnings\" OR stocks OR IPO OR merger OR acquisition",
+    NewsCategory.ELECTIONS: "election OR vote OR polling OR primary OR ballot OR campaign",
+    NewsCategory.ENTERTAINMENT: "entertainment OR movie OR music OR Oscar OR Grammy OR \"box office\"",
+    NewsCategory.FINANCIALS: "financial OR banking OR markets OR trading OR NASDAQ OR \"S&P\"",
+    NewsCategory.HEALTH: "health OR wellness OR psychology OR therapy OR mental health",
+    NewsCategory.SOCIAL: "\"breaking news\" OR community OR trending OR viral",
+    NewsCategory.MENTIONS: "trending OR celebrity OR mention OR viral",
 }
 
 REDDIT_CATEGORY_SUBREDDITS: dict[NewsCategory, list[str]] = {
@@ -429,6 +429,8 @@ class NewsAggregator:
                 continue
             logger.debug("Fetching category %s with query=%r per_cat=%d", cat.value, query, per_cat)
             cat_items = await self._fetch_everything(query, per_cat)
+            for item in cat_items:
+                item.category = cat
             logger.debug("Category %s returned %d items", cat.value, len(cat_items))
             items.extend(cat_items)
 
@@ -964,75 +966,13 @@ class NewsAggregator:
         category_filter: list[NewsCategory] | None = None,
         limit: int = 20,
     ) -> list[DataPoint]:
-        """Fetch election/politics data from Ballotpedia RSS feeds."""
-        if category_filter is not None:
-            allowed = {NewsCategory.ELECTIONS, NewsCategory.POLITICS}
-            if not allowed.intersection(category_filter):
-                return []
+        """Fetch election/politics data from Ballotpedia — DEPRECATED.
 
-        results: list[DataPoint] = []
-
-        for feed_url in _BALLOTPEDIA_FEEDS:
-            try:
-                response = await self._client.get(feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"})
-
-                if response.status_code != 200:
-                    logger.warning(
-                        "Ballotpedia RSS returned HTTP %d, skipping",
-                        response.status_code,
-                    )
-                    continue
-
-                parsed = feedparser.parse(response.text)
-
-                for entry in parsed.entries[:limit]:
-                    try:
-                        title = entry.get("title", "") or ""
-                        summary = entry.get("summary", "") or ""
-                        link = entry.get("link", "") or ""
-
-                        published_at = datetime.now(tz=UTC)
-                        if hasattr(entry, "published_parsed") and entry.published_parsed:
-                            from time import mktime
-
-                            published_at = datetime.fromtimestamp(
-                                mktime(entry.published_parsed), tz=UTC
-                            )
-
-                        hash_id = hashlib.md5(link.encode()).hexdigest()[:12]
-
-                        text = f"{title} {summary}".lower()
-                        if "politics" in text:
-                            cat = NewsCategory.POLITICS
-                        else:
-                            cat = NewsCategory.ELECTIONS
-
-                        results.append(
-                            DataPoint(
-                                id=f"ballotpedia-{hash_id}",
-                                source=NewsSource.BALLOTPEDIA,
-                                category=cat,
-                                title=title,
-                                data={"summary": summary, "link": link},
-                                timestamp=published_at,
-                                ticker_refs=[],
-                                metadata={
-                                    "feed_url": feed_url,
-                                    "source_display": "Ballotpedia",
-                                },
-                            )
-                        )
-                    except Exception:
-                        logger.warning(
-                            "Skipping malformed Ballotpedia entry from %s", feed_url
-                        )
-                        continue
-
-            except Exception:
-                logger.warning("Ballotpedia RSS fetch failed for %s, continuing", feed_url)
-                continue
-
-        return results[:limit]
+        Ballotpedia no longer serves RSS at /feed/ (redirects to MediaWiki page).
+        This method returns empty. Use NewsAPI with ELECTIONS/POLITICS category instead.
+        """
+        logger.warning("Ballotpedia RSS is no longer available (/feed/ redirects to wiki page), returning empty")
+        return []
 
     async def _fetch_coincap(
         self,

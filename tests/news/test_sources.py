@@ -163,29 +163,10 @@ async def test_coincap_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ballotpedia_success() -> None:
-    """Ballotpedia returns DataPoints from RSS feed."""
-    rss_xml = (
-        '<?xml version="1.0"?>\n'
-        '<rss version="2.0"><channel>\n'
-        '<item>\n'
-        '<title>2026 Primary Election Results</title>\n'
-        '<link>https://ballotpedia.org/article</link>\n'
-        '<description>Election coverage</description>\n'
-        '<pubDate>Tue, 12 May 2026 12:00:00 GMT</pubDate>\n'
-        '</item>\n'
-        '</channel></rss>'
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text=rss_xml)
-
-    na = NewsAggregator(http_client=_mock_client(handler))
-    results = await na._fetch_ballotpedia(limit=2)
-    assert len(results) > 0
-    dp = results[0]
-    assert dp.source == NewsSource.BALLOTPEDIA
-    assert dp.category in ("elections", "politics")
+async def test_ballotpedia_deprecated() -> None:
+    """Ballotpedia RSS is deprecated — returns empty list."""
+    results = await NewsAggregator()._fetch_ballotpedia(limit=2)
+    assert results == []
 
 
 # ============================================================
