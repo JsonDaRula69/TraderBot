@@ -625,6 +625,32 @@ setup_api_credentials() {
         echo "Skipped. Set later with: traderbot auth set-key reddit client_id"
     fi
 
+    # --- OpenWeatherMap (optional) ---
+    echo
+    echo "--- OpenWeatherMap (optional) ---"
+    echo "Free tier: 1,000 calls/day. Register at https://openweathermap.org/api"
+    local owm_key=""
+    read -r -p "OpenWeatherMap API key (press Enter to skip): " owm_key
+    if [[ -n "$owm_key" ]]; then
+        _env_set "$env_file" "OPENWEATHER_API_KEY" "$owm_key"
+        echo "OpenWeatherMap key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key openweathermap api_key"
+    fi
+
+    # --- FRED (optional) ---
+    echo
+    echo "--- FRED (optional) ---"
+    echo "Free tier: 120 req/min. Register at https://fred.stlouisfed.org/docs/api/api_key.html"
+    local fred_key=""
+    read -r -p "FRED API key (press Enter to skip): " fred_key
+    if [[ -n "$fred_key" ]]; then
+        _env_set "$env_file" "FRED_API_KEY" "$fred_key"
+        echo "FRED key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key fred api_key"
+    fi
+
     echo
     echo "API credential setup complete."
     echo "Credentials written to ${env_file}"

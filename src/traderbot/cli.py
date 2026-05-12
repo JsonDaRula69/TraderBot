@@ -1739,13 +1739,15 @@ def auth_login() -> None:
         )
         raise typer.Exit(code=1)
 
-    services = ["kalshi", "voyage", "newsapi", "twitter", "reddit"]
+    services = ["kalshi", "voyage", "newsapi", "twitter", "reddit", "openweathermap", "fred"]
     service_keys = {
         "kalshi": ["api_key", "private_key_pem"],
         "voyage": ["api_key"],
         "newsapi": ["api_key"],
         "twitter": ["api_key"],
         "reddit": ["client_id", "client_secret"],
+        "openweathermap": ["api_key"],
+        "fred": ["api_key"],
     }
 
     for service in services:

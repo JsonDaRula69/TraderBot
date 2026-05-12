@@ -54,6 +54,15 @@
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
       "updated_at": "2026-05-12T18:16:13.459Z"
+    },
+    "todo:13": {
+      "task_key": "todo:13",
+      "task_label": "13",
+      "task_title": "Workspace Docs Update — TOOLS.md + AGENTS.md",
+      "session_id": "ses_1e28fbbc4ffezOGOjXyNZ22VNq",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-12T18:36:00.532Z"
     }
   }
 }
