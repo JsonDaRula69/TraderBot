@@ -1,0 +1,6 @@
+- Added DataSourcesConfig dataclass to centralize source API keys/settings.
+- SOURCE_CATEGORY_COVERAGE maps all 11 sources to their NewsCategory coverage.
+- SOURCE_REQUIRES_KEY frozenset flags key-requiring sources.
+- NewsAggregator.__init__ accepts config while keeping legacy params; config takes precedence when param not explicitly passed.
+- requires_api_key helper added to NewsAggregator.
+- Verified backward compat via PYTHONPATH=src python3 one-liner (legacy ok, config ok).
