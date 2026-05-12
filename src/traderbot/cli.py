@@ -25,6 +25,17 @@ err_console = Console(stderr=True)
 def _require_profile(json_output: bool = False) -> "TradingProfile":
     """Return active profile or exit with unauthorized error."""
     from traderbot.profiles.runtime import get_current_profile
+    from traderbot.wal import get_workspace_dir
+
+    workspace = get_workspace_dir()
+    bootstrap_file = workspace / "BOOTSTRAP.md"
+    if bootstrap_file.exists():
+        msg = "Bootstrap incomplete. Complete BOOTSTRAP.md steps first, then delete it."
+        if json_output:
+            json_lib.dump({"error": msg}, sys.stdout)
+        else:
+            err_console.print(f"[red]Bootstrap required:[/red] {msg}")
+        raise typer.Exit(code=1)
 
     profile = get_current_profile()
     if profile is not None:
@@ -818,13 +829,13 @@ def bootstrap(
                             console.print(f"[green]Stored in keyring:[/green] {service_name}.{key}")
                         except (KeyringUnavailableError, Exception) as exc:
                             env_key = f"{service_name.upper()}_{key.upper()}"
-                            env_lines.append(f"{env_key}={value}")
+                            env_lines.append(f"export {env_key}={value}")
                             console.print(
                                 f"[yellow]Keyring failed ({exc}), saved to .env:[/yellow] {env_key}"
                             )
                     else:
                         env_key = f"{service_name.upper()}_{key.upper()}"
-                        env_lines.append(f"{env_key}={value}")
+                        env_lines.append(f"export {env_key}={value}")
                         console.print(f"[green]Saved to .env:[/green] {env_key}")
 
         if env_lines:
@@ -2552,7 +2563,7 @@ def _interactive_profile_create(
                 profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
                 kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
                 kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
-                env_lines = [f"{kalshi_api_env}={api_key_val}", f"{kalshi_key_env}={pem_val}"]
+                env_lines = [f"export {kalshi_api_env}={api_key_val}", f"export {kalshi_key_env}={pem_val}"]
                 new_content = existing_env.rstrip() + "\n" + "\n".join(env_lines) + "\n"
                 env_path.write_text(new_content)
                 os.chmod(env_path, 0o600)
@@ -2574,7 +2585,7 @@ def _interactive_profile_create(
                 profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
                 kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
                 kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
-                env_lines = [f"{kalshi_api_env}={api_key}", f"{kalshi_key_env}={private_key}"]
+                env_lines = [f"export {kalshi_api_env}={api_key}", f"export {kalshi_key_env}={private_key}"]
                 new_content = existing_env.rstrip() + "\n" + "\n".join(env_lines) + "\n"
                 env_path.write_text(new_content)
                 os.chmod(env_path, 0o600)
@@ -2729,8 +2740,8 @@ def profile_create(
                 kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
                 kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
 
-                env_lines.append(f"{kalshi_api_env}={api_key}")
-                env_lines.append(f"{kalshi_key_env}={private_key}")
+                env_lines.append(f"export {kalshi_api_env}={api_key}")
+                env_lines.append(f"export {kalshi_key_env}={private_key}")
                 new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
                 env_path.write_text(new_content)
                 os.chmod(env_path, 0o600)
@@ -2780,7 +2791,7 @@ def profile_create(
                 profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
                 kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
                 kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
-                env_lines = [f"{kalshi_api_env}={api_key_val}", f"{kalshi_key_env}={pem_val}"]
+                env_lines = [f"export {kalshi_api_env}={api_key_val}", f"export {kalshi_key_env}={pem_val}"]
                 new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
                 env_path.write_text(new_content)
                 os.chmod(env_path, 0o600)

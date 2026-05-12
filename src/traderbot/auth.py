@@ -225,15 +225,23 @@ class AuthManager:
 
     def _env_file_get(self, env_keys: list[str]) -> tuple[str | None, str | None]:
         """Read a value from .env file when not in process environment."""
-        env_path = Path.home() / ".traderbot" / ".env"
+        from traderbot.paths import get_data_dir
+
+        env_path = get_data_dir() / ".env"
         if not env_path.is_file():
             return None, None
         for env_key in env_keys:
             prefix = f"{env_key}="
+            export_prefix = f"export {env_key}="
             try:
                 for line in env_path.read_text(encoding="utf-8").splitlines():
-                    if line.startswith(prefix) and not line.lstrip().startswith("#"):
-                        return env_key, line[len(prefix):].strip()
+                    stripped = line.lstrip()
+                    if stripped.startswith("#"):
+                        continue
+                    if stripped.startswith(export_prefix):
+                        return env_key, stripped[len(export_prefix):].strip()
+                    if stripped.startswith(prefix):
+                        return env_key, stripped[len(prefix):].strip()
             except Exception:
                 continue
         return None, None

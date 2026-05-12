@@ -166,7 +166,7 @@ The following environment variables are available:
     # Write token to workspace .env so agent shell commands can source it
     if token:
         env_path = agent_dir / ".env"
-        env_line = f"TRADERBOT_PROFILE_TOKEN={token}\n"
+        env_line = f"export TRADERBOT_PROFILE_TOKEN={token}\n"
         if env_path.exists():
             existing = env_path.read_text()
             if "TRADERBOT_PROFILE_TOKEN=" in existing:

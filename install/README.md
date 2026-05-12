@@ -44,7 +44,7 @@ sudo nano /etc/systemd/system/traderbot-agent@.service
 Replace `<PROFILE_TOKEN>` with your actual profile token:
 
 ```ini
-Environment=TRADERBOT_PROFILE_TOKEN=your_actual_token_here
+Environment="TRADERBOT_PROFILE_TOKEN=your_actual_token_here"
 ```
 
 **Important**: Future versions will include an installer script that automates this step.

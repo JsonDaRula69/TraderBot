@@ -1222,7 +1222,7 @@ print('')
         # Write profile token to workspace .env so the agent can access it
         if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]]; then
             local env_file="${agent_ws_dir}/.env"
-            local env_line="TRADERBOT_PROFILE_TOKEN=${TRADERBOT_PROFILE_TOKEN}"
+            local env_line="export TRADERBOT_PROFILE_TOKEN=${TRADERBOT_PROFILE_TOKEN}"
             if [[ -f "$env_file" ]]; then
                 if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$env_file" 2>/dev/null; then
                     _sed_inplace "s|^TRADERBOT_PROFILE_TOKEN=.*|${env_line}|" "$env_file"

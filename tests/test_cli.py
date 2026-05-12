@@ -50,7 +50,11 @@ class TestNewsCommand:
         assert "--source" in result.output
         assert "--json" in result.output
 
-    def test_news_no_api_keys_json(self):
+    def test_news_no_api_keys_json(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("NEWSAPI_API_KEY", raising=False)
+        monkeypatch.delenv("NEWSAPI_KEY", raising=False)
+        monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+        (tmp_path / ".env").write_text("# empty\n")
         with patch.dict("os.environ", {}, clear=True):
             result = runner.invoke(app, ["news", "--json"])
             assert result.exit_code == 0
@@ -58,7 +62,11 @@ class TestNewsCommand:
             assert "error" in data
             assert "API keys" in data["error"]
 
-    def test_news_no_api_keys_rich(self):
+    def test_news_no_api_keys_rich(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("NEWSAPI_API_KEY", raising=False)
+        monkeypatch.delenv("NEWSAPI_KEY", raising=False)
+        monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+        (tmp_path / ".env").write_text("# empty\n")
         with patch.dict("os.environ", {}, clear=True):
             result = runner.invoke(app, ["news"])
             assert result.exit_code == 0

@@ -65,8 +65,13 @@ def test_resolve_with_profile_credentials(test_profile: TradingProfile, mock_key
     assert "BEGIN PRIVATE KEY" in private_key
 
 
-def test_resolve_fallback_to_global(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
+def test_resolve_fallback_to_global(test_profile: TradingProfile, mock_keyring: MockKeyring, tmp_path, monkeypatch) -> None:
     """Profile without credentials falls back to global AuthManager."""
+    monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PATH", raising=False)
+    monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+
     # Set global credentials
     global_auth = AuthManager(keyring_module=mock_keyring, keyring_available=True)
     global_auth.set_credential("kalshi", "api_key", "global-key")
@@ -78,15 +83,27 @@ def test_resolve_fallback_to_global(test_profile: TradingProfile, mock_keyring: 
     assert "BEGIN PRIVATE KEY" in private_key
 
 
-def test_resolve_no_credentials_raises(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
+def test_resolve_no_credentials_raises(test_profile: TradingProfile, mock_keyring: MockKeyring, tmp_path, monkeypatch) -> None:
     """No credentials anywhere raises ValueError."""
-    # Neither profile nor global has credentials
+    monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PATH", raising=False)
+    monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+
+    # Write empty .env to tmp_path so _env_file_get finds no credentials
+    (tmp_path / ".env").write_text("# empty\n")
+
     with pytest.raises(ValueError, match="No Kalshi credentials configured"):
         resolve_kalshi_credentials(test_profile, global_keyring=mock_keyring, profile_keyring=mock_keyring)
 
 
-def test_resolve_none_profile_uses_global(mock_keyring: MockKeyring) -> None:
+def test_resolve_none_profile_uses_global(mock_keyring: MockKeyring, tmp_path, monkeypatch) -> None:
     """None profile falls back to global credentials."""
+    monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PATH", raising=False)
+    monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+
     # Set global credentials
     global_auth = AuthManager(keyring_module=mock_keyring, keyring_available=True)
     global_auth.set_credential("kalshi", "api_key", "global-key")
@@ -98,8 +115,13 @@ def test_resolve_none_profile_uses_global(mock_keyring: MockKeyring) -> None:
     assert "BEGIN PRIVATE KEY" in private_key
 
 
-def test_resolve_profile_overrides_global(test_profile: TradingProfile, mock_keyring: MockKeyring) -> None:
+def test_resolve_profile_overrides_global(test_profile: TradingProfile, mock_keyring: MockKeyring, tmp_path, monkeypatch) -> None:
     """Profile credentials override global credentials."""
+    monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+    monkeypatch.delenv("KALSHI_PRIVATE_KEY_PATH", raising=False)
+    monkeypatch.setattr("traderbot.paths.get_data_dir", lambda: tmp_path)
+
     # Set both global and profile credentials
     global_auth = AuthManager(keyring_module=mock_keyring, keyring_available=True)
     global_auth.set_credential("kalshi", "api_key", "global-key")

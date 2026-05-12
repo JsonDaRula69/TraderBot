@@ -38,10 +38,12 @@ mkdir -p "${HOME}/.traderbot"
 touch "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "" "s|^TRADERBOT_PROFILE_TOKEN=.*|TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
+if grep -q "^export TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+    sed -i "" "s|^export TRADERBOT_PROFILE_TOKEN=.*|export TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
+elif grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+    sed -i "" "s|^TRADERBOT_PROFILE_TOKEN=.*|export TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
 else
-    echo "TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
+    echo "export TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
 fi
 
 PLIST_FILE="/Library/LaunchDaemons/com.traderbot.agent.$AGENT_NAME.plist"
