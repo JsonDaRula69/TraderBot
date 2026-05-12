@@ -54,6 +54,7 @@ Capture name, pronouns, timezone, communication style, preferred markets, and ri
 Read `AGENTS.md` and `SOUL.md`. These define hard limits, the decision sequence, and what requires human approval vs. autonomy. Ask questions if anything's unclear.
 
 ```
+source .env 2>/dev/null || true
 traderbot --help
 traderbot scan --json
 traderbot news --json
@@ -71,10 +72,11 @@ touch .learnings/LEARNINGS.md .learnings/ERRORS.md .learnings/FEATURE_REQUESTS.m
 
 Register your scheduled loops:
 ```
+source .env 2>/dev/null || true
 traderbot cron setup
 ```
 
-This sets up the decision loop (market hours) and heartbeat loop (every 6 hours). Read `HEARTBEAT.md`, then run your first heartbeat:
+This sets up the decision loop (every 5 minutes) and heartbeat loop (every 30 minutes). Read `HEARTBEAT.md`, then run your first heartbeat:
 ```
 traderbot heartbeat --json
 ```

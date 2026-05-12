@@ -7,6 +7,14 @@ _Home base. Follow these rules every session._
 
 ## Session Startup
 
+**Before running any `traderbot` command, source the environment:**
+
+```
+source .env 2>/dev/null || true
+```
+
+This loads `TRADERBOT_PROFILE_TOKEN` and other required variables. Without it, all traderbot commands will fail with "Unauthorized: no profile assigned."
+
 Use runtime-provided startup context first. That context includes:
 
 - `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`
@@ -272,11 +280,11 @@ Agent queries available markets via CLI tool and filters news based on enabled c
 
 `traderbot news --source all` queries ALL relevant sources in parallel via `asyncio.gather`. Not all sources produce the same output type:
 
-- **`NewsItem`** (articles, headlines): NewsAPI, Reddit, Ballotpedia
-- **`DataPoint`** (structured numeric data): Open-Meteo (weather forecasts), CoinGecko (crypto prices), TheSportsDB (sports scores), CoinCap (crypto prices), OpenWeatherMap (weather), FRED (economic indicators), Google Trends (trending topics)
+- **`NewsItem`** (articles, headlines): NewsAPI, Reddit
+- **`DataPoint`** (structured numeric data): Open-Meteo (weather forecasts), CoinGecko (crypto prices), TheSportsDB (sports scores), OpenWeatherMap (weather), FRED (economic indicators), Google Trends (trending topics)
 
 When comparing perspectives across sources:
-- Crypto: Compare CoinGecko vs CoinCap vs NewsAPI for price + sentiment triangulation
+- Crypto: Compare CoinGecko vs NewsAPI for price + sentiment triangulation
 - Weather: Compare Open-Meteo (forecast) vs OpenWeatherMap (current conditions) vs NewsAPI (news articles)
 - Economics: Compare FRED (raw indicator data) vs NewsAPI (news interpretation)
 

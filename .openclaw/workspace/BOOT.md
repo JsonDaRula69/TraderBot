@@ -44,6 +44,7 @@ After confirming the CLI is available, run the following checks in order to esta
 - Read `.learnings/ERRORS.md` to check for unresolved errors from last session
 
 ### 8. News & Sentiment (if markets are tracked)
+- Run `source .env 2>/dev/null || true` before any traderbot command
 - If SESSION-STATE.md lists tracked markets, run `traderbot news --json` to fetch latest news
 - For each tracked ticker, run `traderbot sentiment <TICKER> --json` to get current sentiment
 

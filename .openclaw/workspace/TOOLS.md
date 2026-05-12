@@ -51,7 +51,7 @@
 | `traderbot profile assign NAME --token TOKEN` | Assign token to agent |
 | `traderbot profile revoke TOKEN` | Revoke a token |
 | `traderbot profile assignments --json` | List token assignments |
-| `traderbot profile update NAME --risk-multiplier 0.9` | Update profile parameters |
+| `traderbot profile update NAME --risk-multiplier 0.9 --min-liquidity 500 --enabled-categories weather,sports` | Update profile parameters |
 | `traderbot profile discover-agents --json` | Map OpenClaw agents to profiles |
 | `traderbot profile set-auth NAME --provider kalshi` | Set per-profile credentials |
 | `traderbot profile auth NAME --json` | Check profile auth status |
@@ -67,7 +67,7 @@
 
 ## Market Categories
 
-economics, politics, weather, sports, culture, technology, science, crypto, commodities, companies, elections, entertainment, financials, health, mentions, social (16 values)
+economics, politics, weather, sports, science_and_technology, crypto, commodities, companies, elections, entertainment, financials, health, mentions, miscellaneous (14 values — matches Kalshi API)
 
 Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories apply.
 
@@ -89,7 +89,7 @@ The `traderbot news` command fetches from multiple sources. Use `--source` to se
 Use `--source all` to query all matching sources in parallel.
 
 Weather sources (Open-Meteo, OpenWeatherMap) return structured `DataPoint` objects with forecasts in Fahrenheit.
-Crypto sources (CoinGecko, CoinCap) return `DataPoint` objects with prices in integer cents.
+Crypto sources (CoinGecko) return `DataPoint` objects with prices in integer cents.
 FRED returns economic indicators as `DataPoint` objects.
 Google Trends returns trending topics as best-effort `DataPoint` objects.
 
@@ -107,9 +107,9 @@ Or set environment variables: `OPENWEATHER_API_KEY`, `FRED_API_KEY`
 
 Not all sources cover all categories. Sources are only queried for categories they support:
 - **Weather**: Open-Meteo, OpenWeatherMap, NewsAPI, Reddit
-- **Crypto**: CoinGecko, CoinCap, NewsAPI, Reddit
+- **Crypto**: CoinGecko, NewsAPI, Reddit
 - **Sports**: TheSportsDB, NewsAPI, Reddit
-- **Elections/Politics**: Ballotpedia, NewsAPI, Reddit
+- **Elections/Politics**: NewsAPI, Reddit
 - **Economics/Financials**: FRED, NewsAPI, Reddit
 - **Mentions/Social**: Google Trends, CoinGecko, NewsAPI, Reddit
 - **All other categories**: NewsAPI, Reddit
