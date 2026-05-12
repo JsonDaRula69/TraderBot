@@ -1060,7 +1060,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): integrate all new sources into CLI with parallel fetch`
   - Files: `src/traderbot/cli.py`, `src/traderbot/news/sources.py`
 
-- [ ] 13. Workspace Docs Update — TOOLS.md + AGENTS.md
+- [x] 13. Workspace Docs Update — TOOLS.md + AGENTS.md
 
   **What to do**:
   - Update `.openclaw/workspace/TOOLS.md`: Add table of all 11 sources with source name, CLI flag value, categories covered, API key requirement, and free tier limits
@@ -1112,7 +1112,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `docs(workspace): update TOOLS.md and AGENTS.md with new data sources`
   - Files: `.openclaw/workspace/TOOLS.md`, `.openclaw/workspace/AGENTS.md`
 
-- [ ] 14. Live Integration Tests
+- [x] 14. Live Integration Tests
 
   **What to do**:
   - Add `tests/news/test_live_sources.py` with `@pytest.mark.live` tests for each of the 8 new sources
@@ -1167,7 +1167,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `test(news): add live integration tests for all 8 new sources`
   - Files: `tests/news/test_live_sources.py`, `tests/news/conftest.py`
 
-- [ ] 15. Unit Tests with Mocks
+- [x] 15. Unit Tests with Mocks
 
   **What to do**:
   - Update `tests/news/test_sources.py` (or create if not exists) with unit tests for all 8 new sources using mocked httpx responses

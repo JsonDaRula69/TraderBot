@@ -262,4 +262,20 @@ All 16 supported market categories (from `kalshi.models.MarketCategory`):
 | `SOCIAL` | social | Social media and viral events |
 
 Agent queries available markets via CLI tool and filters news based on enabled categories.
+
+## Multi-Source Data Fetching
+
+`traderbot news --source all` queries ALL relevant sources in parallel via `asyncio.gather`. Not all sources produce the same output type:
+
+- **`NewsItem`** (articles, headlines): NewsAPI, Reddit, Ballotpedia
+- **`DataPoint`** (structured numeric data): Open-Meteo (weather forecasts), CoinGecko (crypto prices), TheSportsDB (sports scores), CoinCap (crypto prices), OpenWeatherMap (weather), FRED (economic indicators), Google Trends (trending topics)
+
+When comparing perspectives across sources:
+- Crypto: Compare CoinGecko vs CoinCap vs NewsAPI for price + sentiment triangulation
+- Weather: Compare Open-Meteo (forecast) vs OpenWeatherMap (current conditions) vs NewsAPI (news articles)
+- Economics: Compare FRED (raw indicator data) vs NewsAPI (news interpretation)
+
+Google Trends is **best-effort only** — it requires `pytrends` (optional dependency) and Google may block scraping. It may return empty results. Treat it as a supplementary signal, never a primary source.
+
+API key sources (OpenWeatherMap, FRED, NewsAPI) skip gracefully when keys are missing — they log a warning and return empty results rather than crashing.
 <!-- TRADERBOT_RULES_END -->

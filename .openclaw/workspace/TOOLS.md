@@ -71,6 +71,51 @@ economics, politics, weather, sports, culture, technology, science, crypto, comm
 
 Used with `--category` flag on `scan` and `signals`. Profile `enabled_categories` restricts which categories apply.
 
+## Data Sources
+
+The `traderbot news` command fetches from multiple sources. Use `--source` to select:
+
+| Source | CLI Flag | Categories | Key Required | Free Tier |
+|---|---|---|---|---|
+| NewsAPI | `--source newsapi` | All 14 | ✅ Required | 100 req/day |
+| Reddit | `--source reddit` | All 14 | ❌ None | No rate limit documented |
+| Open-Meteo | `--source open-meteo` | Weather | ❌ None | 10,000 req/day |
+| CoinGecko | `--source coingecko` | Crypto, Mentions | ❌ None | 30 req/min |
+| TheSportsDB | `--source thesportsdb` | Sports | ❌ None (key "3") | 30 req/min |
+| CoinCap | `--source coincap` | Crypto | ❌ None | 200 req/min |
+| OpenWeatherMap | `--source openweathermap` | Weather | ✅ Required | 1,000 req/day |
+| Ballotpedia | `--source ballotpedia` | Elections, Politics | ❌ None | RSS — polite crawl |
+| FRED | `--source fred` | Economics, Financials | ✅ Required | 120 req/min |
+| Google Trends | `--source google-trends` | Mentions, Social | ❌ None (optional pytrends) | Best-effort only |
+
+Use `--source all` to query all matching sources in parallel.
+
+Weather sources (Open-Meteo, OpenWeatherMap) return structured `DataPoint` objects with forecasts in Fahrenheit.
+Crypto sources (CoinGecko, CoinCap) return `DataPoint` objects with prices in integer cents.
+FRED returns economic indicators as `DataPoint` objects.
+Google Trends returns trending topics as best-effort `DataPoint` objects.
+
+### Setting Up API Keys
+
+```
+traderbot auth login                        # Interactive setup for ALL services
+traderbot auth set-key openweathermap api_key  # Set OpenWeatherMap key
+traderbot auth set-key fred api_key            # Set FRED key
+```
+
+Or set environment variables: `OPENWEATHER_API_KEY`, `FRED_API_KEY`
+
+### Category Coverage
+
+Not all sources cover all categories. Sources are only queried for categories they support:
+- **Weather**: Open-Meteo, OpenWeatherMap, NewsAPI, Reddit
+- **Crypto**: CoinGecko, CoinCap, NewsAPI, Reddit
+- **Sports**: TheSportsDB, NewsAPI, Reddit
+- **Elections/Politics**: Ballotpedia, NewsAPI, Reddit
+- **Economics/Financials**: FRED, NewsAPI, Reddit
+- **Mentions/Social**: Google Trends, CoinGecko, NewsAPI, Reddit
+- **All other categories**: NewsAPI, Reddit
+
 ## Modules
 
 - **kalshi** — Exchange adapter: markets, trading, client, history
