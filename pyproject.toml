@@ -79,5 +79,6 @@ addopts = "-v --tb=short"
 markers = [
     "unit: unit tests (no external dependencies)",
     "integration: integration tests (mocked external services)",
+    "live: live integration tests (real API calls, skip on missing keys)",
     "slow: slow tests (skipped in fast runs)",
 ]
