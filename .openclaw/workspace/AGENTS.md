@@ -92,7 +92,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 1. Statistical indicators first (signals module)
 2. Cross-reference with news sentiment (when available)
 3. The toolkit computes position sizing; agent provides confidence and estimated probability
-4. **Run `traderbot trade` — this runs the full risk pipeline (`evaluate_trade`), enforcing ALL of:**
+4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` (your forecast probability) and `--confidence` (your certainty). Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades.
     - Divide portfolio equally across enabled markets
    - Circuit breaker status (SLOW/HALT/FULL_STOP blocks trades)
    - Daily loss limits
@@ -117,6 +117,8 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - Modify risk limits — they're immutable
 - Trade outside guard rails — ever
 - Skip audit logging — every action is recorded
+- **Modify TraderBot source code** — NEVER edit files in the TraderBot package, installation, or repository
+- **Read raw credentials** — NEVER read .env files, keyring contents, or credential strings directly. Use `traderbot auth` commands instead
 
 ## Red Lines
 
@@ -124,6 +126,9 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - Don't trade without running `evaluate_trade()` first
 - Don't bypass the risk pipeline
 - When circuit breaker is HALT or FULL_STOP, no new trades
+- Don't modify TraderBot source code (`src/traderbot/`, installed package, or repo files)
+- Don't read or display credential values from `.env` files, keyring, or environment variables
+- Don't modify HARD_LIMITS, risk thresholds, or any compiled runtime constants
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human
 

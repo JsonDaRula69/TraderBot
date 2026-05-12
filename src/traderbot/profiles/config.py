@@ -249,6 +249,22 @@ def resolve_fred_key(
     return None
 
 
+def _check_env_permissions(env_path: Path) -> None:
+    """Warn if .env file has overly permissive access (group/other readable)."""
+    if not env_path.exists():
+        return
+    try:
+        mode = env_path.stat().st_mode
+        if mode & 0o077:
+            logger.warning(
+                "SECURITY: %s has overly permissive mode %o — "
+                "credentials may be readable by other users. Run: chmod 600 %s",
+                env_path, mode & 0o777, env_path,
+            )
+    except OSError:
+        pass
+
+
 def _env_file_get_value(env_path: Path, key: str) -> str | None:
     """Read a specific key from a .env file (without loading into os.environ).
 
@@ -261,6 +277,7 @@ def _env_file_get_value(env_path: Path, key: str) -> str | None:
     """
     if not env_path.exists():
         return None
+    _check_env_permissions(env_path)
     for line in env_path.read_text().splitlines():
         line = line.strip()
         if line.startswith("#") or "=" not in line:
