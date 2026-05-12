@@ -4,6 +4,7 @@ from traderbot.news.classifier import NewsClassifier
 from traderbot.news.impact_assessor import ImpactAssessor
 from traderbot.news.models import (
     ClassifiedNews,
+    DataPoint,
     ImpactAssessment,
     NewsCategory,
     NewsItem,
@@ -15,6 +16,7 @@ from traderbot.news.sources import NewsAggregator
 
 __all__ = [
     "ClassifiedNews",
+    "DataPoint",
     "ImpactAssessment",
     "ImpactAssessor",
     "NewsAggregator",

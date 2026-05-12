@@ -1,121 +1,41 @@
 {
-  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/comprehensive-audit-v2-remediation.md",
-  "started_at": "2026-05-06T04:32:29.814Z",
+  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/news-data-sources.md",
+  "started_at": "2026-05-12T16:31:29.994Z",
   "session_ids": [
-    "ses_20470f1c6ffe05jNswQo4W76cu",
-    "ses_20454db5affeYxsR88im3loC1m",
-    "ses_203e17bdcffd3CmQdiZENWgabU",
-    "ses_203e17bcfffeEKWZbEFwx5ElBD",
-    "ses_203e17bbeffeXdo30h7pLEgWzp",
-    "ses_203e17bb0ffe6CIfSOjegEfOij",
-    "ses_203dce8adffehxcoFGpC7waKUI",
-    "ses_203dce8a1ffeI7O34xW7aiQRLd",
-    "ses_203dce890ffezNhKCeWEkNHe3L",
-    "ses_203dce87fffeIWqv7gXnvi9rct",
-    "ses_203dce871ffeFjRPH6sogKQeSk",
-    "ses_203abd5faffev65uc6VeUJie2W",
-    "ses_203abd5edffeQWTBmNl4vK5S5J",
-    "ses_203abd5d9ffeAWRauMxRtS2Fm6"
+    "ses_1e2f88579ffedDQL1cRXMOtpXe"
   ],
   "session_origins": {
-    "ses_20470f1c6ffe05jNswQo4W76cu": "direct",
-    "ses_20454db5affeYxsR88im3loC1m": "appended",
-    "ses_203e17bdcffd3CmQdiZENWgabU": "appended",
-    "ses_203e17bcfffeEKWZbEFwx5ElBD": "appended",
-    "ses_203e17bbeffeXdo30h7pLEgWzp": "appended",
-    "ses_203e17bb0ffe6CIfSOjegEfOij": "appended",
-    "ses_203dce8adffehxcoFGpC7waKUI": "appended",
-    "ses_203dce8a1ffeI7O34xW7aiQRLd": "appended",
-    "ses_203dce890ffezNhKCeWEkNHe3L": "appended",
-    "ses_203dce87fffeIWqv7gXnvi9rct": "appended",
-    "ses_203dce871ffeFjRPH6sogKQeSk": "appended",
-    "ses_203abd5faffev65uc6VeUJie2W": "appended",
-    "ses_203abd5edffeQWTBmNl4vK5S5J": "appended",
-    "ses_203abd5d9ffeAWRauMxRtS2Fm6": "appended"
+    "ses_1e2f88579ffedDQL1cRXMOtpXe": "direct"
   },
-  "plan_name": "comprehensive-audit-v2-remediation",
+  "plan_name": "news-data-sources",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Migrate OrderRequest/TradingOrder to V2 field names",
-      "session_id": "ses_2046b00c2ffeE5CdkkhRQkHQ5h",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-06T04:52:18.322Z"
-    },
-    "todo:5": {
-      "task_key": "todo:5",
-      "task_label": "5",
-      "task_title": "NewsAPI: X-Api-Key header, 401 handling, daily budget",
-      "session_id": "ses_2044743c5ffepMYe9Bejag1LnJ",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-05-06T05:22:28.995Z"
-    },
-    "todo:8": {
-      "task_key": "todo:8",
-      "task_label": "8",
-      "task_title": "Add _parse_order unit tests and V2 field edge cases",
-      "session_id": "ses_2042fd74effe5fCgCh1folVqkN",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-05-06T05:49:40.817Z"
-    },
-    "todo:9": {
-      "task_key": "todo:9",
-      "task_label": "9",
-      "task_title": "Create injection strategies module with 4 merge strategies",
-      "session_id": "ses_20429a29affeZxYUNvFrjytLHn",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-06T05:57:46.775Z"
-    },
-    "todo:10": {
-      "task_key": "todo:10",
-      "task_label": "10",
-      "task_title": "Implement inject_profile_into_identity() with fenced markers",
-      "session_id": "ses_20421ec91ffeKQsGSLmxTb8zG3",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-05-06T06:12:45.540Z"
-    },
-    "todo:12": {
-      "task_key": "todo:12",
-      "task_label": "12",
-      "task_title": "Refactor propagate_workspace_files() to use strategy dispatcher",
-      "session_id": "ses_20413bcf9ffemY4ZWw9cAGuGoO",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-06T06:24:29.746Z"
-    },
-    "todo:14": {
-      "task_key": "todo:14",
-      "task_label": "14",
-      "task_title": "Rewrite TOOLS.md with accurate CLI reference and profile docs",
-      "session_id": "ses_204027804ffeXIWG6rq1pPeYHs",
-      "agent": "Sisyphus-Junior",
-      "category": "writing",
-      "updated_at": "2026-05-06T06:46:40.284Z"
-    },
-    "todo:19": {
-      "task_key": "todo:19",
-      "task_label": "19",
-      "task_title": "Fix installer: env vars, credentials, paths, services, and deployment",
-      "session_id": "ses_203f17864ffeDPIlLyMO6Ikjdk",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-06T06:56:28.319Z"
-    },
-    "todo:20": {
-      "task_key": "todo:20",
-      "task_label": "20",
-      "task_title": "Fix service templates: remove self-initiated heartbeat polling",
-      "session_id": "ses_203ea94c3ffeU0JsYwd8SCFfAf",
+      "task_title": "DataPoint Model + NewsSource Enum Expansion",
+      "session_id": "ses_1e2e8ee81ffeK6US8v1QGmkl6H",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-05-06T07:03:28.553Z"
+      "updated_at": "2026-05-12T16:49:45.594Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "DataSourcesConfig + SOURCE_CATEGORY_COVERAGE",
+      "session_id": "ses_1e2e2fef8ffeTciLIPbbYpcHW6",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-12T16:56:33.658Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Open-Meteo Weather Source",
+      "session_id": "ses_1e2dc02a7ffeajq5H9ZlJZezup",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-05-12T17:11:45.734Z"
     }
   }
 }

@@ -17,11 +17,19 @@ class NewsSource(StrEnum):
     NEWSAPI = "newsapi"
     TWITTER = "twitter"
     REDDIT = "reddit"
+    OPEN_METEO = "open_meteo"
+    COINGECKO = "coingecko"
+    THESPORTSDB = "thesportsdb"
+    COINCAP = "coincap"
+    OPENWEATHERMAP = "openweathermap"
+    BALLOTPEDIA = "ballotpedia"
+    FRED = "fred"
+    GOOGLE_TRENDS = "google_trends"
 
 
 NewsCategory = MarketCategory
 
-__all__ = ["NewsCategory", "NewsItem", "NewsSource"]
+__all__ = ["DataPoint", "NewsCategory", "NewsItem", "NewsSource"]
 
 
 class NewsItem(BaseModel):
@@ -80,3 +88,22 @@ class ClassifiedNews(BaseModel):
     category: NewsCategory
     sentiment: SentimentResult | None = None
     impact: ImpactAssessment | None = None
+
+
+class DataPoint(BaseModel):
+    """Canonical data point from any non-news source (weather, crypto, trends, etc.).
+
+    Holds structured payload data (e.g., temperature, price index, poll score).
+    Monetary values inside `data` must be represented as integer cents.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    id: str
+    source: NewsSource
+    category: NewsCategory | None = None
+    title: str
+    data: dict = Field(default_factory=dict)
+    timestamp: datetime
+    ticker_refs: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
