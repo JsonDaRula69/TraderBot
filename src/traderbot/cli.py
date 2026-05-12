@@ -2157,8 +2157,172 @@ profile_app = typer.Typer(
 app.add_typer(profile_app, name="profile")
 
 
+def _interactive_profile_update(
+    console: Console,
+    registry: "ProfileRegistry",
+    name: str | None = None,
+) -> None:
+    """Interactive profile update wizard with explanations for each parameter."""
+    from traderbot.kalshi.models import CATEGORY_API_NAMES, MarketCategory
+    from traderbot.profiles.models import TradingProfile
+
+    profiles = registry.list_profiles()
+    if not profiles:
+        console.print("[yellow]No profiles found.[/yellow] Create one with [cyan]traderbot profile create[/cyan]")
+        return
+
+    if name is None:
+        console.print("[bold]Available Profiles[/bold]\n")
+        for p in profiles:
+            profile = registry.get_profile(p)
+            mode_str = f"[dim]{profile.mode}[/dim]" if profile else ""
+            cat_count = len(profile.enabled_categories) if profile and profile.enabled_categories else "all"
+            console.print(f"  [cyan]{p}[/cyan]  {mode_str}  categories: {cat_count}")
+        console.print()
+        name = typer.prompt("Select profile", type=str)
+        console.print()
+
+    profile = registry.get_profile(name)
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Updating profile:[/bold] [cyan]{name}[/cyan]\n")
+
+    _RISK_PARAM_GUIDE = {
+        "risk_multiplier": (
+            "Risk multiplier",
+            "Scales all position sizes down (0.5 = half-size trades). Lower = more conservative, 1.0 = use full limits.",
+        ),
+        "max_position_per_market_pct": (
+            "Max position per market %",
+            "Max % of portfolio in any single market. Lower = more diversified, higher = concentrated bets. Hard limit ceiling: 5%.",
+        ),
+        "max_daily_loss_pct": (
+            "Max daily loss %",
+            "Circuit breaker triggers at half this value (SLOW), full value (HALT). Lower = tighter loss limits. Hard limit ceiling: 2%.",
+        ),
+        "max_drawdown_pct": (
+            "Max drawdown %",
+            "Peak-to-trough drawdown that triggers FULL_STOP (requires human to clear). Lower = faster safety trigger. Hard limit ceiling: 10%.",
+        ),
+        "max_open_positions": (
+            "Max open positions",
+            "Maximum concurrent open positions across all markets. Lower = fewer simultaneous bets. Hard limit ceiling: 20.",
+        ),
+        "min_liquidity_threshold": (
+            "Min liquidity threshold (cents)",
+            "Minimum open interest (in cents) for a market to be tradeable. Higher = only liquid markets, lower = include thin markets. Hard limit floor: 500.",
+        ),
+        "min_edge_pct": (
+            "Min edge %",
+            "Minimum statistical edge over market price required to trade. Higher = fewer but higher-conviction trades. Hard limit floor: 3%.",
+        ),
+    }
+
+    # --- Mode ---
+    console.print("[bold]Trading Mode[/bold]")
+    console.print(f"  Current: {profile.mode}")
+    console.print("  [dim]paper = simulated, live = real money[/dim]")
+    new_mode = typer.prompt("  New mode (paper/live) or Enter to keep", default=profile.mode, type=str)
+    console.print()
+
+    # --- Description ---
+    console.print("[bold]Description[/bold]")
+    console.print(f"  Current: {profile.description or '(none)'}")
+    new_description = typer.prompt("  New description or Enter to keep", default=profile.description or "")
+    console.print()
+
+    # --- Categories ---
+    console.print("[bold]Market Categories[/bold]")
+    if profile.enabled_categories:
+        cat_names = [CATEGORY_API_NAMES.get(c.value, c.value) for c in profile.enabled_categories]
+        console.print(f"  Current: {', '.join(cat_names)}")
+    else:
+        console.print("  Current: all categories")
+    console.print("  [dim]Restricts which market categories the agent can scan and trade.[/dim]")
+    change_cats = typer.confirm("  Change categories?", default=False)
+    new_categories: list[MarketCategory] | None = None
+    if change_cats:
+        cat_keys = [c.value for c in MarketCategory]
+        cat_labels = [CATEGORY_API_NAMES.get(k, k) for k in cat_keys]
+        selected = _checkbox_select(console, "Select market categories", cat_labels, cat_keys)
+        new_categories = [MarketCategory(k) for k in selected]
+        console.print()
+    console.print()
+
+    # --- Risk parameters ---
+    console.print("[bold]Risk Parameters[/bold]")
+    console.print("  [dim]Each value is clamped to HARD_LIMITS — you can be more restrictive but never exceed ceilings.[/dim]\n")
+
+    current_values = {
+        "risk_multiplier": profile.risk_multiplier,
+        "max_position_per_market_pct": profile.max_position_per_market_pct,
+        "max_daily_loss_pct": profile.max_daily_loss_pct,
+        "max_drawdown_pct": profile.max_drawdown_pct,
+        "max_open_positions": profile.max_open_positions,
+        "min_liquidity_threshold": profile.min_liquidity_threshold,
+        "min_edge_pct": profile.min_edge_pct,
+    }
+
+    new_risk: dict = {}
+    for key, (label, explanation) in _RISK_PARAM_GUIDE.items():
+        current = current_values[key]
+        if isinstance(current, float):
+            current_str = f"{current:.2f}" if current < 1 else f"{current:.0%}"
+        else:
+            current_str = str(current)
+        console.print(f"  [bold]{label}[/bold]")
+        console.print(f"    Current: [cyan]{current_str}[/cyan]")
+        console.print(f"    {explanation}")
+        raw = typer.prompt(f"    New value or Enter to keep", default=str(current))
+        if raw.strip() and raw.strip() != str(current):
+            try:
+                if isinstance(current, float):
+                    val = float(raw)
+                else:
+                    val = int(raw)
+                new_risk[key] = val
+            except ValueError:
+                console.print(f"    [yellow]Invalid value, keeping current[/yellow]")
+        console.print()
+
+    # --- Summary ---
+    console.print("[bold]Summary[/bold]")
+    changes: dict = {}
+    if new_mode != profile.mode:
+        changes["mode"] = new_mode
+        console.print(f"  mode: {profile.mode} → {new_mode}")
+    if new_description != (profile.description or ""):
+        changes["description"] = new_description
+        console.print(f"  description: updated")
+    if new_categories is not None:
+        changes["enabled_categories"] = new_categories
+        console.print(f"  categories: {', '.join(c.value for c in new_categories)}")
+    for key, val in new_risk.items():
+        old = current_values[key]
+        changes[key] = val
+        console.print(f"  {key}: {old} → {val}")
+
+    if not changes:
+        console.print("  [dim]No changes[/dim]")
+        return
+
+    console.print()
+    if not typer.confirm("Apply changes?", default=True):
+        console.print("[yellow]Cancelled.[/yellow]")
+        return
+
+    try:
+        registry.update_profile(name, **changes)
+        console.print(f"\n[green]+[/green] Updated profile '{name}'")
+    except ValueError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
 # ---------------------------------------------------------------------------
-# Interactive wizard helpers for `traderbot profile create`
+# Interactive wizard helpers for `traderbot profile create` and `profile update`
 # ---------------------------------------------------------------------------
 
 def _is_interactive_tty() -> bool:
@@ -3105,7 +3269,7 @@ def profile_assignments(
 
 @profile_app.command("update")
 def profile_update(
-    name: str,
+    name: Annotated[str | None, typer.Argument(help="Profile name")] = None,
     mode: Annotated[str | None, typer.Option(help="Trading mode: paper or live")] = None,
     description: Annotated[str | None, typer.Option(help="Profile description")] = None,
     categories: Annotated[
@@ -3121,12 +3285,30 @@ def profile_update(
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
 ) -> None:
-    """Update specific fields of an existing profile."""
+    """Update an existing profile. Launches interactive flow if no flags given."""
     from traderbot.kalshi.models import MarketCategory
     from traderbot.profiles.registry import ProfileRegistry
 
     console = Console()
     registry = ProfileRegistry()
+
+    has_flags = any(v is not None for v in [
+        mode, description, categories, risk_multiplier,
+        max_position_pct, max_daily_loss_pct, max_drawdown_pct,
+        max_open_positions, min_liquidity, min_edge_pct,
+    ])
+
+    if not has_flags:
+        if _is_interactive_tty():
+            _interactive_profile_update(console, registry, name)
+        else:
+            console.print("[yellow]No fields specified.[/yellow] Run with flags or in an interactive terminal.")
+            console.print("Example: [cyan]traderbot profile update my-profile --min-liquidity 500[/cyan]")
+        return
+
+    if name is None:
+        console.print("[red]Error:[/red] Profile name required when using flags")
+        raise typer.Exit(1)
 
     if not registry.profile_exists(name):
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
@@ -3172,10 +3354,6 @@ def profile_update(
 
     if min_edge_pct is not None:
         update_kwargs["min_edge_pct"] = min_edge_pct
-
-    if not update_kwargs:
-        console.print("[yellow]Warning:[/yellow] No fields to update")
-        return
 
     try:
         registry.update_profile(name, **update_kwargs)

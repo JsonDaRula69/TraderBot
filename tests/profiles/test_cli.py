@@ -483,7 +483,7 @@ def test_profile_update_no_fields(runner, registry, mock_keyring):
     result = runner.invoke(app, ["profile", "update", "no-field-update"])
 
     assert result.exit_code == 0
-    assert "No fields to update" in result.stdout
+    assert "No fields specified" in result.stdout
 
 
 def test_profile_discover_agents_empty(runner, registry, mock_keyring, monkeypatch):
