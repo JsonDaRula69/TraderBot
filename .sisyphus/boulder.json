@@ -45,6 +45,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-05-12T17:33:37.456Z"
+    },
+    "todo:12": {
+      "task_key": "todo:12",
+      "task_label": "12",
+      "task_title": "CLI Integration + fetch_all Refactor",
+      "session_id": "ses_1e29d0251ffef6kB03Wt1ODDs4",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-12T18:16:13.459Z"
     }
   }
 }

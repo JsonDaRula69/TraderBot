@@ -823,17 +823,17 @@ def news(
     limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
     source: Annotated[
         str | None,
-        typer.Option("--source", help="Filter by source: newsapi, twitter, reddit"),
+        typer.Option("--source", help="Filter by source: newsapi, twitter, reddit, open-meteo, coingecko, thesportsdb, coincap, openweathermap, ballotpedia, fred, google-trends, all"),
     ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Fetch and display news for tracked markets."""
     from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
-    from traderbot.news.models import NewsCategory, NewsItem, NewsSource
+    from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
-    from traderbot.news.sources import NewsAggregator
-    from traderbot.profiles.config import resolve_newsapi_key
+    from traderbot.news.sources import DataSourcesConfig, NewsAggregator
+    from traderbot.profiles.config import resolve_fred_key, resolve_newsapi_key, resolve_openweather_key
     from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
@@ -882,13 +882,13 @@ def news(
     if profile is not None and profile.enabled_categories:
         category_filter = profile.enabled_categories
 
-    # Validate --source
+    # Validate --source (normalize hyphens to underscores for enum lookup)
     source_filter: NewsSource | None = None
-    if source is not None:
+    if source is not None and source != "all":
         try:
-            source_filter = NewsSource(source.lower())
+            source_filter = NewsSource(source.lower().replace("-", "_"))
         except ValueError:
-            valid = ", ".join(s.value for s in NewsSource)
+            valid = ", ".join(s.value.replace("_", "-") for s in NewsSource)
             if json_output:
                 json_lib.dump({"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout)
             else:
@@ -898,34 +898,26 @@ def news(
     # Resolve API keys via profile-aware chain
     newsapi_key = resolve_newsapi_key(profile)
     twitter_key = os.environ.get("TWITTER_API_KEY")
-
-    if not newsapi_key and not twitter_key:
-        if json_output:
-            json_lib.dump(
-                {
-                    "error": "No API keys configured. Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."
-                },
-                sys.stdout,
-            )
-        else:
-            console.print(
-                "[red]No API keys configured.[/red] Set NEWSAPI_KEY and/or TWITTER_API_KEY environment variables or profile credentials."
-            )
-            console.print("Reddit RSS feeds work without keys — try [cyan]--source reddit[/cyan].")
-        return
+    openweather_key = resolve_openweather_key(profile)
+    fred_key = resolve_fred_key(profile)
 
     # Profile-aware news cache path
     cache_path = get_news_cache_path(profile)
     logger.debug("News cache path: %s", cache_path)
 
-    # Map source filter for aggregator — NewsSource is now a single canonical enum
-    async def _fetch() -> list[NewsItem]:
-        async with NewsAggregator(
-            newsapi_key=newsapi_key, twitter_api_key=twitter_key
-        ) as aggregator:
-            if source_filter is not None:
-                return await aggregator.fetch_recent(source_filter, limit=limit)
-            return await aggregator.fetch_all(limit=limit)
+    ds_config = DataSourcesConfig(
+        newsapi_key=newsapi_key,
+        openweather_key=openweather_key,
+        fred_key=fred_key,
+    )
+
+    async def _fetch() -> list[NewsItem | DataPoint]:
+        async with NewsAggregator(config=ds_config, twitter_api_key=twitter_key) as aggregator:
+            return await aggregator.fetch_all(
+                limit=limit,
+                category_filter=category_filter,
+                source_filter=source_filter,
+            )
 
     try:
         items = asyncio.run(_fetch())
@@ -936,18 +928,20 @@ def news(
             console.print("[red]Failed to fetch news.[/red]")
         return
 
-    # Classify items
     classifier = NewsClassifier()
     scorer = SentimentScorer()
     classified_items: list[dict] = []
-    for item in items:
-        classified = classifier.classify(item, category_filter=category_filter)
+    datapoints: list[DataPoint] = []
+    for item_or_dp in items:
+        if isinstance(item_or_dp, DataPoint):
+            datapoints.append(item_or_dp)
+            continue
+        classified = classifier.classify(item_or_dp, category_filter=category_filter)
         if classified is None:
             continue
-        # Filter by --category flag if specified
         if category_enum is not None and classified.category != category_enum:
             continue
-        sentiment = scorer.score(item.title, item.source, item.id)
+        sentiment = scorer.score(item_or_dp.title, item_or_dp.source, item_or_dp.id)
         classified_items.append(
             {
                 "classified": classified,
@@ -963,6 +957,7 @@ def news(
             item = c.news_item
             output.append(
                 {
+                    "type": "news_item",
                     "id": item.id,
                     "title": item.title,
                     "source": item.source.value,
@@ -975,15 +970,30 @@ def news(
                     "ticker_refs": item.ticker_refs,
                 }
             )
+        for dp in datapoints:
+            output.append(
+                {
+                    "type": "data_point",
+                    "id": dp.id,
+                    "source": dp.source.value,
+                    "category": dp.category.value if dp.category else None,
+                    "title": dp.title,
+                    "data": dp.data,
+                    "timestamp": dp.timestamp.isoformat(),
+                    "ticker_refs": dp.ticker_refs,
+                    "metadata": dp.metadata,
+                }
+            )
         json_lib.dump(output, sys.stdout, default=str)
         return
 
-    if not classified_items:
+    if not classified_items and not datapoints:
         console.print("No news items found.")
         return
 
     table = Table(title="News Feed")
     table.add_column("Title", style="white", max_width=50)
+    table.add_column("Type", style="magenta")
     table.add_column("Source", style="cyan")
     table.add_column("Category", style="green")
     table.add_column("Published", style="dim")
@@ -996,7 +1006,13 @@ def news(
         title = item.title[:50] + "\u2026" if len(item.title) > 50 else item.title
         published = item.published_at.strftime("%Y-%m-%d %H:%M") if item.published_at else "\u2014"
         score_str = f"{s.score:+.2f}"
-        table.add_row(title, item.source.value, c.category.value, published, score_str)
+        table.add_row(title, "news", item.source.value, c.category.value, published, score_str)
+
+    for dp in datapoints:
+        title = dp.title[:50] + "\u2026" if len(dp.title) > 50 else dp.title
+        cat_str = dp.category.value if dp.category else "\u2014"
+        ts_str = dp.timestamp.strftime("%Y-%m-%d %H:%M")
+        table.add_row(title, "data", dp.source.value, cat_str, ts_str, "\u2014")
     console.print(table)
 
 

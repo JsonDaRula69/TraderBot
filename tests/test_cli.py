@@ -46,18 +46,26 @@ class TestNewsCommand:
         assert "--json" in result.output
 
     def test_news_no_api_keys_json(self):
-        with patch.dict("os.environ", {}, clear=True):
+        mock_agg = _make_mock_aggregator([])
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
             result = runner.invoke(app, ["news", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
-            assert "error" in data
-            assert "API keys" in data["error"]
+            assert isinstance(data, list)
+            assert data == []
 
     def test_news_no_api_keys_rich(self):
-        with patch.dict("os.environ", {}, clear=True):
+        mock_agg = _make_mock_aggregator([])
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
+        ):
             result = runner.invoke(app, ["news"])
             assert result.exit_code == 0
-            assert "No API keys" in result.output
+            assert "No API keys" not in result.output
 
     def test_news_invalid_category_json(self):
         result = runner.invoke(app, ["news", "--category", "InvalidCat", "--json"])

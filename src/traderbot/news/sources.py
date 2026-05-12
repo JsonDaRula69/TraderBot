@@ -158,10 +158,18 @@ class NewsAggregator:
         "KXHIGHTSF": ("San Francisco", 37.77, -122.42),
     }
 
-    # Source fetch priority order (fastest/breaking → slowest/analysis)
+    # Source fetch priority order — all active sources (TWITTER is stub)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
         NewsSource.NEWSAPI,
         NewsSource.REDDIT,
+        NewsSource.OPEN_METEO,
+        NewsSource.COINGECKO,
+        NewsSource.THESPORTSDB,
+        NewsSource.COINCAP,
+        NewsSource.OPENWEATHERMAP,
+        NewsSource.BALLOTPEDIA,
+        NewsSource.FRED,
+        NewsSource.GOOGLE_TRENDS,
     ]
 
     _FRED_SERIES: ClassVar[dict[str, dict[str, str]]] = {
@@ -215,7 +223,7 @@ class NewsAggregator:
             )
         self._daily_request_count += 1
 
-    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None, category_filter: list[NewsCategory] | None = None) -> list[NewsItem]:
+    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None, category_filter: list[NewsCategory] | None = None) -> list[NewsItem | DataPoint]:
         """Fetch recent items from a single source."""
         try:
             match source:
@@ -230,21 +238,80 @@ class NewsAggregator:
                 case NewsSource.REDDIT:
                     subs = self._get_reddit_subs(category_filter)
                     return await self._fetch_reddit(limit, subreddits=subs)
+                case NewsSource.OPEN_METEO:
+                    return await self._fetch_open_meteo(category_filter, limit)
+                case NewsSource.COINGECKO:
+                    return await self._fetch_coingecko(category_filter, limit)
+                case NewsSource.THESPORTSDB:
+                    return await self._fetch_thesportsdb(category_filter, limit)
+                case NewsSource.COINCAP:
+                    return await self._fetch_coincap(category_filter, limit)
+                case NewsSource.OPENWEATHERMAP:
+                    return await self._fetch_openweathermap(category_filter, limit)
+                case NewsSource.BALLOTPEDIA:
+                    return await self._fetch_ballotpedia(category_filter, limit)
+                case NewsSource.FRED:
+                    return await self._fetch_fred(category_filter, limit)
+                case NewsSource.GOOGLE_TRENDS:
+                    return await self._fetch_google_trends(category_filter, limit)
         except Exception:
             logger.exception("Source %s failed, returning empty", source.value)
             return []
         return []
 
-    async def fetch_all(self, limit: int = 20, category_filter: list[NewsCategory] | None = None) -> list[NewsItem]:
-        """Aggregate from all sources in priority order."""
-        items: list[NewsItem] = []
-        per_source = max(limit, 20)
-        for source in self._SOURCE_PRIORITY:
-            source_items = await self.fetch_recent(source, limit=per_source, category_filter=category_filter)
-            items.extend(source_items)
+    async def fetch_all(
+        self,
+        limit: int = 20,
+        category_filter: list[NewsCategory] | None = None,
+        source_filter: NewsSource | None = None,
+    ) -> list[NewsItem | DataPoint]:
+        """Aggregate from all matching sources in parallel."""
+        candidates: list[NewsSource] = [source_filter] if source_filter is not None else list(self._SOURCE_PRIORITY)
+
+        # Filter candidates: exclude stubs, key-missing sources, category mismatches
+        qualifying: list[NewsSource] = []
+        for src in candidates:
+            if src == NewsSource.TWITTER:
+                continue
+            if self.requires_api_key(src):
+                if src == NewsSource.OPENWEATHERMAP and not self._openweather_key:
+                    continue
+                if src == NewsSource.FRED and not self._fred_key:
+                    continue
+            if category_filter is not None:
+                covered = SOURCE_CATEGORY_COVERAGE.get(src, [])
+                if not set(covered).intersection(category_filter):
+                    continue
+            qualifying.append(src)
+
+        if not qualifying:
+            return []
+
+        # Build parallel tasks with source-specific routing
+        async def _fetch_one(src: NewsSource) -> list[NewsItem | DataPoint]:
+            if src == NewsSource.NEWSAPI:
+                if category_filter:
+                    return await self._fetch_category_news(category_filter, limit)
+                return await self._fetch_newsapi(limit)
+            if src == NewsSource.REDDIT:
+                subs = self._get_reddit_subs(category_filter)
+                return await self._fetch_reddit(limit, subreddits=subs)
+            return await self.fetch_recent(src, limit=limit, category_filter=category_filter)
+
+        tasks = [asyncio.ensure_future(_fetch_one(src)) for src in qualifying]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect, deduplicate, cap
+        aggregated: list[NewsItem | DataPoint] = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("Source task failed: %s", result)
+            elif isinstance(result, list):
+                aggregated.extend(result)
+
         seen: set[str] = set()
-        unique: list[NewsItem] = []
-        for item in items:
+        unique: list[NewsItem | DataPoint] = []
+        for item in aggregated:
             if item.id not in seen:
                 seen.add(item.id)
                 unique.append(item)
