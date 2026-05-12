@@ -60,7 +60,7 @@ def paper_profile():
         max_daily_loss_pct=0.015,  # 1.5% (within 2% HARD_LIMIT)
         max_drawdown_pct=0.08,  # 8% (within 10% HARD_LIMIT)
         max_open_positions=10,  # (within 20 HARD_LIMIT)
-        min_liquidity_threshold=1200,  # (above 1000 HARD_LIMIT)
+        min_liquidity_threshold=1200,  # (above 500 HARD_LIMIT)
         min_edge_pct=0.035,  # 3.5% (above 3% HARD_LIMIT)
     )
 
@@ -78,7 +78,7 @@ def live_profile():
         max_daily_loss_pct=0.01,  # 1% (within 2% HARD_LIMIT)
         max_drawdown_pct=0.05,  # 5% (within 10% HARD_LIMIT)
         max_open_positions=5,  # (within 20 HARD_LIMIT)
-        min_liquidity_threshold=1500,  # (above 1000 HARD_LIMIT)
+        min_liquidity_threshold=1500,  # (above 500 HARD_LIMIT)
         min_edge_pct=0.04,  # 4% (above 3% HARD_LIMIT)
     )
 

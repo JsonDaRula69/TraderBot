@@ -186,7 +186,7 @@ def test_max_open_positions_exceeds_limit():
             max_daily_loss_pct=0.01,
             max_drawdown_pct=0.05,
             max_open_positions=25,  # > 20
-            min_liquidity_threshold=500,
+            min_liquidity_threshold=200,  # < 500 HARD_LIMITS floor
             min_edge_pct=0.02,
         )
 
@@ -203,7 +203,7 @@ def test_min_liquidity_below_threshold():
             max_daily_loss_pct=0.01,
             max_drawdown_pct=0.05,
             max_open_positions=10,
-            min_liquidity_threshold=500,  # < 1000
+            min_liquidity_threshold=200,  # < 500 HARD_LIMITS floor
             min_edge_pct=0.02,
         )
 

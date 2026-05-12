@@ -97,13 +97,13 @@ class TestCheckDrawdown:
 
 class TestCheckLiquidity:
     def test_passes_at_threshold(self):
-        result = check_liquidity(1000)
+        result = check_liquidity(500)
         assert result.passed
 
     def test_fails_below_threshold(self):
-        result = check_liquidity(999)
+        result = check_liquidity(499)
         assert not result.passed
-        assert result.rejection_reason == "Market liquidity below 1,000 threshold"
+        assert result.rejection_reason == "Market liquidity below 500 threshold"
 
     def test_passes_well_above(self):
         result = check_liquidity(5000)
@@ -161,7 +161,7 @@ class TestHardLimitsImmutability:
         assert HARD_LIMITS["max_position_per_market_pct"] == 0.05
         assert HARD_LIMITS["max_daily_loss_pct"] == 0.02
         assert HARD_LIMITS["max_drawdown_pct"] == 0.10
-        assert HARD_LIMITS["min_liquidity_threshold"] == 1000
+        assert HARD_LIMITS["min_liquidity_threshold"] == 500
         assert HARD_LIMITS["max_open_positions"] == 20
         assert HARD_LIMITS["min_edge_pct"] == 0.03
 

@@ -108,7 +108,7 @@ def test_profile_create_with_options(runner, registry, mock_keyring):
         "--max-daily-loss-pct", "0.01",  # 1% (within 2% HARD_LIMIT)
         "--max-drawdown-pct", "0.08",  # 8% (within 10% HARD_LIMIT)
         "--max-open-positions", "15",  # Within 20 HARD_LIMIT
-        "--min-liquidity", "1500",  # Above 1000 HARD_LIMIT
+        "--min-liquidity", "1500",  # Above 500 HARD_LIMIT
         "--min-edge-pct", "0.04",  # 4% (above 3% HARD_LIMIT)
         "--skip-auth",
     ])

@@ -91,7 +91,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 | `max_position_per_market_pct` | 5% | Max position in any single market |
 | `max_daily_loss_pct` | 2% | Circuit breaker SLOW at 1%, HALT at 2% |
 | `max_drawdown_pct` | 10% | Full stop when peak drawdown hits 10% |
-| `min_liquidity_threshold` | 1,000 | Minimum open interest in cents |
+| `min_liquidity_threshold` | 500 | Minimum open interest in cents |
 | `max_open_positions` | 20 | Maximum concurrent open positions |
 | `min_edge_pct` | 3% | Minimum required edge over market price |
 

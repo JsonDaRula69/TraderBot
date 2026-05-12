@@ -21,7 +21,7 @@ def profile_below_hard_limits() -> TradingProfile:
         max_daily_loss_pct=0.01,  # Below 0.02
         max_drawdown_pct=0.05,  # Below 0.10
         max_open_positions=10,  # Below 20
-        min_liquidity_threshold=2000,  # Above 1000
+        min_liquidity_threshold=1000,  # Above 500
         min_edge_pct=0.05,  # Above 0.03
     )
 
@@ -39,7 +39,7 @@ def profile_at_hard_limits() -> TradingProfile:
         max_daily_loss_pct=0.02,  # At HARD_LIMITS
         max_drawdown_pct=0.10,  # At HARD_LIMITS
         max_open_positions=20,  # At HARD_LIMITS
-        min_liquidity_threshold=1000,  # At HARD_LIMITS
+        min_liquidity_threshold=500,  # At HARD_LIMITS
         min_edge_pct=0.03,  # At HARD_LIMITS
     )
 
@@ -53,7 +53,7 @@ def test_profile_below_hard_limits(profile_below_hard_limits: TradingProfile) ->
     assert limits.max_daily_loss_pct == 0.01
     assert limits.max_drawdown_pct == 0.05
     assert limits.max_open_positions == 10
-    assert limits.min_liquidity_threshold == 2000
+    assert limits.min_liquidity_threshold == 1000
     assert limits.min_edge_pct == 0.05
 
 
@@ -95,12 +95,13 @@ def test_properties_immutable(profile_below_hard_limits: TradingProfile) -> None
 
 def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile) -> None:
     """min_liquidity_threshold uses max() not min() (higher is more restrictive)."""
-    # Profile has 2000, HARD_LIMITS has 1000
-    # Should use 2000 (the higher, more restrictive value)
+    # Profile has 1000, HARD_LIMITS has 500
+    # Should use 1000 (the higher, more restrictive value)
     limits = AgentRiskLimits(profile_below_hard_limits)
-    assert limits.min_liquidity_threshold == 2000
+    assert limits.min_liquidity_threshold == 1000
 
-    # Create profile with liquidity below HARD_LIMITS
+    # Create profile at HARD_LIMITS floor (500)
+    # AgentRiskLimits should use max(profile, HARD_LIMITS) = max(500, 500) = 500
     profile_low_liquidity = TradingProfile(
         name="low_liquidity",
         mode="paper",
@@ -111,12 +112,12 @@ def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile)
         max_daily_loss_pct=0.02,
         max_drawdown_pct=0.10,
         max_open_positions=20,
-        min_liquidity_threshold=1000,  # At HARD_LIMITS floor
+        min_liquidity_threshold=500,  # At HARD_LIMITS floor
         min_edge_pct=0.03,
     )
     limits_low = AgentRiskLimits(profile_low_liquidity)
-    # Should use HARD_LIMITS value (1000) since it's the max
-    assert limits_low.min_liquidity_threshold == 1000
+    # Should use HARD_LIMITS value (500) since it's the max
+    assert limits_low.min_liquidity_threshold == 500
 
 
 def test_min_edge_uses_max_logic(profile_below_hard_limits: TradingProfile) -> None:
@@ -137,7 +138,7 @@ def test_min_edge_uses_max_logic(profile_below_hard_limits: TradingProfile) -> N
         max_daily_loss_pct=0.02,
         max_drawdown_pct=0.10,
         max_open_positions=20,
-        min_liquidity_threshold=1000,
+        min_liquidity_threshold=500,
         min_edge_pct=0.03,  # At HARD_LIMITS floor
     )
     limits_low = AgentRiskLimits(profile_low_edge)
