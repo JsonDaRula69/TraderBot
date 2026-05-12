@@ -54,8 +54,6 @@ REDDIT_CATEGORY_SUBREDDITS: dict[NewsCategory, list[str]] = {
     NewsCategory.MENTIONS: ["news", "trending"],
 }
 
-_BALLOTPEDIA_FEEDS: list[str] = ["https://ballotpedia.org/feed/"]
-
 
 class NewsAPIError(Exception):
     """Raised when the NewsAPI returns an error response."""
@@ -115,10 +113,9 @@ SOURCE_CATEGORY_COVERAGE: dict[NewsSource, list[NewsCategory]] = {
     ],
     NewsSource.TWITTER: [],
     NewsSource.OPEN_METEO: [NewsCategory.WEATHER],
+    NewsSource.COINGECKO: [NewsCategory.CRYPTO, NewsCategory.MENTIONS],
     NewsSource.THESPORTSDB: [NewsCategory.SPORTS],
-    NewsSource.COINCAP: [NewsCategory.CRYPTO],
     NewsSource.OPENWEATHERMAP: [NewsCategory.WEATHER],
-    NewsSource.BALLOTPEDIA: [NewsCategory.ELECTIONS, NewsCategory.POLITICS],
     NewsSource.FRED: [NewsCategory.ECONOMICS, NewsCategory.FINANCIALS],
     NewsSource.GOOGLE_TRENDS: [NewsCategory.MENTIONS, NewsCategory.SOCIAL],
 }
@@ -162,10 +159,9 @@ class NewsAggregator:
         NewsSource.NEWSAPI,
         NewsSource.REDDIT,
         NewsSource.OPEN_METEO,
+        NewsSource.COINGECKO,
         NewsSource.THESPORTSDB,
-        NewsSource.COINCAP,
         NewsSource.OPENWEATHERMAP,
-        NewsSource.BALLOTPEDIA,
         NewsSource.FRED,
         NewsSource.GOOGLE_TRENDS,
     ]
@@ -238,14 +234,12 @@ class NewsAggregator:
                     return await self._fetch_reddit(limit, subreddits=subs, category_filter=category_filter)
                 case NewsSource.OPEN_METEO:
                     return await self._fetch_open_meteo(category_filter, limit)
+                case NewsSource.COINGECKO:
+                    return await self._fetch_coingecko(category_filter, limit)
                 case NewsSource.THESPORTSDB:
                     return await self._fetch_thesportsdb(category_filter, limit)
-                case NewsSource.COINCAP:
-                    return await self._fetch_coincap(category_filter, limit)
                 case NewsSource.OPENWEATHERMAP:
                     return await self._fetch_openweathermap(category_filter, limit)
-                case NewsSource.BALLOTPEDIA:
-                    return await self._fetch_ballotpedia(category_filter, limit)
                 case NewsSource.FRED:
                     return await self._fetch_fred(category_filter, limit)
                 case NewsSource.GOOGLE_TRENDS:
@@ -961,106 +955,190 @@ class NewsAggregator:
 
         return items[:limit]
 
-    async def _fetch_ballotpedia(
+    async def _fetch_coingecko(
         self,
         category_filter: list[NewsCategory] | None = None,
         limit: int = 20,
     ) -> list[DataPoint]:
-        """Fetch election/politics data from Ballotpedia — DEPRECATED.
+        """Fetch crypto market data from CoinGecko /coins/markets (free tier, no API key).
 
-        Ballotpedia no longer serves RSS at /feed/ (redirects to MediaWiki page).
-        This method returns empty. Use NewsAPI with ELECTIONS/POLITICS category instead.
+        Returns DataPoint objects with prices/market caps in integer cents.
+        If MENTIONS is in category_filter, also fetches /search/trending.
         """
-        logger.warning("Ballotpedia RSS is no longer available (/feed/ redirects to wiki page), returning empty")
-        return []
-
-    async def _fetch_coincap(
-        self,
-        category_filter: list[NewsCategory] | None = None,
-        limit: int = 20,
-    ) -> list[DataPoint]:
-        """Fetch crypto asset data from CoinCap API v2 — DEPRECATED.
-
-        CoinCap v2 API (api.coincap.io) is defunct (DNS NXDOMAIN).
-        Use CoinGecko source for crypto data. This method catches
-        httpx.ConnectError from failed DNS resolution and returns empty.
-        """
-        if category_filter is not None and NewsCategory.CRYPTO not in category_filter:
+        if category_filter is not None and NewsCategory.CRYPTO not in category_filter and NewsCategory.MENTIONS not in category_filter:
             return []
 
-        try:
-            capped = min(limit, 20)
-            response = await self._client.get(
-                "https://api.coincap.io/v2/assets", params={"limit": capped}
-            )
+        results: list[DataPoint] = []
 
-            if response.status_code != 200:
-                logger.warning(
-                    "CoinCap API returned HTTP %d, skipping", response.status_code
-                )
+        try:
+            params: dict[str, Any] = {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": min(limit, 50),
+                "page": 1,
+                "sparkline": "false",
+            }
+
+            max_retries = 2
+            for attempt in range(max_retries + 1):
+                try:
+                    response = await self._client.get(
+                        "https://api.coingecko.com/api/v3/coins/markets",
+                        params=params,
+                    )
+
+                    if response.status_code == 429:
+                        if attempt < max_retries:
+                            delay = 2 * (2**attempt)
+                            logger.warning(
+                                "CoinGecko rate limited (429), retry %d/%d in %ds",
+                                attempt + 1,
+                                max_retries,
+                                delay,
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        logger.error("CoinGecko rate limit exhausted after %d retries", max_retries)
+                        return []
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            "CoinGecko /coins/markets returned HTTP %d, skipping",
+                            response.status_code,
+                        )
+                        return []
+
+                    break
+
+                except httpx.HTTPError as exc:
+                    if attempt < max_retries:
+                        await asyncio.sleep(2 * (2**attempt))
+                        continue
+                    logger.error("CoinGecko request failed: %s", exc)
+                    return []
+
+            try:
+                coins = response.json()
+            except Exception:
+                logger.warning("CoinGecko returned non-JSON response, skipping")
                 return []
 
-            payload = response.json()
-            assets = payload.get("data", [])
-
-            points: list[DataPoint] = []
-            for asset in assets[:limit]:
+            for idx, coin in enumerate(coins[:limit]):
                 try:
-                    asset_id: str = asset.get("id", "")
-                    symbol: str = asset.get("symbol", "")
-                    name: str = asset.get("name", "")
-                    rank: str = asset.get("rank", "0")
-                    price_usd: str = asset.get("priceUsd", "0")
-                    market_cap_usd: str = asset.get("marketCapUsd", "0")
-                    volume_usd: str = asset.get("volumeUsd24Hr", "0")
-                    change_pct: str = asset.get("changePercent24Hr", "0")
-                    vwap_raw: str = asset.get("vwap24Hr", "0")
+                    coin_id = coin.get("id", "")
+                    symbol = coin.get("symbol", "")
+                    name = coin.get("name", "")
+                    current_price = coin.get("current_price") or 0
+                    market_cap = coin.get("market_cap") or 0
+                    total_volume = coin.get("total_volume") or 0
+                    price_change_pct = coin.get("price_change_percentage_24h") or 0
+                    last_updated = coin.get("last_updated", "")
 
-                    price_cents = int(round(float(price_usd or "0") * 100))
-                    market_cap_cents = int(round(float(market_cap_usd or "0") * 100))
-                    volume_24h_cents = int(round(float(volume_usd or "0") * 100))
-                    change_24h_pct = round(float(change_pct or "0"), 2)
+                    price_cents = int(round(float(current_price) * 100))
+                    market_cap_cents = int(round(float(market_cap) * 100))
+                    volume_24h_cents = int(round(float(total_volume) * 100))
+                    change_24h_pct = round(float(price_change_pct), 2)
 
-                    metadata: dict[str, Any] = {"name": name, "asset_id": asset_id}
-                    vwap_val = float(vwap_raw or "0")
-                    if vwap_val:
-                        metadata["vwap_24h"] = vwap_val
+                    sign = "+" if change_24h_pct >= 0 else ""
+                    title = f"{symbol.upper()}: ${float(current_price):,.2f} ({sign}{change_24h_pct}% 24h)"
 
-                    points.append(
+                    timestamp = (
+                        datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
+                        if last_updated
+                        else datetime.now(tz=UTC)
+                    )
+
+                    results.append(
                         DataPoint(
-                            id=f"coincap-{asset_id}",
-                            source=NewsSource.COINCAP,
+                            id=f"coingecko-{coin_id}",
+                            source=NewsSource.COINGECKO,
                             category=NewsCategory.CRYPTO,
-                            title=f"{symbol}: ${float(price_usd or 0):,.2f} (rank #{rank})",
+                            title=title,
                             data={
                                 "price_cents": price_cents,
                                 "market_cap_cents": market_cap_cents,
                                 "volume_24h_cents": volume_24h_cents,
                                 "change_24h_pct": change_24h_pct,
-                                "rank": int(rank),
+                                "rank": idx + 1,
                             },
-                            timestamp=datetime.now(tz=UTC),
-                            ticker_refs=[symbol],
-                            metadata=metadata,
+                            timestamp=timestamp,
+                            ticker_refs=[symbol.upper()],
+                            metadata={"name": name, "coin_id": coin_id},
                         )
                     )
-                except Exception:
-                    logger.warning(
-                        "Skipping malformed CoinCap asset: %s", asset.get("id", "?")
-                    )
+                except (ValueError, KeyError, TypeError):
+                    logger.warning("Skipping malformed CoinGecko coin at index %d", idx)
                     continue
 
-            return points[:limit]
+        except (httpx.HTTPError, ValueError):
+            logger.warning("CoinGecko fetch failed, returning partial results")
+            return results
 
-        except httpx.ConnectError:
-            logger.warning(
-                "CoinCap v2 API (api.coincap.io) appears defunct — DNS resolution fails. "
-                "Returning empty. Use CoinGecko source for crypto data."
-            )
-            return []
-        except Exception:
-            logger.exception("CoinCap fetch failed, returning empty")
-            return []
+        # Fetch trending coins if MENTIONS in filter
+        if category_filter is not None and NewsCategory.MENTIONS in category_filter:
+            try:
+                for attempt in range(max_retries + 1):
+                    try:
+                        trending_resp = await self._client.get(
+                            "https://api.coingecko.com/api/v3/search/trending",
+                        )
+                        if trending_resp.status_code == 429:
+                            if attempt < max_retries:
+                                await asyncio.sleep(2 * (2**attempt))
+                                continue
+                            logger.error("CoinGecko trending rate limit exhausted")
+                            break
+                        if trending_resp.status_code != 200:
+                            logger.warning(
+                                "CoinGecko /search/trending returned HTTP %d, skipping",
+                                trending_resp.status_code,
+                            )
+                            break
+                        break
+                    except httpx.HTTPError:
+                        if attempt < max_retries:
+                            await asyncio.sleep(2 * (2**attempt))
+                            continue
+                        break
+
+                try:
+                    trending_data = trending_resp.json()
+                except Exception:
+                    logger.warning("CoinGecko trending returned non-JSON, skipping")
+                    trending_data = {}
+
+                for idx, item in enumerate(trending_data.get("coins", [])):
+                    try:
+                        coin_item = item.get("item", item)
+                        coin_id = coin_item.get("id", "")
+                        symbol = coin_item.get("symbol", "")
+                        name = coin_item.get("name", "")
+                        market_cap_rank = int(coin_item.get("market_cap_rank") or 0)
+                        score = int(coin_item.get("score") if coin_item.get("score") is not None else idx)
+
+                        results.append(
+                            DataPoint(
+                                id=f"coingecko-trending-{coin_id}",
+                                source=NewsSource.COINGECKO,
+                                category=NewsCategory.MENTIONS,
+                                title=f"Trending: {symbol.upper()} ({name}) — rank #{market_cap_rank}",
+                                data={
+                                    "market_cap_rank": market_cap_rank,
+                                    "trending_score": score,
+                                },
+                                timestamp=datetime.now(tz=UTC),
+                                ticker_refs=[symbol.upper()],
+                                metadata={"name": name, "coin_id": coin_id, "trending": True},
+                            )
+                        )
+                    except (ValueError, KeyError, TypeError):
+                        logger.warning("Skipping malformed trending coin at index %d", idx)
+                        continue
+
+            except (httpx.HTTPError, ValueError):
+                logger.warning("CoinGecko trending fetch failed, skipping")
+
+        return results
 
     async def _fetch_thesportsdb(
         self,

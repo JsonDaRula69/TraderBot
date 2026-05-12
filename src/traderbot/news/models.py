@@ -18,10 +18,9 @@ class NewsSource(StrEnum):
     TWITTER = "twitter"
     REDDIT = "reddit"
     OPEN_METEO = "open_meteo"
+    COINGECKO = "coingecko"
     THESPORTSDB = "thesportsdb"
-    COINCAP = "coincap"
     OPENWEATHERMAP = "openweathermap"
-    BALLOTPEDIA = "ballotpedia"
     FRED = "fred"
     GOOGLE_TRENDS = "google_trends"
 

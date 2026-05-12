@@ -65,23 +65,15 @@ async def test_thesportsdb_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_coincap_crypto_assets() -> None:
+async def test_coingecko_crypto_markets() -> None:
     _requires_internet()
     na = NewsAggregator()
-    results = await na._fetch_coincap(limit=5)
+    results = await na._fetch_coingecko(limit=5)
     assert len(results) > 0, "Should return at least 1 crypto DataPoint"
-    _assert_datapoint(results[0], NewsSource.COINCAP)
+    _assert_datapoint(results[0], NewsSource.COINGECKO)
     assert results[0].category == NewsCategory.CRYPTO
     assert "price_cents" in results[0].data, "Should contain price_cents"
     assert isinstance(results[0].data["price_cents"], int), "price_cents should be int"
-
-
-@pytest.mark.asyncio
-async def test_ballotpedia_deprecated() -> None:
-    _requires_internet()
-    na = NewsAggregator()
-    results = await na._fetch_ballotpedia(limit=5)
-    assert results == [], "Ballotpedia RSS is deprecated and should return empty"
 
 
 @pytest.mark.asyncio

@@ -81,9 +81,8 @@ The `traderbot news` command fetches from multiple sources. Use `--source` to se
 | Reddit | `--source reddit` | All 14 | ❌ None | No rate limit documented |
 | Open-Meteo | `--source open-meteo` | Weather | ❌ None | 10,000 req/day |
 | TheSportsDB | `--source thesportsdb` | Sports | ❌ None (key "3") | 30 req/min |
-| CoinCap | `--source coincap` | Crypto | ❌ None | DEPRECATED — API defunct |
+| CoinGecko | `--source coingecko` | Crypto, Mentions | ❌ None | 30 req/min |
 | OpenWeatherMap | `--source openweathermap` | Weather | ✅ Required | 1,000 req/day |
-| Ballotpedia | `--source ballotpedia` | Elections, Politics | ❌ None | RSS — polite crawl |
 | FRED | `--source fred` | Economics, Financials | ✅ Required | 120 req/min |
 | Google Trends | `--source google-trends` | Mentions, Social | ❌ None (optional pytrends) | Best-effort only |
 
