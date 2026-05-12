@@ -96,18 +96,21 @@ class TestUninstallUserData:
 
 
 class TestUninstallOpenClawConfig:
-    """TraderBot agent entries are removed from openclaw.json, others preserved."""
+    """TraderBot heartbeat config is cleaned from OpenClaw agents, non-TraderBot entries preserved."""
 
-    def test_removes_traderbot_agents_from_config(self, tmp_env: dict, tmp_path: Path, monkeypatch: Any) -> None:
-        """TraderBot agent entries removed, non-TraderBot entries preserved."""
+    def test_removes_heartbeat_from_traderbot_agents(self, tmp_env: dict, tmp_path: Path, monkeypatch: Any) -> None:
+        """TraderBot agent heartbeat config is removed, agents themselves preserved."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         with patch("shutil.which", return_value=None):
             result = runner.invoke(app, ["uninstall", "--remove-data"])
 
         oc_config = tmp_env["oc_config"]
         config_data = json.loads(oc_config.read_text())
-        agent_ids = [a["id"] for a in config_data["agents"]["list"]]
-        assert "traderbot-test" not in agent_ids
+        agents = config_data["agents"]["list"]
+        # Agent entries are preserved, but heartbeat config is cleaned
+        assert len(agents) == 2
+        agent_ids = [a["id"] for a in agents]
+        assert "traderbot-test" in agent_ids
         assert "other-agent" in agent_ids
 
     def test_no_traderbot_agents_skipped(self, tmp_path: Path, monkeypatch: Any) -> None:

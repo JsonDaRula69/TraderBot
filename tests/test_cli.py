@@ -340,7 +340,7 @@ class TestScan:
             Market(
                 ticker="KXBTCD-26MAR31-T55000",
                 question="BTC above $55k?",
-                outcome_prices=["60", "40"],
+                last_price_cents=60,
                 volume=1000,
                 open_interest=500,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
@@ -350,7 +350,7 @@ class TestScan:
             Market(
                 ticker="KXBTCD-26MAR31-T60000",
                 question="BTC above $60k?",
-                outcome_prices=["30", "70"],
+                last_price_cents=30,
                 volume=2000,
                 open_interest=800,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
@@ -382,7 +382,7 @@ class TestScan:
             Market(
                 ticker="KXBTCD-26MAR31-T55000",
                 question="BTC above $55k?",
-                outcome_prices=["60", "40"],
+                last_price_cents=60,
                 volume=1000,
                 open_interest=500,
                 close_time=datetime(2026, 3, 31, tzinfo=UTC),
@@ -413,7 +413,7 @@ class TestScan:
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
             question="BTC above $55k?",
-            outcome_prices=["60", "40"],
+            last_price_cents=60,
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, tzinfo=UTC),
@@ -507,25 +507,6 @@ class TestSignals:
         result = runner.invoke(app, ["signals", "--json"])
         assert result.exit_code == 0
 
-    @pytest.mark.unit
-    def test_signals_price_no_double_conversion(self):
-        """Verify outcome_prices (cent strings) are not multiplied by 100."""
-        from traderbot.kalshi.models import Market
-
-        market = Market(
-            ticker="KXBTCD-26MAR31-T55000",
-            question="BTC above $55k?",
-            outcome_prices=["60", "40"],
-            volume=1000,
-            open_interest=500,
-            close_time=datetime(2026, 3, 31, tzinfo=UTC),
-            status="open",
-            event_ticker="KXBTCD-26MAR31",
-        )
-        prices_int = [int(p) for p in market.outcome_prices]
-        assert prices_int == [60, 40], f"Expected [60, 40] cent prices, got {prices_int}"
-
-
 class TestTrade:
     @pytest.fixture(autouse=True)
     def mock_require_profile(self):
@@ -609,7 +590,7 @@ class TestTrade:
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
             question="BTC above $55k?",
-            outcome_prices=["60", "40"],
+            last_price_cents=60,
             volume=1000,
             open_interest=5000,
             close_time=datetime(2026, 3, 31, tzinfo=timezone.utc),
@@ -1308,6 +1289,11 @@ class TestHalt:
 
 
 class TestBacktestCommand:
+    @pytest.fixture(autouse=True)
+    def _patch_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_backtest_help(self):
         result = runner.invoke(app, ["backtest", "--help"])
         assert result.exit_code == 0
@@ -1389,6 +1375,11 @@ class TestBacktestCommand:
 
 
 class TestPaperCommand:
+    @pytest.fixture(autouse=True)
+    def _patch_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_paper_help(self):
         result = runner.invoke(app, ["paper", "--help"])
         assert result.exit_code == 0

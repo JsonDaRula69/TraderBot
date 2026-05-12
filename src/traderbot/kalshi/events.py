@@ -23,7 +23,6 @@ def _normalize_event(raw: dict[str, Any]) -> Event:
         description=raw.get("description", ""),
         category=category,
         market_category=market_category,
-        state=raw.get("state", raw.get("status", "")),
         close_time=close_time_val,
         markets_count=int(raw.get("markets_count", 0)),
     )

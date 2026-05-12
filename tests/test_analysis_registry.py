@@ -211,7 +211,7 @@ def test_simulation_imports_market_category() -> None:
         market=Market(
             ticker="KX-TEST",
             question="Test?",
-            outcome_prices=["0.65", "0.35"],
+            last_price_cents=65,
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),

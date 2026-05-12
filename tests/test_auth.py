@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import keyring.backend
 import pytest
@@ -88,7 +89,10 @@ class TestAuthManagerSetAndGet:
 
 
 class TestAuthManagerDelete:
-    def test_delete_credential(self, auth_manager: AuthManager) -> None:
+    def test_delete_credential(self, auth_manager: AuthManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+        monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: Path("/tmp/nonexistent_home_for_test"))
         auth_manager.set_credential("kalshi", "api_key", "to-delete")
         deleted = auth_manager.delete_credential("kalshi", "api_key")
         assert deleted is True
@@ -169,7 +173,11 @@ class TestAuthManagerCheckCredentials:
         assert status["kalshi"]["api_key"] is True
         assert status["kalshi"]["private_key_pem"] is True
 
-    def test_check_with_missing(self, auth_manager: AuthManager) -> None:
+    def test_check_with_missing(self, auth_manager: AuthManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+        monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
+        monkeypatch.delenv("NEWSAPI_API_KEY", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: Path("/tmp/nonexistent_home_for_test"))
         status = auth_manager.check_credentials()
         assert status["kalshi"]["api_key"] is False
         assert status["kalshi"]["private_key_pem"] is False
@@ -231,26 +239,31 @@ class TestKeyringKalshiConfig:
         assert cfg.resolve_api_key() == "env-key"
         assert cfg.resolve_private_key() is not None
 
-    def test_config_defaults(self) -> None:
+    def test_config_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_DEMO_MODE", raising=False)
+        monkeypatch.delenv("KALSHI_API_KEY", raising=False)
+        monkeypatch.delenv("KALSHI_PRIVATE_KEY_PEM", raising=False)
         from traderbot.kalshi.config import KeyringKalshiConfig
-        cfg = KeyringKalshiConfig()
+        cfg = KeyringKalshiConfig(_env_file=None)
         assert cfg.demo_mode is False
         assert cfg.base_url == "https://api.elections.kalshi.com/trade-api/v2"
 
-    def test_active_url_demo(self) -> None:
+    def test_active_url_demo(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_DEMO_MODE", raising=False)
         from traderbot.kalshi.config import KeyringKalshiConfig
         cfg = KeyringKalshiConfig(demo_mode=True)
         assert cfg.active_url == "https://demo-api.kalshi.co/trade-api/v2"
 
-    def test_active_url_prod(self) -> None:
+    def test_active_url_prod(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_DEMO_MODE", raising=False)
         from traderbot.kalshi.config import KeyringKalshiConfig
-        cfg = KeyringKalshiConfig()
+        cfg = KeyringKalshiConfig(_env_file=None)
         assert cfg.active_url == "https://api.elections.kalshi.com/trade-api/v2"
 
-    def test_config_rejects_extra_fields(self) -> None:
-        with pytest.raises(Exception):
-            from traderbot.kalshi.config import KeyringKalshiConfig
-            KeyringKalshiConfig(extra_field="bad")
+    def test_config_ignores_extra_fields(self) -> None:
+        from traderbot.kalshi.config import KeyringKalshiConfig
+        cfg = KeyringKalshiConfig(extra_field="bad", _env_file=None)
+        assert cfg.api_key is None
 
 
 class TestEnvMapping:

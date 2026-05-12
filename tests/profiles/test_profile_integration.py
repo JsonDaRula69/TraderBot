@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -14,7 +15,14 @@ from traderbot.profiles.auth import ProfileAuthStore
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.registry import ProfileRegistry
 from traderbot.profiles.runtime import get_current_profile
-from traderbot.profiles.tokens import assign_token, generate_token, set_keyring
+from traderbot.profiles.tokens import assign_token, generate_token, set_keyring, _TOKENS_FILE
+
+
+@pytest.fixture(autouse=True)
+def _clean_tokens_file():
+    _TOKENS_FILE.unlink(missing_ok=True)
+    yield
+    _TOKENS_FILE.unlink(missing_ok=True)
 
 
 @pytest.fixture

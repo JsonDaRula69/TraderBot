@@ -76,15 +76,26 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     volume_val = _to_count(raw.get("volume_fp") or raw.get("volume") or 0)
     oi_val = _to_count(raw.get("open_interest_fp") or raw.get("open_interest") or 0)
 
+    # V2 price fields: last_price_dollars, yes/no bid/ask dollars
+    last_price = _to_cents(raw.get("last_price_dollars") or 0)
+    yes_bid = _to_cents(raw.get("yes_bid_dollars") or 0)
+    yes_ask = _to_cents(raw.get("yes_ask_dollars") or 0)
+    no_bid = _to_cents(raw.get("no_bid_dollars") or 0)
+    no_ask = _to_cents(raw.get("no_ask_dollars") or 0)
+
     return Market(
         ticker=raw["ticker"],
         question=raw.get("title") or raw.get("question") or "",
-        outcome_prices=raw.get("outcome_prices"),
         volume=volume_val,
         open_interest=oi_val,
         close_time=close_time_val,
         status=raw.get("status", "open"),
         event_ticker=raw.get("event_ticker", ""),
+        last_price_cents=last_price,
+        yes_bid_cents=yes_bid,
+        yes_ask_cents=yes_ask,
+        no_bid_cents=no_bid,
+        no_ask_cents=no_ask,
         category=category_str,
         market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),
@@ -108,11 +119,11 @@ def _normalize_position(raw: dict[str, Any]) -> Position:
 
 
 def _normalize_fill(raw: dict[str, Any]) -> Fill:
-    price_raw = raw.get("price_fp") or raw.get("price_dollars") or 0
+    price_raw = raw.get("yes_price_dollars") or raw.get("no_price_dollars") or 0
     price = _to_cents(price_raw)
     quantity = _to_count(raw.get("count_fp") or raw.get("count") or 0)
-    ts = _parse_datetime(raw.get("timestamp") or raw.get("created_time")) or datetime.fromtimestamp(0, tz=UTC)
-    side = raw.get("side") or raw.get("taker_side") or "yes"
+    ts = _parse_datetime(raw.get("created_time")) or _parse_datetime(raw.get("timestamp")) or datetime.fromtimestamp(0, tz=UTC)
+    side = raw.get("side") or raw.get("outcome_side") or "yes"
 
     return Fill(
         order_id=str(raw.get("order_id", "")),

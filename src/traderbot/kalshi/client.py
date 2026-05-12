@@ -14,6 +14,7 @@ from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import AccountLimits, MarketListResponse, TradeListResponse
+from traderbot.kalshi._normalize import _parse_datetime, _to_cents, _to_count
 
 logger = logging.getLogger(__name__)
 from traderbot.kalshi.rate_limit import TokenBucketRateLimiter
@@ -75,6 +76,17 @@ class KalshiConfig(BaseSettings):
 
 # Fields where Kalshi returns strings that must be converted to int cents.
 _INT_CENTS_FIELDS: frozenset[str] = frozenset({"price", "avg_price"})
+# V2 dollar-denominated fields that must be converted to cents.
+_V2_DOLLAR_CENTS_FIELDS: frozenset[str] = frozenset({
+    "last_price_dollars", "yes_bid_dollars", "yes_ask_dollars",
+    "no_bid_dollars", "no_ask_dollars", "price_dollars",
+    "avg_price_dollars", "yes_price_dollars", "no_price_dollars",
+})
+# V2 FixedPointCount fields that must be rounded to int.
+_V2_COUNT_FP_FIELDS: frozenset[str] = frozenset({
+    "volume_fp", "open_interest_fp", "count_fp", "initial_count_fp",
+    "fill_count_fp", "remaining_count_fp", "quantity_fp",
+})
 # Fields holding Unix timestamps that must become datetime.
 _TIMESTAMP_FIELDS: frozenset[str] = frozenset({"close_time", "timestamp", "created_time"})
 # Top-level list-wrapper response models keyed by the list field name.
@@ -87,10 +99,9 @@ _LIST_WRAPPERS: dict[str, type[BaseModel]] = {
 def _normalize_api_response(data: dict[str, Any], model_class: type[BaseModel]) -> BaseModel:
     """Convert raw Kalshi API dicts into validated Pydantic models.
 
-    Handles three type mismatches common in Kalshi responses:
+    Handles two type mismatches common in Kalshi responses:
     1. Price fields arrive as strings ("55") — converted to int cents.
     2. Timestamp fields arrive as Unix ints — converted to datetime.
-    3. outcome_prices are already correct as list[str] — passed through.
     """
     normalized = _deep_normalize(data)
     return model_class.model_validate(normalized)
@@ -102,8 +113,18 @@ def _deep_normalize(obj: Any) -> Any:
         for key, value in obj.items():
             if key in _INT_CENTS_FIELDS and isinstance(value, str):
                 result[key] = int(value)
-            elif key in _TIMESTAMP_FIELDS and isinstance(value, int):
-                result[key] = datetime.fromtimestamp(value, tz=UTC)
+            elif key in _V2_DOLLAR_CENTS_FIELDS:
+                new_key = key.replace("_dollars", "_cents").replace("price_cents", "price_cents")
+                result[new_key] = _to_cents(value) if isinstance(value, (str, int, float)) else value
+            elif key in _V2_COUNT_FP_FIELDS:
+                result[key] = _to_count(value) if isinstance(value, (str, int, float)) else value
+            elif key in _TIMESTAMP_FIELDS:
+                if isinstance(value, int):
+                    result[key] = datetime.fromtimestamp(value, tz=UTC)
+                elif isinstance(value, str):
+                    result[key] = _parse_datetime(value) or value
+                else:
+                    result[key] = value
             else:
                 result[key] = _deep_normalize(value)
         return result

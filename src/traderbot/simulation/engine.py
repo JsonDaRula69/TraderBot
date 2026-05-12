@@ -290,11 +290,7 @@ class BacktestEngine:
             if signal.ticker in positions:
                 continue
 
-            yes_bid = market.outcome_prices[0] if len(market.outcome_prices) > 0 else "50"
-            try:
-                bid_pct = int(float(yes_bid) * 100)
-            except (ValueError, IndexError):
-                bid_pct = 50
+            bid_pct = market.last_price_cents if market.last_price_cents > 0 else 50
             no_bid = 100 - bid_pct
 
             fill_price = self._slippage.apply(

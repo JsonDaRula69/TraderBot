@@ -51,6 +51,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - The **risk module is immutable** — never modify hard limits without explicit human approval
 - The **toolkit never decides strategy** — it computes, enforces, and executes, but the agent decides
 - No API keys in code — use environment variables or `.env` files (never committed)
+- No real-money API calls in tests — demo API calls are allowed, marked with `@pytest.mark.live`
 - All trade decisions must be logged with full reasoning in the audit trail
 - All Pydantic models MUST use `ConfigDict(strict=True, extra="forbid")` — including `BaseSettings` subclasses
 - All monetary values in cents as `int` — never `float`

@@ -128,7 +128,6 @@ class Market(BaseModel):
     question: str = Field(
         validation_alias=AliasChoices("question", "title"),
     )
-    outcome_prices: list[str] | None = None
     volume: Annotated[int, Field(ge=0, description="Contracts traded (FixedPointCount)")] = 0
     open_interest: Annotated[int, Field(ge=0, description="Open contracts (FixedPointCount)")] = 0
     close_time: datetime | None = None
@@ -136,6 +135,13 @@ class Market(BaseModel):
         validation_alias=AliasChoices("status", "state"),
     )
     event_ticker: str = ""
+
+    # V2 price fields (all in cents, converted from FixedPointDollars strings)
+    last_price_cents: Annotated[int, Field(ge=-1, description="Last traded price in cents")] = 0
+    yes_bid_cents: Annotated[int, Field(ge=0, description="Yes bid in cents")] = 0
+    yes_ask_cents: Annotated[int, Field(ge=0, description="Yes ask in cents")] = 0
+    no_bid_cents: Annotated[int, Field(ge=0, description="No bid in cents")] = 0
+    no_ask_cents: Annotated[int, Field(ge=0, description="No ask in cents")] = 0
 
     category: str | None = None
     market_category: MarketCategory | None = None
@@ -240,7 +246,6 @@ class Event(BaseModel):
     description: str = ""
     category: str | None = None
     market_category: MarketCategory | None = None
-    state: str = Field(validation_alias=AliasChoices("status", "state"))
     close_time: datetime | None = None
     markets_count: int = 0
 

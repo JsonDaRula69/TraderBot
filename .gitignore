@@ -54,3 +54,4 @@ credentials.json
 # Sisyphus agent state
 .sisyphus/.coverage
 kalshi-starter-code-python/
+mentions-test.txt

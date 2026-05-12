@@ -15,7 +15,14 @@ from traderbot.profiles.runtime import (
     get_runtime_context,
     load_profile_config,
 )
-from traderbot.profiles.tokens import assign_token, generate_token, set_keyring
+from traderbot.profiles.tokens import assign_token, generate_token, set_keyring, _TOKENS_FILE
+
+
+@pytest.fixture(autouse=True)
+def _clean_tokens_file():
+    _TOKENS_FILE.unlink(missing_ok=True)
+    yield
+    _TOKENS_FILE.unlink(missing_ok=True)
 
 
 @pytest.fixture

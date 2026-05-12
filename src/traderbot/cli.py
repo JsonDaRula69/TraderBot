@@ -343,7 +343,6 @@ def signals(
     """Compute and display trading signals across open markets."""
     from traderbot.analysis.odds import implied_probability
     from traderbot.analysis.signals import generate_signal
-    from traderbot.kalshi._normalize import _to_cents
     from traderbot.kalshi.models import MarketCategory
 
     console = Console()
@@ -452,7 +451,7 @@ def signals(
         except ValueError:
             continue
 
-        prices_int = [_to_cents(p) for p in market.outcome_prices]
+        prices_int = [market.last_price_cents] if market.last_price_cents > 0 else []
         signal = generate_signal(
             ticker=market.ticker,
             prices=prices_int,
@@ -1582,8 +1581,7 @@ def paper(
 
                         orderbook = asyncio.run(_fetch_paper_ob())
 
-                        from traderbot.kalshi._normalize import _to_cents
-                        prices = [_to_cents(p) for p in market.outcome_prices]
+                        prices = [market.last_price_cents] if market.last_price_cents > 0 else []
                         from traderbot.kalshi.models import Trade as _Trade
 
                         signals = strat.on_market_open(market, trader.get_portfolio())

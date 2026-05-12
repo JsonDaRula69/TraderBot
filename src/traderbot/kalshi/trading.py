@@ -72,12 +72,16 @@ class TradingService:
         """Normalize a raw V2 API order dict into a TradingOrder model."""
         created_time = raw.get("created_time")
         if isinstance(created_time, str):
-            from datetime import datetime as dt
+            from traderbot.kalshi._normalize import _parse_datetime
 
-            created_time = dt.fromisoformat(created_time.replace("Z", "+00:00"))
+            created_time = _parse_datetime(created_time)
+        elif isinstance(created_time, int):
+            from datetime import UTC, datetime as dt
 
-        price_dollars = raw.get("yes_price_dollars") or raw.get("no_price_dollars") or "0"
-        price = round(float(price_dollars) * 100)
+            created_time = dt.fromtimestamp(created_time, tz=UTC)
+
+        price_str = raw.get("yes_price_dollars") or raw.get("no_price_dollars") or raw.get("price_fp") or raw.get("price_dollars") or "0"
+        price = round(float(price_str) * 100)
 
         initial_count = raw.get("initial_count_fp") or raw.get("count_fp") or "0"
         quantity = int(float(initial_count))

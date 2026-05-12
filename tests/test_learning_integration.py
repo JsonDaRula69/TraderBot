@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from typer.testing import CliRunner
+from unittest.mock import MagicMock, patch
 
 from traderbot.cli import app
 from traderbot.db import get_connection, init_schema
@@ -472,6 +473,11 @@ class TestWALLifecycle:
 
 class TestCLILearningsIntegration:
     """CLI learnings command using real SQLite (not mocked)."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
 
     def test_learnings_list_empty(self, tmp_path: Path) -> None:
         """learnings CLI with empty DB shows 'No learnings found'."""

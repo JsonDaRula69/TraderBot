@@ -45,7 +45,7 @@ def _make_market(
     return Market(
         ticker=ticker,
         question=question,
-        outcome_prices=["0.65", "0.35"],
+        last_price_cents=65,
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
@@ -417,7 +417,7 @@ class TestBacktestEngine:
         market = Market(
             ticker="KX-NOEDGE",
             question="Low edge market?",
-            outcome_prices=["0.52", "0.48"],
+            last_price_cents=52,
             volume=5000,
             open_interest=2000,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),

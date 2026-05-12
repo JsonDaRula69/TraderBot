@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from traderbot.kalshi._normalize import _normalize_trade as normalize_trade_raw
+from traderbot.kalshi._normalize import (
+    _normalize_fill as normalize_fill_raw,
+    _normalize_market as normalize_market_real,
+    _normalize_trade as normalize_trade_raw,
+)
 from traderbot.kalshi.models import (
     Decision,
     Fill,
@@ -33,6 +37,22 @@ def _normalize_market(raw: dict) -> dict:
     d = copy.deepcopy(raw)
     if isinstance(d.get("close_time"), str):
         d["close_time"] = datetime.fromisoformat(d["close_time"].replace("Z", "+00:00"))
+    # Convert V2 raw API fields to model field names
+    for old_key, new_key in [
+        ("last_price_dollars", "last_price_cents"),
+        ("yes_bid_dollars", "yes_bid_cents"),
+        ("yes_ask_dollars", "yes_ask_cents"),
+        ("no_bid_dollars", "no_bid_cents"),
+        ("no_ask_dollars", "no_ask_cents"),
+        ("volume_fp", "volume"),
+        ("open_interest_fp", "open_interest"),
+    ]:
+        if old_key in d:
+            val = d.pop(old_key)
+            if new_key in ("last_price_cents", "yes_bid_cents", "yes_ask_cents", "no_bid_cents", "no_ask_cents"):
+                d[new_key] = int(round(float(val) * 100)) if isinstance(val, str) else val
+            elif new_key in ("volume", "open_interest"):
+                d[new_key] = int(round(float(val))) if isinstance(val, str) else val
     return d
 
 
@@ -77,16 +97,17 @@ class TestOrderBookLevel:
 
 class TestMarket:
     def test_valid(self, sample_market_data: dict) -> None:
-        m = Market(**_normalize_market(sample_market_data))
+        m = normalize_market_real(sample_market_data)
         assert m.ticker == "KXBTCD-26MAR31-T55000"
         assert m.status == "open"
         assert m.category == "crypto"
+        assert m.last_price_cents == 65
 
     def test_optional_fields_none(self) -> None:
         m = Market(
             ticker="KX-TEST",
             question="Test?",
-            outcome_prices=["0.50", "0.50"],
+            last_price_cents=50,
             volume=0,
             open_interest=0,
             close_time=_ts(),
@@ -100,7 +121,7 @@ class TestMarket:
         m = Market(
             ticker="KX-TEST",
             question="Q?",
-            outcome_prices=["0.50"],
+            last_price_cents=50,
             volume=1,
             open_interest=1,
             close_time=_ts(),
@@ -129,7 +150,7 @@ class TestMarket:
         m = Market(
             ticker="KX-SETTLED",
             question="Done?",
-            outcome_prices=["1.00", "0.00"],
+            last_price_cents=100,
             volume=100,
             open_interest=50,
             close_time=_ts(),
@@ -144,7 +165,7 @@ class TestMarket:
             Market(
                 ticker="KX-TEST",
                 question="Q?",
-                outcome_prices=["0.50"],
+                last_price_cents=50,
                 volume=-1,
                 open_interest=0,
                 close_time=_ts(),
@@ -156,7 +177,7 @@ class TestMarket:
         m = Market(
             ticker="KX-CLOSED",
             question="Over?",
-            outcome_prices=["0.90", "0.10"],
+            last_price_cents=90,
             volume=500,
             open_interest=200,
             close_time=_ts(),
@@ -641,7 +662,7 @@ class TestMarketListResponse:
         m2 = Market(
             ticker="KX-OTHER",
             question="Other?",
-            outcome_prices=["0.20", "0.80"],
+            last_price_cents=20,
             volume=500,
             open_interest=100,
             close_time=_ts(),
@@ -1039,7 +1060,7 @@ class TestMarketCategoryValidator:
         market = Market(
             ticker="KXBTC-26MAR31-T55000",
             question="Bitcoin above 55000?",
-            outcome_prices=["0.5", "0.5"],
+            last_price_cents=50,
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
@@ -1053,7 +1074,7 @@ class TestMarketCategoryValidator:
         market = Market(
             ticker="KXBTC-26MAR31-T55000",
             question="Bitcoin above 55000?",
-            outcome_prices=["0.5", "0.5"],
+            last_price_cents=50,
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
@@ -1067,7 +1088,7 @@ class TestMarketCategoryValidator:
         market = Market(
             ticker="KXBTC-26MAR31-T55000",
             question="Bitcoin above 55000?",
-            outcome_prices=["0.5", "0.5"],
+            last_price_cents=50,
             volume=1000,
             open_interest=500,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),

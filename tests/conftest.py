@@ -13,7 +13,11 @@ def sample_market_data() -> dict:
     return {
         "ticker": "KXBTCD-26MAR31-T55000",
         "question": "Will BTC touch $55,000 before March 31?",
-        "outcome_prices": ["0.65", "0.35"],
+        "last_price_dollars": "0.65",
+        "yes_bid_dollars": "0.64",
+        "yes_ask_dollars": "0.66",
+        "no_bid_dollars": "0.34",
+        "no_ask_dollars": "0.36",
         "volume": 15000,
         "open_interest": 2500,
         "close_time": datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),

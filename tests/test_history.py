@@ -13,9 +13,6 @@ from traderbot.kalshi.history import HistoryService
 
 CLOSE_TIME_2026_03_31 = 1775001599
 TRADE_TS_2025_04_20 = 1745150400
-SETTLED_TS = 1775001600
-CUTOFF_TRADE_TS = 1774900000
-CUTOFF_ORDER_TS = 1774800000
 
 
 def _make_config() -> KalshiConfig:
@@ -30,7 +27,11 @@ def _make_config() -> KalshiConfig:
 SAMPLE_MARKET_RAW = {
     "ticker": "KXBTCD-26MAR31-T55000",
     "question": "Will BTC touch $55,000 before March 31?",
-    "outcome_prices": ["0.65", "0.35"],
+    "last_price_dollars": "0.65",
+    "yes_bid_dollars": "0.64",
+    "yes_ask_dollars": "0.66",
+    "no_bid_dollars": "0.34",
+    "no_ask_dollars": "0.36",
     "volume": 15000,
     "open_interest": 2500,
     "close_time": CLOSE_TIME_2026_03_31,
@@ -40,23 +41,9 @@ SAMPLE_MARKET_RAW = {
     "settlement_result": True,
 }
 
-SAMPLE_MARKET_WITH_CUTOFFS = {
-    "ticker": "KXBTCD-26MAR31-T55000",
-    "question": "Will BTC touch $55,000?",
-    "outcome_prices": ["0.5", "0.5"],
-    "volume": 100,
-    "open_interest": 50,
-    "close_time": CLOSE_TIME_2026_03_31,
-    "status": "open",
-    "event_ticker": "KXBTCD-26MAR31",
-    "market_settled_ts": SETTLED_TS,
-    "trade_cutoff_ts": CUTOFF_TRADE_TS,
-    "order_cutoff_ts": CUTOFF_ORDER_TS,
-}
-
 SAMPLE_TRADE_RAW = {
     "ticker": "KXBTCD-26MAR31-T55000",
-    "yes_price": 65,
+    "yes_price_dollars": "0.65",
     "count": 10,
     "side": "yes",
     "timestamp": TRADE_TS_2025_04_20,
@@ -65,7 +52,11 @@ SAMPLE_TRADE_RAW = {
 SAMPLE_SETTLED_MARKET_RAW = {
     "ticker": "KXELEC-24NOV05-SENATE",
     "question": "Which party controls the Senate after 2026?",
-    "outcome_prices": ["0.58", "0.42"],
+    "last_price_dollars": "0.58",
+    "yes_bid_dollars": "0.57",
+    "yes_ask_dollars": "0.59",
+    "no_bid_dollars": "0.41",
+    "no_ask_dollars": "0.43",
     "volume": 320000,
     "open_interest": 45000,
     "close_time": CLOSE_TIME_2026_03_31,
@@ -74,64 +65,6 @@ SAMPLE_SETTLED_MARKET_RAW = {
     "category": "politics",
     "settlement_result": False,
 }
-
-
-class TestGetCutoffs:
-    @respx.mock
-    async def test_get_cutoffs_with_timestamps(self) -> None:
-        cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000").mock(
-            return_value=httpx.Response(200, json={"market": SAMPLE_MARKET_WITH_CUTOFFS})
-        )
-        async with KalshiClient(cfg) as client:
-            client._session_token = "tok"
-            service = HistoryService(client)
-            result = await service.get_cutoffs("KXBTCD-26MAR31-T55000")
-
-        assert result.market_settled_ts is not None
-        assert result.trade_cutoff_ts is not None
-        assert result.order_cutoff_ts is not None
-
-    @respx.mock
-    async def test_get_cutoffs_missing_fields(self) -> None:
-        cfg = _make_config()
-        market_without_cutoffs = {
-            "ticker": "KXBTCD-26MAR31-T55000",
-            "question": "Will BTC touch $55,000?",
-            "outcome_prices": ["0.5", "0.5"],
-            "volume": 100,
-            "open_interest": 50,
-            "close_time": CLOSE_TIME_2026_03_31,
-            "status": "open",
-            "event_ticker": "KXBTCD-26MAR31",
-        }
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000").mock(
-            return_value=httpx.Response(200, json={"market": market_without_cutoffs})
-        )
-        async with KalshiClient(cfg) as client:
-            client._session_token = "tok"
-            service = HistoryService(client)
-            result = await service.get_cutoffs("KXBTCD-26MAR31-T55000")
-
-        assert result.market_settled_ts is None
-        assert result.trade_cutoff_ts is None
-        assert result.order_cutoff_ts is None
-
-    @respx.mock
-    async def test_get_cutoffs_partial_fields(self) -> None:
-        cfg = _make_config()
-        market_partial = {**SAMPLE_MARKET_RAW, "market_settled_ts": SETTLED_TS}
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000").mock(
-            return_value=httpx.Response(200, json={"market": market_partial})
-        )
-        async with KalshiClient(cfg) as client:
-            client._session_token = "tok"
-            service = HistoryService(client)
-            result = await service.get_cutoffs("KXBTCD-26MAR31-T55000")
-
-        assert result.market_settled_ts is not None
-        assert result.trade_cutoff_ts is None
-        assert result.order_cutoff_ts is None
 
 
 class TestGetHistoricalTrades:

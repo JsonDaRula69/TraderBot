@@ -319,7 +319,7 @@ class TestParseOrder:
             "yes_price_dollars": None,
             "no_price_dollars": None,
             "price_dollars": None,
-            "price_fp": "0.6600",
+            "price_fp": "0.66",
         }
         order = TradingService._parse_order(raw)
         assert order.price == 66
@@ -367,10 +367,11 @@ class TestParseOrder:
         order = TradingService._parse_order(raw)
         assert order.status == OrderStatus.live
 
-    def test_created_time_str_rejected_by_model(self) -> None:
+    def test_created_time_str_parsed_correctly(self) -> None:
         raw = {**self._base(), "created_time": "2025-04-20T12:00:00Z"}
-        with pytest.raises(ValidationError):
-            TradingService._parse_order(raw)
+        order = TradingService._parse_order(raw)
+        assert order.created_time is not None
+        assert order.created_time.year == 2025
 
     def test_ask_enum_value_maps_to_no(self) -> None:
         raw = {**self._base(), "side": OrderSideV2.ask}

@@ -1,18 +1,19 @@
 """Backtest strategy implementations for binary prediction markets."""
 
-from traderbot.kalshi._normalize import _to_cents
 from traderbot.simulation.engine import Context, Signal
 
 
-def _yes_probability(prices: list[str] | None) -> float:
-    """Convert outcome_prices to yes-side probability (0.0–1.0).
+def _yes_probability(market) -> float:
+    """Extract yes-side probability (0.0–1.0) from market V2 price fields.
 
-    Handles both dollar format ("0.55") and cent format ("55").
+    Uses last_price_cents if available, falls back to mid-price of yes bid/ask spread.
     """
-    if not prices:
-        return 0.5
-    cents = _to_cents(prices[0])
-    return cents / 100.0 if cents > 0 else 0.5
+    if hasattr(market, "last_price_cents") and market.last_price_cents > 0:
+        return market.last_price_cents / 100.0
+    if hasattr(market, "yes_bid_cents") and market.yes_bid_cents > 0:
+        yes_ask = market.yes_ask_cents if market.yes_ask_cents > 0 else 100
+        return ((market.yes_bid_cents + yes_ask) / 2) / 100.0
+    return 0.5
 
 
 class MomentumStrategy:
@@ -21,7 +22,7 @@ class MomentumStrategy:
     def on_market_open(self, market, context: Context) -> list[Signal]:
         if market.volume < 100:
             return []
-        yes_price = _yes_probability(market.outcome_prices)
+        yes_price = _yes_probability(market)
         price_cents = int(yes_price * 100)
         edge = abs(yes_price - 0.5)
         if edge < 0.03:
@@ -50,7 +51,7 @@ class MeanReversionStrategy:
     """Bet against extremes — buy the underpriced side when price deviates significantly."""
 
     def on_market_open(self, market, context: Context) -> list[Signal]:
-        yes_price = _yes_probability(market.outcome_prices)
+        yes_price = _yes_probability(market)
         price_cents = int(yes_price * 100)
         if 0.35 < yes_price < 0.65:
             return []
@@ -78,7 +79,7 @@ class ConservativeStrategy:
     """Only trade when edge is large and volume is high — capital preservation."""
 
     def on_market_open(self, market, context: Context) -> list[Signal]:
-        yes_price = _yes_probability(market.outcome_prices)
+        yes_price = _yes_probability(market)
         price_cents = int(yes_price * 100)
         edge = abs(yes_price - 0.5)
         if edge < 0.10 or market.volume < 500:

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from traderbot.kalshi._normalize import _to_cents, _to_count, _normalize_fill, _normalize_position
+from traderbot.kalshi._normalize import _parse_datetime, _to_cents, _to_count, _normalize_fill, _normalize_position
 from traderbot.kalshi.models import Fill, Position, Settlement
 
 if TYPE_CHECKING:
@@ -83,12 +82,7 @@ class PortfolioService:
         settlements: list[Settlement] = []
         for raw in raw_settlements:
             try:
-                settled_val = raw.get("settlement_time") or raw.get("settled_at")
-                settled_at = (
-                    datetime.fromtimestamp(int(settled_val), tz=UTC)
-                    if isinstance(settled_val, int)
-                    else None
-                )
+                settled_at = _parse_datetime(raw.get("settlement_time") or raw.get("settled_at"))
 
                 price_cents = _to_cents(raw.get("price_fp") or 0)
 

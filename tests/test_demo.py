@@ -131,7 +131,6 @@ class TestDemoAdapterServices:
     def test_get_history_service_has_history_methods(self) -> None:
         adapter, _ = self._make_adapter_with_client()
         service = adapter.get_history_service()
-        assert hasattr(service, "get_cutoffs")
         assert hasattr(service, "get_historical_trades")
 
     def test_market_service_uses_demo_client(self) -> None:

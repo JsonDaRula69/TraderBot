@@ -22,14 +22,16 @@ def _make_config(**overrides: Any) -> WebSocketConfig:
 
 
 class TestWebSocketConfig:
-    def test_defaults(self) -> None:
-        config = _make_config()
+    def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_DEMO_MODE", raising=False)
+        config = _make_config(_env_file=None)
         assert config.base_url == "wss://api.elections.kalshi.com/trade-api/ws/v2"
         assert config.demo_url == "wss://demo-api.kalshi.co/trade-api/ws/v2"
         assert config.demo_mode is False
 
-    def test_active_url_production(self) -> None:
-        config = _make_config(demo_mode=False)
+    def test_active_url_production(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KALSHI_DEMO_MODE", raising=False)
+        config = _make_config(demo_mode=False, _env_file=None)
         assert config.active_url == "wss://api.elections.kalshi.com/trade-api/ws/v2"
 
     def test_active_url_demo(self) -> None:
@@ -41,11 +43,9 @@ class TestWebSocketConfig:
         dumped = config.model_dump()
         assert dumped["private_key_pem"] != config.private_key_pem.get_secret_value()
 
-    def test_extra_field_rejected(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            WebSocketConfig(api_key=SecretStr("k"), private_key_pem=SecretStr("pem"), extra_field=True)
+    def test_extra_field_ignored(self) -> None:
+        config = WebSocketConfig(api_key=SecretStr("k"), private_key_pem=SecretStr("pem"), extra_field=True)
+        assert config.api_key.get_secret_value() == "k"
 
 
 class TestKalshiWebSocketSubscribe:

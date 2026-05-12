@@ -19,8 +19,8 @@ from traderbot.kalshi.models import (
     OrderBookLevel,
     PortfolioState,
     Trade,
-    TradeListResponse,
 )
+from unittest.mock import AsyncMock, MagicMock, patch
 from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.risk.limits import HARD_LIMITS
 from traderbot.simulation.data_loader import DataLoader, DataQualityReport, init_cache_tables
@@ -83,7 +83,7 @@ def _make_market(
     return Market(
         ticker=ticker,
         question=question,
-        outcome_prices=["0.65", "0.35"],
+        last_price_cents=65,
         volume=volume,
         open_interest=open_interest,
         close_time=close_time or datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
@@ -460,6 +460,11 @@ class TestPaperTraderIntegration:
 class TestCLIIntegration:
     """CLI commands wired to simulation modules via Typer CliRunner."""
 
+    @pytest.fixture(autouse=True)
+    def mock_require_profile(self):
+        with patch("traderbot.cli._require_profile", return_value=MagicMock(enabled_categories=[])):
+            yield
+
     def test_backtest_command_with_mock(self, tmp_path: Path) -> None:
         """backtest CLI: mock engine → verify output."""
         mock_result = BacktestResult(
@@ -716,7 +721,7 @@ class TestRiskEnforcementIntegration:
         """BacktestEngine rejects trades with edge < 3% (min_edge_pct)."""
         low_edge_market = Market(
             ticker="KX-NOEDGE", question="Low edge?",
-            outcome_prices=["0.52", "0.48"], volume=5000, open_interest=2000,
+            last_price_cents=52, volume=5000, open_interest=2000,
             close_time=datetime(2026, 3, 31, 23, 59, 59, tzinfo=UTC),
             status="settled", event_ticker="KX-EVENT",
             category="test", settlement_result=True,
