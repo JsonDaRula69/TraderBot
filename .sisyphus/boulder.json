@@ -36,6 +36,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-05-12T17:11:45.734Z"
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "OpenWeatherMap Weather Source",
+      "session_id": "ses_1e2c37636ffedG2ds5T8kvjITh",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-05-12T17:33:37.456Z"
     }
   }
 }

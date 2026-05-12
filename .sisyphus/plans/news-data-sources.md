@@ -418,7 +418,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(profiles): add resolve_openweather_key and resolve_fred_key`
   - Files: `src/traderbot/profiles/config.py`
 
-- [ ] 4. Open-Meteo Weather Source
+- [x] 4. Open-Meteo Weather Source
 
   **What to do**:
   - Add `_fetch_open_meteo(self, category_filter, limit)` method to `NewsAggregator`
@@ -502,7 +502,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add Open-Meteo weather source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 5. CoinGecko Crypto Source
+- [x] 5. CoinGecko Crypto Source
 
   **What to do**:
   - Add `_fetch_coingecko(self, category_filter, limit)` method to `NewsAggregator`
@@ -582,7 +582,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add CoinGecko crypto source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 6. TheSportsDB Sports Source
+- [x] 6. TheSportsDB Sports Source
 
   **What to do**:
   - Add `_fetch_thesportsdb(self, category_filter, limit)` method to `NewsAggregator`
@@ -656,7 +656,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add TheSportsDB sports source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 7. CoinCap Crypto Source
+- [x] 7. CoinCap Crypto Source
 
   **What to do**:
   - Add `_fetch_coincap(self, category_filter, limit)` method to `NewsAggregator`
@@ -712,7 +712,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add CoinCap crypto source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 8. Ballotpedia Elections RSS Source
+- [x] 8. Ballotpedia Elections RSS Source
 
   **What to do**:
   - Add `_fetch_ballotpedia(self, category_filter, limit)` method to `NewsAggregator`
@@ -773,7 +773,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add Ballotpedia elections RSS source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 9. OpenWeatherMap Weather Source
+- [x] 9. OpenWeatherMap Weather Source
 
   **What to do**:
   - Add `_fetch_openweathermap(self, category_filter, limit)` method to `NewsAggregator`
@@ -850,7 +850,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add OpenWeatherMap weather source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 10. FRED Economics Source
+- [x] 10. FRED Economics Source
 
   **What to do**:
   - Add `_fetch_fred(self, category_filter, limit)` method to `NewsAggregator`
@@ -916,7 +916,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add FRED economics source`
   - Files: `src/traderbot/news/sources.py`
 
-- [ ] 11. Google Trends Mentions Source
+- [x] 11. Google Trends Mentions Source
 
   **What to do**:
   - Add `_fetch_google_trends(self, category_filter, limit)` method to `NewsAggregator`

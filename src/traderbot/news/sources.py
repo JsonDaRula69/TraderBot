@@ -16,6 +16,7 @@ import feedparser
 import httpx
 
 from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
+from traderbot.profiles.config import resolve_fred_key, resolve_openweather_key
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,15 @@ class NewsAggregator:
         NewsSource.REDDIT,
     ]
 
+    _FRED_SERIES: ClassVar[dict[str, dict[str, str]]] = {
+        "CPIAUCSL": {"name": "CPI (All Urban Consumers)", "units": "index", "category": "ECONOMICS"},
+        "UNRATE": {"name": "Unemployment Rate", "units": "percent", "category": "ECONOMICS"},
+        "FEDFUNDS": {"name": "Federal Funds Rate", "units": "percent", "category": "ECONOMICS"},
+        "GDP": {"name": "Gross Domestic Product", "units": "billions", "category": "ECONOMICS"},
+        "DFF": {"name": "Daily Fed Funds Rate", "units": "percent", "category": "FINANCIALS"},
+        "T10Y2Y": {"name": "10Y-2Y Treasury Spread", "units": "percent", "category": "FINANCIALS"},
+    }
+
     def __init__(
         self,
         config: DataSourcesConfig | None = None,
@@ -186,6 +196,8 @@ class NewsAggregator:
         self._daily_budget: int = daily_budget if daily_budget is not None else (config.daily_budget or int(os.environ.get("NEWSAPI_DAILY_BUDGET", "100")))
         self._daily_request_count: int = 0
         self._budget_reset_date: str = ""
+        self._owm_daily_count: int = 0
+        self._owm_budget_date: str = ""
 
     def requires_api_key(self, source: NewsSource) -> bool:
         """Return whether a source requires an API key."""
@@ -580,6 +592,64 @@ class NewsAggregator:
         logger.warning("Twitter API integration not yet implemented despite TWITTER_API_KEY being set")
         return []
 
+    async def _fetch_google_trends(
+        self,
+        category_filter: list[NewsCategory] | None = None,
+        limit: int = 20,
+    ) -> list[DataPoint]:
+        """Fetch trending search terms from Google Trends via pytrends (best-effort, optional)."""
+        if category_filter and not (
+            NewsCategory.MENTIONS in category_filter or NewsCategory.SOCIAL in category_filter
+        ):
+            return []
+
+        try:
+            from pytrends.request import TrendReq  # noqa: TCH002
+        except ImportError:
+            logger.info("pytrends not installed, Google Trends source skipped")
+            return []
+
+        try:
+            loop = asyncio.get_running_loop()
+            try:
+                pytrends = await asyncio.wait_for(
+                    loop.run_in_executor(None, TrendReq, "en-US", 360, 10),
+                    timeout=10,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Google Trends client init timed out, skipping")
+                return []
+
+            try:
+                trending = await asyncio.wait_for(
+                    loop.run_in_executor(None, pytrends.trending_searches, "united_states"),
+                    timeout=10,
+                )
+            except (asyncio.TimeoutError, Exception):
+                logger.warning("Google Trends fetch failed (likely blocked), returning empty")
+                return []
+
+            terms: list[str] = trending[0].tolist()[:limit] if not trending.empty else []
+
+            results: list[DataPoint] = []
+            for term in terms:
+                results.append(
+                    DataPoint(
+                        id=f"gt-{hashlib.md5(term.encode()).hexdigest()[:12]}",
+                        source=NewsSource.GOOGLE_TRENDS,
+                        category=NewsCategory.MENTIONS,
+                        title=f"Trending: {term}",
+                        data={"topic": term},
+                        timestamp=datetime.now(tz=UTC),
+                        ticker_refs=[],
+                        metadata={"geo": "US", "source_type": "trending_searches"},
+                    )
+                )
+            return results
+        except Exception:
+            logger.warning("Google Trends unexpected failure, returning empty")
+            return []
+
     async def _fetch_open_meteo(
         self,
         category_filter: list[NewsCategory] | None = None,
@@ -662,6 +732,102 @@ class NewsAggregator:
                 logger.warning("Open-Meteo HTTP error for %s, skipping", city_label)
             except Exception:
                 logger.warning("Open-Meteo unexpected error for %s, skipping", city_label)
+
+        return points
+
+    async def _fetch_openweathermap(
+        self,
+        category_filter: list[NewsCategory] | None = None,
+        limit: int = 20,
+    ) -> list[DataPoint]:
+        """Fetch current weather from OpenWeatherMap for Kalshi-related cities."""
+        if category_filter and NewsCategory.WEATHER not in category_filter:
+            return []
+
+        key = resolve_openweather_key(None)
+        if key is None:
+            logger.warning("OpenWeatherMap key not set, skipping")
+            return []
+
+        today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+        if today != self._owm_budget_date:
+            self._owm_budget_date = today
+            self._owm_daily_count = 0
+        if self._owm_daily_count >= 900:
+            logger.warning("OpenWeatherMap daily budget exhausted (%d calls today), skipping", self._owm_daily_count)
+            return []
+
+        points: list[DataPoint] = []
+        try:
+            for ticker, (city_name, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
+                if len(points) >= limit:
+                    break
+                if self._owm_daily_count >= 900:
+                    logger.warning("OpenWeatherMap daily budget exhausted mid-fetch, stopping")
+                    break
+
+                try:
+                    params: dict[str, Any] = {
+                        "q": city_name,
+                        "appid": key,
+                        "units": "imperial",
+                    }
+                    response = await self._client.get(
+                        "https://api.openweathermap.org/data/2.5/weather",
+                        params=params,
+                    )
+                    if response.status_code != 200:
+                        logger.warning(
+                            "OpenWeatherMap returned HTTP %d for %s, skipping",
+                            response.status_code, city_name,
+                        )
+                        self._owm_daily_count += 1
+                        continue
+
+                    data = response.json()
+                    main = data.get("main", {})
+                    wind = data.get("wind", {})
+                    weather_list = data.get("weather", [{}])
+
+                    temp_f = int(main.get("temp", 0))
+                    temp_min_f = int(main.get("temp_min", 0))
+                    temp_max_f = int(main.get("temp_max", 0))
+                    humidity_pct = int(main.get("humidity", 0))
+                    wind_mph = int(wind.get("speed", 0))
+                    weather_code = int(weather_list[0].get("id", 0))
+                    weather_desc = str(weather_list[0].get("description", "Unknown"))
+
+                    points.append(
+                        DataPoint(
+                            id=f"owm-{city_name.lower().replace(' ', '-')}",
+                            source=NewsSource.OPENWEATHERMAP,
+                            category=NewsCategory.WEATHER,
+                            title=f"{city_name}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
+                            data={
+                                "temp_f": temp_f,
+                                "temp_min_f": temp_min_f,
+                                "temp_max_f": temp_max_f,
+                                "humidity_pct": humidity_pct,
+                                "wind_mph": wind_mph,
+                                "weather_code": weather_code,
+                                "description": weather_desc,
+                            },
+                            timestamp=datetime.now(tz=UTC),
+                            ticker_refs=[ticker],
+                            metadata={"city": city_name, "lat": lat, "lon": lon},
+                        )
+                    )
+
+                except httpx.HTTPError:
+                    logger.warning("OpenWeatherMap HTTP error for %s, skipping", city_name)
+                except Exception:
+                    logger.warning("OpenWeatherMap unexpected error for %s, skipping", city_name)
+
+                self._owm_daily_count += 1
+
+        except Exception:
+            logger.warning("OpenWeatherMap fetch failed, returning partial results")
+            return points
 
         return points
 
@@ -1150,6 +1316,130 @@ class NewsAggregator:
                 await asyncio.sleep(1)
 
         return points[:limit]
+
+    async def _fetch_fred(
+        self,
+        category_filter: list[NewsCategory] | None = None,
+        limit: int = 20,
+    ) -> list[DataPoint]:
+        """Fetch latest economic observations from FRED API.
+
+        Returns DataPoint objects with series values as strings (no float conversion).
+        Requires FRED_API_KEY resolved via profile-aware fallback chain.
+        """
+        if category_filter is not None:
+            if (
+                NewsCategory.ECONOMICS not in category_filter
+                and NewsCategory.FINANCIALS not in category_filter
+            ):
+                return []
+
+        key = resolve_fred_key(None)
+        if key is None:
+            logger.warning("FRED API key not available, skipping FRED fetch")
+            return []
+
+        allowed_categories: set[str] = set()
+        if category_filter is None:
+            allowed_categories = {"ECONOMICS", "FINANCIALS"}
+        else:
+            if NewsCategory.ECONOMICS in category_filter:
+                allowed_categories.add("ECONOMICS")
+            if NewsCategory.FINANCIALS in category_filter:
+                allowed_categories.add("FINANCIALS")
+
+        filtered_series = {
+            sid: info
+            for sid, info in self._FRED_SERIES.items()
+            if info["category"] in allowed_categories
+        }
+
+        points: list[DataPoint] = []
+
+        try:
+            for sid, info in filtered_series.items():
+                if len(points) >= limit:
+                    break
+
+                try:
+                    response = await self._client.get(
+                        "https://api.stlouisfed.org/fred/series/observations",
+                        params={
+                            "series_id": sid,
+                            "api_key": key,
+                            "file_type": "json",
+                            "sort_order": "desc",
+                            "limit": 1,
+                        },
+                    )
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            "FRED series %s returned HTTP %d, skipping",
+                            sid,
+                            response.status_code,
+                        )
+                        continue
+
+                    data = response.json()
+                    observations = data.get("observations", [])
+                    if not observations:
+                        logger.warning("FRED series %s has no observations, skipping", sid)
+                        continue
+
+                    obs = observations[0]
+                    date = obs.get("date", "")
+                    value = obs.get("value", ".")
+
+                    series_name = info["name"]
+                    units = info["units"]
+                    series_category = info["category"]
+
+                    if date:
+                        try:
+                            timestamp = datetime.fromisoformat(date + "T00:00:00+00:00")
+                        except ValueError:
+                            timestamp = datetime.now(tz=UTC)
+                    else:
+                        timestamp = datetime.now(tz=UTC)
+
+                    category = (
+                        NewsCategory.ECONOMICS
+                        if series_category == "ECONOMICS"
+                        else NewsCategory.FINANCIALS
+                    )
+
+                    freq = "daily" if sid in ("DFF", "T10Y2Y") else "monthly"
+
+                    points.append(
+                        DataPoint(
+                            id=f"fred-{sid.lower()}",
+                            source=NewsSource.FRED,
+                            category=category,
+                            title=f"{series_name}: {value} ({date})",
+                            data={
+                                "series_id": sid,
+                                "value": value,
+                                "date": date,
+                                "units": units,
+                            },
+                            timestamp=timestamp,
+                            ticker_refs=[],
+                            metadata={
+                                "series_name": series_name,
+                                "freq": freq,
+                            },
+                        )
+                    )
+
+                except Exception:
+                    logger.warning("FRED series %s fetch failed, skipping", sid, exc_info=True)
+                    continue
+
+        except Exception:
+            logger.exception("FRED fetch failed, returning partial results")
+
+        return points
 
     async def close(self) -> None:
         """Close the underlying HTTP client."""
