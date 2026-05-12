@@ -857,7 +857,7 @@ def news(
     limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
     source: Annotated[
         str | None,
-        typer.Option("--source", help="Filter by source: newsapi, twitter, reddit, open-meteo, coingecko, thesportsdb, coincap, openweathermap, ballotpedia, fred, google-trends, all"),
+        typer.Option("--source", help="Filter by source: newsapi, twitter, reddit, open-meteo, thesportsdb, coincap, openweathermap, ballotpedia, fred, google-trends, all"),
     ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
