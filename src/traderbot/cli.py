@@ -64,11 +64,27 @@ app.add_typer(cron_app, name="cron")
 err_console = Console(stderr=True)
 
 
+def _resolve_db_path(db_path: Path | None = None) -> Path:
+    """Resolve database path: explicit override > profile-specific > global default."""
+    from traderbot.db import DB_PATH
+    from traderbot.profiles.isolation import get_profile_db_path
+
+    if db_path is not None:
+        return db_path
+
+    from traderbot.profiles.runtime import get_current_profile
+    profile = get_current_profile()
+    if profile is not None:
+        return get_profile_db_path(profile, "decisions.db")
+
+    return DB_PATH
+
+
 def _with_db(db_path, func):
     """Run func with a database connection, handling open/close."""
     from traderbot.db import get_connection, init_schema
 
-    with get_connection(db_path) as conn:
+    with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
         return func(conn)
 
@@ -439,7 +455,7 @@ def positions(
     """List current positions from SQLite."""
     from traderbot.db.positions import list_all
 
-    all_positions = _with_db(db_path, list_all)
+    all_positions = _with_db(_resolve_db_path(db_path), list_all)
 
     if json_output:
         json_lib.dump([p.model_dump(mode="json") for p in all_positions], sys.stdout, default=str)
@@ -488,7 +504,7 @@ def audit(
         else:
             return list_by_date_range(conn, start=start_dt, end=end_dt)
 
-    decisions = _with_db(db_path, _query_decisions)
+    decisions = _with_db(_resolve_db_path(db_path), _query_decisions)
 
     if json_output:
         json_lib.dump([d.model_dump(mode="json") for d in decisions], sys.stdout, default=str)
@@ -622,7 +638,7 @@ def bootstrap(
     steps["db_path"] = str(db_path)
     if not dry_run:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        with get_connection(db_path) as conn:
+        with get_connection(_resolve_db_path(db_path)) as conn:
             init_schema(conn)
     steps["db_created"] = not dry_run
 
@@ -731,7 +747,7 @@ def heartbeat(
         ))
 
     try:
-        result = _with_db(db_path, _run)
+        result = _with_db(_resolve_db_path(db_path), _run)
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
@@ -911,10 +927,22 @@ def news(
             )
         raise typer.Exit(code=1) from None
 
-    # Build category filter from profile
+    # Build category filter from profile and/or --category flag
     category_filter: list[NewsCategory] | None = None
     if profile is not None and profile.enabled_categories:
         category_filter = profile.enabled_categories
+
+    # If --category was explicitly passed, use it for fetching even without a profile
+    if category_enum is not None:
+        if category_filter is not None:
+            # Both profile categories and --category: intersect (must be in both)
+            if category_enum not in category_filter:
+                category_filter = None  # let it fall through to the display filter
+            else:
+                category_filter = [category_enum]
+        else:
+            # No profile categories: use --category alone
+            category_filter = [category_enum]
 
     # Validate --source (normalize hyphens to underscores for enum lookup)
     source_filter: NewsSource | None = None
@@ -1254,7 +1282,7 @@ def backtest(
     from traderbot.db import get_connection, init_schema
     from traderbot.simulation.data_loader import DataLoader, init_cache_tables
 
-    with get_connection(db_path) as conn:
+    with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
         init_cache_tables(conn)
         loader = DataLoader(conn, history)
@@ -1346,7 +1374,7 @@ def paper(
     client = demo.get_client()
     market_service = MarketService(client)
 
-    with get_connection(db_path) as conn:
+    with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
         trader = PaperTrader(demo, conn, profile=profile)
 
@@ -1490,7 +1518,7 @@ def compare(
     from traderbot.simulation.data_loader import DataLoader, init_cache_tables
     from traderbot.simulation.engine import BacktestEngine
 
-    with get_connection(db_path) as conn:
+    with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
         init_cache_tables(conn)
         loader = DataLoader(conn, history)
@@ -1564,7 +1592,7 @@ def performance(
     start_dt = datetime.fromisoformat(from_date) if from_date else None
     end_dt = datetime.fromisoformat(to_date) if to_date else None
 
-    decisions = _with_db(db_path, lambda conn: list_by_date_range(conn, start=start_dt, end=end_dt))
+    decisions = _with_db(_resolve_db_path(db_path), lambda conn: list_by_date_range(conn, start=start_dt, end=end_dt))
 
     executed = [d for d in decisions if d.outcome == "executed"]
 
@@ -1756,7 +1784,7 @@ def learnings(
             )
         console.print(table)
 
-    _with_db(db_path, _run)
+    _with_db(_resolve_db_path(db_path), _run)
 
 
 @auth_app.command("login")

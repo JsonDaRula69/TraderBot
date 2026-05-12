@@ -27,7 +27,7 @@ def test_create_paper_profile():
     assert profile.name == "test-paper"
     assert profile.mode == "paper"
     assert profile.demo_mode is True
-    assert profile.base_dir.endswith("/.traderbot/paper") or profile.base_dir.endswith("\\.traderbot\\paper")
+    assert profile.base_dir.endswith("/.traderbot/paper-test-paper") or profile.base_dir.endswith("\\.traderbot\\paper-test-paper")
     assert profile.keyring_prefix == "traderbot-paper-test-paper"
     assert profile.env_file == ".env.paper"
 
@@ -49,7 +49,7 @@ def test_create_live_profile():
     assert profile.name == "test-live"
     assert profile.mode == "live"
     assert profile.demo_mode is False
-    assert profile.base_dir.endswith("/.traderbot/live") or profile.base_dir.endswith("\\.traderbot\\live")
+    assert profile.base_dir.endswith("/.traderbot/live-test-live") or profile.base_dir.endswith("\\.traderbot\\live-test-live")
     assert profile.keyring_prefix == "traderbot-live-test-live"
     assert profile.env_file == ".env.live"
 
