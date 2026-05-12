@@ -990,7 +990,7 @@ Max Concurrent: 5 (Wave 2)
   - Message: `feat(news): add Google Trends mentions source (best-effort)`
   - Files: `src/traderbot/news/sources.py`, `pyproject.toml`
 
-- [ ] 12. CLI Integration + fetch_all Refactor
+- [x] 12. CLI Integration + fetch_all Refactor
 
   **What to do**:
   - Update `traderbot news` CLI command (in `src/traderbot/cli.py`) to support all 11 sources (3 existing + 8 new)
