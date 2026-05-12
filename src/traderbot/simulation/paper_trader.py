@@ -177,6 +177,15 @@ class PaperTrader:
                         unrealized += (row["avg_price_cents"] - mark) * row["quantity"]
         return self._realized_pnl_cents + unrealized
 
+    def _compute_unrealized_loss(self) -> int:
+        """Compute unrealized loss from open positions.
+
+        Without a live market price, positions are marked at average cost
+        so unrealized loss defaults to 0. Call get_pnl(mark_prices=...) for
+        accurate unrealized P&L when mark prices are available.
+        """
+        return 0
+
     def record_fill(self, fill: PaperFill) -> None:
         now = datetime.now(UTC).isoformat()
 
@@ -204,12 +213,15 @@ class PaperTrader:
         if self._cash_cents <= 0:
             raise BacktestError(f"Cash balance must be positive, got {self._cash_cents}")
 
+        today_realized_loss = max(0, -self._realized_pnl_cents)
+        today_unrealized_loss = self._compute_unrealized_loss()
+
         portfolio = PortfolioState(
             portfolio_value_cents=self._cash_cents,
             peak_value_cents=self._cash_cents,
             current_positions_value_cents=self._position_value_cents(),
-            today_realized_loss_cents=max(0, -self._realized_pnl_cents),
-            today_unrealized_loss_cents=0,
+            today_realized_loss_cents=today_realized_loss,
+            today_unrealized_loss_cents=today_unrealized_loss,
             open_positions_count=len(self.get_positions()),
         )
         # Derive estimated probability from price + edge offset

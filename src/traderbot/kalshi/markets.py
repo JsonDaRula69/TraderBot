@@ -129,7 +129,6 @@ class MarketService:
                 )
                 raw_markets = raw_event.get("markets") or []
                 for raw_market in raw_markets:
-                    # Filter client-side: only include active/open markets
                     market_status = raw_market.get("status", "").lower()
                     if market_status not in ("active", "open"):
                         continue
@@ -154,12 +153,13 @@ class MarketService:
         response.raise_for_status()
         data = response.json()
 
-        yes_bids = [
-            _normalize_orderbook_level(level) for level in data.get("yes_bids", data.get("yes", []))
-        ]
-        no_bids = [
-            _normalize_orderbook_level(level) for level in data.get("no_bids", data.get("no", []))
-        ]
+        # V2 orderbook uses orderbook_fp wrapper with yes_dollars/no_dollars keys.
+        ob = data.get("orderbook_fp", data)
+        yes_raw = ob.get("yes_dollars", ob.get("yes_bids", ob.get("yes", [])))
+        no_raw = ob.get("no_dollars", ob.get("no_bids", ob.get("no", [])))
+
+        yes_bids = [_normalize_orderbook_level(level) for level in yes_raw]
+        no_bids = [_normalize_orderbook_level(level) for level in no_raw]
 
         return OrderBook(yes_bids=yes_bids, no_bids=no_bids)
 

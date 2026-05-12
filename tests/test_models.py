@@ -9,7 +9,6 @@ from pydantic import ValidationError
 
 from traderbot.kalshi._normalize import _normalize_trade as normalize_trade_raw
 from traderbot.kalshi.models import (
-    CutoffTimestamps,
     Decision,
     Fill,
     Market,
@@ -610,31 +609,6 @@ class TestDecision:
         raw = d.model_dump_json()
         restored = Decision.model_validate_json(raw)
         assert restored == d
-
-
-class TestCutoffTimestamps:
-    def test_all_none(self) -> None:
-        c = CutoffTimestamps()
-        assert c.market_settled_ts is None
-        assert c.trade_cutoff_ts is None
-        assert c.order_cutoff_ts is None
-
-    def test_all_set(self) -> None:
-        c = CutoffTimestamps(
-            market_settled_ts=_ts(),
-            trade_cutoff_ts=_ts(),
-            order_cutoff_ts=_ts(),
-        )
-        assert c.market_settled_ts is not None
-
-    def test_extra_field_forbidden(self) -> None:
-        with pytest.raises(ValidationError):
-            CutoffTimestamps(extra=True)
-
-    def test_roundtrip(self) -> None:
-        c = CutoffTimestamps(market_settled_ts=_ts())
-        data = c.model_dump()
-        assert CutoffTimestamps(**data) == c
 
 
 class TestMarketListResponse:

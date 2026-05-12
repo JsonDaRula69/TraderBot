@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from traderbot.kalshi._normalize import _to_cents
+from traderbot.kalshi._normalize import _to_cents, _to_count, _normalize_fill, _normalize_position
 from traderbot.kalshi.models import Fill, Position, Settlement
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioService:
@@ -40,7 +43,7 @@ class PortfolioService:
         response = await self._client.get("/portfolio/positions", **params)
         response.raise_for_status()
         data = response.json()
-        return [Position.model_validate(p) for p in data.get("positions", [])]
+        return [_normalize_position(p) for p in data.get("positions", [])]
 
     async def get_fills(
         self,
@@ -58,7 +61,7 @@ class PortfolioService:
         response = await self._client.get("/portfolio/fills", **params)
         response.raise_for_status()
         data = response.json()
-        return [Fill.model_validate(f) for f in data.get("fills", [])]
+        return [_normalize_fill(f) for f in data.get("fills", [])]
 
     async def get_settlements(
         self,
@@ -87,19 +90,13 @@ class PortfolioService:
                     else None
                 )
 
-                price_cents = _to_cents(
-                    raw.get("price_dollars") or raw.get("price_fp") or 0
-                )
+                price_cents = _to_cents(raw.get("price_fp") or 0)
 
-                settlement_price_cents = _to_cents(
-                    raw.get("settlement_price_dollars") or raw.get("settlement_price_fp") or 0
-                )
+                settlement_price_cents = _to_cents(raw.get("settlement_price_fp") or 0)
 
-                pnl_cents = _to_cents(
-                    raw.get("pnl_dollars") or raw.get("pnl_fp") or 0
-                )
+                pnl_cents = _to_cents(raw.get("pnl_fp") or 0)
 
-                quantity = int(raw.get("count_fp") or 0)
+                quantity = _to_count(raw.get("count_fp") or 0)
 
                 settlements.append(
                     Settlement(
@@ -113,5 +110,6 @@ class PortfolioService:
                     )
                 )
             except Exception:
+                logger.warning("Skipping malformed settlement record: %s", raw.get("ticker", "unknown"))
                 continue
         return settlements

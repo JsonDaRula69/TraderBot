@@ -1,20 +1,44 @@
-"""Internal normalization helpers shared across kalshi modules."""
+"""Internal normalization helpers for Kalshi V2 API responses."""
 
 from datetime import UTC, datetime
 from typing import Any
 
-from traderbot.kalshi.models import Market, MarketCategory, OrderBookLevel, Trade
+from traderbot.kalshi.models import (
+    Fill,
+    Market,
+    MarketCategory,
+    OrderBookLevel,
+    Position,
+    Trade,
+)
 
 
 def _to_cents(value: str | int) -> int:
-    """Convert a value to integer cents. Handles fixed-point dollar strings like '0.55' → 55."""
+    """Convert a FixedPointDollars string to integer cents. E.g. '0.55' → 55."""
     if isinstance(value, str):
         return int(round(float(value) * 100))
     return int(value)
 
 
-def _unix_to_datetime(ts: int) -> datetime:
-    return datetime.fromtimestamp(ts, tz=UTC)
+def _to_count(value: str | int | float) -> int:
+    """Convert a FixedPointCount string to integer. E.g. '1516.00' → 1516.
+
+    FixedPointCount represents decimal contract quantities, NOT dollar amounts.
+    """
+    if isinstance(value, str):
+        return int(round(float(value)))
+    return int(value)
+
+
+def _parse_datetime(value: str | int | None) -> datetime | None:
+    """Parse a V2 API datetime field (ISO 8601 string or Unix timestamp)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if isinstance(value, int):
+        return datetime.fromtimestamp(value, tz=UTC)
+    return None
 
 
 _CATEGORY_MAP: dict[str, MarketCategory] = {
@@ -46,25 +70,20 @@ def _map_category(raw: str | None) -> MarketCategory | None:
 
 
 def _normalize_market(raw: dict[str, Any]) -> Market:
-    raw_close = raw.get("close_time")
-    if isinstance(raw_close, int):
-        close_time_val = _unix_to_datetime(raw_close)
-    elif isinstance(raw_close, str):
-        from datetime import datetime as dt
-        close_time_val = dt.fromisoformat(raw_close.replace("Z", "+00:00"))
-    else:
-        close_time_val = None
-
+    close_time_val = _parse_datetime(raw.get("close_time"))
     category_str = raw.get("category")
+
+    volume_val = _to_count(raw.get("volume_fp") or raw.get("volume") or 0)
+    oi_val = _to_count(raw.get("open_interest_fp") or raw.get("open_interest") or 0)
 
     return Market(
         ticker=raw["ticker"],
-        question=raw.get("question", raw.get("title", "")),
+        question=raw.get("title") or raw.get("question") or "",
         outcome_prices=raw.get("outcome_prices"),
-        volume=int(raw["volume"]) if raw.get("volume") else 0,
-        open_interest=int(raw["open_interest"]) if raw.get("open_interest") else 0,
+        volume=volume_val,
+        open_interest=oi_val,
         close_time=close_time_val,
-        status=raw.get("state", raw.get("status", "open")),
+        status=raw.get("status", "open"),
         event_ticker=raw.get("event_ticker", ""),
         category=category_str,
         market_category=_map_category(category_str),
@@ -72,25 +91,59 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     )
 
 
+def _normalize_position(raw: dict[str, Any]) -> Position:
+    quantity = _to_count(raw.get("quantity_fp") or raw.get("quantity") or 0)
+    avg_price = _to_cents(raw.get("avg_price_fp") or raw.get("avg_price") or 0)
+
+    settlement_result = raw.get("settlement_result")
+    if isinstance(settlement_result, str):
+        settlement_result = settlement_result.lower() in ("yes", "true", "1")
+
+    return Position(
+        ticker=raw.get("ticker", ""),
+        quantity=quantity,
+        avg_price=avg_price,
+        settlement_result=settlement_result,
+    )
+
+
+def _normalize_fill(raw: dict[str, Any]) -> Fill:
+    price_raw = raw.get("price_fp") or raw.get("price_dollars") or 0
+    price = _to_cents(price_raw)
+    quantity = _to_count(raw.get("count_fp") or raw.get("count") or 0)
+    ts = _parse_datetime(raw.get("timestamp") or raw.get("created_time")) or datetime.fromtimestamp(0, tz=UTC)
+    side = raw.get("side") or raw.get("taker_side") or "yes"
+
+    return Fill(
+        order_id=str(raw.get("order_id", "")),
+        ticker=raw.get("ticker", ""),
+        side=side,
+        price=price,
+        quantity=quantity,
+        timestamp=ts,
+    )
+
+
 def _normalize_orderbook_level(raw: list[Any]) -> OrderBookLevel:
-    return OrderBookLevel(price=_to_cents(raw[0]), size=int(raw[1]))
+    return OrderBookLevel(price=_to_cents(raw[0]), size=_to_count(raw[1]))
 
 
 def _normalize_trade(raw: dict[str, Any]) -> Trade:
-    ts_val = raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("created_time", 0)
-    if isinstance(ts_val, int):
-        ts_val = _unix_to_datetime(ts_val)
+    ts = _parse_datetime(raw.get("timestamp") or raw.get("created_time")) or datetime.fromtimestamp(0, tz=UTC)
 
-    price = _to_cents(
-        raw.get("price_dollars") or raw.get("price_fp") or 0
-    )
+    price_raw = raw.get("price_fp") or raw.get("price_dollars") or 0
+    if not price_raw:
+        price_raw = raw.get("yes_price_dollars") or 0
+    price = _to_cents(price_raw)
 
-    quantity = int(raw.get("count_fp") or 0)
+    quantity = _to_count(raw.get("count_fp") or raw.get("count") or 0)
+    side = raw.get("taker_side") or raw.get("side") or raw.get("taker_outcome_side") or "yes"
 
     return Trade(
         ticker=raw["ticker"],
         price=price,
         quantity=quantity,
-        side=raw.get("side", "yes"),
-        timestamp=ts_val,
+        side=side,
+        timestamp=ts,
     )
+

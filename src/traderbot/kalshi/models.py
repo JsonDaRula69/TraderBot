@@ -118,17 +118,19 @@ class OrderBookLevel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     price: Annotated[int, Field(ge=0, description="Price in cents")]
-    size: Annotated[int, Field(ge=0)]
+    size: Annotated[int, Field(ge=0, description="Contract count")]
 
 
 class Market(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
 
     ticker: str
-    question: str
+    question: str = Field(
+        validation_alias=AliasChoices("question", "title"),
+    )
     outcome_prices: list[str] | None = None
-    volume: Annotated[int, Field(ge=0)] = 0
-    open_interest: Annotated[int, Field(ge=0)] = 0
+    volume: Annotated[int, Field(ge=0, description="Contracts traded (FixedPointCount)")] = 0
+    open_interest: Annotated[int, Field(ge=0, description="Open contracts (FixedPointCount)")] = 0
     close_time: datetime | None = None
     status: str = Field(
         validation_alias=AliasChoices("status", "state"),
@@ -228,25 +230,17 @@ class Decision(BaseModel):
     actual_result: bool | None = None
 
 
-class CutoffTimestamps(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    market_settled_ts: datetime | None = None
-    trade_cutoff_ts: datetime | None = None
-    order_cutoff_ts: datetime | None = None
-
-
 class Event(BaseModel):
     """Kalshi event — a group of related markets sharing a resolution condition."""
 
-    model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(strict=True, extra="ignore", populate_by_name=True)
 
     event_ticker: str
     title: str
     description: str = ""
     category: str | None = None
     market_category: MarketCategory | None = None
-    state: str = Field(validation_alias=AliasChoices("state", "status"))
+    state: str = Field(validation_alias=AliasChoices("status", "state"))
     close_time: datetime | None = None
     markets_count: int = 0
 
@@ -254,7 +248,7 @@ class Event(BaseModel):
 class Series(BaseModel):
     """Kalshi series — a thematic group of events sharing a category."""
 
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(strict=True, extra="ignore")
 
     ticker: str
     title: str = ""
@@ -267,7 +261,7 @@ class Series(BaseModel):
 class SeriesListResponse(BaseModel):
     """Paginated response for series listing."""
 
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(strict=True, extra="ignore")
 
     series: list[Series]
     cursor: str | None = None

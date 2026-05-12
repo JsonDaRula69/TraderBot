@@ -69,27 +69,19 @@ class TradingService:
 
     @staticmethod
     def _parse_order(raw: dict[str, Any]) -> TradingOrder:
-        """Normalize a raw API order dict into a TradingOrder model."""
+        """Normalize a raw V2 API order dict into a TradingOrder model."""
         created_time = raw.get("created_time")
-        if isinstance(created_time, int):
-            from datetime import UTC, datetime
+        if isinstance(created_time, str):
+            from datetime import datetime as dt
 
-            created_time = datetime.fromtimestamp(created_time, tz=UTC)
+            created_time = dt.fromisoformat(created_time.replace("Z", "+00:00"))
 
-        # Legacy Order schema: yes_price_dollars/no_price_dollars, price_dollars/price_fp
-        price_dollars = (
-            raw.get("yes_price_dollars")
-            or raw.get("no_price_dollars")
-            or raw.get("price_dollars")
-            or raw.get("price_fp")
-        )
-        price = round(float(price_dollars) * 100) if price_dollars is not None else 0
+        price_dollars = raw.get("yes_price_dollars") or raw.get("no_price_dollars") or "0"
+        price = round(float(price_dollars) * 100)
 
-        # Legacy Order schema: initial_count_fp, falling back to count_fp
-        initial_count = raw.get("initial_count_fp") or raw.get("count_fp")
-        quantity = int(initial_count) if initial_count is not None else 0
+        initial_count = raw.get("initial_count_fp") or raw.get("count_fp") or "0"
+        quantity = int(float(initial_count))
 
-        # Map V2 bid/ask → internal yes/no
         raw_side = raw.get("side", "yes")
         if raw_side in (OrderSideV2.bid.value, OrderSideV2.bid):
             side = OrderSide.yes
@@ -98,9 +90,8 @@ class TradingService:
         else:
             side = OrderSide(raw_side)
 
-        # Legacy fill count: fill_count_fp (string) or filled_quantity (int)
         fill_count_fp = raw.get("fill_count_fp")
-        filled_quantity = int(fill_count_fp) if fill_count_fp is not None else int(raw.get("filled_quantity", 0))
+        filled_quantity = int(float(fill_count_fp)) if fill_count_fp is not None else int(raw.get("filled_quantity", 0))
 
         return TradingOrder(
             order_id=raw["order_id"],

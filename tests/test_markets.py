@@ -237,7 +237,7 @@ class TestGetMarket:
             service = MarketService(client)
             market = await service.get_market("KXBTCD-26MAR31-T55000")
 
-        assert market.question == "Will BTC touch $55,000 before March 31?"
+        assert market.question == "Will BTC touch $55k?"
 
 
 class TestGetOrderbook:

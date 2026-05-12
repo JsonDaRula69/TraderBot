@@ -101,7 +101,7 @@ def check_liquidity(
         limit_name="liquidity",
         current_value=open_interest,
         limit_value=threshold,
-        rejection_reason=None if passed else f"Market liquidity below {int(threshold)} threshold",
+        rejection_reason=None if passed else f"Market liquidity below {int(threshold):,} threshold",
     )
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from traderbot.kalshi._normalize import _map_category, _unix_to_datetime
+from traderbot.kalshi._normalize import _map_category, _parse_datetime
 from traderbot.kalshi.models import Event, Series, SeriesListResponse
 
 if TYPE_CHECKING:
@@ -12,9 +12,7 @@ if TYPE_CHECKING:
 
 
 def _normalize_event(raw: dict[str, Any]) -> Event:
-    close_time_val = raw.get("close_time")
-    if isinstance(close_time_val, int):
-        close_time_val = _unix_to_datetime(close_time_val)
+    close_time_val = _parse_datetime(raw.get("close_time"))
 
     category = raw.get("category")
     market_category = _map_category(category)

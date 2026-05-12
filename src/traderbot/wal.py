@@ -203,17 +203,18 @@ def write_intent(
     path = Path(session_state_path)
 
     if entry is None:
-        if any(v is None for v in (action, ticker, direction, quantity, price_cents, reason)):
+        required = (action, ticker, direction, quantity, price_cents, reason)
+        if any(v is None for v in required):
             raise ValueError("Must provide either entry or all required keyword args")
         entry = WalEntry(
             intent_id=_new_intent_id(),
             timestamp=datetime.now(UTC),
-            action=action,  # type: ignore[arg-type]
-            ticker=ticker,  # type: ignore[arg-type]
-            direction=direction,  # type: ignore[arg-type]
-            quantity=quantity,  # type: ignore[arg-type]
-            price_cents=price_cents,  # type: ignore[arg-type]
-            reason=reason,  # type: ignore[arg-type]
+            action=action,  # validated non-None above
+            ticker=ticker,  # validated non-None above
+            direction=direction,  # validated non-None above
+            quantity=quantity,  # validated non-None above
+            price_cents=price_cents,  # validated non-None above
+            reason=reason,  # validated non-None above
             signal=signal,
             risk_checks=risk_checks,
             confidence=confidence,

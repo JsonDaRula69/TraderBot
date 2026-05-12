@@ -82,7 +82,7 @@ MODERATE = StrategyProfile(
 
 AGGRESSIVE = StrategyProfile(
     name="Aggressive",
-    risk_multiplier=0.8,
+    risk_multiplier=1.0,
     signal_weights={"statistical": 0.3, "sentiment": 0.7},
     category_focus=["economics", "politics", "science_and_technology", "sports", "entertainment"],
     description="Seeks higher returns; tolerates more volatility",

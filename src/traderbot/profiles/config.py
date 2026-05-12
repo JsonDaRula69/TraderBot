@@ -127,12 +127,6 @@ def resolve_newsapi_key(
             logger.info("Using global NewsAPI credentials")
         return key_result.value.get_secret_value()
 
-    for env_name in ("NEWSAPI_API_KEY", "NEWSAPI_KEY"):
-        env_key = os.environ.get(env_name)
-        if env_key is not None:
-            logger.debug("Using NewsAPI key from %s environment variable", env_name)
-            return env_key
-
     from traderbot.paths import get_data_dir
 
     env_path = get_data_dir() / ".env"
@@ -142,6 +136,12 @@ def resolve_newsapi_key(
             if env_value is not None:
                 logger.debug("Using NewsAPI key from %s in %s", env_name, env_path)
                 return env_value
+
+    for env_name in ("NEWSAPI_API_KEY", "NEWSAPI_KEY"):
+        env_key = os.environ.get(env_name)
+        if env_key is not None:
+            logger.debug("Using NewsAPI key from %s environment variable", env_name)
+            return env_key
 
     logger.warning("No NewsAPI key found in profile, global, or environment")
     return None
