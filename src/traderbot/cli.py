@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -282,11 +283,24 @@ def trade(
     ] = "yes",
     quantity: Annotated[int, typer.Option("--quantity", help="Number of contracts")] = 1,
     price: Annotated[int, typer.Option("--price", help="Limit price in cents")] = 50,
+    estimated_prob: Annotated[
+        float | None,
+        typer.Option("--estimated-prob", help="Agent's estimated probability (0.0-1.0). Overrides market-implied."),
+    ] = None,
+    confidence: Annotated[
+        float | None,
+        typer.Option("--confidence", help="Agent's confidence in the estimate (0.0-1.0). Default 0.5 if not set."),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """Place a trade through risk checks."""
+    """Place a trade through risk checks.
+
+    Use --estimated-prob and --confidence to provide your own probability estimate
+    instead of relying on market-implied probability, which often yields ~0 edge
+    and causes all trades to be rejected by the Kelly sizing formula.
+    """
     from traderbot.analysis.odds import implied_probability
     from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
@@ -306,7 +320,8 @@ def trade(
 
     profile = get_current_profile()
 
-    estimated_prob = 0.5
+    resolved_prob = estimated_prob
+    resolved_confidence = confidence if confidence is not None else 0.5
     edge_estimate = 0.0
     market_price_cents = price
     market_open_interest = 0
@@ -318,21 +333,22 @@ def trade(
         orderbook = asyncio.run(service.get_orderbook(ticker))
         prob = implied_probability(orderbook)
         market_price_cents = prob.mid_price_cents
-        estimated_prob = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
-        edge_estimate = abs(estimated_prob - (market_price_cents / 100.0))
+        market_implied = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
+        if resolved_prob is None:
+            resolved_prob = market_implied
+        edge_estimate = abs(resolved_prob - (market_price_cents / 100.0))
         market_open_interest = market.open_interest
     except Exception:
-        # Without live data, fall through with defaults that will likely
-        # fail liquidity and edge checks — caller should ensure API connectivity.
-        pass
+        if resolved_prob is None:
+            resolved_prob = 0.5
 
     trade_request = TradeRequest(
         ticker=ticker,
         direction=direction,
         quantity=quantity,
         price_cents=price,
-        estimated_prob=estimated_prob,
-        confidence=0.5,
+        estimated_prob=resolved_prob,
+        confidence=resolved_confidence,
         edge_estimate=edge_estimate,
         market_price_cents=market_price_cents,
         market_open_interest=market_open_interest,
@@ -357,7 +373,7 @@ def trade(
         price_cents=price,
         reason=f"CLI trade: {ticker} {direction}",
         risk_checks="pending evaluation",
-        confidence=0.5,
+        confidence=resolved_confidence,
     )
 
     sized = evaluate_trade(trade_request, portfolio, breaker, profile)
@@ -382,6 +398,24 @@ def trade(
             "sized_position_cents": sized,
             "wal_intent_id": wal_entry.intent_id,
         }
+
+    from traderbot.risk.audit import AuditLogger
+    from traderbot.kalshi.models import Decision
+
+    decision = Decision(
+        timestamp=datetime.now(UTC),
+        ticker=ticker,
+        direction=direction,
+        quantity=quantity,
+        price=price,
+        signal_strength=resolved_prob,
+        confidence=resolved_confidence,
+        edge_estimate=edge_estimate,
+        risk_checks={"all_passed": sized > 0},
+        outcome=result["outcome"],
+        rejection_reason=result.get("reason"),
+    )
+    AuditLogger().log_decision(decision)
 
     if json_output:
         json_lib.dump(result, sys.stdout, default=str)
