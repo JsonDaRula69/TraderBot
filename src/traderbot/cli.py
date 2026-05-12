@@ -1076,7 +1076,7 @@ def news(
         str | None,
         typer.Option(
             "--category",
-            help="Filter by category: Economics, Politics, Weather, Culture, Tech, Science",
+            help="Filter by category (economics, politics, weather, sports, etc.)",
         ),
     ] = None,
     limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
@@ -1137,6 +1137,11 @@ def news(
     if profile is not None and profile.enabled_categories:
         category_filter = profile.enabled_categories
 
+    # Narrow aggregator queries to --category if specified
+    aggregator_categories: list[NewsCategory] | None = category_filter
+    if category_enum is not None:
+        aggregator_categories = [category_enum]
+
     # Validate --source
     source_filter: NewsSource | None = None
     if source is not None:
@@ -1179,8 +1184,8 @@ def news(
             newsapi_key=newsapi_key, twitter_api_key=twitter_key
         ) as aggregator:
             if source_filter is not None:
-                return await aggregator.fetch_recent(source_filter, limit=limit)
-            return await aggregator.fetch_all(limit=limit)
+                return await aggregator.fetch_recent(source_filter, limit=limit, category_filter=aggregator_categories)
+            return await aggregator.fetch_all(limit=limit, category_filter=aggregator_categories)
 
     try:
         items = asyncio.run(_fetch())

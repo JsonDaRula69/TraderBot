@@ -24,6 +24,8 @@
 | `traderbot news --json` | Fetch news (`--category`, `--limit`, `--source`) |
 | `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
 
+> **Note:** `traderbot news` uses your profile's `enabled_categories` to target relevant NewsAPI queries. Without `--category`, it queries all profile-enabled categories. Use `--source reddit` as a fallback if NewsAPI results are thin for niche topics.
+
 ## Simulation & Backtesting
 
 | Command | Purpose |

@@ -14,9 +14,43 @@ from typing import Any, ClassVar
 import feedparser
 import httpx
 
-from traderbot.news.models import NewsItem, NewsSource
+from traderbot.news.models import NewsCategory, NewsItem, NewsSource
 
 logger = logging.getLogger(__name__)
+
+NEWSAPI_CATEGORY_QUERIES: dict[NewsCategory, str] = {
+    NewsCategory.ECONOMICS: "economy GDP inflation federal reserve interest rates",
+    NewsCategory.POLITICS: "politics election congress president legislation",
+    NewsCategory.WEATHER: "weather hurricane tornado flood temperature forecast storm",
+    NewsCategory.SPORTS: "sports NFL NBA MLB NHL soccer championship",
+    NewsCategory.SCIENCE_AND_TECHNOLOGY: "technology science AI software space research",
+    NewsCategory.CRYPTO: "cryptocurrency bitcoin ethereum crypto blockchain",
+    NewsCategory.COMMODITIES: "commodities oil gold copper wheat futures",
+    NewsCategory.COMPANIES: "company earnings stocks IPO merger acquisition",
+    NewsCategory.ELECTIONS: "election vote polling primary ballot campaign",
+    NewsCategory.ENTERTAINMENT: "entertainment movie music Oscar Grammy box office",
+    NewsCategory.FINANCIALS: "financial banking markets stocks trading NASDAQ S&P",
+    NewsCategory.HEALTH: "health mental health wellness psychology therapy",
+    NewsCategory.SOCIAL: "social community trending viral breaking news",
+    NewsCategory.MENTIONS: "trending viral celebrity mention",
+}
+
+REDDIT_CATEGORY_SUBREDDITS: dict[NewsCategory, list[str]] = {
+    NewsCategory.ECONOMICS: ["economics", "Economics", "economy"],
+    NewsCategory.POLITICS: ["politics", "PoliticalDiscussion"],
+    NewsCategory.WEATHER: ["weather", "meteorology", "stormfront"],
+    NewsCategory.SPORTS: ["sports", "nfl", "nba", "mlb", "soccer"],
+    NewsCategory.SCIENCE_AND_TECHNOLOGY: ["technology", "science", "artificial", "MachineLearning"],
+    NewsCategory.CRYPTO: ["cryptocurrency", "bitcoin", "ethereum"],
+    NewsCategory.COMMODITIES: ["commodities", "oil", "gold"],
+    NewsCategory.COMPANIES: ["stocks", "investing", "SecurityAnalysis"],
+    NewsCategory.ELECTIONS: ["politics", "election"],
+    NewsCategory.ENTERTAINMENT: ["entertainment", "movies", "music"],
+    NewsCategory.FINANCIALS: ["finance", "investing", "stocks"],
+    NewsCategory.HEALTH: ["mentalhealth", "psychology", "health"],
+    NewsCategory.SOCIAL: ["news", "worldnews", "AskReddit"],
+    NewsCategory.MENTIONS: ["news", "trending"],
+}
 
 
 class NewsAPIError(Exception):
@@ -77,31 +111,33 @@ class NewsAggregator:
             )
         self._daily_request_count += 1
 
-    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None) -> list[NewsItem]:
+    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None, category_filter: list[NewsCategory] | None = None) -> list[NewsItem]:
         """Fetch recent items from a single source."""
         try:
             match source:
                 case NewsSource.NEWSAPI:
                     if query:
                         return await self._fetch_everything(query, limit)
+                    if category_filter:
+                        return await self._fetch_category_news(category_filter, limit)
                     return await self._fetch_newsapi(limit)
                 case NewsSource.TWITTER:
                     return await self._fetch_twitter(limit)
                 case NewsSource.REDDIT:
-                    return await self._fetch_reddit(limit)
+                    subs = self._get_reddit_subs(category_filter)
+                    return await self._fetch_reddit(limit, subreddits=subs)
         except Exception:
             logger.exception("Source %s failed, returning empty", source.value)
             return []
         return []
 
-    async def fetch_all(self, limit: int = 20) -> list[NewsItem]:
+    async def fetch_all(self, limit: int = 20, category_filter: list[NewsCategory] | None = None) -> list[NewsItem]:
         """Aggregate from all sources in priority order."""
         items: list[NewsItem] = []
         per_source = max(limit, 20)
         for source in self._SOURCE_PRIORITY:
-            source_items = await self.fetch_recent(source, limit=per_source)
+            source_items = await self.fetch_recent(source, limit=per_source, category_filter=category_filter)
             items.extend(source_items)
-        # Deduplicate by id (first occurrence wins per priority order)
         seen: set[str] = set()
         unique: list[NewsItem] = []
         for item in items:
@@ -210,6 +246,38 @@ class NewsAggregator:
         if last_exc is not None:
             logger.error("NewsAPI request failed: %s", last_exc)
         return []
+
+    async def _fetch_category_news(self, categories: list[NewsCategory], limit: int = 20) -> list[NewsItem]:
+        """Fetch news targeted to specific categories using /everything endpoint."""
+        if not self._newsapi_key:
+            logger.warning("NEWSAPI_API_KEY not set, skipping category news")
+            return []
+
+        items: list[NewsItem] = []
+        per_cat = max(limit // len(categories), 5)
+        for cat in categories:
+            query = NEWSAPI_CATEGORY_QUERIES.get(cat)
+            if not query:
+                continue
+            cat_items = await self._fetch_everything(query, per_cat)
+            items.extend(cat_items)
+
+        seen: set[str] = set()
+        unique: list[NewsItem] = []
+        for item in items:
+            if item.id not in seen:
+                seen.add(item.id)
+                unique.append(item)
+        return unique[:limit]
+
+    def _get_reddit_subs(self, category_filter: list[NewsCategory] | None = None) -> list[str] | None:
+        """Resolve subreddit list from category filter."""
+        if not category_filter:
+            return None
+        subs: list[str] = []
+        for cat in category_filter:
+            subs.extend(REDDIT_CATEGORY_SUBREDDITS.get(cat, []))
+        return subs if subs else None
 
     async def _fetch_everything(self, query: str, limit: int = 20) -> list[NewsItem]:
         """Fetch articles matching query via NewsAPI /everything endpoint."""
@@ -420,11 +488,11 @@ class NewsAggregator:
         logger.warning("Twitter API integration not yet implemented despite TWITTER_API_KEY being set")
         return []
 
-    async def _fetch_reddit(self, limit: int) -> list[NewsItem]:
+    async def _fetch_reddit(self, limit: int, subreddits: list[str] | None = None) -> list[NewsItem]:
         """Fetch recent posts from configured subreddits via RSS."""
         items: list[NewsItem] = []
 
-        for sub in self._reddit_subreddits:
+        for sub in subreddits or self._reddit_subreddits:
             try:
                 feed_url = f"https://www.reddit.com/r/{sub}/.rss"
                 response = await self._client.get(feed_url)

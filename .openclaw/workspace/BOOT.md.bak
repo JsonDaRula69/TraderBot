@@ -46,6 +46,7 @@ After confirming the CLI is available, run the following checks in order to esta
 ### 8. Cron Health
 - Run `traderbot cron status` to verify decision, heartbeat, and news loops are registered and healthy
 - If any loops are missing or in error state, note which ones and alert your human
+- Delivery errors (e.g., "Telegram requires target <chatId>") are OpenClaw config issues — surface to human, don't fix yourself
 
 ### 9. News & Sentiment (if markets are tracked)
 - If SESSION-STATE.md lists tracked markets, run `traderbot news --json` to fetch latest news

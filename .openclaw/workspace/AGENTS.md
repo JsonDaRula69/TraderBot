@@ -135,6 +135,13 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human
 
+## Infrastructure Notes
+
+- **Cron delivery errors** about "Telegram requires target <chatId>" are OpenClaw config issues, not TraderBot bugs. Surface to human, don't attempt to fix yourself.
+- **Credential resolution** is automatic. TraderBot resolves Kalshi and NewsAPI credentials via keyring → profile .env → global .env (`~/.traderbot/.env`) → environment variables. You do NOT need to manually add API keys to the workspace `.env`.
+- **Empty news results**: `traderbot news` now uses category-aware queries when your profile has `enabled_categories` — it targets the `/everything` endpoint with relevant search terms. If results are still thin, use `--source reddit` as a fallback.
+- **Paper/demo accounts** have no initial balance. All trades will be rejected by the risk pipeline until the account is funded or an initial balance is configured. Surface this blocker to your human immediately.
+
 ## Crash Reconciliation
 
 If the agent restarts with pending actions in SESSION-STATE.md, follow this procedure:
