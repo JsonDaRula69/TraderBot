@@ -80,49 +80,6 @@ async def test_open_meteo_http_error() -> None:
 
 
 # ============================================================
-# CoinGecko
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_coingecko_success() -> None:
-    """CoinGecko returns DataPoints with valid market data."""
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=[
-            {
-                "id": "bitcoin",
-                "symbol": "btc",
-                "name": "Bitcoin",
-                "current_price": 67234.50,
-                "market_cap": 1300000000000,
-                "total_volume": 28000000000,
-                "price_change_percentage_24h": 2.3,
-                "last_updated": "2026-05-12T12:00:00.000Z",
-            },
-        ])
-
-    na = NewsAggregator(http_client=_mock_client(handler))
-    results = await na._fetch_coingecko(limit=2)
-    assert len(results) > 0
-    dp = results[0]
-    assert dp.source == NewsSource.COINGECKO
-    assert dp.category == "crypto"
-    assert dp.data["price_cents"] == 6723450
-    assert isinstance(dp.data["price_cents"], int)
-
-
-@pytest.mark.asyncio
-async def test_coingecko_rate_limited() -> None:
-    """CoinGecko returns empty on 429 rate limit."""
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(429, json={"status": {"error_code": 429}})
-
-    na = NewsAggregator(http_client=_mock_client(handler))
-    results = await na._fetch_coingecko(limit=2)
-    assert results == []
-
-
-# ============================================================
 # TheSportsDB
 # ============================================================
 
@@ -357,7 +314,7 @@ def test_source_coverage_all_sources_have_entries() -> None:
     """All 11 NewsSource members (except TWITTER is allowed as [] stub) have coverage entries."""
     expected_sources = {
         NewsSource.NEWSAPI, NewsSource.REDDIT, NewsSource.TWITTER,
-        NewsSource.OPEN_METEO, NewsSource.COINGECKO, NewsSource.THESPORTSDB,
+        NewsSource.OPEN_METEO, NewsSource.THESPORTSDB,
         NewsSource.COINCAP, NewsSource.OPENWEATHERMAP, NewsSource.BALLOTPEDIA,
         NewsSource.FRED, NewsSource.GOOGLE_TRENDS,
     }

@@ -53,19 +53,6 @@ async def test_open_meteo_weather_forecast() -> None:
 
 
 @pytest.mark.asyncio
-async def test_coingecko_crypto_markets() -> None:
-    _requires_internet()
-    na = NewsAggregator()
-    results = await na._fetch_coingecko(limit=5)
-    assert len(results) > 0, "Should return at least 1 crypto DataPoint"
-    _assert_datapoint(results[0], NewsSource.COINGECKO)
-    assert results[0].category == NewsCategory.CRYPTO
-    assert "price_cents" in results[0].data, "Crypto data should contain price_cents"
-    assert isinstance(results[0].data["price_cents"], int), "price_cents should be int"
-    assert results[0].data["price_cents"] > 0, "price_cents should be positive"
-
-
-@pytest.mark.asyncio
 async def test_thesportsdb_events() -> None:
     _requires_internet()
     na = NewsAggregator()
