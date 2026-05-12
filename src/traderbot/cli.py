@@ -2141,9 +2141,459 @@ profile_app = typer.Typer(
 app.add_typer(profile_app, name="profile")
 
 
+# ---------------------------------------------------------------------------
+# Interactive wizard helpers for `traderbot profile create`
+# ---------------------------------------------------------------------------
+
+def _is_interactive_tty() -> bool:
+    """Check if stdin is a TTY suitable for interactive prompts."""
+    return sys.stdin.isatty() and bool(os.environ.get("TERM"))
+
+
+def _read_key() -> str:
+    """Read a single keypress from stdin (arrow keys, space, enter, etc.).
+
+    Returns 'up', 'down', 'enter', 'space', 'q', or the raw character.
+    Falls back to 'enter' on EOF.
+    """
+    import tty as _tty
+    import termios
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        _tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            seq = sys.stdin.read(2)
+            if seq == "[A":
+                return "up"
+            if seq == "[B":
+                return "down"
+            return "esc"
+        if ch == "\r" or ch == "\n":
+            return "enter"
+        if ch == " ":
+            return "space"
+        return ch
+    except Exception:
+        return "enter"
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _arrow_select(console: Console, prompt: str, options: list[str], default_index: int = 0) -> int:
+    """Interactive arrow-key selector. Returns the chosen index.
+
+    Falls back to numbered list input on non-TTY.
+    """
+    if not _is_interactive_tty():
+        # Fallback: numbered list
+        console.print(f"\n[bold]{prompt}[/bold]")
+        for i, opt in enumerate(options):
+            console.print(f"  {i + 1}) {opt}")
+        while True:
+            choice = input("Enter number: ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(options):
+                    return idx
+            except ValueError:
+                pass
+            console.print(f"[red]Please enter a number 1-{len(options)}[/red]")
+
+    console.print(f"\n[bold]{prompt}[/bold]")
+    console.print("[dim]Use ↑/↓ to navigate, ENTER to select[/dim]\n")
+
+    current = default_index
+    n = len(options)
+    lines_per_render = n + 2  # options + instruction + blank
+
+    # Initial render
+    for i, opt in enumerate(options):
+        marker = "[bold green]→[/bold green]" if i == current else " "
+        console.print(f"  {marker} {opt}")
+    console.print()
+
+    while True:
+        key = _read_key()
+        if key == "up":
+            current = (current - 1) % n
+        elif key == "down":
+            current = (current + 1) % n
+        elif key == "enter":
+            # Clear the menu
+            sys.stdout.write(f"\033[{lines_per_render}A\033[J")
+            sys.stdout.flush()
+            console.print(f"  [bold green]→[/bold green] {options[current]}")
+            return current
+        # Re-render
+        sys.stdout.write(f"\033[{lines_per_render}A\033[J")
+        sys.stdout.flush()
+        for i, opt in enumerate(options):
+            marker = "[bold green]→[/bold green]" if i == current else " "
+            console.print(f"  {marker} {opt}")
+        console.print()
+
+
+def _checkbox_select(
+    console: Console,
+    prompt: str,
+    options: list[str],
+    keys: list[str],
+) -> list[str]:
+    """Interactive checkbox selector. Returns list of selected keys.
+
+    Falls back to comma-separated number input on non-TTY.
+    If none selected, returns all keys (dev profile — all categories permitted).
+    """
+    if not _is_interactive_tty():
+        # Fallback: numbered list with 'a' for all
+        console.print(f"\n[bold]{prompt}[/bold]")
+        for i, opt in enumerate(options):
+            console.print(f"  {i + 1}) {opt}")
+        console.print("   a) All categories")
+        choice = input("Choice [a]: ").strip()
+        if not choice or choice.lower() == "a":
+            return keys
+        selected: list[str] = []
+        for num_str in choice.replace(",", " ").split():
+            try:
+                idx = int(num_str.strip()) - 1
+                if 0 <= idx < len(keys):
+                    selected.append(keys[idx])
+            except ValueError:
+                pass
+        return selected if selected else keys
+
+    console.print(f"\n[bold]{prompt}[/bold]")
+    console.print("[dim]↑/↓ navigate, SPACE toggle, ENTER confirm[/dim]\n")
+
+    n = len(options)
+    selected_flags = [False] * n
+    current = 0
+    lines_per_render = n + 2
+
+    def _render() -> None:
+        for i, opt in enumerate(options):
+            marker = "[bold green]→[/bold green]" if i == current else " "
+            check = "[green]✓[/green]" if selected_flags[i] else " "
+            console.print(f"  {marker} {check} {opt}")
+        console.print()
+
+    _render()
+
+    while True:
+        key = _read_key()
+        if key == "up":
+            current = (current - 1) % n
+        elif key == "down":
+            current = (current + 1) % n
+        elif key == "space":
+            selected_flags[current] = not selected_flags[current]
+        elif key == "enter":
+            sys.stdout.write(f"\033[{lines_per_render}A\033[J")
+            sys.stdout.flush()
+            chosen_keys = [keys[i] for i in range(n) if selected_flags[i]]
+            if not chosen_keys:
+                chosen_keys = list(keys)
+            for i, opt in enumerate(options):
+                if keys[i] in chosen_keys:
+                    console.print(f"  [green]✓[/green] {opt}")
+            return chosen_keys
+        # Re-render
+        sys.stdout.write(f"\033[{lines_per_render}A\033[J")
+        sys.stdout.flush()
+        _render()
+
+
+def _interactive_profile_create(
+    console: Console,
+    name: str,
+    mode: str,
+    categories: str,
+    description: str,
+    risk_multiplier: float,
+    max_position_pct: float | None,
+    max_daily_loss_pct: float | None,
+    max_drawdown_pct: float | None,
+    max_open_positions: int | None,
+    min_liquidity: int | None,
+    min_edge_pct: float | None,
+    skip_auth: bool,
+) -> None:
+    """Interactive wizard for creating a trading profile.
+
+    Guides the user through name, mode, categories, risk params, and credentials.
+    Preserves the same validation and storage logic as the non-interactive path.
+    """
+    from traderbot.kalshi.models import CATEGORY_API_NAMES, MarketCategory
+    from traderbot.profiles.auth import ProfileAuthStore
+    from traderbot.profiles.models import TradingProfile
+    from traderbot.profiles.registry import ProfileRegistry
+    from traderbot.risk.limits import HARD_LIMITS
+
+    console.rule("[bold cyan]TraderBot Profile Setup[/bold cyan]")
+
+    # --- Step 1: Profile name ---
+    if not name:
+        name = typer.prompt("\n[bold]Profile name[/bold]", default="my-agent")
+    else:
+        console.print(f"\n[bold]Profile name:[/bold] {name}")
+
+    # --- Step 2: Trading mode ---
+    mode_options = ["paper", "live"]
+    mode_labels = ["Paper Trading (safe — no real money)", "Live Trading (real money at stake)"]
+    default_idx = 0 if mode == "paper" else 1
+    chosen_mode_idx = _arrow_select(console, "Select trading mode", mode_labels, default_idx)
+    mode = mode_options[chosen_mode_idx]
+    console.print(f"[green]Selected:[/green] {mode} mode\n")
+
+    # --- Step 3: Category picker ---
+    cat_keys = list(CATEGORY_API_NAMES.keys())
+    cat_labels = [CATEGORY_API_NAMES[k] for k in cat_keys]
+
+    if not categories:
+        selected_keys = _checkbox_select(console, "Select market categories", cat_labels, cat_keys)
+        enabled_categories = [MarketCategory(k) for k in selected_keys]
+        console.print(f"[green]Selected {len(selected_keys)} categories[/green]\n")
+    else:
+        enabled_categories = [
+            MarketCategory(cat.strip().lower()) for cat in categories.split(",")
+        ]
+        console.print(f"[green]Categories:[/green] {', '.join(c.value for c in enabled_categories)}\n")
+
+    # --- Step 4: Risk parameters ---
+    console.print("[bold]Risk Parameters[/bold]")
+    console.print(f"  Current defaults from HARD_LIMITS:")
+    console.print(f"    max_position_per_market_pct: {HARD_LIMITS['max_position_per_market_pct']}")
+    console.print(f"    max_daily_loss_pct:          {HARD_LIMITS['max_daily_loss_pct']}")
+    console.print(f"    max_drawdown_pct:            {HARD_LIMITS['max_drawdown_pct']}")
+    console.print(f"    max_open_positions:           {HARD_LIMITS['max_open_positions']}")
+    console.print(f"    min_liquidity_threshold:      {HARD_LIMITS['min_liquidity_threshold']}")
+    console.print(f"    min_edge_pct:                {HARD_LIMITS['min_edge_pct']}\n")
+
+    customize_risk = typer.confirm("Customize risk limits?", default=False)
+    if customize_risk:
+        max_position_pct = typer.prompt(
+            "  Max position per market %",
+            default=str(HARD_LIMITS["max_position_per_market_pct"]),
+            type=float,
+        )
+        max_daily_loss_pct = typer.prompt(
+            "  Max daily loss %",
+            default=str(HARD_LIMITS["max_daily_loss_pct"]),
+            type=float,
+        )
+        max_drawdown_pct = typer.prompt(
+            "  Max drawdown %",
+            default=str(HARD_LIMITS["max_drawdown_pct"]),
+            type=float,
+        )
+        max_open_positions = typer.prompt(
+            "  Max open positions",
+            default=str(int(HARD_LIMITS["max_open_positions"])),
+            type=int,
+        )
+        min_liquidity = typer.prompt(
+            "  Min liquidity threshold",
+            default=str(int(HARD_LIMITS["min_liquidity_threshold"])),
+            type=int,
+        )
+        min_edge_pct = typer.prompt(
+            "  Min edge %",
+            default=str(HARD_LIMITS["min_edge_pct"]),
+            type=float,
+        )
+        console.print()
+    else:
+        max_position_pct = max_position_pct or HARD_LIMITS["max_position_per_market_pct"]
+        max_daily_loss_pct = max_daily_loss_pct or HARD_LIMITS["max_daily_loss_pct"]
+        max_drawdown_pct = max_drawdown_pct or HARD_LIMITS["max_drawdown_pct"]
+        max_open_positions = max_open_positions or int(HARD_LIMITS["max_open_positions"])
+        min_liquidity = min_liquidity or int(HARD_LIMITS["min_liquidity_threshold"])
+        min_edge_pct = min_edge_pct or HARD_LIMITS["min_edge_pct"]
+
+    # --- Step 5: Kalshi credentials ---
+    console.print("\n[bold]Kalshi Credentials[/bold]")
+    from traderbot.auth import AuthManager
+
+    global_auth = AuthManager()
+    global_key = global_auth.get_credential("kalshi", "api_key")
+    global_pem = global_auth.get_credential("kalshi", "private_key_pem")
+    global_pem_val: str | None = None
+    if global_pem:
+        global_pem_val = global_pem.value.get_secret_value()
+    else:
+        global_path = global_auth.get_credential("kalshi", "private_key_path")
+        if global_path:
+            from pathlib import Path as _P
+
+            p = _P(global_path.value.get_secret_value())
+            if p.is_file():
+                global_pem_val = p.read_text()
+
+    has_global = global_key is not None and global_pem_val is not None
+    if has_global:
+        key_status = "[green]✓ API key found[/green]"
+        pem_status = "[green]✓ Private key found[/green]"
+    else:
+        key_status = "[red]✗ Not set[/red]"
+        pem_status = "[red]✗ Not set[/red]"
+    console.print(f"  Global Kalshi credentials: {key_status}, {pem_status}")
+
+    import_creds = False
+    api_key = ""
+    private_key = ""
+
+    if not skip_auth:
+        if has_global:
+            import_creds = typer.confirm(
+                "\n  Import global Kalshi credentials for this profile?", default=True
+            )
+        else:
+            setup_creds = typer.confirm(
+                "\n  Set up Kalshi credentials for this profile?", default=True
+            )
+            if setup_creds:
+                api_key = typer.prompt("  Kalshi API key", default="", show_default=False)
+                private_key = ""
+                if api_key:
+                    private_key = typer.prompt(
+                        "  Kalshi private key (PEM)", default="", show_default=False
+                    )
+                if api_key and not private_key:
+                    console.print(
+                        "[yellow]Skipped: private key is required with API key[/yellow]"
+                    )
+                    api_key = ""
+
+    # --- Step 6: Confirmation summary ---
+    console.print("\n")
+    console.rule("[bold cyan]Profile Summary[/bold cyan]")
+    console.print(f"  [bold]Name:[/bold]              {name}")
+    console.print(f"  [bold]Mode:[/bold]              {mode}")
+    console.print(f"  [bold]Description:[/bold]        {description or f'{name} trading profile'}")
+    console.print(f"  [bold]Categories:[/bold]         {', '.join(c.value for c in enabled_categories) if enabled_categories else 'all (dev profile)'}")
+    console.print(f"  [bold]Risk multiplier:[/bold]     {risk_multiplier}")
+    console.print(f"  [bold]Max position %:[/bold]      {max_position_pct}")
+    console.print(f"  [bold]Max daily loss %:[/bold]     {max_daily_loss_pct}")
+    console.print(f"  [bold]Max drawdown %:[/bold]       {max_drawdown_pct}")
+    console.print(f"  [bold]Max open positions:[/bold]   {max_open_positions}")
+    console.print(f"  [bold]Min liquidity:[/bold]        {min_liquidity}")
+    console.print(f"  [bold]Min edge %:[/bold]          {min_edge_pct}")
+    if not skip_auth:
+        if import_creds:
+            console.print("  [bold]Credentials:[/bold]        Import from global")
+        elif api_key and private_key:
+            console.print("  [bold]Credentials:[/bold]        Manually entered")
+        else:
+            console.print("  [bold]Credentials:[/bold]        Skipped (set later)")
+    else:
+        console.print("  [bold]Credentials:[/bold]        Skipped (--skip-auth)")
+    console.print()
+
+    if not typer.confirm("Create this profile?", default=True):
+        console.print("[yellow]Cancelled.[/yellow]")
+        raise typer.Exit(0)
+
+    # --- Create the profile ---
+    profile_data = {
+        "name": name,
+        "mode": mode,
+        "description": description or f"{name} trading profile",
+        "enabled_categories": enabled_categories,
+        "risk_multiplier": risk_multiplier,
+        "max_position_per_market_pct": max_position_pct,
+        "max_daily_loss_pct": max_daily_loss_pct,
+        "max_drawdown_pct": max_drawdown_pct,
+        "max_open_positions": int(max_open_positions),
+        "min_liquidity_threshold": int(min_liquidity),
+        "min_edge_pct": min_edge_pct,
+    }
+
+    registry = ProfileRegistry()
+    existing_profiles = registry.list_profiles()
+
+    if name in existing_profiles:
+        overwrite = typer.confirm(
+            f"Profile '{name}' already exists. Overwrite?", default=False
+        )
+        if not overwrite:
+            console.print(f"[yellow]Cancelled.[/yellow] Profile '{name}' not modified.")
+            raise typer.Exit(0)
+        registry.delete_profile(name)
+
+    try:
+        profile = TradingProfile(**profile_data)
+        registry.create_profile(profile)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    console.print(f"\n[bold green]✓[/bold green] Created profile '{name}' in {mode} mode")
+
+    # --- Handle credentials ---
+    if not skip_auth:
+        auth_store = ProfileAuthStore(profile)
+        if import_creds and has_global:
+            api_key_val = global_key.value.get_secret_value()
+            pem_val = global_pem_val
+            if auth_store.keyring_available:
+                auth_store.set_credentials("kalshi", api_key_val, pem_val)
+                console.print(
+                    f"[green]+[/green] Imported global Kalshi credentials for profile '{name}' into keyring"
+                )
+            else:
+                from traderbot.paths import get_data_dir
+
+                env_path = get_data_dir() / ".env"
+                existing_env = env_path.read_text() if env_path.exists() else ""
+                profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
+                kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
+                kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
+                env_lines = [f"{kalshi_api_env}={api_key_val}", f"{kalshi_key_env}={pem_val}"]
+                new_content = existing_env.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+                env_path.write_text(new_content)
+                os.chmod(env_path, 0o600)
+                console.print(
+                    f"[green]+[/green] Imported global Kalshi credentials for profile '{name}' into {env_path}"
+                )
+                console.print(f"[dim]  Env vars: {kalshi_api_env}, {kalshi_key_env}[/dim]")
+        elif api_key and private_key:
+            if auth_store.keyring_available:
+                auth_store.set_credentials("kalshi", api_key, private_key)
+                console.print(
+                    f"[green]+[/green] Stored Kalshi credentials for profile '{name}' in keyring"
+                )
+            else:
+                from traderbot.paths import get_data_dir
+
+                env_path = get_data_dir() / ".env"
+                existing_env = env_path.read_text() if env_path.exists() else ""
+                profile_prefix = name.upper().replace("-", "_").replace(" ", "_")
+                kalshi_api_env = f"KALSHI_API_KEY_PROFILE_{profile_prefix}"
+                kalshi_key_env = f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}"
+                env_lines = [f"{kalshi_api_env}={api_key}", f"{kalshi_key_env}={private_key}"]
+                new_content = existing_env.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+                env_path.write_text(new_content)
+                os.chmod(env_path, 0o600)
+                console.print(
+                    f"[green]+[/green] Stored Kalshi credentials for profile '{name}' in {env_path}"
+                )
+                console.print(f"[dim]  Env vars: {kalshi_api_env}, {kalshi_key_env}[/dim]")
+        else:
+            console.print(
+                f"[yellow]Skipped: set credentials later with [dim]traderbot profile set-auth {name} kalshi[/dim][/yellow]"
+            )
+
+    console.print(f"\n[bold]Next step:[/bold] Assign this profile to an agent:")
+    console.print(f"  [cyan]traderbot profile assign {name}[/cyan]")
+
+
 @profile_app.command("create")
 def profile_create(
-    name: str,
+    name: Annotated[str, typer.Argument(help="Profile name")] = "",
     mode: Annotated[str, typer.Option(help="Trading mode: paper or live")] = "paper",
     description: Annotated[str, typer.Option(help="Profile description")] = "",
     categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = "",
@@ -2158,7 +2608,15 @@ def profile_create(
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
     skip_auth: Annotated[bool, typer.Option("--skip-auth", help="Skip Kalshi credential setup")] = False,
 ) -> None:
-    """Create a new trading profile with risk parameters."""
+    """Create a new trading profile with risk parameters.
+
+    When called with minimal flags (just a name or no flags), launches an
+    interactive wizard that guides you through mode selection, category picker,
+    risk parameter customization, and Kalshi credential setup.
+
+    When called with all required flags (--mode, --categories, --skip-auth),
+    runs non-interactively (the original CLI-flag-driven behavior).
+    """
     from traderbot.kalshi.models import MarketCategory
     from traderbot.profiles.models import TradingProfile
     from traderbot.profiles.registry import ProfileRegistry
@@ -2166,6 +2624,30 @@ def profile_create(
 
     console = Console()
 
+    # Interactive wizard when name is missing, or when on a TTY without
+    # enough flags for automation. Non-interactive when enough info is
+    # supplied via flags (existing CLI-driven behavior).
+    use_interactive = sys.stdin.isatty() and (not name or not categories)
+
+    if use_interactive:
+        _interactive_profile_create(
+            console=console,
+            name=name,
+            mode=mode,
+            categories=categories,
+            description=description,
+            risk_multiplier=risk_multiplier,
+            max_position_pct=max_position_pct,
+            max_daily_loss_pct=max_daily_loss_pct,
+            max_drawdown_pct=max_drawdown_pct,
+            max_open_positions=max_open_positions,
+            min_liquidity=min_liquidity,
+            min_edge_pct=min_edge_pct,
+            skip_auth=skip_auth,
+        )
+        return
+
+    # Non-interactive path (original behavior)
     # Validate mode
     if mode not in ("paper", "live"):
         console.print("[red]Error:[/red] mode must be 'paper' or 'live'")

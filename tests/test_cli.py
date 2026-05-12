@@ -1892,3 +1892,224 @@ class TestLearnings:
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["learnings", "--db", str(db), "--status", "invalid"])
         assert result.exit_code == 1
+
+
+class TestInteractiveWizard:
+    """Tests for the interactive profile create wizard helpers."""
+
+    @pytest.mark.unit
+    def test_is_interactive_tty_false_no_tty(self):
+        from traderbot.cli import _is_interactive_tty
+
+        with patch("sys.stdin") as mock_stdin, patch.dict("os.environ", {}, clear=True):
+            mock_stdin.isatty.return_value = False
+            assert _is_interactive_tty() is False
+
+    @pytest.mark.unit
+    def test_is_interactive_tty_false_no_term(self):
+        from traderbot.cli import _is_interactive_tty
+
+        with patch("sys.stdin") as mock_stdin, patch.dict("os.environ", {}, clear=True):
+            mock_stdin.isatty.return_value = True
+            assert _is_interactive_tty() is False
+
+    @pytest.mark.unit
+    def test_is_interactive_tty_true(self):
+        from traderbot.cli import _is_interactive_tty
+
+        with patch("sys.stdin") as mock_stdin, patch.dict("os.environ", {"TERM": "xterm-256color"}):
+            mock_stdin.isatty.return_value = True
+            assert _is_interactive_tty() is True
+
+    @pytest.mark.unit
+    def test_arrow_select_fallback_number_input(self):
+        from traderbot.cli import _arrow_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value="1"):
+            idx = _arrow_select(console, "Choose mode", ["Paper", "Live"])
+            assert idx == 0
+
+    @pytest.mark.unit
+    def test_arrow_select_fallback_second_option(self):
+        from traderbot.cli import _arrow_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value="2"):
+            idx = _arrow_select(console, "Choose mode", ["Paper", "Live"])
+            assert idx == 1
+
+    @pytest.mark.unit
+    def test_arrow_select_fallback_invalid_then_valid(self):
+        from traderbot.cli import _arrow_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", side_effect=["abc", "1"]):
+            idx = _arrow_select(console, "Choose mode", ["Paper", "Live"])
+            assert idx == 0
+
+    @pytest.mark.unit
+    def test_checkbox_select_fallback_all(self):
+        from traderbot.cli import _checkbox_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        keys = ["economics", "politics", "weather"]
+        labels = ["Economics", "Politics", "Climate and Weather"]
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value="a"):
+            selected = _checkbox_select(console, "Pick categories", labels, keys)
+            assert selected == keys
+
+    @pytest.mark.unit
+    def test_checkbox_select_fallback_specific(self):
+        from traderbot.cli import _checkbox_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        keys = ["economics", "politics", "weather"]
+        labels = ["Economics", "Politics", "Climate and Weather"]
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value="1,3"):
+            selected = _checkbox_select(console, "Pick categories", labels, keys)
+            assert selected == ["economics", "weather"]
+
+    @pytest.mark.unit
+    def test_checkbox_select_fallback_all_on_empty_input(self):
+        from traderbot.cli import _checkbox_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        keys = ["economics", "politics"]
+        labels = ["Economics", "Politics"]
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value=""):
+            selected = _checkbox_select(console, "Pick categories", labels, keys)
+            assert selected == keys
+
+    @pytest.mark.unit
+    def test_checkbox_select_fallback_all_on_invalid_numbers(self):
+        from traderbot.cli import _checkbox_select
+        from rich.console import Console
+
+        console = Console(force_terminal=False)
+        keys = ["economics", "politics"]
+        labels = ["Economics", "Politics"]
+        with patch("traderbot.cli._is_interactive_tty", return_value=False), \
+             patch("builtins.input", return_value="99"):
+            selected = _checkbox_select(console, "Pick categories", labels, keys)
+            assert selected == keys
+
+
+class TestProfileCreateNonInteractive:
+    """Tests for the non-interactive (flag-driven) profile create path."""
+
+    @pytest.mark.unit
+    def test_profile_create_help(self):
+        result = runner.invoke(app, ["profile", "create", "--help"])
+        assert result.exit_code == 0
+        assert "mode" in result.output.lower()
+        assert "categories" in result.output.lower()
+
+    @pytest.mark.unit
+    def test_profile_create_rejects_invalid_mode(self):
+        with patch("traderbot.cli.sys.stdin") as mock_stdin, \
+             patch.dict("os.environ", {"TERM": "xterm"}):
+            mock_stdin.isatty.return_value = False
+            result = runner.invoke(
+                app,
+                ["profile", "create", "test-agent", "--mode", "invalid"],
+            )
+            assert result.exit_code == 1
+            assert "mode must be" in result.output
+
+    @pytest.mark.unit
+    def test_profile_create_rejects_invalid_category(self):
+        with patch("traderbot.cli.sys.stdin") as mock_stdin, \
+             patch.dict("os.environ", {"TERM": "xterm"}):
+            mock_stdin.isatty.return_value = False
+            result = runner.invoke(
+                app,
+                ["profile", "create", "test-agent", "--mode", "paper", "--categories", "invalid_cat"],
+            )
+            assert result.exit_code == 1
+
+    @pytest.mark.unit
+    def test_profile_create_skip_auth_non_interactive(self):
+        with patch("traderbot.cli.sys.stdin") as mock_stdin, \
+             patch.dict("os.environ", {"TERM": "xterm"}):
+            mock_stdin.isatty.return_value = False
+            with patch("traderbot.profiles.registry.ProfileRegistry") as MockRegistry:
+                mock_registry = MagicMock()
+                mock_registry.list_profiles.return_value = []
+                mock_registry.create_profile.return_value = None
+                MockRegistry.return_value = mock_registry
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "profile", "create", "wizard-test",
+                        "--mode", "paper",
+                        "--categories", "economics,politics",
+                        "--skip-auth",
+                    ],
+                )
+                assert result.exit_code == 0
+                mock_registry.create_profile.assert_called_once()
+
+    @pytest.mark.unit
+    def test_profile_create_wizard_shows_global_creds_mocked_keyring(self):
+        """Wizard reads global credentials via AuthManager — must NOT use real keychain."""
+        with patch("traderbot.cli.sys.stdin") as mock_stdin, \
+             patch.dict("os.environ", {"TERM": "xterm"}, clear=False):
+            mock_stdin.isatty.return_value = False
+            with patch("traderbot.profiles.registry.ProfileRegistry") as MockRegistry, \
+                 patch("traderbot.auth.AuthManager") as MockAuthManager:
+                mock_auth = MagicMock()
+                mock_auth.keyring_available = False
+                mock_auth.get_credential.return_value = None
+                MockAuthManager.return_value = mock_auth
+                mock_registry = MagicMock()
+                mock_registry.list_profiles.return_value = []
+                mock_registry.create_profile.return_value = None
+                MockRegistry.return_value = mock_registry
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "profile", "create", "test-keyring-agent",
+                        "--mode", "paper",
+                        "--categories", "economics",
+                        "--skip-auth",
+                    ],
+                )
+                assert result.exit_code == 0
+
+    @pytest.mark.unit
+    def test_profile_create_skip_auth_non_interactive(self):
+        with patch("traderbot.cli.sys.stdin") as mock_stdin, \
+             patch.dict("os.environ", {"TERM": "xterm"}):
+            mock_stdin.isatty.return_value = False
+            with patch("traderbot.profiles.registry.ProfileRegistry") as MockRegistry:
+                mock_registry = MagicMock()
+                mock_registry.list_profiles.return_value = []
+                mock_registry.create_profile.return_value = None
+                MockRegistry.return_value = mock_registry
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "profile", "create", "wizard-test",
+                        "--mode", "paper",
+                        "--categories", "economics,politics",
+                        "--skip-auth",
+                    ],
+                )
+                assert result.exit_code == 0
+                mock_registry.create_profile.assert_called_once()
