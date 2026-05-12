@@ -1,0 +1,20 @@
+OpenWeatherMap key not set, skipping
+FRED API key not available, skipping FRED fetch
+=== Edge Case Test Results ===
+  [PASS] backward_compat_legacy
+  [PASS] backward_compat_config
+  [PASS] backward_compat_override
+  [PASS] category_filter_openmeteo
+  [PASS] category_filter_owm
+  [PASS] category_filter_fred
+  [PASS] category_filter_coingecko
+  [PASS] category_filter_thesportsdb
+  [PASS] category_filter_coincap
+  [PASS] category_filter_ballotpedia
+  [PASS] category_filter_google_trends
+  [PASS] missing_key_owm
+  [PASS] missing_key_fred
+  [PASS] fetch_all_fred_no_key
+  [PASS] fetch_all_owm_no_key
+
+Edge Cases: 15/15 pass

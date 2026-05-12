@@ -1,0 +1,37 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.4, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/opt/python@3.14/bin/python3.14
+cachedir: .pytest_cache
+rootdir: /Users/djtchill/Desktop/TraderBot
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.3.0, respx-0.23.1, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 20 items
+
+tests/news/test_sources.py::test_open_meteo_success PASSED               [  5%]
+tests/news/test_sources.py::test_open_meteo_category_filter PASSED       [ 10%]
+tests/news/test_sources.py::test_open_meteo_http_error PASSED            [ 15%]
+tests/news/test_sources.py::test_coingecko_success PASSED                [ 20%]
+tests/news/test_sources.py::test_coingecko_rate_limited PASSED           [ 25%]
+tests/news/test_sources.py::test_thesportsdb_success PASSED              [ 30%]
+tests/news/test_sources.py::test_thesportsdb_empty_events PASSED         [ 35%]
+tests/news/test_sources.py::test_coincap_success PASSED                  [ 40%]
+tests/news/test_sources.py::test_ballotpedia_success PASSED              [ 45%]
+tests/news/test_sources.py::test_openweathermap_success PASSED           [ 50%]
+tests/news/test_sources.py::test_openweathermap_no_key PASSED            [ 55%]
+tests/news/test_sources.py::test_fred_success PASSED                     [ 60%]
+tests/news/test_sources.py::test_fred_no_key PASSED                      [ 65%]
+tests/news/test_sources.py::test_google_trends_no_pytrends PASSED        [ 70%]
+tests/news/test_sources.py::test_google_trends_category_filter PASSED    [ 75%]
+tests/news/test_sources.py::test_datasources_config_legacy PASSED        [ 80%]
+tests/news/test_sources.py::test_datasources_config_object PASSED        [ 85%]
+tests/news/test_sources.py::test_datasources_config_individual_wins PASSED [ 90%]
+tests/news/test_sources.py::test_source_coverage_all_sources_have_entries PASSED [ 95%]
+tests/news/test_sources.py::test_source_requires_key PASSED              [100%]
+
+=============================== warnings summary ===============================
+tests/news/conftest.py:5
+  /Users/djtchill/Desktop/TraderBot/tests/news/conftest.py:5: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; tests.news
+    pytest.register_assert_rewrite("tests.news")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 20 passed, 1 warning in 18.66s ========================

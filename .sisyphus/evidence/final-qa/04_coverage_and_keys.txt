@@ -1,0 +1,23 @@
+=== SOURCE_CATEGORY_COVERAGE ===
+Total sources: 11
+  ballotpedia: ['elections', 'politics']
+  coincap: ['crypto']
+  coingecko: ['crypto', 'mentions']
+  fred: ['economics', 'financials']
+  google_trends: ['mentions', 'social']
+  newsapi: ['economics', 'politics', 'weather', 'sports', 'science_and_technology', 'crypto', 'commodities', 'companies', 'elections', 'entertainment', 'financials', 'health', 'social', 'mentions']
+  open_meteo: ['weather']
+  openweathermap: ['weather']
+  reddit: ['economics', 'politics', 'weather', 'sports', 'science_and_technology', 'crypto', 'commodities', 'companies', 'elections', 'entertainment', 'financials', 'health', 'social', 'mentions']
+  thesportsdb: ['sports']
+  twitter: []
+
+=== SOURCE_REQUIRES_KEY ===
+Sources requiring key: 2
+  fred
+  openweathermap
+
+=== VERIFICATION ===
+All 11 sources have entries: True
+All sources accounted for: PASS
+Requires-key sources: only OPENWEATHERMAP and FRED: True
