@@ -10,7 +10,81 @@ TraderBot provides the data pipeline, statistical analysis, risk enforcement, si
 
 This separation is deliberate: it eliminates emotional bias from the execution layer. Even if the agent's LLM "decides" to go all-in on a hunch, hard-coded risk guards reject the order before it reaches the exchange.
 
-## Architecture at a Glance
+## Prerequisites
+
+- **OpenClaw** — TraderBot is designed to be operated by OpenClaw AI agents. [Install OpenClaw first](https://github.com/openclaw/openclaw#installation).
+- **Python 3.12** — required (chroma-hnswlib has no wheels for 3.13+)
+- **Kalshi API credentials** — sign up at [kalshi.com](https://kalshi.com) and generate an API key + RSA key pair
+
+## One-Liner Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh
+```
+
+The installer auto-detects your OS (Ubuntu/Debian or macOS), installs dependencies, clones the repo, and runs the interactive config wizard — covering API keys, profile creation, and OpenClaw agent assignment.
+
+### Installer Options
+
+| Flag | Description |
+|------|-------------|
+| *(none)* | Interactive install with config wizard |
+| `--update` | Pull latest from GitHub and restart services |
+| `--uninstall` | Remove all TraderBot services and files |
+| `--help` | Show full usage |
+
+### Manual Install
+
+```bash
+# Clone the repo
+git clone https://github.com/JsonDaRula69/TraderBot.git ~/traderbot
+cd ~/traderbot
+
+# Install with uv (recommended)
+uv sync
+
+# Or with pip
+pip install -e .
+```
+
+## Quick Start
+
+```bash
+# 1. Configure your Kalshi credentials
+#    Create ~/.traderbot/.env with:
+export KALSHI_API_KEY=your_key_id
+export KALSHI_PRIVATE_KEY_PEM="$(cat /path/to/private_key.pem)"
+
+# 2. Scan available markets
+traderbot scan
+
+# 3. Deep analysis on a specific market
+traderbot analyze KXBTCD-26MAR31-T55000
+
+# 4. Paper trade a strategy
+traderbot paper momentum
+
+# 5. Run a heartbeat (self-review cycle)
+traderbot heartbeat
+```
+
+### OpenClaw Agent Setup
+
+After installing TraderBot, configure your OpenClaw agents to use it:
+
+1. **Assign a profile token** to your agent:
+   ```bash
+   traderbot profile create --name weather-agent --category weather
+   traderbot profile assign --agent weather-agent --token $(traderbot profile token weather-agent)
+   ```
+
+2. **Set `TRADERBOT_PROFILE_TOKEN`** in your agent's environment (OpenClaw `.env` or agent config)
+
+3. The agent can now run all TraderBot commands autonomously. See [TOOLS.md](.openclaw/workspace/TOOLS.md) for the agent command reference.
+
+See [docs/deployment.md](docs/deployment.md) for full deployment instructions including systemd/launchd service setup.
+
+## Architecture
 
 TraderBot runs three autonomous loops via OpenClaw:
 
@@ -36,9 +110,6 @@ traderbot/
 │   │   ├── models.py        # TradingProfile model
 │   │   ├── registry.py      # ProfileRegistry (.env CRUD)
 │   │   ├── tokens.py        # Token generation/resolution
-│   │   ├── auth.py          # Per-profile auth store
-│   │   ├── discovery.py     # OpenClaw agent discovery
-│   │   ├── injection.py     # Token injection into TOOLS.md
 │   │   ├── config.py        # Profile-aware credential resolution
 │   │   ├── isolation.py     # Per-profile data isolation
 │   │   └── runtime.py       # Runtime context resolution
@@ -51,7 +122,7 @@ traderbot/
 │   └── SKILL.md             # OpenClaw skill definition
 ├── .openclaw/workspace/     # Agent workspace files
 │   ├── AGENTS.md
-│   ├── SESSION-STATE.md
+│   ├── TOOLS.md             # Agent CLI reference
 │   ├── HEARTBEAT.md
 │   └── .learnings/
 ├── docs/                    # Full documentation
@@ -78,30 +149,25 @@ traderbot/
 | [docs/security.md](docs/security.md) | Threat model, token handshake security, .env-based encryption, enforcement layers |
 | [docs/api.md](docs/api.md) | CLI command reference including profile commands |
 
-## Quick Start
+## CLI Overview
 
-*Not yet implemented. See [docs/product-roadmap.md](docs/product-roadmap.md) for implementation timeline.*
+| Command | Description |
+|---|---|
+| `traderbot scan` | List open markets across categories |
+| `traderbot analyze TICKER` | Orderbook depth + implied probability |
+| `traderbot signals` | Active trading signals |
+| `traderbot news` | Fetch news from all active sources |
+| `traderbot sentiment TICKER` | Aggregate sentiment analysis |
+| `traderbot paper` | Paper trade (no real money) |
+| `traderbot trade` | Place a real order (human-only) |
+| `traderbot positions` | View open positions |
+| `traderbot performance` | P&L and metrics |
+| `traderbot heartbeat` | Self-review: performance, adaptation, risk state |
+| `traderbot profile` | Profile management (create, list, assign tokens) |
+| `traderbot auth check` | Verify credential configuration |
+| `traderbot resume` | Clear circuit breaker halt state |
 
-```bash
-# Install (future)
-pip install traderbot
-
-# Configure
-export KALSHI_API_KEY=your_key_id
-export KALSHI_PRIVATE_KEY=path/to/private_key.pem
-
-# Scan markets
-traderbot scan
-
-# Deep analysis
-traderbot analyze KXBTCD-26MAR31-T55000
-
-# Paper trade a strategy
-traderbot paper momentum
-
-# Run heartbeat (self-review)
-traderbot heartbeat
-```
+Full reference in [TOOLS.md](.openclaw/workspace/TOOLS.md) and [docs/api.md](docs/api.md).
 
 ## License
 
