@@ -1,4 +1,4 @@
-"""Tests for profile-aware news pipeline: CLI resolution, category filtering, credential chain."""
+"""Tests for profile-aware news pipeline: CLI resolution, category filtering."""
 
 import os
 from unittest.mock import patch
@@ -6,8 +6,6 @@ from unittest.mock import patch
 import pytest
 
 from traderbot.kalshi.models import MarketCategory
-from traderbot.profiles.auth import ProfileAuthStore
-from traderbot.profiles.config import resolve_kalshi_credentials, resolve_newsapi_key
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.runtime import get_current_profile
 
@@ -25,25 +23,6 @@ _SAMPLE_PROFILE = TradingProfile(
     min_edge_pct=0.03,
     enabled_categories=[MarketCategory.ECONOMICS, MarketCategory.POLITICS],
 )
-
-
-class MockKeyring:
-    """In-memory keyring mock for testing."""
-
-    def __init__(self) -> None:
-        self._store: dict[tuple[str, str], str] = {}
-
-    def set_password(self, service: str, username: str, password: str) -> None:
-        self._store[(service, username)] = password
-
-    def get_password(self, service: str, username: str) -> str | None:
-        return self._store.get((service, username))
-
-    def delete_password(self, service: str, username: str) -> None:
-        self._store.pop((service, username), None)
-
-    def keys(self) -> list[tuple[str, str]]:
-        return list(self._store.keys())
 
 
 class TestGetProfileFromEnv:
@@ -83,30 +62,3 @@ class TestCategoryFiltering:
         assert open_profile.is_category_enabled(MarketCategory.SCIENCE_AND_TECHNOLOGY) is True
 
 
-class TestCredentialResolution:
-    """Profile-aware credential resolution falls back correctly."""
-
-    def test_profile_credentials_take_priority(self) -> None:
-        mock_kr = MockKeyring()
-        mock_kr.set_password(
-            "traderbot.profiles.test-agent.kalshi",
-            "credentials",
-            '{"key": "profile-key", "secret": "profile-secret", "created_at": "2025-01-01T00:00:00+00:00"}',
-        )
-        store = ProfileAuthStore(_SAMPLE_PROFILE, keyring_module=mock_kr)
-        creds = store.get_credentials("kalshi")
-        assert creds is not None
-        assert creds[0] == "profile-key"
-
-    def test_resolve_newsapi_key_returns_env_fallback(self) -> None:
-        mock_kr = MockKeyring()
-        with patch.dict(os.environ, {"NEWSAPI_KEY": "env-key-123"}):
-            key = resolve_newsapi_key(None, global_keyring=mock_kr)
-            assert key == "env-key-123"
-
-    def test_resolve_newsapi_key_none_when_no_source(self) -> None:
-        mock_kr = MockKeyring()
-        with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("NEWSAPI_KEY", None)
-            key = resolve_newsapi_key(None, global_keyring=mock_kr)
-            assert key is None

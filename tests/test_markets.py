@@ -44,16 +44,16 @@ SAMPLE_ORDERBOOK_RAW = {
 
 SAMPLE_TRADE_RAW = {
     "ticker": "KXBTCD-26MAR31-T55000",
-    "yes_price": 65,
-    "count": 10,
+    "price_fp": "0.65",
+    "count_fp": 10,
     "side": "yes",
     "timestamp": TRADE_TS_2025_04_20,
 }
 
 SAMPLE_TRADE_RAW_2 = {
     "ticker": "KXBTCD-26MAR31-T55000",
-    "price": 63,
-    "quantity": 5,
+    "price_fp": "0.63",
+    "count_fp": 5,
     "side": "no",
     "created_time": TRADE_TS_2025_04_20,
 }
@@ -63,7 +63,7 @@ class TestListMarkets:
     @respx.mock
     async def test_returns_market_list(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": [SAMPLE_MARKET_RAW], "cursor": "abc123"}
             )
@@ -81,7 +81,7 @@ class TestListMarkets:
     @respx.mock
     async def test_passes_filter_params(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.active_url}/markets").mock(
+        route = respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": [], "cursor": None})
         )
         async with KalshiClient(cfg) as client:
@@ -96,7 +96,7 @@ class TestListMarkets:
     @respx.mock
     async def test_empty_list(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(200, json={"markets": [], "cursor": None})
         )
         async with KalshiClient(cfg) as client:
@@ -112,7 +112,7 @@ class TestGetMarket:
     @respx.mock
     async def test_returns_single_market(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json={"market": SAMPLE_MARKET_RAW})
         )
         async with KalshiClient(cfg) as client:
@@ -127,7 +127,7 @@ class TestGetMarket:
     @respx.mock
     async def test_404_raises(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/INVALID").mock(
+        respx.get(f"{cfg.base_url}/markets/INVALID").mock(
             return_value=httpx.Response(404, json={"error": "not found"})
         )
         async with KalshiClient(cfg) as client:
@@ -139,7 +139,7 @@ class TestGetMarket:
     @respx.mock
     async def test_flat_response_fallback(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json=SAMPLE_MARKET_RAW)
         )
         async with KalshiClient(cfg) as client:
@@ -154,7 +154,7 @@ class TestGetOrderbook:
     @respx.mock
     async def test_returns_orderbook(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
+        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
             return_value=httpx.Response(200, json=SAMPLE_ORDERBOOK_RAW)
         )
         async with KalshiClient(cfg) as client:
@@ -170,11 +170,11 @@ class TestGetOrderbook:
     @respx.mock
     async def test_string_price_normalization(self) -> None:
         orderbook_raw = {
-            "yes_bids": [["64", "100"], ["63", "250"]],
-            "no_bids": [["36", "150"], ["37", "200"]],
+            "yes_bids": [["0.64", "100"], ["0.63", "250"]],
+            "no_bids": [["0.36", "150"], ["0.37", "200"]],
         }
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
+        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
             return_value=httpx.Response(200, json=orderbook_raw)
         )
         async with KalshiClient(cfg) as client:
@@ -188,7 +188,7 @@ class TestGetOrderbook:
     @respx.mock
     async def test_empty_orderbook(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KX-EMPTY/orderbook").mock(
+        respx.get(f"{cfg.base_url}/markets/KX-EMPTY/orderbook").mock(
             return_value=httpx.Response(200, json={"yes_bids": [], "no_bids": []})
         )
         async with KalshiClient(cfg) as client:
@@ -206,7 +206,7 @@ class TestGetOrderbook:
             "no": [[35, 75], [36, 125]],
         }
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
+        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000/orderbook").mock(
             return_value=httpx.Response(200, json=alt_orderbook)
         )
         async with KalshiClient(cfg) as client:
@@ -222,7 +222,7 @@ class TestGetRecentTrades:
     @respx.mock
     async def test_returns_trades(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/trades").mock(
+        respx.get(f"{cfg.base_url}/markets/trades").mock(
             return_value=httpx.Response(
                 200,
                 json={"trades": [SAMPLE_TRADE_RAW, SAMPLE_TRADE_RAW_2], "cursor": "next_page"},
@@ -245,7 +245,7 @@ class TestGetRecentTrades:
     @respx.mock
     async def test_pagination(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets/trades").mock(
+        respx.get(f"{cfg.base_url}/markets/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": "page2"})
         )
         async with KalshiClient(cfg) as client:
@@ -262,7 +262,7 @@ class TestListAllMarkets:
     async def test_single_page_no_cursor(self) -> None:
         """When API returns no cursor, list_all_markets returns one page."""
         cfg = _make_config()
-        respx.get(f"{cfg.active_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": [SAMPLE_MARKET_RAW], "cursor": None}
             )
@@ -291,7 +291,7 @@ class TestListAllMarkets:
                 return httpx.Response(200, json={"markets": [market_a], "cursor": "page2"})
             return httpx.Response(200, json={"markets": [market_b], "cursor": None})
 
-        respx.get(f"{cfg.active_url}/markets").mock(side_effect=side_effect)
+        respx.get(f"{cfg.base_url}/markets").mock(side_effect=side_effect)
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
             service = MarketService(client)
@@ -307,7 +307,7 @@ class TestListAllMarkets:
         """Stops after max_pages even if cursor remains."""
         cfg = _make_config()
         # Each page returns a market and a cursor to the next page
-        respx.get(f"{cfg.active_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": [SAMPLE_MARKET_RAW], "cursor": "next_page"}
             )
@@ -325,7 +325,7 @@ class TestListAllMarkets:
         """Stops collecting once limit is reached."""
         cfg = _make_config()
         markets = [{**SAMPLE_MARKET_RAW, "ticker": f"MKT-{i}"} for i in range(5)]
-        respx.get(f"{cfg.active_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": markets, "cursor": "more"}
             )
@@ -354,7 +354,7 @@ class TestListAllMarkets:
                 return httpx.Response(200, json={"markets": [market_a], "cursor": "page2"})
             return httpx.Response(500, json={"error": "internal"})
 
-        respx.get(f"{cfg.active_url}/markets").mock(side_effect=side_effect)
+        respx.get(f"{cfg.base_url}/markets").mock(side_effect=side_effect)
         async with KalshiClient(cfg) as client:
             client._session_token = "tok"
             service = MarketService(client)

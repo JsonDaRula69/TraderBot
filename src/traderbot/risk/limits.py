@@ -15,7 +15,7 @@ HARD_LIMITS: Final[dict[str, float | int]] = MappingProxyType(
         "max_position_per_market_pct": 0.05,
         "max_daily_loss_pct": 0.02,
         "max_drawdown_pct": 0.10,
-        "min_liquidity_threshold": 500,
+        "min_liquidity_threshold": 1000,
         "max_open_positions": 20,
         "min_edge_pct": 0.03,
     }
