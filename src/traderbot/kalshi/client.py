@@ -112,11 +112,11 @@ class KalshiClient:
 
         Args:
             config: KalshiConfig to use (if None, loads from env vars or profile)
-            profile: TradingProfile to use for credentials and demo mode (optional)
+            profile: TradingProfile to use for credentials (optional)
 
         Note:
             If both config and profile are None, attempts to load from KALSHI_* env vars.
-            If profile is provided but config is None, uses profile credentials and demo mode.
+            If profile is provided but config is None, uses profile credentials.
             If config is provided, profile is ignored (explicit config takes precedence).
         """
         if config is None:
