@@ -127,6 +127,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - Skip audit logging — every action is recorded
 - **Modify TraderBot source code** — NEVER edit files in the TraderBot package, installation, or repository
 - **Read raw credentials** — NEVER read .env files, keyring contents, or credential strings directly. Use `traderbot auth` commands instead
+- **Access files outside the agent workspace** — NEVER read, write, cat, less, head, or python-import any file outside `~/.openclaw/workspace/{agent}/`. This includes `~/.traderbot/`, `src/traderbot/`, `/etc/`, and any other system directory. Your ONLY interfaces are `traderbot` CLI commands and web search.
 
 ## Red Lines
 
@@ -137,6 +138,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - Don't modify TraderBot source code (`src/traderbot/`, installed package, or repo files)
 - Don't read or display credential values from `.env` files, keyring, or environment variables
 - Don't modify HARD_LIMITS, risk thresholds, or any compiled runtime constants
+- **Don't access files outside your agent workspace** — you may ONLY read/write within `~/.openclaw/workspace/{agent}/` and its subdirectories. The TraderBot package, its source code, its `.env` files under `~/.traderbot/`, and any other system directories are STRICTLY OFF LIMITS. Your only interfaces to TraderBot are the `traderbot` CLI commands and web search. No `cat`, `less`, `head`, `python -c "import traderbot"`, or any other direct access method is permitted.
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human
 

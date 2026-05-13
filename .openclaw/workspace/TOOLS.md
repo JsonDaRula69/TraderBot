@@ -1,15 +1,32 @@
 <!-- TRADERBOT_TOOLS_START -->
 # TOOLS.md - CLI Reference
 
-## Market Analysis
+## ⚠️ Permission Model
+
+**All `traderbot` commands are classified into TWO tiers:**
+
+| Tier | Rule |
+|---|---|
+| **🟢 Agent-autonomous** | Run freely without asking. No permission needed. |
+| **🔴 Human-only** | You MUST request EXPLICIT permission from the user BEFORE running. Do not execute these on your own. If unsure, ask. |
+
+If a command is not listed below, assume it requires permission (🔴 Human-only).
+
+---
+
+## 🟢 Agent-Autonomous Commands
+
+### Market Analysis
 
 | Command | Purpose |
 |---|---|
 | `traderbot scan --json` | List open markets (`--category`, `--limit`) |
 | `traderbot analyze TICKER --json` | Orderbook + implied probability |
 | `traderbot signals --json` | Active trading signals (`--category`, `--limit`) |
+| `traderbot news --json` | Fetch news (`--category`, `--limit`, `--source`) |
+| `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
 
-## Trading & Positions
+### Trading & Positions
 
 | Command | Purpose |
 |---|---|
@@ -17,53 +34,74 @@
 | `traderbot positions --json` | List current positions from DB |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
 
-## News & Sentiment
-
-| Command | Purpose |
-|---|---|
-| `traderbot news --json` | Fetch news (`--category`, `--limit`, `--source`) |
-| `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
-
-## Simulation & Backtesting
+### Simulation & Backtesting
 
 | Command | Purpose |
 |---|---|
 | `traderbot backtest --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Historical backtest |
 | `traderbot paper --strategy momentum --json` | Paper trade against demo API |
-| `traderbot compare --profiles name1,name2 --json` | Compare across risk profiles |
 | `traderbot performance --json` | P&L and win rate (`--from`, `--to`) |
 
-## Self-Improvement
+### Self-Improvement
 
 | Command | Purpose |
 |---|---|
 | `traderbot heartbeat --json` | 7-step review cycle (`--dry-run`) |
 | `traderbot learnings --json` | List learning patterns (`--status`, `--category`, `--promote`) |
+| `traderbot compare --profiles name1,name2 --json` | Compare across risk profiles |
+| `traderbot --version` | Show version |
+| `traderbot halt --json` | Check circuit breaker state (read-only) |
 
-## Profile Management
+### Profile Inspection (read-only)
 
 | Command | Purpose |
 |---|---|
 | `traderbot profile list --json` | List all profiles |
 | `traderbot profile show NAME --json` | Show profile details |
-| `traderbot profile create NAME --risk-multiplier 0.8` | Create profile |
-| `traderbot profile delete NAME` | Delete profile |
-| `traderbot profile assign NAME --token TOKEN` | Assign token to agent |
-| `traderbot profile revoke TOKEN` | Revoke a token |
 | `traderbot profile assignments --json` | List token assignments |
-| `traderbot profile update NAME --risk-multiplier 0.9 --min-liquidity 500 --enabled-categories weather,sports` | Update profile parameters |
-| `traderbot profile discover-agents --json` | Map OpenClaw agents to profiles |
-| `traderbot profile set-auth NAME --provider kalshi` | Set per-profile credentials |
 | `traderbot profile auth NAME --json` | Check profile auth status |
 
-## System
+---
 
-| Command | Purpose |
+## 🔴 Human-Only Commands (REQUIRE EXPLICIT PERMISSION)
+
+**You MUST ask for permission before running ANY of these commands. State which command you want to run and why, then wait for explicit user approval.**
+
+### Risk & Safety
+
+| Command | Why Restricted |
 |---|---|
-| `traderbot --version` | Show version |
-| `traderbot halt --json` | Check circuit breaker state |
-| `traderbot halt --force` | Force FULL_STOP (user only) |
-| `traderbot bootstrap` | One-time setup wizard |
+| `traderbot halt --force` | Emergency override — requires human judgment |
+
+### Profile Management (changes config or credentials)
+
+| Command | Why Restricted |
+|---|---|
+| `traderbot profile create NAME --risk-multiplier 0.8` | Creates config — human decides profiles |
+| `traderbot profile delete NAME` | Destructive — could remove active config |
+| `traderbot profile assign NAME --token TOKEN` | Binds agent to profile — deployment decision |
+| `traderbot profile revoke TOKEN` | Revokes access — security boundary |
+| `traderbot profile update NAME [OPTIONS]` | Changes risk limits, categories — **must request permission each time** |
+| `traderbot profile set-auth NAME --provider kalshi` | Stores credentials — security boundary |
+| `traderbot profile discover-agents --json` | Maps agents to profiles — deployment decision |
+
+### Auth & Credentials
+
+| Command | Why Restricted |
+|---|---|
+| `traderbot auth login` | Interactive credential setup — security boundary |
+| `traderbot auth set-key SERVICE KEY` | Stores credential — security boundary |
+| `traderbot auth rotate SERVICE` | Rotates credential — security boundary |
+| `traderbot auth check` | Verifies all credentials — informational but best with human awareness |
+
+### System
+
+| Command | Why Restricted |
+|---|---|
+| `traderbot bootstrap` | One-time setup — should not run mid-session |
+| `traderbot update` | System upgrade — should not happen mid-session |
+
+---
 
 ## Market Categories
 
@@ -93,16 +131,6 @@ Crypto sources (CoinGecko) return `DataPoint` objects with prices in integer cen
 FRED returns economic indicators as `DataPoint` objects.
 Google Trends returns trending topics as best-effort `DataPoint` objects.
 
-### Setting Up API Keys
-
-```
-traderbot auth login                        # Interactive setup for ALL services
-traderbot auth set-key openweathermap api_key  # Set OpenWeatherMap key
-traderbot auth set-key fred api_key            # Set FRED key
-```
-
-Or set environment variables: `OPENWEATHER_API_KEY`, `FRED_API_KEY`
-
 ### Category Coverage
 
 Not all sources cover all categories. Sources are only queried for categories they support:
@@ -122,8 +150,8 @@ Not all sources cover all categories. Sources are only queried for categories th
 - **news** — Aggregation, classification, sentiment scoring
 
 All monetary values in cents (int). Always use `--json` for machine-readable output.
-<!-- TRADERBOT_TOOLS_END -->
 
 ## Environment Variables
 
 - `TRADERBOT_PROFILE_TOKEN`: Assigned profile token (set by the system at deploy time, do not modify)
+<!-- TRADERBOT_TOOLS_END -->
