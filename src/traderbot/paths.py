@@ -17,6 +17,12 @@ def get_db_path() -> Path:
 
 def get_audit_dir() -> Path:
     """Return the audit log directory."""
+    from traderbot.profiles.isolation import get_profile_audit_path
+    from traderbot.profiles.runtime import get_current_profile
+
+    profile = get_current_profile()
+    if profile is not None:
+        return get_profile_audit_path(profile)
     return get_data_dir() / "audit"
 
 
