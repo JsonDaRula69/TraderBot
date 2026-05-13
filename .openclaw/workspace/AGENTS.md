@@ -173,17 +173,43 @@ During HALT/FULL_STOP, the agent:
 
 ## Signal Confidence Thresholds
 
-Signal confidence is computed by the statistical indicators module (signals). It represents the weighted agreement of available indicators:
+Signal confidence is computed by the statistical indicators module (`signals.py`). It represents a **weighted average of signed signal strengths**, not a product of independent factors:
+
+**Formula:** `confidence = |weighted_sum| / total_weight`
+
+where:
+- `weighted_sum = Σ(source_strength × source_weight × direction_sign)`
+- `direction_sign`: `+1` for yes, `-1` for no, `0` for neutral
+- `total_weight = Σ(source_weight)`
+- Confidence is clamped to `[0, 1]`
+
+**Direction logic:**
+- `weighted_sum > 0.01` → direction = **yes**
+- `weighted_sum < -0.01` → direction = **no**
+- Otherwise → direction = **neutral**
+
+**Signal sources and weights (3-source default):**
+
+| Source | Weight | Description |
+|---|---|---|
+| indicators | 0.30 | RSI + Bollinger Bands position |
+| odds | 0.50 | Edge detection vs implied probability |
+| momentum | 0.20 | EMA crossover trend |
+
+**Signal sources and weights (with sentiment):**
+
+| Source | Weight | Description |
+|---|---|---|
+| indicators | 0.25 | RSI + Bollinger Bands position |
+| odds | 0.45 | Edge detection vs implied probability |
+| momentum | 0.15 | EMA crossover trend |
+| sentiment | 0.15 | News sentiment score (optional) |
+
+**Confidence thresholds:**
 
 - **≥ 70% confidence**: Agent may trade autonomously within risk limits
 - **50-69% confidence**: Agent may trade but SHOULD confirm with human if conflicting news sentiment exists
 - **< 50% confidence**: Agent must NOT trade. Log as low-confidence observation and continue monitoring
-
-Confidence is not a single number — it's the product of:
-1. Statistical edge magnitude (how far from 50/50)
-2. Indicator agreement (how many signals agree)
-3. Volume/liquidity check (thin markets reduce confidence)
-4. Recency weighting (stale data reduces confidence)
 
 When confidence is between 50-69% and news sentiment is neutral or absent, the agent may proceed autonomously but must log the low-confidence reasoning.
 
@@ -255,7 +281,7 @@ The 7-step review cycle runs via `traderbot heartbeat --json` and writes output 
 
 ## Market Categories
 
-All 16 supported market categories (from `kalshi.models.MarketCategory`):
+All 14 supported market categories (from `kalshi.models.MarketCategory`):
 
 | Category | Kalshi Value | Description |
 |---|---|---|
@@ -263,9 +289,7 @@ All 16 supported market categories (from `kalshi.models.MarketCategory`):
 | `POLITICS` | politics | Political outcomes and legislation |
 | `WEATHER` | weather | Climate and weather events |
 | `SPORTS` | sports | Sporting event outcomes |
-| `CULTURE` | culture | Cultural events and trends |
-| `TECHNOLOGY` | technology | Technology industry outcomes |
-| `SCIENCE` | science | Scientific discoveries and events |
+| `SCIENCE_AND_TECHNOLOGY` | science_and_technology | Science and technology outcomes |
 | `CRYPTO` | crypto | Cryptocurrency price and events |
 | `COMMODITIES` | commodities | Commodity prices and events |
 | `COMPANIES` | companies | Company-specific outcomes |

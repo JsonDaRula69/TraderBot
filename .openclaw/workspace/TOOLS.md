@@ -51,6 +51,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot compare --profiles name1,name2 --json` | Compare across risk profiles |
 | `traderbot --version` | Show version |
 | `traderbot halt --json` | Check circuit breaker state (read-only) |
+| `traderbot update` | Update TraderBot to latest version |
 
 ### Profile Inspection (read-only)
 
@@ -99,7 +100,6 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | Command | Why Restricted |
 |---|---|
 | `traderbot bootstrap` | One-time setup — should not run mid-session |
-| `traderbot update` | System upgrade — should not happen mid-session |
 
 ---
 
@@ -150,6 +150,49 @@ Not all sources cover all categories. Sources are only queried for categories th
 - **news** — Aggregation, classification, sentiment scoring
 
 All monetary values in cents (int). Always use `--json` for machine-readable output.
+
+## Signal Computation
+
+`traderbot signals` combines weighted sources into a direction (`yes`/`no`/`neutral`) and a confidence score [0, 1]. Two weight models exist:
+
+| Model | Sources & Weights |
+|---|---|
+| 3-source (default) | indicators **0.30** + odds **0.50** + momentum **0.20** |
+| 4-source (with sentiment) | indicators **0.25** + odds **0.45** + momentum **0.15** + sentiment **0.15** |
+
+### Source Details
+
+**Indicators**
+- RSI (14-period): <30 → `yes`, >70 → `no`
+- Bollinger Bands (20-period, k=2.0) fallback when RSI is 30–70:
+  - price < lower band → `yes` (strength 0.7)
+  - price > upper band → `no` (strength 0.7)
+  - inside bands → `neutral` with strength proportional to distance from middle band
+
+**Odds / Edge**
+- Compares agent `estimated_prob` against market-implied probability from the order book (`best_yes_bid / 100`)
+- Edge = `estimated_prob - market_prob`
+- `|edge| < 0.01` → `neutral`; otherwise direction follows sign of edge
+- Strength = `min(1.0, abs(edge) * 5)`
+
+**Momentum**
+- EMA(5) vs EMA(20) crossover
+- Requires at least 20 price observations
+- Strength = `min(1.0, abs(short - long) / long * 10)` (capped at 1.0)
+
+**Sentiment** (optional 4th source)
+- Provided by `news_sentiment` when available
+- `> 0.1` → `yes`, `< -0.1` → `no`, else `neutral`
+- Strength = `min(abs(sentiment), 1.0)`
+
+### Confidence & Direction
+
+For each source: `signed_contribution = strength * weight * (+1 / -1 / 0)` depending on direction.
+
+- **Direction**: sum of signed contributions > 0.01 → `yes`, < -0.01 → `no`, else `neutral`
+- **Confidence**: `|sum| / total_weight`, clamped to [0, 1]
+
+> **Note:** `traderbot signals` may return an empty list when no scanned markets have active order books. This is common on demo environments or for low-liquidity categories.
 
 ## Environment Variables
 
