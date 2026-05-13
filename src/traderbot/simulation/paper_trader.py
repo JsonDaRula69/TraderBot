@@ -41,6 +41,7 @@ class PaperPosition(BaseModel):
     side: Literal["yes", "no"]
     avg_price_cents: Annotated[int, Field(ge=1, description="Weighted-average price in cents")]
     quantity: Annotated[int, Field(ge=0)]
+    status: Literal["open", "settled", "closed"] = "open"
 
 
 class PaperPortfolio(BaseModel):
@@ -84,6 +85,16 @@ class PaperSlippageModel:
         return min(avg_price + self.base_slippage_cents, 99)
 
 
+def _migrate_add_status_column(conn: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(paper_positions)").fetchall()
+    }
+    if "status" not in columns:
+        conn.execute("ALTER TABLE paper_positions ADD COLUMN status TEXT NOT NULL DEFAULT 'open'")
+        conn.commit()
+
+
 def _init_paper_positions_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS paper_positions (
@@ -91,10 +102,12 @@ def _init_paper_positions_table(conn: sqlite3.Connection) -> None:
             side TEXT NOT NULL,
             avg_price_cents INTEGER NOT NULL DEFAULT 0,
             quantity INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'open',
             updated_at TEXT NOT NULL
         )"""
     )
     conn.commit()
+    _migrate_add_status_column(conn)
 
 
 class PaperTrader:
@@ -150,7 +163,7 @@ class PaperTrader:
 
     def get_positions(self) -> list[PaperPosition]:
         rows = self._conn.execute(
-            "SELECT ticker, side, avg_price_cents, quantity FROM paper_positions ORDER BY ticker"
+            "SELECT ticker, side, avg_price_cents, quantity, status FROM paper_positions ORDER BY ticker"
         ).fetchall()
         return [
             PaperPosition(
@@ -158,9 +171,44 @@ class PaperTrader:
                 side=row["side"],
                 avg_price_cents=row["avg_price_cents"],
                 quantity=row["quantity"],
+                status=row["status"],
             )
             for row in rows
         ]
+
+    def mark_settled(self, ticker: str, outcome: bool) -> None:
+        row = self._conn.execute(
+            "SELECT quantity, status FROM paper_positions WHERE ticker = ?",
+            (ticker,),
+        ).fetchone()
+        if row is None:
+            logger.warning("mark_settled: no position for ticker=%s", ticker)
+            return
+        old_status: str = row["status"]
+        new_status = "settled"
+        self._conn.execute(
+            "UPDATE paper_positions SET status = ?, quantity = 0, updated_at = ? WHERE ticker = ?",
+            (new_status, datetime.now(UTC).isoformat(), ticker),
+        )
+        self._conn.commit()
+        logger.info("Position %s status: %s → %s", ticker, old_status, new_status)
+
+    def close_position(self, ticker: str) -> None:
+        row = self._conn.execute(
+            "SELECT status FROM paper_positions WHERE ticker = ?",
+            (ticker,),
+        ).fetchone()
+        if row is None:
+            logger.warning("close_position: no position for ticker=%s", ticker)
+            return
+        old_status: str = row["status"]
+        new_status = "closed"
+        self._conn.execute(
+            "UPDATE paper_positions SET status = ?, updated_at = ? WHERE ticker = ?",
+            (new_status, datetime.now(UTC).isoformat(), ticker),
+        )
+        self._conn.commit()
+        logger.info("Position %s status: %s → %s", ticker, old_status, new_status)
 
     def get_pnl(self, mark_prices: dict[str, int] | None = None) -> int:
         unrealized = 0
