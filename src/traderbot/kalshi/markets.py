@@ -278,5 +278,32 @@ class MarketService:
                 if m.market_category is None:
                     m.market_category = _map_category(raw_cat)
 
+        # Fallback: the /events endpoint misses many daily weather markets
+        # (KXHIGH*, KXLOW*, KXTEMP*) whose events don't appear there.
+        # Query /markets directly and merge any category matches missed above.
+        weather_prefixes = ("KXHIGH", "KXLOW", "KXTEMP")
+        if target_cat in ("climate and weather", "weather") and len(all_markets) < limit:
+            try:
+                direct = await self.list_all_markets(limit=min(limit, 500), status="open")
+                seen_tickers = {m.ticker for m in all_markets}
+                raw_cat_full = "Climate and Weather"
+                for m in direct.markets:
+                    if m.ticker in seen_tickers:
+                        continue
+                    is_weather = (
+                        (m.category and target_cat in m.category.lower())
+                        or (m.market_category and target_cat in m.market_category.value.lower())
+                        or (m.event_ticker and m.event_ticker.startswith(weather_prefixes))
+                    )
+                    if is_weather:
+                        if m.category is None:
+                            m.category = raw_cat_full
+                        if m.market_category is None:
+                            m.market_category = _map_category(raw_cat_full)
+                        all_markets.append(m)
+                        seen_tickers.add(m.ticker)
+            except Exception:
+                logger.warning("Direct market scan fallback failed for category=%s", category)
+
         markets = all_markets[:limit]
         return MarketListResponse(markets=markets, cursor=None)

@@ -39,7 +39,7 @@ def profile_at_hard_limits() -> TradingProfile:
         max_daily_loss_pct=0.02,  # At HARD_LIMITS
         max_drawdown_pct=0.10,  # At HARD_LIMITS
         max_open_positions=20,  # At HARD_LIMITS
-        min_liquidity_threshold=1000,  # At HARD_LIMITS
+        min_liquidity_threshold=500,  # At HARD_LIMITS
         min_edge_pct=0.03,  # At HARD_LIMITS
     )
 
@@ -95,12 +95,12 @@ def test_properties_immutable(profile_below_hard_limits: TradingProfile) -> None
 
 def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile) -> None:
     """min_liquidity_threshold uses max() not min() (higher is more restrictive)."""
-    # Profile has 2000, HARD_LIMITS has 1000
+    # Profile has 2000, HARD_LIMITS has 500
     # Should use 2000 (the higher, more restrictive value)
     limits = AgentRiskLimits(profile_below_hard_limits)
     assert limits.min_liquidity_threshold == 2000
 
-    # Create profile with liquidity below HARD_LIMITS
+    # Create profile with liquidity at HARD_LIMITS floor
     profile_low_liquidity = TradingProfile(
         name="low_liquidity",
         mode="paper",
@@ -111,12 +111,12 @@ def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile)
         max_daily_loss_pct=0.02,
         max_drawdown_pct=0.10,
         max_open_positions=20,
-        min_liquidity_threshold=1000,  # At HARD_LIMITS floor
+        min_liquidity_threshold=500,  # At HARD_LIMITS floor
         min_edge_pct=0.03,
     )
     limits_low = AgentRiskLimits(profile_low_liquidity)
-    # Should use HARD_LIMITS value (1000) since it's the max
-    assert limits_low.min_liquidity_threshold == 1000
+    # Should use HARD_LIMITS value (500) since it's the max
+    assert limits_low.min_liquidity_threshold == 500
 
 
 def test_min_edge_uses_max_logic(profile_below_hard_limits: TradingProfile) -> None:
@@ -137,7 +137,7 @@ def test_min_edge_uses_max_logic(profile_below_hard_limits: TradingProfile) -> N
         max_daily_loss_pct=0.02,
         max_drawdown_pct=0.10,
         max_open_positions=20,
-        min_liquidity_threshold=1000,
+        min_liquidity_threshold=500,
         min_edge_pct=0.03,  # At HARD_LIMITS floor
     )
     limits_low = AgentRiskLimits(profile_low_edge)
