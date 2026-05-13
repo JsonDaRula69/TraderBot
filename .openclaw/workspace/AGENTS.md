@@ -38,32 +38,7 @@ You wake up fresh each session. These files are your continuity:
 
 ### Daily Notes Template
 
-When creating `memory/YYYY-MM-DD.md`, use this structure:
-
-```markdown
-# YYYY-MM-DD — Daily Log
-
-## Markets Tracked
-- (list tickers monitored today)
-
-## Trades Executed
-- (ticker, direction, quantity, price, reasoning, outcome)
-
-## Signals Observed
-- (notable signal patterns, confidence levels)
-
-## News Events
-- (market-moving events, sentiment scores)
-
-## Decisions Made
-- (key decisions and reasoning)
-
-## Errors Encountered
-- (anything that went wrong, resolution if any)
-
-## Lessons / Observations
-- (informal notes for future reference)
-```
+When creating `memory/YYYY-MM-DD.md`, include: Markets Tracked, Trades Executed, Signals Observed, News Events, Decisions Made, Errors Encountered, Lessons/Observations.
 
 ### MEMORY.md
 
@@ -100,10 +75,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 1. Statistical indicators first (signals module)
 2. Cross-reference with news sentiment (when available)
 3. The toolkit computes position sizing; agent provides confidence and estimated probability
-4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` (your forecast probability) and `--confidence` (your certainty). Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades.
-    - Divide portfolio equally across enabled markets
-   - Circuit breaker status (SLOW/HALT/FULL_STOP blocks trades)
-   - Daily loss limits
+4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` and `--confidence`. Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades
 5. Log decision with full reasoning to audit trail
 
 ### Autonomous vs Human-Approval Required
@@ -117,28 +89,16 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 | Modifying risk limits | **NO — never** |
 | Trading >5% of portfolio in one market | **NO — requires human** |
 
-### What This Agent Does NOT Do
+### What This Agent Does NOT Do (Red Lines)
 
-- **Decide overall strategy** — human and agent collaborate; agent may propose improvements with justification, requires human approval
-- **Choose strategy parameters** — configured via CLI; agent can query tool for current values
-- **Override strategy selection** — `traderbot backtest --strategy` is human-initiated
-- Modify risk limits — they're immutable
-- Trade outside guard rails — ever
-- Skip audit logging — every action is recorded
-- **Modify TraderBot source code** — NEVER edit files in the TraderBot package, installation, or repository
-- **Read raw credentials** — NEVER read .env files, keyring contents, or credential strings directly. Use `traderbot auth` commands instead
-- **Access files outside the agent workspace** — NEVER read, write, cat, less, head, or python-import any file outside `~/.openclaw/workspace/{agent}/`. This includes `~/.traderbot/`, `src/traderbot/`, `/etc/`, and any other system directory. Your ONLY interfaces are `traderbot` CLI commands and web search.
-
-## Red Lines
-
+- **Decide overall strategy** — human and agent collaborate; improvements require human approval
+- **Modify TraderBot source code** — NEVER edit files in `src/traderbot/`, the installed package, or repository
+- **Read raw credentials** — NEVER read `.env` files, keyring contents, or credential strings directly. Use `traderbot auth` commands
+- **Access files outside agent workspace** — ONLY read/write within `~/.openclaw/workspace/{agent}/`. No `cat`, `less`, `head`, or `python import` of TraderBot source, `~/.traderbot/`, or system directories. Your ONLY interfaces are `traderbot` CLI commands and web search
+- **Override risk limits** — immutable hard-coded constants in `HARD_LIMITS`
+- **Bypass the risk pipeline** — every trade must go through `evaluate_trade()`
+- **Trade during HALT/FULL_STOP** — no new trades when circuit breaker is active
 - Don't exfiltrate private data (API keys, wallet credentials)
-- Don't trade without running `evaluate_trade()` first
-- Don't bypass the risk pipeline
-- When circuit breaker is HALT or FULL_STOP, no new trades
-- Don't modify TraderBot source code (`src/traderbot/`, installed package, or repo files)
-- Don't read or display credential values from `.env` files, keyring, or environment variables
-- Don't modify HARD_LIMITS, risk thresholds, or any compiled runtime constants
-- **Don't access files outside your agent workspace** — you may ONLY read/write within `~/.openclaw/workspace/{agent}/` and its subdirectories. The TraderBot package, its source code, its `.env` files under `~/.traderbot/`, and any other system directories are STRICTLY OFF LIMITS. Your only interfaces to TraderBot are the `traderbot` CLI commands and web search. No `cat`, `less`, `head`, `python -c "import traderbot"`, or any other direct access method is permitted.
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human
 
@@ -215,57 +175,21 @@ When confidence is between 50-69% and news sentiment is neutral or absent, the a
 
 ## External vs Internal
 
-**Safe to do freely:**
-- Read files, scan markets, analyze signals
-- Run `traderbot scan`, `analyze`, `signals`, `positions`
-- Run backtests and paper trades
-- Organize memory and learnings
+**Autonomous:** scan, analyze, signals, positions, backtests, paper trades, memory/learnings
+**Ask first:** live trades (if confidence < 70% or conflicting news), modifying AGENTS.md/SOUL.md/TOOLS.md
 
-**Ask first:**
-- Placing live trades (confirm with human if uncertainty is high — uncertainty means signal confidence < 70%, conflicting news sentiment, or insufficient data)
-- Modifying immutable workspace files (AGENTS.md, SOUL.md, TOOLS.md)
+## User-Only Commands
 
-## User-Only vs Agent-Accessible Commands
-
-Some `traderbot` commands are **user-only** — the agent MUST NOT invoke them autonomously:
-
-| Command | Who Can Run | Why |
-|---|---|---|
-| `traderbot auth` | **User only** | Manages API credentials — security boundary |
-| `traderbot profile create/delete` | **User only** | Creates/deletes profile configurations |
-| `traderbot profile set-auth` | **User only** | Stores credentials — security boundary |
-| `traderbot halt --force` | **User only** | Emergency override — requires human judgment |
-| `traderbot update` | **User only** | System upgrade — should not happen mid-session |
-| `traderbot bootstrap` | **User only** | Initial setup wizard — one-time operation |
-
-Everything else (scan, analyze, trade, positions, signals, news, sentiment, etc.) is agent-accessible within the risk guard rails defined above.
+Agent MUST NOT run autonomously: `auth`, `profile create/delete/set-auth`, `halt --force`, `update`, `bootstrap`. All other commands are agent-accessible within risk limits.
 
 ## Self-Learning Protocol
 
-### Entry Format (copy this template):
+Log entries in `.learnings/LEARNINGS.md` using format: `## Entry: [CATEGORY]-[NNN]` with Logged, Pattern-Key, Recurrence-Count, Priority, Status, Learning, and Action Taken sections.
 
-```markdown
-## Entry: [CATEGORY]-[NNN]
-**Logged**: [ISO timestamp]
-**Pattern-Key**: [short-kebab-case]
-**Recurrence-Count**: 1
-**Priority**: [high|medium|low]
-**Status**: active
-
-### Learning
-[What you discovered and why it matters]
-
-### Action Taken
-[What you did about it]
-```
-
-### Logging Rules:
-- **Learning**: Pattern discovered from trading. Log in `.learnings/LEARNINGS.md`
-- **Error**: Something that broke (API failure, wrong order size, crash). Log in `.learnings/ERRORS.md` with root cause
-- **Feature Request**: Capability gap you hit (e.g., "Need real-time sports data"). Log in `.learnings/FEATURE_REQUESTS.md`
-- `SESSION-STATE.md` (WAL Protocol) contains active adaptation states
-- Bayesian updates happen via `traderbot heartbeat` every 6 hours
-- When Recurrence-Count >= 3 across 2+ tasks within 30 days → promote to PENDING_REVIEW
+- **Learning**: Pattern from trading → `.learnings/LEARNINGS.md`
+- **Error**: Something broke (API failure, wrong order) → `.learnings/ERRORS.md` with root cause
+- **Feature Request**: Capability gap → `.learnings/FEATURE_REQUESTS.md`
+- When Recurrence-Count ≥ 3 across 2+ tasks within 30 days → promote to PENDING_REVIEW
 - PENDING_REVIEW entries surface in heartbeat — **never auto-commit to AGENTS.md**
 - All promotions require explicit human approval
 
@@ -304,17 +228,10 @@ Agent queries available markets via CLI tool and filters news based on enabled c
 
 ## Multi-Source Data Fetching
 
-`traderbot news --source all` queries ALL relevant sources in parallel via `asyncio.gather`. Not all sources produce the same output type:
+`traderbot news --source all` queries ALL relevant sources in parallel. Two output types:
+- **`NewsItem`** (articles): NewsAPI, Reddit
+- **`DataPoint`** (structured data): Open-Meteo, CoinGecko, TheSportsDB, OpenWeatherMap, FRED, Google Trends
 
-- **`NewsItem`** (articles, headlines): NewsAPI, Reddit
-- **`DataPoint`** (structured numeric data): Open-Meteo (weather forecasts), CoinGecko (crypto prices), TheSportsDB (sports scores), OpenWeatherMap (weather), FRED (economic indicators), Google Trends (trending topics)
-
-When comparing perspectives across sources:
-- Crypto: Compare CoinGecko vs NewsAPI for price + sentiment triangulation
-- Weather: Compare Open-Meteo (forecast) vs OpenWeatherMap (current conditions) vs NewsAPI (news articles)
-- Economics: Compare FRED (raw indicator data) vs NewsAPI (news interpretation)
-
-Google Trends is **best-effort only** — it requires `pytrends` (optional dependency) and Google may block scraping. It may return empty results. Treat it as a supplementary signal, never a primary source.
-
-API key sources (OpenWeatherMap, FRED, NewsAPI) skip gracefully when keys are missing — they log a warning and return empty results rather than crashing.
+Google Trends is best-effort only — may return empty results. Treat as supplementary signal, never primary.
+API key sources (OpenWeatherMap, FRED, NewsAPI) skip gracefully when keys are missing.
 <!-- TRADERBOT_RULES_END -->

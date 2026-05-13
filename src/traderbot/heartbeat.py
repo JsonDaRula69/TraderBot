@@ -380,10 +380,8 @@ async def step_system_health(
         import asyncio
 
         from traderbot.kalshi.client import KalshiClient
-        from traderbot.kalshi.config import KalshiConfig
 
-        config = KalshiConfig()
-        client = KalshiClient(config)
+        client = KalshiClient()  # auto-resolve auth from profile/env
         try:
             response = await asyncio.wait_for(client.get("/platform/status"), timeout=5.0)
             status = response.json() if hasattr(response, "json") else response
