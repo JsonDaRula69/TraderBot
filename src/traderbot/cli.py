@@ -899,6 +899,42 @@ def halt(
 
 
 @app.command()
+def resume(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+) -> None:
+    """Resume trading after circuit breaker halt. Clears FULL_STOP/HALT state."""
+    from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker, CircuitBreakerState
+
+    console = Console()
+    breaker = CircuitBreaker()
+    state = breaker.get_state()
+
+    if state.level == BreakerLevel.NORMAL:
+        if json_output:
+            json_lib.dump(state.model_dump(mode="json"), sys.stdout, default=str)
+        else:
+            console.print("[green]Circuit breaker already NORMAL — no action needed.[/green]")
+        return
+
+    breaker._state = CircuitBreakerState()
+    breaker._persist_state()
+    new_state = breaker.get_state()
+
+    if json_output:
+        json_lib.dump(
+            {"previous_level": state.level.name, "current_level": new_state.level.name, "can_trade": new_state.can_trade},
+            sys.stdout,
+            default=str,
+        )
+        return
+
+    console.print(f"[green]✓[/green] Circuit breaker cleared: {state.level.name} → {new_state.level.name}")
+    console.print(f"  Can trade: {new_state.can_trade}")
+
+
+@app.command()
 def news(
     category: Annotated[
         str | None,

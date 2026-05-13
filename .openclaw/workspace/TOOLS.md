@@ -20,7 +20,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 
 | Command | Purpose |
 |---|---|
-| `traderbot scan --json` | List open markets (`--category`, `--limit`) |
+| `traderbot scan --json` | List open markets (`--category`, `--limit`, default 500) |
 | `traderbot analyze TICKER --json` | Orderbook + implied probability |
 | `traderbot signals --json` | Active trading signals (`--category`, `--limit`) |
 | `traderbot news --json` | Fetch news (`--category`, `--limit`, `--source`) |
@@ -51,6 +51,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot compare --profiles name1,name2 --json` | Compare across risk profiles |
 | `traderbot --version` | Show version |
 | `traderbot halt --json` | Check circuit breaker state (read-only) |
+| `traderbot resume --json` | Clear FULL_STOP/HALT state and resume trading |
 | `traderbot update` | Update TraderBot to latest version |
 
 ### Profile Inspection (read-only)
@@ -73,6 +74,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | Command | Why Restricted |
 |---|---|
 | `traderbot halt --force` | Emergency override — requires human judgment |
+| `traderbot resume` | Clears circuit breaker halt — requires human judgment (agent should alert, not auto-resume) |
 
 ### Profile Management (changes config or credentials)
 
@@ -194,7 +196,21 @@ For each source: `signed_contribution = strength * weight * (+1 / -1 / 0)` depen
 
 > **Note:** `traderbot signals` may return an empty list when no scanned markets have active order books. This is common on demo environments or for low-liquidity categories.
 
+## ⚠️ CRITICAL: Profile Token Required
+
+Most traderbot commands require TRADERBOT_PROFILE_TOKEN to access the profile-specific database. Without it, commands like positions, performance, audit, and heartbeat will use the global default DB which has NO data.
+
+Always run this before any traderbot command:
+  source .env 2>/dev/null || true
+
+The .env file in the workspace root contains TRADERBOT_PROFILE_TOKEN. The cron jobs already source this, but manual CLI calls will miss it without sourcing.
+
+Symptoms of missing profile token:
+  - positions --json returns empty list
+  - performance --json shows trade_count: 0
+  - heartbeat --json shows open_positions: 0
+
 ## Environment Variables
 
-- `TRADERBOT_PROFILE_TOKEN`: Assigned profile token (set by the system at deploy time, do not modify)
+- TRADERBOT_PROFILE_TOKEN: Assigned profile token. MUST source .env before commands. Set by the system at deploy time.
 <!-- TRADERBOT_TOOLS_END -->
