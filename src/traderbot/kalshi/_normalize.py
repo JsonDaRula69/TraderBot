@@ -97,7 +97,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
 
 
 def _normalize_orderbook_level(raw: list[Any]) -> OrderBookLevel:
-    return OrderBookLevel(price=_to_cents(raw[0]), size=int(raw[1]))
+    return OrderBookLevel(price=_to_cents(raw[0]), size=int(float(raw[1])))
 
 
 def _normalize_trade(raw: dict[str, Any]) -> Trade:
