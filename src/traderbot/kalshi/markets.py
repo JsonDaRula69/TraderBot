@@ -204,17 +204,19 @@ class MarketService:
     ) -> MarketListResponse:
         """Fetch markets by category via the events endpoint.
 
-        The Kalshi V2 ``/markets?category=`` filter is broken (returns
-        unfiltered results).  This method works around it by:
-        1. Fetching events filtered by category via ``/events?category=``
-        2. Fetching markets for each event via ``/markets?event_ticker=``
-        3. Merging and enriching the results
+        The Kalshi V2 ``/events?category=`` and ``/markets?category=``
+        filters are both broken (return unfiltered results).  This method
+        works around it by:
+        1. Fetching all open events via ``/events?status=open``
+        2. Filtering client-side by matching ``category`` case-insensitively
+        3. Fetching markets for each matched event via ``/markets?event_ticker=``
+        4. Merging and enriching the results
         """
         logger = logging.getLogger(__name__)
 
-        # The /markets?category= filter is broken; fetch via events instead.
+        # The category param is broken on both /events and /markets — filter client-side.
         try:
-            events_resp = await self._client.get("/events", category=category, limit=limit, status="open")
+            events_resp = await self._client.get("/events", limit=limit, status="open")
             events_resp.raise_for_status()
             events_data = events_resp.json()
         except Exception:
@@ -222,7 +224,11 @@ class MarketService:
             return MarketListResponse(markets=[], cursor=None)
 
         raw_events = events_data.get("events", [])
-        event_tickers = [e["ticker"] for e in raw_events if "ticker" in e]
+        target_cat = category.lower().replace("_", " ")
+        event_tickers = [
+            e["event_ticker"] for e in raw_events
+            if "event_ticker" in e and e.get("category", "").lower() == target_cat
+        ]
 
         if not event_tickers:
             return MarketListResponse(markets=[], cursor=None)
