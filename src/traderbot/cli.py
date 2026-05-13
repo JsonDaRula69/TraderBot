@@ -714,7 +714,7 @@ def bootstrap(
         if missing:
             console.print(f"  Missing credentials: {', '.join(missing)}")
             console.print(
-                "  Run [bold]traderbot auth login[/bold] to configure missing credentials."
+                "  Run [bold]traderbot auth check[/bold] to verify credentials."
             )
 
 

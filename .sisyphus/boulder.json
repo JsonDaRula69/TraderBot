@@ -1,11 +1,11 @@
 {
   "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/prod-data-local-sim.md",
-  "started_at": "2026-05-13T14:39:21.907Z",
+  "started_at": "2026-05-13T19:55:23.833Z",
   "session_ids": [
-    "ses_1de38d31affevc6xSOyw1NCfGe"
+    "ses_1dd177cd6ffe8XQGbBsgTolUIw"
   ],
   "session_origins": {
-    "ses_1de38d31affevc6xSOyw1NCfGe": "direct"
+    "ses_1dd177cd6ffe8XQGbBsgTolUIw": "direct"
   },
   "plan_name": "prod-data-local-sim",
   "agent": "atlas"

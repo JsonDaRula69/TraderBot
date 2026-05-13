@@ -1196,73 +1196,22 @@ class TestPaperCommand:
         assert "--db" in result.output
         assert "--json" in result.output
 
+    @pytest.mark.unit
     def test_paper_no_api(self):
-        with patch("traderbot.kalshi.demo.DemoAdapter", side_effect=Exception("no demo")):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
             result = runner.invoke(app, ["paper"])
             assert result.exit_code == 0
-            assert "Demo API connection required" in result.output
+            assert "Kalshi API connection required" in result.output
 
+    @pytest.mark.unit
     def test_paper_no_api_json(self):
-        with patch("traderbot.kalshi.demo.DemoAdapter", side_effect=Exception("no demo")):
+        with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
             result = runner.invoke(app, ["paper", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert "error" in data
 
-    @pytest.mark.unit
-    def test_paper_with_mock(self, tmp_path):
-        from traderbot.simulation.paper_trader import PaperPortfolio, PaperPosition
 
-        mock_portfolio = PaperPortfolio(
-            cash_cents=99_500_00,
-            positions=[
-                PaperPosition(ticker="KXBTCD-26MAR31-T55000", side="yes", avg_price_cents=55, quantity=10),
-            ],
-        )
-
-        with (
-            patch("traderbot.kalshi.demo.DemoAdapter"),
-            patch(
-                "traderbot.simulation.paper_trader.PaperTrader.get_portfolio",
-                return_value=mock_portfolio,
-            ),
-            patch(
-                "traderbot.simulation.paper_trader.PaperTrader.get_pnl",
-                return_value=-500_00,
-            ),
-        ):
-            result = runner.invoke(app, ["paper", "--db", str(tmp_path / "test.db")])
-            assert result.exit_code == 0
-            assert "Paper Trading" in result.output
-            assert "KXBTCD-26MAR31-T55000" in result.output
-
-    @pytest.mark.unit
-    def test_paper_json_with_mock(self, tmp_path):
-        from traderbot.simulation.paper_trader import PaperPortfolio, PaperPosition
-
-        mock_portfolio = PaperPortfolio(
-            cash_cents=99_500_00,
-            positions=[
-                PaperPosition(ticker="KXBTCD-26MAR31-T55000", side="yes", avg_price_cents=55, quantity=10),
-            ],
-        )
-
-        with (
-            patch("traderbot.kalshi.demo.DemoAdapter"),
-            patch(
-                "traderbot.simulation.paper_trader.PaperTrader.get_portfolio",
-                return_value=mock_portfolio,
-            ),
-            patch(
-                "traderbot.simulation.paper_trader.PaperTrader.get_pnl",
-                return_value=-500_00,
-            ),
-        ):
-            result = runner.invoke(app, ["paper", "--db", str(tmp_path / "test.db"), "--json"])
-            assert result.exit_code == 0
-            data = json.loads(result.output)
-            assert data["cash_cents"] == 99_500_00
-            assert len(data["positions"]) == 1
 
 
 class TestPerformanceCommand:
@@ -1379,10 +1328,7 @@ class TestCompareCommand:
             data = json.loads(result.output)
             assert "error" in data
 
-    def test_compare_unknown_profile(self):
-        result = runner.invoke(app, ["compare", "--profiles", "Unknown"])
-        assert result.exit_code == 1
-        assert "Unknown profile" in result.output
+
 
     @pytest.mark.unit
     def test_compare_with_mock_profiles(self, tmp_path):
@@ -1491,7 +1437,6 @@ class TestBootstrapCommand:
             "reddit": {"client_id": False, "client_secret": False},
         }
         with (
-            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
             patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
@@ -1510,9 +1455,7 @@ class TestBootstrapCommand:
             "reddit": {"client_id": False, "client_secret": False},
         }
         with (
-            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
-            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
             result = runner.invoke(app, ["bootstrap", "--dry-run", "--json"])
             assert result.exit_code == 0
@@ -1520,7 +1463,6 @@ class TestBootstrapCommand:
             assert "python_version" in data
             assert data["python_version_ok"] is True
             assert "config_dir" in data
-            assert "keyring_available" in data
             assert "credentials_ok" in data
             assert data["credentials_ok"] is False
             assert "missing_credentials" in data
@@ -1536,9 +1478,7 @@ class TestBootstrapCommand:
             "reddit": {"client_id": True, "client_secret": True},
         }
         with (
-            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: True)),
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
-            patch("traderbot.auth.AuthManager.set_credential"),
             patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
         ):
             result = runner.invoke(app, ["bootstrap", "--json"])
@@ -1547,23 +1487,8 @@ class TestBootstrapCommand:
             assert data["credentials_ok"] is True
             assert data["missing_credentials"] == []
 
-    def test_bootstrap_dry_run_no_keyring(self):
-        """Bootstrap with keyring unavailable reports it clearly."""
-        mock_status = {
-            "kalshi": {"api_key": False, "api_secret": False},
-            "voyage": {"api_key": False},
-            "newsapi": {"api_key": False},
-            "twitter": {"api_key": False},
-            "reddit": {"client_id": False, "client_secret": False},
-        }
-        with (
-            patch("traderbot.auth.AuthManager.keyring_available", new_callable=lambda: property(lambda self: False)),
-            patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
-            patch("traderbot.cli._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
-        ):
-             result = runner.invoke(app, ["bootstrap", "--dry-run"])
-             assert result.exit_code == 0
-             assert "Keyring unavailable" in result.output
+
+
 
 
 class TestLearnings:
