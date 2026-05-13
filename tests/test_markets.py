@@ -255,3 +255,111 @@ class TestGetRecentTrades:
 
         assert len(result.trades) == 1
         assert result.cursor == "page2"
+
+
+class TestListAllMarkets:
+    @respx.mock
+    async def test_single_page_no_cursor(self) -> None:
+        """When API returns no cursor, list_all_markets returns one page."""
+        cfg = _make_config()
+        respx.get(f"{cfg.active_url}/markets").mock(
+            return_value=httpx.Response(
+                200, json={"markets": [SAMPLE_MARKET_RAW], "cursor": None}
+            )
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_all_markets()
+
+        assert len(result.markets) == 1
+        assert result.cursor is None
+
+    @respx.mock
+    async def test_follows_cursor_across_pages(self) -> None:
+        """Follows cursor to fetch multiple pages."""
+        cfg = _make_config()
+        market_a = {**SAMPLE_MARKET_RAW, "ticker": "MKT-A"}
+        market_b = {**SAMPLE_MARKET_RAW, "ticker": "MKT-B"}
+
+        call_count = 0
+
+        def side_effect(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(200, json={"markets": [market_a], "cursor": "page2"})
+            return httpx.Response(200, json={"markets": [market_b], "cursor": None})
+
+        respx.get(f"{cfg.active_url}/markets").mock(side_effect=side_effect)
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_all_markets()
+
+        assert len(result.markets) == 2
+        assert result.markets[0].ticker == "MKT-A"
+        assert result.markets[1].ticker == "MKT-B"
+        assert result.cursor is None
+
+    @respx.mock
+    async def test_respects_max_pages(self) -> None:
+        """Stops after max_pages even if cursor remains."""
+        cfg = _make_config()
+        # Each page returns a market and a cursor to the next page
+        respx.get(f"{cfg.active_url}/markets").mock(
+            return_value=httpx.Response(
+                200, json={"markets": [SAMPLE_MARKET_RAW], "cursor": "next_page"}
+            )
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_all_markets(max_pages=2)
+
+        assert len(result.markets) == 2
+        assert result.cursor is None
+
+    @respx.mock
+    async def test_respects_limit(self) -> None:
+        """Stops collecting once limit is reached."""
+        cfg = _make_config()
+        markets = [{**SAMPLE_MARKET_RAW, "ticker": f"MKT-{i}"} for i in range(5)]
+        respx.get(f"{cfg.active_url}/markets").mock(
+            return_value=httpx.Response(
+                200, json={"markets": markets, "cursor": "more"}
+            )
+        )
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_all_markets(limit=7, max_pages=3)
+
+        # First page returns 5, second page request limit=min(200, 7-5)=2
+        # But the API returns all 5 per page, so we get 5+5=10, trimmed to 7
+        assert len(result.markets) == 7
+        assert result.cursor is None
+
+    @respx.mock
+    async def test_mid_page_failure_returns_collected(self) -> None:
+        """Returns collected markets if a page call fails."""
+        cfg = _make_config()
+        market_a = {**SAMPLE_MARKET_RAW, "ticker": "MKT-A"}
+        call_count = 0
+
+        def side_effect(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(200, json={"markets": [market_a], "cursor": "page2"})
+            return httpx.Response(500, json={"error": "internal"})
+
+        respx.get(f"{cfg.active_url}/markets").mock(side_effect=side_effect)
+        async with KalshiClient(cfg) as client:
+            client._session_token = "tok"
+            service = MarketService(client)
+            result = await service.list_all_markets()
+
+        assert len(result.markets) == 1
+        assert result.markets[0].ticker == "MKT-A"
+        assert result.cursor is None
