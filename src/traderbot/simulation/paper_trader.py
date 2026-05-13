@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from traderbot.risk import evaluate_trade
 from traderbot.simulation.engine import BacktestError
 
+DEFAULT_INITIAL_BALANCE_CENTS: int = 1_000_00
+
 if TYPE_CHECKING:
     import sqlite3
 
@@ -115,7 +117,7 @@ class PaperTrader:
         self,
         demo_adapter: DemoAdapter,
         db_conn: sqlite3.Connection,
-        initial_cash_cents: int = 100_000_00,
+        initial_cash_cents: int,
         slippage_model: PaperSlippageModel | None = None,
         breaker: CircuitBreaker | None = None,
         profile: TradingProfile | None = None,

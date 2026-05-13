@@ -1383,6 +1383,13 @@ def paper(
     duration: Annotated[int, typer.Option("--duration", help="Run duration in minutes")] = 60,
     db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    initial_balance: Annotated[
+        int | None,
+        typer.Option(
+            "--initial-balance",
+            help="Starting cash in dollars (converted to cents). 0 = fetch from prod API.",
+        ),
+    ] = None,
 ) -> None:
     """Run a paper trading session against the Kalshi demo API.
 
@@ -1396,7 +1403,7 @@ def paper(
     from traderbot.kalshi.demo import DemoAdapter
     from traderbot.kalshi.markets import MarketService
     from traderbot.simulation.engine import Signal
-    from traderbot.simulation.paper_trader import PaperTrader
+    from traderbot.simulation.paper_trader import PaperTrader, DEFAULT_INITIAL_BALANCE_CENTS
     from traderbot.simulation.strategies import get_strategy
 
     console = Console()
@@ -1420,9 +1427,46 @@ def paper(
     client = demo.get_client()
     market_service = MarketService(client)
 
+    # --- resolve initial balance ---
+    initial_cash_cents: int
+
+    if initial_balance is not None and initial_balance > 0:
+        initial_cash_cents = initial_balance * 100
+        logger.info("Using CLI balance: $%s", initial_balance)
+        console.print(f"[dim]Using CLI balance: ${initial_balance:,}[/dim]")
+    elif profile is not None and profile.initial_balance_cents is not None:
+        initial_cash_cents = profile.initial_balance_cents
+        logger.info("Using profile balance: $%s", profile.initial_balance_cents / 100)
+        console.print(f"[dim]Using profile balance: ${profile.initial_balance_cents / 100:,.2f}[/dim]")
+    else:
+        fetched = False
+        try:
+            from traderbot.kalshi.client import KalshiClient
+            from traderbot.kalshi.portfolio import PortfolioService
+
+            prod_client = KalshiClient()
+            portfolio_svc = PortfolioService(prod_client)
+            balance_data = asyncio.run(portfolio_svc.get_balance())
+            balance_cents = balance_data.get("balance") or balance_data.get("available_balance")
+            if isinstance(balance_cents, str):
+                balance_cents = int(float(balance_cents) * 100)
+            if balance_cents and int(balance_cents) > 0:
+                initial_cash_cents = int(balance_cents)
+                fetched = True
+                amount_str = f"${initial_cash_cents / 100:,.2f}"
+                logger.info("Using prod API balance: %s", amount_str)
+                console.print(f"[dim]Using prod API balance: {amount_str}[/dim]")
+        except Exception:
+            pass
+
+        if not fetched:
+            initial_cash_cents = DEFAULT_INITIAL_BALANCE_CENTS
+            logger.warning("Balance fetch failed, using default: $%s", initial_cash_cents / 100)
+            console.print(f"[yellow]Balance fetch failed, using default: ${initial_cash_cents / 100:,.2f}[/yellow]")
+
     with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
-        trader = PaperTrader(demo, conn, profile=profile)
+        trader = PaperTrader(demo, conn, initial_cash_cents, profile=profile)
 
         console.print(f"[bold]Paper Trading[/bold] — {strategy} ({duration}min)")
         console.print(f"  Starting cash: ${trader.get_portfolio().cash_cents / 100:.2f}")
