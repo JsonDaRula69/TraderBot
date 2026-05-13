@@ -220,7 +220,7 @@ def signals(
 
         client = KalshiClient()
         service = MarketService(client)
-        result = asyncio.run(service.list_markets(limit=limit, status="open"))
+        result = asyncio.run(service.list_markets(limit=limit))
         markets = result.markets
     except Exception:
         if json_output:
@@ -1390,7 +1390,7 @@ def paper(
             while time.time() < end_time:
                 iteration += 1
                 try:
-                    markets = asyncio.run(market_service.list_markets(limit=5, status="open"))
+                    markets = asyncio.run(market_service.list_markets(limit=5)).markets
                 except Exception:
                     console.print("[yellow]Could not fetch markets, retrying...[/yellow]")
                     time.sleep(30)
