@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from traderbot.logging_config import log_settlement_event
+from traderbot.logging_config import log_reconciliation_event, log_settlement_event
 
 if TYPE_CHECKING:
     from traderbot.kalshi.cache import MarketDataCache
+    from traderbot.kalshi.portfolio import PortfolioService
     from traderbot.kalshi.provider import MarketDataProvider, SettlementResult
     from traderbot.simulation.paper_trader import PaperTrader
 
@@ -33,10 +34,12 @@ class SettlementVerifier:
         provider: MarketDataProvider,
         paper_trader: PaperTrader,
         cache: MarketDataCache | None = None,
+        portfolio_service: PortfolioService | None = None,
     ) -> None:
         self._provider = provider
         self._paper_trader = paper_trader
         self._cache = cache
+        self._portfolio_service = portfolio_service
 
     async def check_settlements_on_startup(self) -> None:
         """Reconcile all open positions against settlement data at startup."""
@@ -132,12 +135,79 @@ class SettlementVerifier:
 
         return False
 
-    def reconcile_positions(self) -> None:
-        """Reconcile paper positions against expected valuations.
+    async def reconcile_positions(self) -> None:
+        """Compare paper positions vs real positions and warn on drift.
 
-        T15 implements full reconciliation logic.
+        This is a read-only check — no positions are modified.
         """
-        raise NotImplementedError("reconcile_positions not yet implemented — see T15")
+        paper_positions = [p for p in self._paper_trader.get_positions() if p.status == "open"]
+
+        if self._portfolio_service is None:
+            logger.info("Skipping reconciliation — no portfolio service configured")
+            return
+
+        try:
+            real_positions = await self._portfolio_service.get_positions()
+        except Exception:
+            logger.warning("Portfolio service get_positions failed during reconciliation", exc_info=True)
+            return
+
+        real_by_ticker: dict[str, Any] = {rp.ticker: rp for rp in real_positions}
+
+        checked = 0
+        drifts = 0
+
+        for pp in paper_positions:
+            rp = real_by_ticker.get(pp.ticker)
+            checked += 1
+
+            if rp is None:
+                drifts += 1
+                log_reconciliation_event(
+                    logger,
+                    pp.ticker,
+                    drift_cents=pp.avg_price_cents * pp.quantity,
+                    paper_side=pp.side,
+                    paper_qty=pp.quantity,
+                    real_side="not_found",
+                    real_qty=0,
+                )
+                logger.warning(
+                    "Position drift: paper=%s side=%s qty=%s, real=not found",
+                    pp.ticker,
+                    pp.side,
+                    pp.quantity,
+                )
+                continue
+
+            # Map real position fields (side may not exist on Position model)
+            rp_side = getattr(rp, "side", "unknown")
+            rp_qty = getattr(rp, "quantity", 0)
+
+            if pp.side != rp_side or pp.quantity != rp_qty:
+                drifts += 1
+                drift_cents = abs(pp.avg_price_cents * pp.quantity - rp.avg_price * rp_qty)
+                log_reconciliation_event(
+                    logger,
+                    pp.ticker,
+                    drift_cents=drift_cents,
+                    paper_side=pp.side,
+                    paper_qty=pp.quantity,
+                    real_side=rp_side,
+                    real_qty=rp_qty,
+                )
+                logger.warning(
+                    "Position drift: paper=%s side=%s qty=%s, real=side=%s qty=%s",
+                    pp.ticker,
+                    pp.side,
+                    pp.quantity,
+                    rp_side,
+                    rp_qty,
+                )
+            else:
+                logger.debug("Position OK: %s", pp.ticker)
+
+        logger.info("Reconciliation: %d checked, %d drifts", checked, drifts)
 
     async def _gather_settlements(self, tickers: list[str]) -> dict[str, SettlementResult | None]:
         """Fetch settlement data for multiple tickers with concurrency limit."""
