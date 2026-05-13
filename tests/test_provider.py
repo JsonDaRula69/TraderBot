@@ -1,11 +1,15 @@
-"""Tests for traderbot.kalshi.provider — Protocol conformance, MockDataProvider, ProdDataProvider placeholder."""
+"""Tests for traderbot.kalshi.provider — Protocol conformance, MockDataProvider, ProdDataProvider."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import traderbot.kalshi.markets as markets_mod
+from traderbot.kalshi.client import AuthenticationError
+from traderbot.kalshi.models import Market
 from traderbot.kalshi.provider import (
     MarketDataProvider,
     MarketSnapshot,
@@ -129,24 +133,121 @@ class TestFrozenDataclasses:
             level.price_cents = 20  # type: ignore[misc]
 
 
-# --- ProdDataProvider placeholder ---
+# --- ProdDataProvider ---
 
 
-class TestProdDataProviderPlaceholder:
-    async def test_get_market_raises(self) -> None:
-        provider = ProdDataProvider()
-        with pytest.raises(NotImplementedError, match="see T7"):
-            await provider.get_market("X")
+def _make_mock_client() -> MagicMock:
+    client = MagicMock()
+    client.get = AsyncMock()
+    return client
 
-    async def test_get_orderbook_raises(self) -> None:
-        provider = ProdDataProvider()
-        with pytest.raises(NotImplementedError, match="see T7"):
-            await provider.get_orderbook("X")
 
-    async def test_get_settlement_raises(self) -> None:
-        provider = ProdDataProvider()
-        with pytest.raises(NotImplementedError, match="see T7"):
-            await provider.get_settlement("X")
+class TestProdDataProvider:
+    @pytest.fixture()
+    def mock_client(self) -> MagicMock:
+        return _make_mock_client()
+
+    @pytest.fixture()
+    def provider(self, mock_client: MagicMock) -> ProdDataProvider:
+        return ProdDataProvider(client=mock_client)
+
+    async def test_protocol_conformance(self) -> None:
+        assert issubclass(ProdDataProvider, MarketDataProvider)
+
+    async def test_get_market_success(self, provider: ProdDataProvider, mock_client: MagicMock) -> None:
+        market = Market(
+            ticker="BTC-100K",
+            question="Will BTC reach 100K?",
+            outcome_prices=["0.55", "0.45"],
+            volume=1000,
+            open_interest=500000,
+            close_time=datetime(2026, 6, 1, tzinfo=UTC),
+            status="open",
+            event_ticker="CRYPTO",
+        )
+        mock_client.get.return_value.status_code = 200
+        mock_client.get.return_value.json.return_value = {"market": {}}
+        mock_client.get.return_value.raise_for_status = MagicMock()
+
+        original_get_market = markets_mod.MarketService.get_market
+
+        async def fake_get_market(self_svc: object, ticker: str) -> Market:
+            return market
+
+        markets_mod.MarketService.get_market = fake_get_market
+        try:
+            result = await provider.get_market("BTC-100K")
+            assert result.ticker == "BTC-100K"
+            assert result.status == "open"
+            assert result.open_interest_cents == 500000
+            assert result.settlement_result is None
+        finally:
+            markets_mod.MarketService.get_market = original_get_market
+
+    async def test_get_market_auth_failure(self, provider: ProdDataProvider, mock_client: MagicMock) -> None:
+        original = markets_mod.MarketService.get_market
+
+        async def raise_auth(self_svc: object, ticker: str) -> None:
+            raise AuthenticationError("HTTP 401")
+
+        markets_mod.MarketService.get_market = raise_auth
+        try:
+            with pytest.raises(ProdAPIError, match="authentication failed"):
+                await provider.get_market("X")
+        finally:
+            markets_mod.MarketService.get_market = original
+
+    async def test_get_settlement_unsettled(self, provider: ProdDataProvider, mock_client: MagicMock) -> None:
+        market = Market(
+            ticker="BTC-100K",
+            question="Will BTC reach 100K?",
+            outcome_prices=["0.55", "0.45"],
+            volume=1000,
+            open_interest=500000,
+            close_time=datetime(2026, 6, 1, tzinfo=UTC),
+            status="open",
+            event_ticker="CRYPTO",
+        )
+
+        original = markets_mod.MarketService.get_market
+
+        async def fake_get_market(self_svc: object, ticker: str) -> Market:
+            return market
+
+        markets_mod.MarketService.get_market = fake_get_market
+        try:
+            result = await provider.get_settlement("BTC-100K")
+            assert result is None
+        finally:
+            markets_mod.MarketService.get_market = original
+
+    async def test_get_settlement_success(self, provider: ProdDataProvider, mock_client: MagicMock) -> None:
+        market = Market(
+            ticker="ETH-5K",
+            question="Will ETH reach 5K?",
+            outcome_prices=["1.00", "0.00"],
+            volume=2000,
+            open_interest=800000,
+            close_time=datetime(2026, 4, 1, tzinfo=UTC),
+            status="settled",
+            event_ticker="CRYPTO",
+            settlement_result=True,
+        )
+
+        original = markets_mod.MarketService.get_market
+
+        async def fake_get_market(self_svc: object, ticker: str) -> Market:
+            return market
+
+        markets_mod.MarketService.get_market = fake_get_market
+        try:
+            result = await provider.get_settlement("ETH-5K")
+            assert result is not None
+            assert result.ticker == "ETH-5K"
+            assert result.outcome is True
+            assert result.settled_at == datetime(2026, 4, 1, tzinfo=UTC)
+        finally:
+            markets_mod.MarketService.get_market = original
 
 
 # --- ProdAPIError ---
