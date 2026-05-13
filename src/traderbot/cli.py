@@ -2341,7 +2341,7 @@ def profile_assignments(
 
 @profile_app.command("update")
 def profile_update(
-    name: str,
+    name: Annotated[str | None, typer.Argument(help="Profile name to update")] = None,
     mode: Annotated[str | None, typer.Option(help="Trading mode: paper or live")] = None,
     description: Annotated[str | None, typer.Option(help="Profile description")] = None,
     categories: Annotated[
@@ -2363,6 +2363,16 @@ def profile_update(
 
     console = Console()
     registry = ProfileRegistry()
+
+    if name is None:
+        profiles = registry.list_profiles()
+        if not profiles:
+            console.print("[yellow]No profiles found.[/yellow] Create one with: traderbot profile create <name>")
+        else:
+            console.print("[bold]Available profiles:[/bold]")
+            for p_name in profiles:
+                console.print(f"  • {p_name}")
+        raise typer.Exit(0)
 
     if not registry.profile_exists(name):
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
