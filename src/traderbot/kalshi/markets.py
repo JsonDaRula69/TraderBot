@@ -216,7 +216,7 @@ class MarketService:
 
         # The category param is broken on both /events and /markets — filter client-side.
         try:
-            events_resp = await self._client.get("/events", limit=limit, status="open")
+            events_resp = await self._client.get("/events", limit=max(limit, 100), status="open")
             events_resp.raise_for_status()
             events_data = events_resp.json()
         except Exception:
