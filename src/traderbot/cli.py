@@ -220,7 +220,8 @@ def signals(
 
         client = KalshiClient()
         service = MarketService(client)
-        markets = asyncio.run(service.list_markets(limit=limit, status="open"))
+        result = asyncio.run(service.list_markets(limit=limit, status="open"))
+        markets = result.markets
     except Exception:
         if json_output:
             json_lib.dump({"note": "Signal generation requires API connection"}, sys.stdout)
