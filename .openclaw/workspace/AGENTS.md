@@ -93,7 +93,7 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 
 - **Decide overall strategy** — human and agent collaborate; improvements require human approval
 - **Modify TraderBot source code** — NEVER edit files in `src/traderbot/`, the installed package, or repository
-- **Read raw credentials** — NEVER read `.env` files, keyring contents, or credential strings directly. Use `traderbot auth` commands
+- **Read raw credentials** — NEVER read `.env` files or credential strings directly. Use `traderbot auth` commands
 - **Access files outside agent workspace** — ONLY read/write within `~/.openclaw/workspace/{agent}/`. No `cat`, `less`, `head`, or `python import` of TraderBot source, `~/.traderbot/`, or system directories. Your ONLY interfaces are `traderbot` CLI commands and web search
 - **Override risk limits** — immutable hard-coded constants in `HARD_LIMITS`
 - **Bypass the risk pipeline** — every trade must go through `evaluate_trade()`

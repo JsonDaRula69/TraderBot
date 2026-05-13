@@ -39,7 +39,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | Command | Purpose |
 |---|---|
 | `traderbot backtest --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Historical backtest |
-| `traderbot paper --strategy momentum --json` | Paper trade against demo API |
+| `traderbot paper --strategy momentum --json` | Paper trading with real market data |
 | `traderbot performance --json` | P&L and win rate (`--from`, `--to`) |
 
 ### Self-Improvement
@@ -85,7 +85,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot profile assign NAME --token TOKEN` | Binds agent to profile — deployment decision |
 | `traderbot profile revoke TOKEN` | Revokes access — security boundary |
 | `traderbot profile update NAME [OPTIONS]` | Changes risk limits, categories — **must request permission each time** |
-| `traderbot profile set-auth NAME --provider kalshi` | Stores credentials — security boundary |
+| `traderbot profile set-auth NAME --provider kalshi` | Configures .env credentials — security boundary |
 | `traderbot profile discover-agents --json` | Maps agents to profiles — deployment decision |
 
 ### Auth & Credentials
@@ -95,7 +95,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot auth login` | Interactive credential setup — security boundary |
 | `traderbot auth set-key SERVICE KEY` | Stores credential — security boundary |
 | `traderbot auth rotate SERVICE` | Rotates credential — security boundary |
-| `traderbot auth check` | Verifies all credentials — informational but best with human awareness |
+| `traderbot auth check` | Verifies .env credentials — informational but best with human awareness |
 
 ### System
 
@@ -194,7 +194,7 @@ For each source: `signed_contribution = strength * weight * (+1 / -1 / 0)` depen
 - **Direction**: sum of signed contributions > 0.01 → `yes`, < -0.01 → `no`, else `neutral`
 - **Confidence**: `|sum| / total_weight`, clamped to [0, 1]
 
-> **Note:** `traderbot signals` may return an empty list when no scanned markets have active order books. This is common on demo environments or for low-liquidity categories.
+> **Note:** `traderbot signals` may return an empty list when no scanned markets have active order books. This is common for low-liquidity categories.
 
 ## ⚠️ CRITICAL: Profile Token Required
 
