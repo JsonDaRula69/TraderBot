@@ -50,9 +50,8 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     if isinstance(close_time_val, int):
         close_time_val = _unix_to_datetime(close_time_val)
     elif isinstance(close_time_val, str):
-        from datetime import fromisoformat
         try:
-            close_time_val = fromisoformat(close_time_val.replace("Z", "+00:00"))
+            close_time_val = datetime.fromisoformat(close_time_val.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             close_time_val = _unix_to_datetime(0)
 
