@@ -55,7 +55,7 @@ def main_callback(
 
 auth_app = typer.Typer(
     name="auth",
-    help="Manage API credentials via OS keyring.",
+    help="Manage API credentials via environment variables.",
     rich_markup_mode="rich",
 )
 app.add_typer(auth_app, name="auth")
@@ -584,7 +584,7 @@ def _python_version_ok() -> tuple[bool, str, tuple[int, int]]:
 @app.command()
 def bootstrap(
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Validate without writing to DB or keyring")
+        bool, typer.Option("--dry-run", help="Validate without writing to DB")
     ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
@@ -623,43 +623,22 @@ def bootstrap(
         config_dir.mkdir(parents=True, exist_ok=True)
     steps["config_dir_created"] = not config_dir_exists and not dry_run
 
-    # Step 3: Verify keyring access
     mgr = AuthManager()
-    keyring_ok = mgr.keyring_available
-    steps["keyring_available"] = keyring_ok
+    status = mgr.check_credentials()
 
-    # Step 4: Run auth login flow (interactive — skipped in dry-run/JSON mode)
     if not dry_run and not json_output:
-        if not keyring_ok:
-            console.print(
-                "\n[yellow]Keyring unavailable (headless Linux?). Credentials will be stored in ~/.traderbot/.env[/yellow]"
-            )
-            console.print(
-                "[yellow]For secure storage, install and unlock gnome-keyring with a D-Bus session.[/yellow]"
-            )
         console.print("\n[bold]Credential Setup[/bold]")
         console.print("Enter your API credentials (press Enter to skip any field):")
-        from traderbot.auth import _ALL_SERVICES, KeyringUnavailableError
+        from traderbot.auth import _ALL_SERVICES
 
         env_lines: list[str] = []
         for service_name, keys in _ALL_SERVICES.items():
             for key in keys:
                 value = typer.prompt(f"  {service_name}.{key}", default="", show_default=False)
                 if value:
-                    if keyring_ok:
-                        try:
-                            mgr.set_credential(service_name, key, value)
-                            console.print(f"[green]Stored in keyring:[/green] {service_name}.{key}")
-                        except (KeyringUnavailableError, Exception) as exc:
-                            env_key = f"{service_name.upper()}_{key.upper()}"
-                            env_lines.append(f"{env_key}={value}")
-                            console.print(
-                                f"[yellow]Keyring failed ({exc}), saved to .env:[/yellow] {env_key}"
-                            )
-                    else:
-                        env_key = f"{service_name.upper()}_{key.upper()}"
-                        env_lines.append(f"{env_key}={value}")
-                        console.print(f"[green]Saved to .env:[/green] {env_key}")
+                    env_key = f"{service_name.upper()}_{key.upper()}"
+                    env_lines.append(f"{env_key}={value}")
+                    console.print(f"[green]Saved to .env:[/green] {env_key}")
 
         if env_lines:
             env_path = get_data_dir() / ".env"
@@ -712,19 +691,13 @@ def bootstrap(
     else:
         console.print(f"  [green]✓[/green] Created {config_dir}")
 
-    console.print("\n[bold]3. Keyring Access[/bold]")
-    if keyring_ok:
-        console.print("  [green]✓[/green] OS keyring available")
-    else:
-        console.print("  [red]✗[/red] Keyring unavailable — use .env fallback")
-
-    console.print("\n[bold]4. Credentials[/bold]")
+    console.print("\n[bold]3. Credentials[/bold]")
     for service_name, keys in sorted(status.items()):
         for key, ok in keys.items():
             mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
             console.print(f"  {mark} {service_name}.{key}")
 
-    console.print("\n[bold]5. Database[/bold]")
+    console.print("\n[bold]4. Database[/bold]")
     if dry_run:
         console.print(f"  (dry-run) {db_path}")
     else:
@@ -1863,16 +1836,9 @@ def learnings(
 @auth_app.command("login")
 def auth_login() -> None:
     """Interactive credential setup for all services."""
-    from traderbot.auth import AuthManager, KeyringUnavailableError
+    from traderbot.paths import get_data_dir
 
     console = Console()
-    mgr = AuthManager()
-
-    if not mgr.keyring_available:
-        console.print(
-            "[red]Keyring backend unavailable.[/red] Set credentials via .env file instead."
-        )
-        raise typer.Exit(code=1)
 
     services = ["kalshi", "voyage", "newsapi", "twitter", "reddit", "openweathermap", "fred"]
     service_keys = {
@@ -1885,16 +1851,23 @@ def auth_login() -> None:
         "fred": ["api_key"],
     }
 
+    env_lines: list[str] = []
     for service in services:
         for key in service_keys[service]:
             value = typer.prompt(f"  {service}.{key}", default="", show_default=False)
             if value:
-                try:
-                    mgr.set_credential(service, key, value)
-                    console.print(f"[green]Stored[/green] {service}.{key}")
-                except KeyringUnavailableError as exc:
-                    console.print(f"[red]Failed:[/red] {exc}")
-                    raise typer.Exit(code=1) from exc
+                env_key = f"{service.upper()}_{key.upper()}"
+                env_lines.append(f"{env_key}={value}")
+                console.print(f"[green]Saved:[/green] {env_key}")
+
+    if env_lines:
+        env_path = get_data_dir() / ".env"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = env_path.read_text() if env_path.exists() else ""
+        new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
+        env_path.write_text(new_content)
+        os.chmod(env_path, 0o600)
+        console.print(f"[dim]Credentials written to {env_path}[/dim]")
 
 
 @auth_app.command("set-key")
@@ -1902,23 +1875,20 @@ def auth_set_key(
     service: Annotated[str, typer.Argument(help="Service name (e.g. kalshi, voyage)")],
     key: Annotated[str, typer.Argument(help="Credential key (e.g. api_key)")],
 ) -> None:
-    """Store a credential in the OS keyring."""
-    from traderbot.auth import AuthManager, KeyringUnavailableError
+    """Store a credential in the .env file."""
+    from traderbot.paths import get_data_dir
 
     console = Console()
-    mgr = AuthManager()
-
-    if not mgr.keyring_available:
-        console.print("[red]Keyring backend unavailable.[/red]")
-        raise typer.Exit(code=1)
 
     value = typer.prompt(f"Enter value for {service}.{key}", hide_input=True)
-    try:
-        mgr.set_credential(service, key, value)
-        console.print(f"[green]Stored[/green] {service}.{key}")
-    except KeyringUnavailableError as exc:
-        console.print(f"[red]Failed:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
+    env_key = f"{service.upper()}_{key.upper()}"
+    env_path = get_data_dir() / ".env"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = env_path.read_text() if env_path.exists() else ""
+    new_content = existing.rstrip() + f"\n{env_key}={value}\n"
+    env_path.write_text(new_content)
+    os.chmod(env_path, 0o600)
+    console.print(f"[green]Saved[/green] {env_key} to {env_path}")
 
 
 @auth_app.command("list-keys")
@@ -1946,30 +1916,33 @@ def auth_list_keys() -> None:
 def auth_rotate(
     service: Annotated[str, typer.Argument(help="Service name to rotate")],
 ) -> None:
-    """Rotate a credential (delete old, prompt for new)."""
-    from traderbot.auth import _ALL_SERVICES, AuthManager, KeyringUnavailableError
+    """Rotate a credential (prompt for new values and update .env)."""
+    from traderbot.auth import _ALL_SERVICES
+    from traderbot.paths import get_data_dir
 
     console = Console()
-    mgr = AuthManager()
-
-    if not mgr.keyring_available:
-        console.print("[red]Keyring backend unavailable.[/red]")
-        raise typer.Exit(code=1)
 
     keys = _ALL_SERVICES.get(service)
     if keys is None:
         console.print(f"[red]Unknown service:[/red] {service}")
         raise typer.Exit(code=1)
 
+    env_lines: list[str] = []
     for key in keys:
-        mgr.delete_credential(service, key)
         new_val = typer.prompt(f"Enter new value for {service}.{key}", hide_input=True)
-        try:
-            mgr.set_credential(service, key, new_val)
-            console.print(f"[green]Rotated[/green] {service}.{key}")
-        except KeyringUnavailableError as exc:
-            console.print(f"[red]Failed:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
+        env_key = f"{service.upper()}_{key.upper()}"
+        env_lines.append(f"{env_key}={new_val}")
+        console.print(f"[green]Updated[/green] {service}.{key}")
+
+    if env_lines:
+        env_path = get_data_dir() / ".env"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = env_path.read_text() if env_path.exists() else ""
+        existing_lines = [l for l in existing.splitlines() if not any(l.startswith(ek.split("=")[0]) for ek in env_lines)]
+        new_content = "\n".join(existing_lines).rstrip() + "\n" + "\n".join(env_lines) + "\n"
+        env_path.write_text(new_content)
+        os.chmod(env_path, 0o600)
+        console.print(f"[dim]Credentials updated in {env_path}[/dim]")
 
 
 @auth_app.command("check")
@@ -2794,8 +2767,8 @@ def profile_set_auth(
     service: str,
     key: str,
 ) -> None:
-    """Store a credential for a profile (prompts for secret)."""
-    from traderbot.profiles.auth import ProfileAuthStore
+    """Store a credential for a profile in .env (prompts for secret)."""
+    from traderbot.paths import get_data_dir
     from traderbot.profiles.registry import ProfileRegistry
 
     console = Console()
@@ -2807,11 +2780,17 @@ def profile_set_auth(
         raise typer.Exit(1)
 
     secret = typer.prompt("Secret", hide_input=True)
+    prefix = profile_name.upper().replace("-", "_").replace(" ", "_")
+    env_key = f"{service.upper()}_{key.upper()}_PROFILE_{prefix}"
 
-    auth_store = ProfileAuthStore(profile)
-    auth_store.set_credentials(service, key, secret)
+    env_path = get_data_dir() / ".env"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = env_path.read_text() if env_path.exists() else ""
+    new_content = existing.rstrip() + f"\n{env_key}={secret}\n"
+    env_path.write_text(new_content)
+    os.chmod(env_path, 0o600)
     console.print(
-        f"[green]✓[/green] Stored credentials for '{service}' on profile '{profile_name}'"
+        f"[green]✓[/green] Stored credential for '{service}' on profile '{profile_name}' in {env_path}"
     )
 
 
@@ -2820,7 +2799,7 @@ def profile_auth(
     profile_name: str,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Show configured credentials for a profile."""
+    """Show configured credentials for a profile (from environment variables)."""
     from traderbot.profiles.auth import ProfileAuthStore
     from traderbot.profiles.registry import ProfileRegistry
 
@@ -2833,9 +2812,13 @@ def profile_auth(
         raise typer.Exit(1)
 
     auth_store = ProfileAuthStore(profile)
-    services = auth_store.list_services()
+    known_services = ["kalshi", "voyage", "newsapi", "twitter", "reddit"]
+    found_services: list[str] = []
+    for svc in known_services:
+        if auth_store.has_credentials(svc):
+            found_services.append(svc)
 
-    if not services:
+    if not found_services:
         if not json_output:
             console.print(
                 f"[yellow]No credentials configured for profile '{profile_name}'[/yellow]"
@@ -2846,7 +2829,7 @@ def profile_auth(
 
     if json_output:
         creds_list = []
-        for svc in services:
+        for svc in found_services:
             creds = auth_store.get_credentials(svc)
             if creds:
                 creds_list.append(
@@ -2861,7 +2844,7 @@ def profile_auth(
         table.add_column("Service", style="cyan")
         table.add_column("Key", style="yellow")
 
-        for svc in services:
+        for svc in found_services:
             creds = auth_store.get_credentials(svc)
             if creds:
                 masked_key = creds[0][:8] + "..." if len(creds[0]) > 8 else "***"

@@ -22,11 +22,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_current_profile(keyring_module: Any = None) -> TradingProfile | None:
+def get_current_profile(**kwargs: Any) -> TradingProfile | None:
     """Read TRADERBOT_PROFILE_TOKEN env var and resolve to profile.
-
-    Args:
-        keyring_module: Optional keyring module for testing
 
     Returns:
         TradingProfile if token is valid and profile exists, None otherwise
@@ -36,7 +33,6 @@ def get_current_profile(keyring_module: Any = None) -> TradingProfile | None:
         logger.debug("No TRADERBOT_PROFILE_TOKEN environment variable set")
         return None
 
-    # Resolve token to (profile_name, agent_id)
     resolution = resolve_token(token)
     if resolution is None:
         logger.warning("Invalid or revoked token: %s", "****" + token[-4:] if len(token) > 4 else "****")
@@ -45,8 +41,7 @@ def get_current_profile(keyring_module: Any = None) -> TradingProfile | None:
     profile_name, agent_id = resolution
     logger.debug("Token resolved to profile '%s' for agent '%s'", profile_name, agent_id)
 
-    # Load profile from registry
-    registry = ProfileRegistry(keyring_module=keyring_module)
+    registry = ProfileRegistry()
     profile = registry.get_profile(profile_name)
 
     if profile is None:
@@ -59,15 +54,8 @@ def get_current_profile(keyring_module: Any = None) -> TradingProfile | None:
 
 def load_profile_config(
     profile: TradingProfile,
-    global_keyring: Any = None,
-    profile_keyring: Any = None,
 ) -> dict[str, Any]:
     """Load profile-specific configuration.
-
-    Args:
-        profile: TradingProfile to load configuration for
-        global_keyring: Optional keyring module for global auth (testing)
-        profile_keyring: Optional keyring module for profile auth (testing)
 
     Returns:
         Dictionary containing:
@@ -78,13 +66,8 @@ def load_profile_config(
     """
     config: dict[str, Any] = {}
 
-    # Resolve Kalshi credentials (profile-specific or global fallback)
     try:
-        kalshi_key, kalshi_secret = resolve_kalshi_credentials(
-            profile,
-            global_keyring=global_keyring,
-            profile_keyring=profile_keyring,
-        )
+        kalshi_key, kalshi_secret = resolve_kalshi_credentials(profile)
         config["credentials"] = {
             "kalshi": (kalshi_key, kalshi_secret)
         }
@@ -92,17 +75,14 @@ def load_profile_config(
         logger.warning("Failed to resolve Kalshi credentials: %s", e)
         config["credentials"] = {}
 
-    # Demo mode from profile
     config["demo_mode"] = profile.demo_mode
 
-    # Data paths from isolation functions
     config["paths"] = {
         "db": get_profile_db_path(profile, "decisions.db").parent,
         "chroma": get_profile_chroma_path(profile),
         "audit": get_profile_audit_path(profile),
     }
 
-    # Risk limits from AgentRiskLimits
     limits = AgentRiskLimits(profile)
     config["limits"] = {
         "max_position_per_market_pct": limits.max_position_per_market_pct,
@@ -123,26 +103,17 @@ def load_profile_config(
     return config
 
 
-def get_runtime_context(
-    keyring_module: Any = None,
-    global_keyring: Any = None,
-    profile_keyring: Any = None,
-) -> dict[str, Any]:
+def get_runtime_context(**kwargs: Any) -> dict[str, Any]:
     """Get full runtime context (profile + config).
 
     Convenience function that calls get_current_profile() and load_profile_config().
-
-    Args:
-        keyring_module: Optional keyring module for profile registry (testing)
-        global_keyring: Optional keyring module for global auth (testing)
-        profile_keyring: Optional keyring module for profile auth (testing)
 
     Returns:
         Dictionary containing:
             - profile: TradingProfile | None
             - config: dict[str, Any] | None (None if no profile)
     """
-    profile = get_current_profile(keyring_module=keyring_module)
+    profile = get_current_profile()
 
     if profile is None:
         logger.debug("No profile available, returning empty context")
@@ -153,13 +124,9 @@ def get_runtime_context(
 
     config = load_profile_config(
         profile,
-        global_keyring=global_keyring,
-        profile_keyring=profile_keyring,
     )
 
     return {
         "profile": profile,
         "config": config,
     }
-
-

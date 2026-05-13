@@ -8,49 +8,17 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime
-from typing import Any
 
 from traderbot.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
+
 def _mask_token(token: str) -> str:
     return "****" + token[-4:] if len(token) > 4 else "****"
 
 
-_KEYRING_SERVICE_PREFIX = "traderbot.tokens."
 _TOKENS_FILE = get_data_dir() / "tokens.enc"
-
-# Global keyring instance (can be overridden for testing)
-_keyring_instance: Any | None = None
-
-
-def _get_keyring() -> Any:
-    """Get keyring module (real or mock)."""
-    if _keyring_instance is not None:
-        return _keyring_instance
-    return __import__("keyring")
-
-
-def set_keyring(keyring_module: Any) -> None:
-    """Set keyring module for testing."""
-    global _keyring_instance
-    _keyring_instance = keyring_module
-
-
-def _keyring_available() -> bool:
-    try:
-        kr = _get_keyring()
-        if hasattr(kr, "get_keyring"):
-            backend = kr.get_keyring()
-            backend_name = type(backend).__name__
-            if "Fail" in backend_name or "Null" in backend_name:
-                return False
-        kr.set_password("__traderbot_probe__", "test", "probe")
-        kr.delete_password("__traderbot_probe__", "test")
-        return True
-    except Exception:
-        return False
 
 
 def _derive_or_create_key() -> bytes:
@@ -99,16 +67,11 @@ def _save_tokens_file(tokens: list[dict]) -> None:
 
 
 def generate_token() -> str:
-    """Generate 12-char opaque token with ~72 bits entropy.
-
-    Returns:
-        URL-safe token string (12 characters)
-    """
+    """Generate 12-char opaque token with ~72 bits entropy."""
     return secrets.token_urlsafe(9)[:12]
 
 
 def assign_token(profile_name: str, agent_id: str, token: str) -> None:
-    # Check if profile already has a token
     existing_token = get_profile_token(profile_name)
     if existing_token is not None:
         raise ValueError(f"Profile '{profile_name}' already has a token assigned")
@@ -119,81 +82,29 @@ def assign_token(profile_name: str, agent_id: str, token: str) -> None:
         "agent": agent_id,
         "created_at": datetime.now(UTC).isoformat(),
     }
-
-    if _keyring_available():
-        kr = _get_keyring()
-        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-        kr.set_password(service, "token", json.dumps(data))
-    else:
-        tokens = _load_tokens_file()
-        tokens.append(data)
-        _save_tokens_file(tokens)
-
+    tokens = _load_tokens_file()
+    tokens.append(data)
+    _save_tokens_file(tokens)
     logger.info("Assigned token to profile '%s' for agent '%s'", profile_name, agent_id)
 
 
 def resolve_token(token: str) -> tuple[str, str] | None:
-    if _keyring_available():
-        kr = _get_keyring()
-        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-        try:
-            data_json = kr.get_password(service, "token")
-            if data_json is None:
-                return None
-            data = json.loads(data_json)
-            return (data["profile"], data["agent"])
-        except Exception as e:
-            logger.debug("Failed to resolve token from keyring: %s", e)
-            return None
-    else:
-        tokens = _load_tokens_file()
-        for entry in tokens:
-            if entry["token"] == token:
-                return (entry["profile"], entry["agent"])
-        return None
+    tokens = _load_tokens_file()
+    for entry in tokens:
+        if entry["token"] == token:
+            return (entry["profile"], entry["agent"])
+    return None
 
 
 def revoke_token(token: str) -> None:
-    if _keyring_available():
-        kr = _get_keyring()
-        service = f"{_KEYRING_SERVICE_PREFIX}{token}"
-        try:
-            kr.delete_password(service, "token")
-            logger.info("Revoked token: %s", _mask_token(token))
-        except Exception as e:
-            logger.debug("Failed to revoke token (may not exist): %s", e)
-    else:
-        tokens = _load_tokens_file()
-        tokens = [t for t in tokens if t["token"] != token]
-        _save_tokens_file(tokens)
-        logger.info("Revoked token: %s", _mask_token(token))
+    tokens = _load_tokens_file()
+    tokens = [t for t in tokens if t["token"] != token]
+    _save_tokens_file(tokens)
+    logger.info("Revoked token: %s", _mask_token(token))
 
 
 def list_assignments() -> list[dict[str, str]]:
-    if _keyring_available():
-        kr = _get_keyring()
-        assignments: list[dict[str, str]] = []
-        if hasattr(kr, "_store"):
-            for (service, username) in kr._store:
-                if service.startswith(_KEYRING_SERVICE_PREFIX) and username == "token":
-                    token = service[len(_KEYRING_SERVICE_PREFIX):]
-                    try:
-                        data_json = kr.get_password(service, "token")
-                        if data_json:
-                            data = json.loads(data_json)
-                            assignments.append({
-                                "token": token,
-                                "profile": data["profile"],
-                                "agent": data["agent"],
-                                "created_at": data["created_at"],
-                            })
-                    except Exception as e:
-                        logger.warning("Failed to parse token data for %s: %s", _mask_token(token), e)
-        else:
-            logger.warning("list_assignments() not fully supported with real keyring backend")
-        return assignments
-    else:
-        return _load_tokens_file()
+    return _load_tokens_file()
 
 
 def get_profile_token(profile_name: str) -> str | None:
@@ -202,4 +113,3 @@ def get_profile_token(profile_name: str) -> str | None:
         if assignment["profile"] == profile_name:
             return assignment["token"]
     return None
-
