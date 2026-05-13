@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import pytest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,6 +15,7 @@ from typer.testing import CliRunner
 from traderbot.cli import app
 from traderbot.db.decisions import DbDecision
 from traderbot.db.decisions import init_table as init_decisions_table
+from traderbot.db.positions import init_table as init_positions_table
 from traderbot.heartbeat import (
     AdaptationReview,
     CircuitBreakerReview,
@@ -43,9 +45,11 @@ def _init_db(conn: sqlite3.Connection) -> None:
     """Initialize all required tables for heartbeat tests."""
     init_decisions_table(conn)
     from traderbot.db.learnings import init_table as init_learnings_table
+    from traderbot.db.positions import init_table as init_positions_table
     from traderbot.learning import init_task_observations_table
 
     init_learnings_table(conn)
+    init_positions_table(conn)
     init_task_observations_table(conn)
 
 
@@ -113,8 +117,15 @@ def _make_decision(
 
 
 class TestPerformanceReview:
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        self.conn = sqlite3.connect(":memory:")
+        init_positions_table(self.conn)
+        yield
+        self.conn.close()
+
     def test_empty_decisions(self):
-        result = step_performance_review([])
+        result = step_performance_review(self.conn, [])
         assert result.trade_count == 0
         assert result.win_rate == 0.0
         assert result.total_pnl_cents == 0
@@ -125,7 +136,7 @@ class TestPerformanceReview:
             _make_decision(id=1, direction="yes", price=40, actual_result=True),
             _make_decision(id=2, direction="yes", price=40, actual_result=True),
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.trade_count == 2
         assert result.win_rate == 1.0
         assert result.total_pnl_cents == 120
@@ -135,7 +146,7 @@ class TestPerformanceReview:
         decisions = [
             _make_decision(id=1, direction="yes", price=60, actual_result=False),
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.trade_count == 1
         assert result.win_rate == 0.0
         assert result.total_pnl_cents == -60
@@ -145,7 +156,7 @@ class TestPerformanceReview:
             _make_decision(id=1, direction="yes", price=40, actual_result=True),
             _make_decision(id=2, direction="yes", price=60, actual_result=False),
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.trade_count == 2
         assert result.win_rate == 0.5
 
@@ -154,7 +165,7 @@ class TestPerformanceReview:
             _make_decision(id=i, direction="yes", price=40, actual_result=True)
             for i in range(8)
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.deviation_flag == "win_rate_above_expected"
 
     def test_deviation_flag_below_expected(self):
@@ -162,7 +173,7 @@ class TestPerformanceReview:
             _make_decision(id=i, direction="yes", price=60, actual_result=False)
             for i in range(6)
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.deviation_flag == "win_rate_below_expected"
 
     def test_no_direction_trades_ignored(self):
@@ -170,7 +181,7 @@ class TestPerformanceReview:
             _make_decision(id=1, outcome="rejected"),
             _make_decision(id=2, outcome="held"),
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert result.trade_count == 0
 
     def test_avg_confidence_multiple(self):
@@ -178,7 +189,7 @@ class TestPerformanceReview:
             _make_decision(id=1, confidence=0.8, actual_result=True),
             _make_decision(id=2, confidence=0.4, actual_result=False),
         ]
-        result = step_performance_review(decisions)
+        result = step_performance_review(self.conn, decisions)
         assert abs(result.avg_confidence - 0.6) < 1e-9
 
 
@@ -659,20 +670,26 @@ class TestEdgeCases:
         conn.close()
 
     def test_single_decision(self):
+        conn = sqlite3.connect(":memory:")
+        init_positions_table(conn)
         decisions = [_make_decision(id=1, actual_result=True)]
-        perf = step_performance_review(decisions)
+        perf = step_performance_review(conn, decisions)
         review = step_decision_review(decisions)
         assert perf.trade_count == 1
         assert review.closed_count == 1
+        conn.close()
 
     def test_many_stale_decisions(self):
+        conn = sqlite3.connect(":memory:")
+        init_positions_table(conn)
         decisions = [
             _make_decision(id=i, actual_result=None, hours_ago=72)
             for i in range(20)
         ]
-        perf = step_performance_review(decisions)
+        perf = step_performance_review(conn, decisions)
         # None actual_result → no wins counted for those that are executed but unresolved
         assert perf.trade_count == 20
+        conn.close()
 
     def test_heartbeat_md_contains_circuit_breaker_level(self, tmp_path):
         conn = sqlite3.connect(":memory:")

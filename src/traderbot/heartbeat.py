@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.db import positions
 from traderbot.db.decisions import DbDecision, list_by_date_range
 from traderbot.kalshi.models import MarketCategory
 from traderbot.learning import (
@@ -143,13 +144,14 @@ class HeartbeatResult(BaseModel):
 
 
 def step_performance_review(
+    conn: sqlite3.Connection,
     decisions: list[DbDecision],
     since: datetime | None = None,
 ) -> PerformanceReview:
     """Step 1: Aggregate trade outcomes, compute win rate, P&L, avg confidence, Sharpe, and max drawdown."""
     executed = [d for d in decisions if d.outcome == "executed"]
     if not executed:
-        return PerformanceReview()
+        return PerformanceReview(open_positions=positions.count_open(conn))
 
     wins = 0
     total_pnl = 0
@@ -208,6 +210,7 @@ def step_performance_review(
         sharpe_ratio=sharpe_ratio,
         max_drawdown_pct=max_drawdown_pct,
         deviation_flag=deviation_flag,
+        open_positions=positions.count_open(conn),
     )
 
 
@@ -390,7 +393,11 @@ async def step_system_health(
                 response = await asyncio.wait_for(client.get("/"), timeout=5.0)
                 api_ok = response.status_code < 500
             except Exception:
-                api_ok = False
+                try:
+                    response = await asyncio.wait_for(client.get("/markets?limit=1"), timeout=5.0)
+                    api_ok = response.status_code < 500
+                except Exception:
+                    api_ok = False
         finally:
             await asyncio.wait_for(client.close(), timeout=2.0)
         api_status = "ok" if api_ok else "degraded"
@@ -427,7 +434,7 @@ async def run_heartbeat_cycle(
 
     # Step 1: Performance review
     decisions = _get_decisions(conn, since)
-    performance = step_performance_review(decisions, since)
+    performance = step_performance_review(conn, decisions, since)
     steps_completed.append("performance_review")
 
     # Step 2: Decision review

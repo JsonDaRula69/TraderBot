@@ -100,6 +100,11 @@ def update_avg_price(
     conn.commit()
 
 
+def count_open(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL").fetchone()
+    return row[0] if row else 0
+
+
 def _row_to_model(row: sqlite3.Row) -> DbPosition:
     """Convert a sqlite3.Row to a DbPosition, parsing datetime strings."""
     data = dict(row)
