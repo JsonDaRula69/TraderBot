@@ -78,7 +78,6 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 |---|---|---|
 | `KALSHI_API_KEY` | Yes | Kalshi API authentication key |
 | `KALSHI_PRIVATE_KEY_PEM` | Yes | RSA private key for JWT auth |
-| `KALSHI_DEMO` | No | Set to `true` to use demo API (`demo-api.kalshi.co`) |
 | `TRADERBOT_PROFILE_TOKEN` | No | Profile token for multi-agent deployment (auto-injected into TOOLS.md) |
 
 ## Profile-Aware Trading
@@ -86,7 +85,7 @@ All commands support `--json` flag for machine-readable output. When `--json` is
 When `TRADERBOT_PROFILE_TOKEN` is set, the CLI resolves it to a `TradingProfile` and applies:
 - Profile-specific risk limits (capped by HARD_LIMITS)
 - Category filtering (only enabled_categories permitted)
-- Per-profile API credentials from keyring namespace `traderbot.profiles.<name>`
+- Shared API credentials from `.env` file
 - Isolated data directories (`~/.traderbot-paper/` or `~/.traderbot-live/`)
 
 ## Cron Architecture

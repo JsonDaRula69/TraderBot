@@ -102,7 +102,7 @@ Profiles cannot exceed `HARD_LIMITS` ceilings. `AgentRiskLimits` enforces this a
 
 ### Credential Isolation
 
-Each profile has its own keyring namespace: `traderbot.profiles.<profile_name>.<service>`. Credentials stored under a profile are not accessible to other profiles or the global namespace.
+All profiles share the same `.env` file for API credentials. There is no per-profile credential isolation. The `KALSHI_API_KEY` and `KALSHI_PRIVATE_KEY_PEM` values are shared across all agents.
 
 ## Decision Records
 

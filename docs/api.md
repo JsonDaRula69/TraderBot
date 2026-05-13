@@ -190,7 +190,7 @@ Scan `.openclaw/workspace/` for available agents.
 traderbot profile set-auth PROFILE-NAME SERVICE
 ```
 
-Store credentials for a service under a profile's keyring namespace. Prompts for key and secret.
+Store credentials for a service under a profile's configuration namespace. Prompts for key and secret.
 
 ### traderbot profile auth
 
@@ -214,7 +214,7 @@ Interactive credential setup for all services.
 traderbot auth set-key SERVICE KEY
 ```
 
-Store a specific credential in the global keyring.
+Store a specific credential in the global `.env` file.
 
 ### traderbot auth list-keys
 

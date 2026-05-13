@@ -13,7 +13,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Market data | `kalshi/markets.py` | List markets, get detail, orderbook, recent trades |
 | Historical data | `kalshi/history.py` | Cutoff queries, historical trades, settled markets |
 | WebSocket | `kalshi/websocket.py` | Real-time price/streaming data |
-| Demo adapter | `kalshi/demo.py` | Demo API for paper trading |
+| Demo adapter | `kalshi/demo.py` | Paper trading adapter (deprecated) |
 
 **Dependencies**: None — this is the foundation.
 **Version target**: v0.01.00
@@ -22,7 +22,6 @@ Implementation phases, dependencies between them, success criteria, and future e
 - `traderbot scan` returns a list of open markets from production API
 - `traderbot analyze KXBTCD-26MAR31-T55000` returns market details + orderbook
 - WebSocket maintains persistent connection and receives real-time updates
-- Demo mode works against `demo-api.kalshi.co`
 - All API responses parsed into validated Pydantic models
 
 ## Phase 2: Risk Module
@@ -95,7 +94,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 |---|---|---|
 | Backtest engine | `simulation/engine.py` | Event-driven replay for binary outcomes |
 | Data loader | `simulation/data_loader.py` | Historical data fetch + cache |
-| Paper trader | `simulation/paper_trader.py` | Demo API execution |
+| Paper trader | `simulation/paper_trader.py` | Simulated execution against prod data |
 | Performance | `simulation/performance.py` | Strategy metrics and comparison |
 | **StrategyProfile** | `simulation/profiles.py` | Preset risk/signal profiles for multi-profile backtesting |
 | **Bootstrap command** | CLI (`traderbot bootstrap`) | Calibrates strategy parameters against historical data |
@@ -110,7 +109,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 
 **Success criteria**:
 - `traderbot backtest <strategy> 2026-01-01 2026-03-01` produces valid performance metrics
-- Paper trading executes against demo API with realistic fills
+- Paper trading simulates execution against prod market data with realistic fills
 - Slippage modeled in backtests (worst-case fill within spread)
 - `traderbot compare strategy_a strategy_b` produces side-by-side metrics
 - Historical data cached locally to avoid re-fetching

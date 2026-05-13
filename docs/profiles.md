@@ -6,8 +6,8 @@ The profile system enables multi-agent deployment where each OpenClaw agent runs
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│              Profile Registry (Keyring / Encrypted File)               │
-│              traderbot.profiles.<name> → JSON profile                │
+│                    Profile Registry (.env file)                        │
+│                    traderbot.profiles.<name> → JSON profile           │
 └──────────┬───────────────────┬──────────────────────┬────────────────┘
            │                   │                      │
     ┌──────▼──────┐    ┌───────▼──────┐      ┌──────▼──────┐
@@ -18,16 +18,15 @@ The profile system enables multi-agent deployment where each OpenClaw agent runs
     └─────────────┘    │ revoke       │      └──────┬──────┘
                        └──────┬───────┘             │
                               │               ┌─────▼─────┐
-                       ┌──────▼──────┐       │  Keyring  │
-                       │  Injection  │       │ Namespace │
-                       │ into TOOLS  │       │ profiles. │
-                       └─────────────┘       │ <name>    │
-                                            └───────────┘
+                       ┌──────▼──────┐       │  .env     │
+                       │  Injection  │       │  Shared   │
+                       │ into TOOLS  │       │  API Keys │
+                       └─────────────┘       └───────────┘
 ```
 
 ## TradingProfile Model
 
-Every profile is a `TradingProfile` stored in the OS keyring under `traderbot.profiles.<name>`.
+Every profile is a `TradingProfile` stored in the `.env` file under `traderbot.profiles.<name>`.
 
 ```python
 class TradingProfile(BaseModel):
@@ -49,9 +48,7 @@ class TradingProfile(BaseModel):
 ### Computed Properties
 
 ```python
-profile.demo_mode     # True if mode == "paper"
 profile.base_dir      # ".traderbot-paper" or ".traderbot-live"
-profile.keyring_prefix  # "traderbot-paper-<name>" or "traderbot-live-<name>"
 profile.env_file      # ".env.paper" or ".env.live"
 ```
 
@@ -80,23 +77,23 @@ An empty `enabled_categories` list means all categories are permitted. If a list
 
 ## Profile Registry
 
-`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in the OS keyring by default (`traderbot.profiles.<name>` namespace), with automatic fallback to an AES-256 encrypted file when the keyring is unavailable (e.g., headless Linux).
+`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in a `.env`-based configuration by default, with automatic fallback to an AES-256 encrypted file when needed (e.g., headless Linux).
 
 ```python
 registry = ProfileRegistry()
 
-registry.create_profile(profile)           # Store in keyring or encrypted file
+registry.create_profile(profile)           # Store in .env or encrypted file
 profile = registry.get_profile(name)       # Retrieve by name, None if missing
 names = registry.list_profiles()          # All profile names (sorted)
 registry.profile_exists(name)             # Boolean check
 registry.delete_profile(name, keep_data)  # Remove + optionally purge data dirs
 ```
 
-Storage namespace: `traderbot.profiles.<name>` (keyring) or `~/.traderbot/profiles.enc` (file fallback)
+Storage namespace: `traderbot.profiles.<name>` (`.env` file) or `~/.traderbot/profiles.enc` (file fallback)
 
 ## Headless Linux / File Storage
 
-On headless Linux servers (no desktop environment, no D-Bus session), the OS keyring may be unavailable. `ProfileRegistry` detects this by probing the keyring backend: if the backend returns a `FailKeyring` or `NullKeyring`, or if `set_password` throws, it falls back to an AES-256 encrypted file.
+On headless Linux servers (no desktop environment, no D-Bus session), the `.env` file is the primary storage. `ProfileRegistry` falls back to an AES-256 encrypted file when `.env` is unavailable.
 
 ### Fallback Path
 
@@ -110,8 +107,10 @@ The file stores all profiles as a single JSON dictionary, encrypted via `cryptog
 
 The AES-256 key is derived as follows:
 
-1. **Keyring available**: A 32-byte random key is stored in the keyring under `traderbot.encryption` service, `profile_key` username.
-2. **Keyring unavailable**: A 32-byte key is stored in `~/.traderbot/.profile_key` (mode 0600). The `_derive_or_create_key()` function creates the key on first access and caches it.
+1. **Key file available**: A 32-byte random key is stored in `~/.traderbot/.profile_key` (mode 0600).
+2. **Key file missing**: A 32-byte key is generated and stored in `~/.traderbot/.profile_key`.
+
+The `_derive_or_create_key()` function creates the key on first access and caches it.
 
 ### Migration from Legacy
 
@@ -122,9 +121,9 @@ If a plaintext `~/.traderbot/profiles.json` exists alongside `profiles.enc`, the
 Agents are bound to profiles via opaque tokens. The flow:
 
 1. **Generate**: `generate_token()` → 12-char URL-safe string (~72 bits entropy)
-2. **Assign**: `assign_token(profile_name, agent_id, token)` → stored in keyring as `traderbot.tokens.<token>`
+2. **Assign**: `assign_token(profile_name, agent_id, token)` → stored in `.env` as `traderbot.tokens.<token>`
 3. **Resolve**: `resolve_token(token)` → `(profile_name, agent_id)` or `None` if invalid/revoked
-4. **Revoke**: `revoke_token(token)` → deletes from keyring
+4. **Revoke**: `revoke_token(token)` → deletes from `.env`
 
 ### One-to-One Binding
 
@@ -153,31 +152,27 @@ The `_resolve_agent_path(agent_id)` function resolves agent paths in OpenClaw's 
 
 The first match wins. If none of these exist, `inject_token()` receives the raw path passed by the caller (from `discover_agents()`).
 
-## Per-Profile Auth Store
+## Shared Credential Storage
 
-`ProfileAuthManager` provides isolated credential storage per profile:
+All profiles share the same `.env` file for API credentials. There is no per-profile credential isolation.
 
 ```python
-auth = ProfileAuthManager(profile)
+from traderbot.profiles import get_current_profile
 
-auth.set_credentials("kalshi", api_key, api_secret)    # Store
-key, secret = auth.get_credentials("kalshi")            # Retrieve
-auth.delete_credentials("kalshi")                       # Remove
-auth.has_credentials("kalshi")                          # Boolean check
-auth.list_services()                                    # All configured services
+profile = get_current_profile()  # Reads TRADERBOT_PROFILE_TOKEN env var
+# API keys always come from ~/.traderbot/.env
 ```
 
-Keyring namespace: `traderbot.profiles.<profile_name>.<service>`
+API keys (`KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`) are stored once in `~/.traderbot/.env` and shared by all agents regardless of profile.
 
 ### Credential Resolution Chain
 
 When resolving API credentials:
 
-1. Profile-specific keyring (`traderbot.profiles.<name>.<service>`)
-2. Global keyring (`traderbot.<service>`)
-3. Environment variable
+1. `.env` file (`~/.traderbot/.env` with mode 0600)
+2. Environment variable fallback
 
-The resolution chain in `resolve_kalshi_credentials()` checks profile credentials first, then falls back to global AuthManager.
+The resolution chain in `resolve_kalshi_credentials()` reads from `.env` first, then falls back to `KALSHI_API_KEY` / `KALSHI_PRIVATE_KEY_PEM` environment variables.
 
 ## Data Isolation
 
@@ -212,7 +207,6 @@ The full config bundle:
 config = load_profile_config(profile)
 # Returns:
 #   - credentials: {"kalshi": (api_key, api_secret)}
-#   - demo_mode: bool
 #   - paths: {"db": Path, "chroma": Path, "audit": Path}
 #   - limits: dict of effective risk limits
 ```
@@ -339,7 +333,7 @@ openclaw agents add molty
 ```
 
 1. `discover_agents()` scans openclaw.json, agent directories, and workspace paths to find all available agents.
-2. `traderbot profile assign <agent-id> <profile-name>` generates a token and binds the agent ID to the profile name in the keyring.
+2. `traderbot profile assign <agent-id> <profile-name>` generates a token and binds the agent ID to the profile name in the `.env` file.
 3. `inject_token()` writes `TRADERBOT_PROFILE_TOKEN` into the agent's `TOOLS.md` using path resolution (`workspace-<id>`, then `workspace/<id>`, then `agents/<id>`).
 4. At runtime, the agent reads `TRADERBOT_PROFILE_TOKEN` from its environment (either from `TOOLS.md` or from a launchd/systemd service definition).
 
@@ -348,7 +342,7 @@ openclaw agents add molty
 Each agent runs independently with its own:
 
 - **Profile**: Risk parameters, category filters, mode (paper/live)
-- **Credentials**: API keys stored under `traderbot.profiles.<name>.<service>`
+- **Credentials**: Shared API keys in `.env` file under `traderbot.profiles.<name>.<service>`
 - **Data**: SQLite DB, ChromaDB, audit logs in `~/.traderbot-<mode>/`
 - **Token**: One-to-one binding — one profile per token, one token per agent
 

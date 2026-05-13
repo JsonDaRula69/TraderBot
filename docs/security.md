@@ -8,13 +8,13 @@ Multi-agent deployment introduces new attack surfaces that do not exist in singl
 
 | Threat | Description | Mitigation |
 |---|---|---|
-| **Token theft** | Malicious actor reads token from TOOLS.md or environment | Token is 72-bit entropy, keyring storage |
+| **Token theft** | Malicious actor reads token from TOOLS.md or environment | Token is 72-bit entropy, .env storage with restricted read permissions |
 | **Token guessing** | Offline brute force of token values | `secrets.token_urlsafe(9)` provides ~72 bits of entropy |
-| **Profile hijacking** | Agent attempts to modify its own profile | Profile stored in separate keyring namespace agent cannot access |
+| **Profile hijacking** | Agent attempts to modify its own profile | Profile stored in `.env` file agent cannot modify at runtime |
 | **Risk limit override** | Agent attempts to set aggressive risk parameters | HARD_LIMITS ceiling enforcement at profile creation + at runtime |
-| **Credential theft** | Agent reads another profile's API keys | Per-profile keyring namespace with no cross-profile visibility |
+| **Credential theft** | Agent reads another profile's API keys | Shared `.env` file; all profiles share the same API keys |
 | **Data isolation breach** | Agent reads another agent's SQLite/ChromaDB | Separate base directories per profile mode |
-| **Token re-use** | Revoked token still resolves | `revoke_token()` deletes from keyring; resolution fails immediately |
+| **Token re-use** | Revoked token still resolves | `revoke_token()` removes token from registry; resolution fails immediately |
 | **Category filter bypass** | Agent attempts to trade disabled market categories | Category check in `evaluate_trade()` before any sizing |
 
 ## Token Handshake Security
@@ -31,33 +31,36 @@ This provides approximately 72 bits of entropy (9 bytes × 8/6 URL-safe encoding
 
 ### Storage
 
-Tokens are stored in the OS keyring under `traderbot.tokens.<token>`. The agent process does not have access to this namespace — it only sees `traderbot.*` (service credentials) and `traderbot.profiles.*` (profile metadata), not `traderbot.tokens.*`.
+Tokens are stored in the `.env` file alongside other configuration. The agent process receives the token via the `TRADERBOT_PROFILE_TOKEN` environment variable at startup and cannot modify the file at runtime.
 
 ### Resolution
 
-`resolve_token(token)` returns `(profile_name, agent_id)` or `None`. Revocation is immediate — the keyring entry is deleted and subsequent resolution attempts return `None`.
+`resolve_token(token)` returns `(profile_name, agent_id)` or `None`. Revocation is immediate — the token entry is removed from the registry and subsequent resolution attempts return `None`.
 
 ### One-to-One Binding
 
 Each profile can have only one active token. Attempting to assign a second token raises `ValueError`. This prevents a scenario where an agent is assigned a profile that already has a token from a previous agent.
 
-## Keyring Encryption
+## .env-Based Credential Storage
 
-TraderBot uses OS-native keyring backends for credential storage:
+TraderBot uses a `.env` file for all credential and configuration storage:
 
-| Platform | Backend |
-|---|---|
-| macOS | Keychain |
-| Linux | Secret Service (gnome-keyring) |
-| Windows | Credential Manager |
+- **Location**: `~/.traderbot/.env` with mode 0600 (owner read/write only)
+- **API keys**: `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM` stored as environment variables
+- **Profile tokens**: `TRADERBOT_PROFILE_TOKEN` injected at agent startup
 
-The OS keyring encrypts stored data at rest using the user's login password or a system-managed key. TraderBot does not manage its own encryption keys.
+The `.env` file is the single source of truth for credentials. All profiles share the same API keys — there is no per-profile credential isolation. The OS filesystem permissions (0600) enforce that only the owning user can read the file.
 
-### Fernet Fallback
+### .env File Format
 
-If the keyring backend is unavailable (e.g., headless Linux without gnome-keyring), encrypted file fallback is used. Fernet (AES-128-CBC with HMAC) encryption is applied to a local file. The key is derived from a machine-specific secret and not stored in plaintext.
+```bash
+KALSHI_API_KEY=your_key_id
+KALSHI_PRIVATE_KEY_PEM=-----BEGIN RSA PRIVATE KEY-----
+KALSHI_RATE_LIMIT_RPS=20
+TRADERBOT_PROFILE_TOKEN=xK9mQ2pL7nR4
+```
 
-Profile metadata is stored as JSON in the keyring, not in plain text files that agents could read.
+All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
 
 ## Enforcement Layers
 
@@ -118,10 +121,10 @@ An agent running with a paper profile token cannot access the live profile's SQL
 
 These restrictions are enforced by the system and cannot be bypassed by the agent:
 
-1. **Cannot modify profile parameters** — Profiles are stored in the keyring and managed only via CLI
+1. **Cannot modify profile parameters** — Profiles are stored via env and managed only via CLI
 2. **Cannot exceed HARD_LIMITS** — Even with a custom profile, `AgentRiskLimits` ceiling enforcement prevents exceeding hard limits
 3. **Cannot read another profile's credentials** — Keyring namespace isolation prevents cross-profile credential access
-4. **Cannot use revoked tokens** — `revoke_token()` deletes the keyring entry immediately
+4. **Cannot use revoked tokens** — `revoke_token()` removes the token entry immediately
 5. **Cannot bypass category filtering** — Category check is in the risk gate before sizing
 6. **Cannot access another profile's data** — Separate SQLite and ChromaDB directories per mode
 7. **Cannot self-assign a token** — Token generation requires CLI invocation by a human

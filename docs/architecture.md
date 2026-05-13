@@ -272,34 +272,33 @@ class AnalysisRegistry:
 
 ## Security: Credential Management
 
-### Keyring-Based Credential Management
+### .env-Based Credential Management
 
-TraderBot uses OS-native credential storage (Keychain on macOS, Secret Service on Linux, Credential Manager on Windows) via the `keyring` library:
+TraderBot uses a `.env` file for all credential and configuration storage. There is no separate credential backend.
 
-| Storage | Platform | Backend |
-|---|---|---|
-| **macOS Keychain** | macOS | `keyring.backends.macOS` |
-| **Linux Secret Service** | Linux | `keyring.backends.SecretService` |
-| **Windows Credential Manager** | Windows | `keyring.backends.Windows` |
+- **Location**: `~/.traderbot/.env` with mode 0600
+- **API keys**: `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`, `KALSHI_RATE_LIMIT_RPS`
+- **Profile resolution**: `TRADERBOT_PROFILE_TOKEN` set as an environment variable at agent startup
+
+All profiles share the same `.env` file. There is no per-profile credential isolation.
 
 ### `traderbot auth` CLI
 
-The `traderbot auth` command manages credentials:
+The `traderbot auth` command manages credentials in the `.env` file:
 
 | Subcommand | Description |
 |---|---|
-| `traderbot auth login` | Interactive login — stores Kalshi API key/secret in keyring |
-| `traderbot auth set-key <name> <value>` | Store a specific credential in keyring |
-| `traderbot auth list-keys` | List stored credential names (values NOT shown) |
+| `traderbot auth check` | Verify that required env vars are set and valid |
+| `traderbot auth set-key <name> <value>` | Store a credential in `.env` |
+| `traderbot auth list-keys` | List configured credential names (values NOT shown) |
 | `traderbot auth rotate <name>` | Rotate a credential — prompts for new value |
 
-### Credential Resolution Order
+### Credential Resolution
 
-1. **Keyring** (preferred) — OS-native secure storage
-2. **`.env` file** (fallback) — for development and CI environments
-3. **Environment variables** (fallback) — for container deployments
+1. **`.env` file** (primary) — located at `~/.traderbot/.env`
+2. **Environment variables** (fallback) — for container deployments
 
-When keyring is unavailable or empty, the system falls back to `.env` with a WARNING log. All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
+All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
 
 ## Module Dependencies
 

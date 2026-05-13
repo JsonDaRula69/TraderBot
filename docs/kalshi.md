@@ -7,7 +7,6 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 | Detail | Value |
 |---|---|
 | **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
-| **Base URL (demo)** | `https://demo-api.kalshi.co/trade-api/v2` |
 | **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
 | **Rate limit** | Tiered: Basic=20 rps, Advanced=30, Premier=100, Paragon=200, Prime=400 (configurable via `KALSHI_RATE_LIMIT_RPS`) |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
@@ -59,7 +58,6 @@ Our `kalshi/signing.py` implements `auth_headers()` which generates the three re
 | Stream | Description |
 |---|---|
 | `wss://api.elections.kalshi.com/trade-api/ws/v2` | Production real-time data |
-| `wss://demo-api.kalshi.co/trade-api/ws/v2` | Demo real-time data |
 
 WebSocket auth is sent as HTTP headers during the handshake (same RSA-PSS signing as REST). Subscribe format: `{"id": N, "cmd": "subscribe", "params": {"channels": ["ticker"], "market_ticker": "XXX"}}`.
 
@@ -107,7 +105,6 @@ Our `kalshi/client.py` implements direct HTTP calls with:
 - **Automatic retry** with exponential backoff (handles transient 5xx errors)
 - **Token bucket rate limiter** — respects configured req/sec, queues requests when approaching limit
 - **Type normalization** — converts raw API responses to our Pydantic models
-- **Demo mode** — swaps base URL to demo API for paper trading
 
 ```python
 # Intended usage pattern

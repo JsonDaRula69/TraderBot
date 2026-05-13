@@ -113,13 +113,6 @@ Kalshi partitions data into live and historical tiers:
 - **No candlestick endpoint**: Must reconstruct OHLCV from trade data
 - **Rate limit**: ~10 req/sec, 1000 results per page for trades
 
-### Demo API
-
-- **URL**: `https://demo-api.kalshi.co/trade-api/v2`
-- **Purpose**: Paper trading with fake money
-- **Behavior**: Identical to production API
-- **Use case**: Strategy validation before live trading
-
 ### Market Characteristics
 
 - Binary outcomes: contracts settle at $1 (correct) or $0 (incorrect)

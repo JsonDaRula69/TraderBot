@@ -14,7 +14,7 @@
 | Market data | `kalshi/markets.py` | ✅ Done | list_markets, get_market, get_orderbook, get_recent_trades |
 | Historical data | `kalshi/history.py` | ✅ Done | get_cutoffs, get_historical_trades, get_settled_markets |
 | WebSocket | `kalshi/websocket.py` | ✅ Done | MarketStream with auth, subscribe/unsubscribe, auto-reconnect |
-| Demo adapter | `kalshi/demo.py` | ✅ Done | DemoAdapter for demo API |
+| Demo adapter | `kalshi/demo.py` | ✅ Done | DemoAdapter (deprecated — prod-only) |
 | Shared helpers | `kalshi/_normalize.py` | ✅ Done | Extracted from markets.py/history.py (DRY) |
 | Order placement | `kalshi/trading.py` | ✅ Done | place_order, cancel_order, get_order, list_orders via TradingService |
 
@@ -22,7 +22,6 @@
 
 **Success criteria met**:
 - [x] All API responses parsed into validated Pydantic models
-- [x] Demo mode works against demo-api.kalshi.co
 - [x] `traderbot scan` returns open markets (CLI wired in Phase 3)
 - [x] `traderbot analyze <ticker>` returns details + orderbook + indicators (CLI wired in Phase 4)
 - [ ] WebSocket maintains persistent connection (tested with mocks only)
@@ -98,10 +97,10 @@
 | Backtest engine | `simulation/engine.py` | ✅ Done | BacktestEngine with Strategy Protocol, risk gate integration |
 | Data loader | `simulation/data_loader.py` | ✅ Done | DataLoader with caching, quality metrics, retry |
 | Models | `simulation/models.py` | ✅ Done | BacktestConfig, BacktestTrade, BacktestResult, Context, Strategy Protocol |
-| Paper trader | `simulation/paper_trader.py` | ✅ Done | PaperTrader composing with DemoAdapter, slippage model |
+| Paper trader | `simulation/paper_trader.py` | ✅ Done | PaperTrader with slippage model, prod data simulation |
 | Performance | `simulation/performance.py` | ✅ Done | Portfolio metrics + prediction-market metrics, compare_strategies |
 | Strategy profiles | `simulation/profiles.py` | ✅ Done | StrategyProfile, PRESETS, run_profiles, multi-profile backtest |
-| Auth management | `auth.py`, `kalshi/config.py` | ✅ Done | AuthManager + keyring, traderbot auth CLI |
+| Auth management | `auth.py`, `kalshi/config.py` | ✅ Done | .env-only AuthManager, traderbot auth CLI |
 | CLI commands | `cli.py` | ✅ Done | backtest, paper, performance, compare, bootstrap commands |
 | Integration tests | `tests/test_simulation_integration.py` | ✅ Done | 35 tests — E2E pipeline, CLI, risk, edge cases |
 
@@ -235,10 +234,10 @@ Multi-agent deployment with token-based profile binding, per-profile data isolat
 | Component | File | Status | Notes |
 |---|---|---|---|
 | TradingProfile model | `profiles/models.py` | ✅ Done | Pydantic model with HARD_LIMITS validation, category filtering |
-| ProfileRegistry | `profiles/registry.py` | ✅ Done | Keyring CRUD with encrypted storage |
+| ProfileRegistry | `profiles/registry.py` | ✅ Done | .env CRUD with encrypted storage |
 | Token module | `profiles/tokens.py` | ✅ Done | 72-bit entropy tokens, assign/resolve/revoke |
 | AgentRiskLimits | `risk/agent_limits.py` | ✅ Done | HARD_LIMITS ceiling enforcement at runtime |
-| ProfileAuthStore | `profiles/auth.py` | ✅ Done | Per-profile keyring namespace with fallback chain |
+| ProfileAuthStore | `profiles/auth.py` | ✅ Done | .env-based credential namespace with fallback chain |
 | Agent discovery | `profiles/discovery.py` | ✅ Done | OpenClaw workspace scanning from IDENTITY.md |
 | Token injection | `profiles/injection.py` | ✅ Done | Atomic TOOLS.md injection, backup on write |
 | Profile-aware config | `profiles/config.py` | ✅ Done | Credential resolution chain: profile → global → env |
@@ -252,7 +251,7 @@ Multi-agent deployment with token-based profile binding, per-profile data isolat
 | docs/profiles.md | `docs/profiles.md` | ✅ Done | Profile system architecture, TradingProfile, registry, token handshake |
 | docs/risk.md update | `docs/risk.md` | ✅ Done | AgentRiskLimits, profile-aware evaluate_trade(), category filtering |
 | docs/deployment.md | `docs/deployment.md` | ✅ Done | Ubuntu + macOS install, persistence, profile-agent flow |
-| docs/security.md | `docs/security.md` | ✅ Done | Threat model, token security, keyring encryption, enforcement layers |
+| docs/security.md | `docs/security.md` | ✅ Done | Threat model, token security, .env encryption, enforcement layers |
 | docs/api.md update | `docs/api.md` | ✅ Done | CLI profile commands reference |
 | README.md update | `README.md` | ✅ Done | Multi-agent deployment section, project structure |
 | AGENTS.md update | `AGENTS.md` | ✅ Done | Profile-aware trading rules, TRADERBOT_PROFILE_TOKEN |

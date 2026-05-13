@@ -153,7 +153,7 @@ check_openclaw() {
 }
 
 install_dependencies_debian() {
-    local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev gnome-keyring unzip curl git file python3-pip jq)
+    local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev unzip curl git file python3-pip jq)
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
@@ -509,14 +509,6 @@ setup_api_credentials() {
     echo "Kalshi credentials are required. Other services are optional."
     echo
 
-    local use_keyring="false"
-    if "$tb_cmd" auth list-keys 2>/dev/null | grep -qi 'kalshi'; then
-        use_keyring="true"
-        echo "Keyring detected. Credentials will be stored securely."
-        echo "You can also run 'traderbot auth login' after installation for keyring storage."
-        echo
-    fi
-
     mkdir -p "${HOME}/.traderbot"
     local env_file="${HOME}/.traderbot/.env"
     touch "$env_file"
@@ -535,9 +527,6 @@ setup_api_credentials() {
         read -r -p "Kalshi API secret: " -s kalshi_secret
         echo
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
-        if [[ "$use_keyring" == "true" ]] && [[ -n "$kalshi_key" ]]; then
-            "$tb_cmd" auth set-key kalshi api_key "$kalshi_key" 2>/dev/null || true
-        fi
         if [[ -n "$kalshi_secret" ]]; then
             local pem_path="${HOME}/.traderbot/kalshi_key.pem"
             printf '%s' "$kalshi_secret" > "$pem_path"
@@ -654,9 +643,6 @@ setup_api_credentials() {
     echo
     echo "API credential setup complete."
     echo "Credentials written to ${env_file}"
-    if [[ "$use_keyring" == "true" ]]; then
-        echo "To migrate credentials to keyring, run: traderbot auth login"
-    fi
     return 0
 }
 

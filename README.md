@@ -34,7 +34,7 @@ traderbot/
 │   ├── news/                # News & social media pipeline
 │   ├── profiles/            # Multi-agent profile system
 │   │   ├── models.py        # TradingProfile model
-│   │   ├── registry.py      # ProfileRegistry (keyring CRUD)
+│   │   ├── registry.py      # ProfileRegistry (.env CRUD)
 │   │   ├── tokens.py        # Token generation/resolution
 │   │   ├── auth.py          # Per-profile auth store
 │   │   ├── discovery.py     # OpenClaw agent discovery
@@ -75,7 +75,7 @@ traderbot/
 | [docs/research.md](docs/research.md) | External references, existing projects, ecosystem analysis |
 | [docs/profiles.md](docs/profiles.md) | Profile system architecture, TradingProfile model, registry, token handshake |
 | [docs/deployment.md](docs/deployment.md) | Ubuntu (Debian-based Linux) installation, persistence setup, profile-agent flow |
-| [docs/security.md](docs/security.md) | Threat model, token handshake security, keyring encryption, enforcement layers |
+| [docs/security.md](docs/security.md) | Threat model, token handshake security, .env-based encryption, enforcement layers |
 | [docs/api.md](docs/api.md) | CLI command reference including profile commands |
 
 ## Quick Start

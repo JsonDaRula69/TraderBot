@@ -254,10 +254,10 @@ OpenClaw loads skills in this order (later overrides earlier):
 
 TraderBot is installed at the project level: `skills/traderbot/SKILL.md`. This means it takes highest precedence and can override generic financial skills if any exist.
 
-## Demo Mode for Development
+## Simulation Mode
 
-During development, the agent uses the Kalshi demo API — `demo-api.kalshi.co` — which mirrors the production API but with fake money. This is controlled via environment variable:
+During development, the agent reads real market data from Kalshi's production API but simulates all orders locally. No trades are submitted to the exchange. This is controlled via the simulation engine:
 
 ```bash
-KALSHI_DEMO=true  # routes all calls to demo API
+traderbot paper momentum  # runs strategy with local order simulation
 ```

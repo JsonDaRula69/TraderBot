@@ -38,7 +38,7 @@ bash install/traderbot-installer.sh
 
 The installer will:
 - Detect `linux-debian` (Ubuntu/Debian) or `linux-other`
-- Install dependencies: `build-essential`, `python3-dev`, `python3-venv`, `gnome-keyring`
+- Install dependencies: `build-essential`, `python3-dev`, `python3-venv`
 - Download and install TraderBot
 - Launch interactive config
 

@@ -126,12 +126,11 @@ Markets or periods that fail quality checks are flagged in results.
 
 ### How It Works
 
-1. Connects to Kalshi's **demo API** (`demo-api.kalshi.co`)
-2. Submits orders via the demo API (identical flow to production)
-3. Tracks fills, slippage, and P&L just like real trading
-4. Records decisions in the same audit trail format
+1. Reads real market data from Kalshi's prod API — all orders simulated locally
+2. Tracks fills, slippage, and P&L against live market prices without submitting any real orders
+3. Records decisions in the same audit trail format
 
-Paper trading is the bridge between backtesting and live trading. It validates that the strategy works when connected to a real API with real latency, real orderbook dynamics, and real fill mechanics — but with no money at risk.
+Paper trading is the bridge between backtesting and live trading. It validates that the strategy works when connected to a real API with real latency, real orderbook dynamics, and real fill mechanics — but with no money at risk. All orders are simulated locally; no trades are submitted to the exchange.
 
 ### Transition to Live
 
