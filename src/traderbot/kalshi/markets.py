@@ -226,8 +226,8 @@ class MarketService:
                 events_resp.raise_for_status()
                 events_data = events_resp.json()
             except Exception:
-                logger.warning("Failed to fetch events for category=%s", category)
-                return MarketListResponse(markets=[], cursor=None)
+                logger.warning("Failed to fetch events page for category=%s (collected %d so far)", category, len(all_events))
+                break
 
             batch = events_data.get("events", [])
             all_events.extend(batch)
