@@ -208,25 +208,36 @@ class MarketService:
         The Kalshi V2 ``/events?category=`` and ``/markets?category=``
         filters are both broken (return unfiltered results).  This method
         works around it by:
-        1. Fetching all open events via ``/events?status=open``
+        1. Fetching all open events via ``/events?status=open`` (paginated)
         2. Filtering client-side by matching ``category`` case-insensitively
         3. Fetching markets for matched events in parallel (asyncio.gather)
         4. Enriching category from the known event data directly
         """
         logger = logging.getLogger(__name__)
 
-        try:
-            events_resp = await self._client.get("/events", limit=max(limit, 100), status="open")
-            events_resp.raise_for_status()
-            events_data = events_resp.json()
-        except Exception:
-            logger.warning("Failed to fetch events for category=%s", category)
-            return MarketListResponse(markets=[], cursor=None)
+        all_events: list[dict] = []
+        cursor: str | None = None
+        for _ in range(10):
+            try:
+                params: dict[str, Any] = {"limit": 100, "status": "open"}
+                if cursor:
+                    params["cursor"] = cursor
+                events_resp = await self._client.get("/events", **params)
+                events_resp.raise_for_status()
+                events_data = events_resp.json()
+            except Exception:
+                logger.warning("Failed to fetch events for category=%s", category)
+                return MarketListResponse(markets=[], cursor=None)
 
-        raw_events = events_data.get("events", [])
+            batch = events_data.get("events", [])
+            all_events.extend(batch)
+            cursor = events_data.get("cursor")
+            if not cursor or not batch:
+                break
+
         target_cat = category.lower().replace("_", " ")
         matched_events = [
-            e for e in raw_events
+            e for e in all_events
             if "event_ticker" in e and (e.get("category", "") == category or target_cat in e.get("category", "").lower())
         ]
 
