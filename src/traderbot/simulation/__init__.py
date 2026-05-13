@@ -69,6 +69,7 @@ from traderbot.simulation.profiles import (
     compare_strategies_extended,
     run_profiles,
 )
+from traderbot.simulation.settlement import SettlementVerifier
 
 __all__ = [
     "AGGRESSIVE",
@@ -105,6 +106,7 @@ __all__ = [
     "Posterior",
     "Prior",
     "QualityFlag",
+    "SettlementVerifier",
     "Signal",
     "SlippageModel",
     "Strategy",
