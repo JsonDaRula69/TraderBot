@@ -240,7 +240,7 @@ class MarketService:
 
         async def _fetch_event_markets(evt_ticker: str) -> list[Market]:
             try:
-                result = await self.list_markets(event_ticker=evt_ticker, limit=limit)
+                result = await self.list_markets(event_ticker=evt_ticker, limit=200)
                 return result.markets
             except Exception:
                 logger.warning("Failed to fetch markets for event=%s, skipping", evt_ticker)

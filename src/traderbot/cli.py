@@ -102,7 +102,7 @@ def _get_strategy(name: str):
 
 @app.command()
 def scan(
-    limit: Annotated[int, typer.Option("--limit", help="Max markets to return")] = 20,
+    limit: Annotated[int, typer.Option("--limit", help="Max markets to return")] = 500,
     category: Annotated[str | None, typer.Option("--category", help="Filter by category")] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
