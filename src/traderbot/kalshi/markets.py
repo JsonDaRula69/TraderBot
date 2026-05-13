@@ -227,7 +227,7 @@ class MarketService:
         target_cat = category.lower().replace("_", " ")
         event_tickers = [
             e["event_ticker"] for e in raw_events
-            if "event_ticker" in e and e.get("category", "").lower() == target_cat
+            if "event_ticker" in e and (e.get("category", "") == category or target_cat in e.get("category", "").lower())
         ]
 
         if not event_tickers:
