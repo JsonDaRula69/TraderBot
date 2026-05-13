@@ -247,8 +247,16 @@ def signals(
         except Exception:
             continue
 
-        prob = implied_probability(orderbook)
-        prices_int = [int(p) for p in market.outcome_prices]
+        try:
+            prob = implied_probability(orderbook)
+        except ValueError:
+            continue
+
+        try:
+            prices_int = [int(float(p)) for p in market.outcome_prices]
+        except (ValueError, TypeError):
+            continue
+
         signal = generate_signal(
             ticker=market.ticker,
             prices=prices_int,
