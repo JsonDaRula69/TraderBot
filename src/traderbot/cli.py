@@ -1390,20 +1390,30 @@ def paper(
             help="Starting cash in dollars (converted to cents). 0 = fetch from prod API.",
         ),
     ] = None,
+    reconcile: Annotated[
+        bool,
+        typer.Option(
+            "--reconcile",
+            help="Run settlement reconciliation on startup (not yet implemented).",
+        ),
+    ] = False,
 ) -> None:
-    """Run a paper trading session against the Kalshi demo API.
+    """Run a paper trading session with real market data.
 
-    Connects to the demo API, fetches open markets, runs the specified
+    Connects to the live Kalshi API, fetches open markets, runs the specified
     strategy through risk checks, and tracks simulated positions and P&L.
     Press Ctrl+C to stop early and see final results.
     """
     import asyncio
     import time
 
-    from traderbot.kalshi.demo import DemoAdapter
+    from traderbot.kalshi.cache import MarketDataCache
+    from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
+    from traderbot.kalshi.provider import ProdDataProvider
     from traderbot.simulation.engine import Signal
     from traderbot.simulation.paper_trader import PaperTrader, DEFAULT_INITIAL_BALANCE_CENTS
+    from traderbot.simulation.settlement import SettlementVerifier
     from traderbot.simulation.strategies import get_strategy
 
     console = Console()
@@ -1411,20 +1421,23 @@ def paper(
 
     strat = get_strategy(strategy)
 
-    try:
-        demo = DemoAdapter()
-    except Exception:
-        if json_output:
-            json_lib.dump({"error": "Demo API connection required for paper trading"}, sys.stdout)
-        else:
-            console.print("[red]Demo API connection required for paper trading.[/red]")
-        return
-
     from traderbot.db import get_connection, init_schema
     from traderbot.profiles import get_current_profile
 
     profile = get_current_profile()
-    client = demo.get_client()
+
+    cache = MarketDataCache(profile=profile)
+
+    try:
+        client = KalshiClient()
+    except Exception:
+        if json_output:
+            json_lib.dump({"error": "Kalshi API connection required for paper trading"}, sys.stdout)
+        else:
+            console.print("[red]Kalshi API connection required for paper trading.[/red]")
+        return
+
+    provider = ProdDataProvider(client, cache, profile)
     market_service = MarketService(client)
 
     # --- resolve initial balance ---
@@ -1466,10 +1479,24 @@ def paper(
 
     with get_connection(_resolve_db_path(db_path)) as conn:
         init_schema(conn)
-        trader = PaperTrader(demo, conn, initial_cash_cents, profile=profile)
+        trader = PaperTrader(provider, conn, initial_cash_cents, cache=cache, profile=profile)
+        settlement = SettlementVerifier(provider, trader, cache=cache)
 
         console.print(f"[bold]Paper Trading[/bold] — {strategy} ({duration}min)")
         console.print(f"  Starting cash: ${trader.get_portfolio().cash_cents / 100:.2f}")
+
+        asyncio.run(settlement.check_settlements_on_startup())
+        logger.info("Startup settlement check complete.")
+
+        if reconcile:
+            try:
+                asyncio.run(settlement.reconcile_positions())
+                logger.info("Reconciliation run.")
+            except NotImplementedError:
+                logger.warning(
+                    "Reconciliation requested but not yet implemented. Skipping reconciliation."
+                )
+                console.print("[yellow]Reconciliation requested but not yet implemented.[/yellow]")
 
         start_time = time.time()
         end_time = start_time + duration * 60
