@@ -1,4 +1,4 @@
-"""Extended KalshiConfig with keyring-priority credential lookup."""
+"""KalshiConfig variant for env-file credential resolution."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 
-class KeyringKalshiConfig(BaseSettings):
-    """Kalshi config that checks keyring first, then falls back to .env."""
+class EnvKalshiConfig(BaseSettings):
+    """Kalshi config that reads credentials from .env file."""
 
     model_config = SettingsConfigDict(
         strict=True,
@@ -47,5 +47,4 @@ class KeyringKalshiConfig(BaseSettings):
         return None
 
 
-if __name__ == "__main__":
-    print(KeyringKalshiConfig().model_dump_json())
+

@@ -60,7 +60,7 @@ def load_profile_config(
     Returns:
         Dictionary containing:
             - credentials: dict[str, tuple[str, str]] — service → (key, secret)
-            - demo_mode: bool — True for paper trading, False for live
+            - paper_mode: bool — True for paper trading, False for live
             - paths: dict[str, Path] — db, chroma, audit paths
             - limits: dict[str, float | int] — risk limits from AgentRiskLimits
     """
@@ -75,7 +75,7 @@ def load_profile_config(
         logger.warning("Failed to resolve Kalshi credentials: %s", e)
         config["credentials"] = {}
 
-    config["demo_mode"] = profile.demo_mode
+    config["paper_mode"] = profile.paper_mode
 
     config["paths"] = {
         "db": get_profile_db_path(profile, "decisions.db").parent,
@@ -94,9 +94,9 @@ def load_profile_config(
     }
 
     logger.debug(
-        "Loaded config for profile '%s': demo_mode=%s, paths=%s",
+        "Loaded config for profile '%s': paper_mode=%s, paths=%s",
         profile.name,
-        config["demo_mode"],
+        config["paper_mode"],
         {k: str(v) for k, v in config["paths"].items()},
     )
 

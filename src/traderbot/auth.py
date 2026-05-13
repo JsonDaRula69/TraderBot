@@ -112,8 +112,6 @@ class AuthManager:
             return ["KALSHI_API_KEY"]
         if service == "kalshi" and key == "private_key_pem":
             return ["KALSHI_PRIVATE_KEY_PEM", "KALSHI_PRIVATE_KEY_PATH"]
-        if service == "kalshi" and key == "demo_mode":
-            return ["KALSHI_DEMO_MODE"]
         if service == "newsapi" and key == "api_key":
             return ["NEWSAPI_API_KEY", "NEWSAPI_KEY"]
         service_prefix = service.upper()
