@@ -112,7 +112,10 @@ def scan(
 
         client = KalshiClient()
         service = MarketService(client)
-        result = asyncio.run(service.list_markets(limit=limit, category=category))
+        if category is not None:
+            result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+        else:
+            result = asyncio.run(service.list_markets(limit=limit))
         markets = result.markets
     except Exception:
         if json_output:
@@ -220,7 +223,10 @@ def signals(
 
         client = KalshiClient()
         service = MarketService(client)
-        result = asyncio.run(service.list_markets(limit=limit))
+        if category_enum is not None:
+            result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+        else:
+            result = asyncio.run(service.list_markets(limit=limit))
         markets = result.markets
     except Exception:
         if json_output:

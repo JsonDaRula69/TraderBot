@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
@@ -122,3 +123,118 @@ class MarketService:
             except Exception:
                 continue
         return categories
+
+    async def list_all_markets(
+        self,
+        *,
+        limit: int = 200,
+        max_pages: int = 5,
+        category: str | None = None,
+        status: str | None = None,
+        event_ticker: str | None = None,
+        series_ticker: str | None = None,
+        min_close_ts: int | None = None,
+        max_close_ts: int | None = None,
+    ) -> MarketListResponse:
+        """Fetch all markets by following cursor-based pagination.
+
+        Calls ``list_markets()`` for each page and merges results.
+        Stops when the cursor is exhausted, *max_pages* is reached,
+        or enough markets have been collected to satisfy *limit*.
+
+        Args:
+            limit: Target number of markets to collect (default 200).
+            max_pages: Safety ceiling — stop after this many pages (default 5).
+            category: Filter by Kalshi category slug.
+            status: Filter by market status (default ``"open"`` via list_markets).
+            event_ticker: Filter by event ticker.
+            series_ticker: Filter by series ticker.
+            min_close_ts: Earliest close timestamp filter.
+            max_close_ts: Latest close timestamp filter.
+
+        Returns:
+            ``MarketListResponse`` with all collected markets and ``cursor=None``.
+            If a mid-page call fails, returns whatever was collected so far.
+        """
+        logger = logging.getLogger(__name__)
+        all_markets: list[Market] = []
+        cursor: str | None = None
+
+        for page in range(max_pages):
+            page_limit = min(200, limit - len(all_markets)) if limit else 200
+            if page_limit <= 0:
+                break
+            try:
+                result = await self.list_markets(
+                    cursor=cursor,
+                    limit=page_limit,
+                    category=category,
+                    status=status,
+                    event_ticker=event_ticker,
+                    series_ticker=series_ticker,
+                    min_close_ts=min_close_ts,
+                    max_close_ts=max_close_ts,
+                )
+            except Exception:
+                logger.warning(
+                    "list_all_markets: page %d failed (cursor=%s), returning %d markets collected so far",
+                    page + 1,
+                    cursor,
+                    len(all_markets),
+                )
+                break
+
+            all_markets.extend(result.markets)
+            cursor = result.cursor
+
+            if not cursor:
+                break
+            if limit and len(all_markets) >= limit:
+                break
+
+        if limit and len(all_markets) > limit:
+            all_markets = all_markets[:limit]
+
+        return MarketListResponse(markets=all_markets, cursor=None)
+
+    async def list_markets_by_category(
+        self,
+        category: str,
+        limit: int = 100,
+    ) -> MarketListResponse:
+        """Fetch markets by category via the events endpoint.
+
+        The Kalshi V2 ``/markets?category=`` filter is broken (returns
+        unfiltered results).  This method works around it by:
+        1. Fetching events filtered by category via ``/events?category=``
+        2. Fetching markets for each event via ``/markets?event_ticker=``
+        3. Merging and enriching the results
+        """
+        logger = logging.getLogger(__name__)
+
+        # The /markets?category= filter is broken; fetch via events instead.
+        try:
+            events_resp = await self._client.get("/events", category=category, limit=limit, status="open")
+            events_resp.raise_for_status()
+            events_data = events_resp.json()
+        except Exception:
+            logger.warning("Failed to fetch events for category=%s", category)
+            return MarketListResponse(markets=[], cursor=None)
+
+        raw_events = events_data.get("events", [])
+        event_tickers = [e["ticker"] for e in raw_events if "ticker" in e]
+
+        if not event_tickers:
+            return MarketListResponse(markets=[], cursor=None)
+
+        all_markets: list[Market] = []
+        for evt_ticker in event_tickers:
+            try:
+                result = await self.list_markets(event_ticker=evt_ticker, limit=limit)
+                all_markets.extend(result.markets)
+            except Exception:
+                logger.warning("Failed to fetch markets for event=%s, skipping", evt_ticker)
+                continue
+
+        markets = all_markets[:limit]
+        return MarketListResponse(markets=markets, cursor=None)
