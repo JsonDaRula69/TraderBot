@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import random
 from datetime import UTC, datetime
-from pathlib import Path  # noqa: TC003 — needed at runtime by Pydantic BaseSettings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -47,27 +47,18 @@ class KalshiConfig(BaseSettings):
     private_key_pem: SecretStr | None = None
     private_key_path: Path | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
-    demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
-    demo_mode: bool = False
     rate_limit_rps: float = 20.0
     max_retries: int = 3
     retry_base_delay: float = 1.0
 
-    @property
-    def active_url(self) -> str:
-        return self.demo_url if self.demo_mode else self.base_url
-
     def resolve_private_key(self) -> str:
-        """Resolve private key PEM: direct → file → env → raise."""
         if self.private_key_pem is not None:
             return self.private_key_pem.get_secret_value()
         if self.private_key_path is not None:
             return self.private_key_path.read_text()
-        if not self.demo_mode:
-            raise ConfigurationError(
-                "No private key configured. Set KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH."
-            )
-        return ""
+        raise ConfigurationError(
+            "No private key configured. Set KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH."
+        )
 
 
 # Fields where Kalshi returns strings that must be converted to int cents.
@@ -136,19 +127,15 @@ class KalshiClient:
                 config = KalshiConfig(
                     api_key=SecretStr(api_key),
                     private_key_pem=SecretStr(private_key_pem) if private_key_pem else None,
-                    demo_mode=profile.demo_mode,
                 )
             else:
                 config = KalshiConfig()  # type: ignore[call-arg]
 
         self._config = config
         self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
-        self._client = httpx.AsyncClient(base_url=self._config.active_url)
+        self._client = httpx.AsyncClient(base_url=self._config.base_url)
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
-        """Build authentication headers for a request."""
-        if self._config.demo_mode:
-            return {"Content-Type": "application/json"}
         return auth_headers(
             self._config.api_key.get_secret_value(),
             self._config.resolve_private_key(),
