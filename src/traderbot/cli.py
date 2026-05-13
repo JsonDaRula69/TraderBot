@@ -231,7 +231,7 @@ def signals(
 
     if category_enum is not None:
         cat_val = category_enum.value
-        markets = [m for m in markets if m.market_category == category_enum or (m.category and m.category.lower() == cat_val)]
+        markets = [m for m in markets if m.market_category == category_enum or (m.category and m.category.lower() in (cat_val, f"climate and {cat_val}"))]
 
     if not markets:
         if json_output:
