@@ -257,13 +257,17 @@ class MarketService:
                 logger.warning("Failed to fetch markets for event=%s, skipping", evt_ticker)
                 return []
 
-        results = await asyncio.gather(
-            *[_fetch_event_markets(e["event_ticker"]) for e in matched_events]
-        )
-
+        batch_size = 3
         all_markets: list[Market] = []
-        for market_list in results:
-            all_markets.extend(market_list)
+        for i in range(0, len(matched_events), batch_size):
+            batch = matched_events[i:i + batch_size]
+            results = await asyncio.gather(
+                *[_fetch_event_markets(e["event_ticker"]) for e in batch]
+            )
+            for market_list in results:
+                all_markets.extend(market_list)
+            if i + batch_size < len(matched_events):
+                await asyncio.sleep(0.5)
 
         # Enrich category from event data we already fetched (no extra API calls)
         for m in all_markets:
