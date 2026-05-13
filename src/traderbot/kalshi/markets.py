@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
+    _map_category,
     _normalize_market,
     _normalize_orderbook_level,
     _normalize_trade,
@@ -57,6 +58,20 @@ class MarketService:
         response.raise_for_status()
         data = response.json()
         markets = [_normalize_market(m) for m in data.get("markets", [])]
+
+        # V2 API returns category on events, not markets. Enrich from events.
+        if markets:
+            event_tickers = {m.event_ticker for m in markets if m.event_ticker}
+            if event_tickers:
+                event_categories = await self._fetch_event_categories(event_tickers)
+                for m in markets:
+                    if m.event_ticker in event_categories:
+                        raw_cat = event_categories[m.event_ticker]
+                        if m.category is None:
+                            m.category = raw_cat
+                        if m.market_category is None:
+                            m.market_category = _map_category(raw_cat)
+
         return MarketListResponse(markets=markets, cursor=data.get("cursor"))
 
     async def get_market(self, ticker: str) -> Market:
@@ -95,3 +110,16 @@ class MarketService:
         data = response.json()
         trades = [_normalize_trade(t) for t in data.get("trades", [])]
         return TradeListResponse(trades=trades, cursor=data.get("cursor"))
+
+    async def _fetch_event_categories(self, event_tickers: set[str]) -> dict[str, str]:
+        categories: dict[str, str] = {}
+        for ticker in event_tickers:
+            try:
+                resp = await self._client.get(f"/events/{ticker}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ev = data.get("event", data)
+                    categories[ticker] = ev.get("category", "")
+            except Exception:
+                continue
+        return categories
