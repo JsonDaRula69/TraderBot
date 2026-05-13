@@ -37,7 +37,7 @@ class KalshiConfig(BaseSettings):
 
     model_config = SettingsConfigDict(
         strict=True,
-        extra="forbid",
+        extra="ignore",
         env_prefix="KALSHI_",
         env_file=str(Path.home() / ".traderbot" / ".env"),
         env_file_encoding="utf-8",

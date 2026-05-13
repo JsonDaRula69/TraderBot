@@ -203,8 +203,8 @@ def test_min_liquidity_below_threshold():
             max_daily_loss_pct=0.01,
             max_drawdown_pct=0.05,
             max_open_positions=10,
-            min_liquidity_threshold=500,  # < 1000
-            min_edge_pct=0.02,
+            min_liquidity_threshold=100,  # < 500
+            min_edge_pct=0.05,
         )
 
 

@@ -52,12 +52,29 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
 
     category_str = raw.get("category")
 
+    # V2 API uses `title` instead of `question`
+    question = raw.get("question") or raw.get("title", "")
+
+    # V2 API uses `_fp` suffix for fixed-point string fields
+    volume = int(float(raw.get("volume_fp", raw.get("volume", 0))))
+    open_interest = int(float(raw.get("open_interest_fp", raw.get("open_interest", 0))))
+
+    # V2 API uses `yes_ask_dollars`/`no_ask_dollars` instead of `outcome_prices`
+    outcome_prices = raw.get("outcome_prices")
+    if outcome_prices is None:
+        yes_ask = raw.get("yes_ask_dollars")
+        no_ask = raw.get("no_ask_dollars")
+        if yes_ask is not None and no_ask is not None:
+            outcome_prices = [yes_ask, no_ask]
+        else:
+            outcome_prices = ["0.50", "0.50"]
+
     return Market(
         ticker=raw["ticker"],
-        question=raw["question"],
-        outcome_prices=raw["outcome_prices"],
-        volume=int(raw["volume"]),
-        open_interest=int(raw["open_interest"]),
+        question=question,
+        outcome_prices=outcome_prices,
+        volume=volume,
+        open_interest=open_interest,
         close_time=close_time_val,
         status=raw.get("state", raw.get("status")),
         event_ticker=raw["event_ticker"],
