@@ -38,13 +38,11 @@ class MarketService:
         min_close_ts: int | None = None,
         max_close_ts: int | None = None,
     ) -> MarketListResponse:
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit, "status": status or "open"}
         if cursor is not None:
             params["cursor"] = cursor
         if category is not None:
             params["category"] = category
-        if status is not None:
-            params["status"] = status
         if event_ticker is not None:
             params["event_ticker"] = event_ticker
         if series_ticker is not None:
