@@ -1,5 +1,7 @@
 """Command-line interface for TraderBot."""
 
+from __future__ import annotations
+
 import asyncio
 import json as json_lib
 import logging
@@ -13,6 +15,9 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from traderbot.profiles.models import TradingProfile
+from traderbot.profiles.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -2373,22 +2378,274 @@ def profile_update(
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
 ) -> None:
-    """Update specific fields of an existing profile."""
-    from traderbot.kalshi.models import MarketCategory
+    """Update specific fields of an existing profile.
+
+    Called without a name, enters interactive mode: select a profile, then choose
+    to edit, delete, or assign an agent to it. Called with a name and flags, applies
+    the flags directly (non-interactive).
+    """
     from traderbot.profiles.registry import ProfileRegistry
 
     console = Console()
     registry = ProfileRegistry()
 
+    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier, max_position_pct, max_daily_loss_pct, max_drawdown_pct, max_open_positions, min_liquidity, min_edge_pct])
+
     if name is None:
         profiles = registry.list_profiles()
         if not profiles:
             console.print("[yellow]No profiles found.[/yellow] Create one with: traderbot profile create <name>")
-        else:
-            console.print("[bold]Available profiles:[/bold]")
-            for p_name in profiles:
-                console.print(f"  • {p_name}")
+            raise typer.Exit(0)
+
+        if not has_flags and sys.stdin.isatty():
+            name = _interactive_profile_select(profiles, console)
+            if name is None:
+                raise typer.Exit(0)
+            _interactive_profile_action(name, console, registry)
+            return
+
+        console.print("[bold]Available profiles:[/bold]")
+        for p_name in profiles:
+            console.print(f"  • {p_name}")
+        console.print("\n[dim]Use: traderbot profile update <name> [options] to update a profile[/dim]")
         raise typer.Exit(0)
+
+    _apply_profile_update(name, mode, description, categories, risk_multiplier,
+                          max_position_pct, max_daily_loss_pct, max_drawdown_pct,
+                          max_open_positions, min_liquidity, min_edge_pct,
+                          console, registry)
+
+
+def _interactive_profile_select(profiles: list[str], console: Console) -> str | None:
+    from traderbot.profiles.registry import ProfileRegistry
+
+    registry = ProfileRegistry()
+    console.print("\n[bold]Select a profile:[/bold]")
+    for i, p_name in enumerate(profiles, 1):
+        profile = registry.get_profile(p_name)
+        desc = f" — {profile.description}" if profile and profile.description else ""
+        mode = f" [{profile.mode}]" if profile else ""
+        console.print(f"  {i}. {p_name}{mode}{desc}")
+
+    try:
+        choice = typer.prompt("Enter number", type=int)
+    except (ValueError, KeyboardInterrupt):
+        return None
+
+    if choice < 1 or choice > len(profiles):
+        console.print("[red]Invalid selection[/red]")
+        return None
+
+    return profiles[choice - 1]
+
+
+def _interactive_profile_action(name: str, console: Console, registry: "ProfileRegistry") -> None:
+    profile = registry.get_profile(name)
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        raise typer.Exit(1)
+
+    console.print(f"\n[bold]Profile: {name}[/bold] ({profile.mode})")
+    console.print(f"  Description:    {profile.description}")
+    console.print(f"  Categories:     {', '.join(str(c.value) for c in profile.enabled_categories) if profile.enabled_categories else 'all'}")
+    console.print(f"  Risk multiplier:{profile.risk_multiplier:.1%}")
+    console.print(f"  Max position:   {profile.max_position_per_market_pct:.1%}")
+    console.print(f"  Max daily loss:  {profile.max_daily_loss_pct:.1%}")
+    console.print(f"  Max drawdown:    {profile.max_drawdown_pct:.1%}")
+    console.print(f"  Max open pos:   {profile.max_open_positions}")
+    console.print(f"  Min liquidity:   {profile.min_liquidity_threshold}")
+    console.print(f"  Min edge:        {profile.min_edge_pct:.1%}")
+
+    console.print("\n[bold]Actions:[/bold]")
+    console.print("  1. Edit profile")
+    console.print("  2. Delete profile")
+    console.print("  3. Assign agent")
+    console.print("  4. Exit")
+
+    try:
+        action = typer.prompt("Choose action", type=int)
+    except (ValueError, KeyboardInterrupt):
+        return
+
+    if action == 1:
+        _interactive_edit_profile(name, profile, console, registry)
+    elif action == 2:
+        _interactive_delete_profile(name, console, registry)
+    elif action == 3:
+        _interactive_assign_agent(name, console, registry)
+
+
+def _interactive_edit_profile(name: str, profile: "TradingProfile", console: Console, registry: "ProfileRegistry") -> None:
+    from traderbot.kalshi.models import MarketCategory
+
+    update_kwargs: dict = {}
+
+    console.print(f"\n[bold]Editing profile '{name}'[/bold] (press Enter to keep current value)")
+
+    new_mode = typer.prompt(f"  Mode [{profile.mode}]", default="", show_default=False)
+    if new_mode:
+        if new_mode not in ("paper", "live"):
+            console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
+            return
+        update_kwargs["mode"] = new_mode
+
+    new_desc = typer.prompt(f"  Description", default=profile.description)
+    if new_desc != profile.description:
+        update_kwargs["description"] = new_desc
+
+    current_cats = ", ".join(str(c.value) for c in profile.enabled_categories) if profile.enabled_categories else ""
+    new_cats = typer.prompt(f"  Categories [{current_cats or 'all'}]", default="", show_default=False)
+    if new_cats:
+        try:
+            update_kwargs["enabled_categories"] = [
+                MarketCategory(cat.strip().lower()) for cat in new_cats.split(",")
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Invalid category: {e}")
+            return
+
+    new_rm = typer.prompt(f"  Risk multiplier [{profile.risk_multiplier}]", default="", show_default=False)
+    if new_rm:
+        try:
+            update_kwargs["risk_multiplier"] = float(new_rm)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_mp = typer.prompt(f"  Max position per market % [{profile.max_position_per_market_pct}]", default="", show_default=False)
+    if new_mp:
+        try:
+            update_kwargs["max_position_per_market_pct"] = float(new_mp)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_ml = typer.prompt(f"  Max daily loss % [{profile.max_daily_loss_pct}]", default="", show_default=False)
+    if new_ml:
+        try:
+            update_kwargs["max_daily_loss_pct"] = float(new_ml)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_md = typer.prompt(f"  Max drawdown % [{profile.max_drawdown_pct}]", default="", show_default=False)
+    if new_md:
+        try:
+            update_kwargs["max_drawdown_pct"] = float(new_md)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_op = typer.prompt(f"  Max open positions [{profile.max_open_positions}]", default="", show_default=False)
+    if new_op:
+        try:
+            update_kwargs["max_open_positions"] = int(new_op)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_lq = typer.prompt(f"  Min liquidity threshold [{profile.min_liquidity_threshold}]", default="", show_default=False)
+    if new_lq:
+        try:
+            update_kwargs["min_liquidity_threshold"] = int(new_lq)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    new_edge = typer.prompt(f"  Min edge % [{profile.min_edge_pct}]", default="", show_default=False)
+    if new_edge:
+        try:
+            update_kwargs["min_edge_pct"] = float(new_edge)
+        except ValueError:
+            console.print("[red]Invalid number[/red]")
+            return
+
+    if not update_kwargs:
+        console.print("[yellow]No changes made[/yellow]")
+        return
+
+    try:
+        registry.update_profile(name, **update_kwargs)
+        console.print(f"[green]✓[/green] Updated profile '{name}'")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+
+
+def _interactive_delete_profile(name: str, console: Console, registry: "ProfileRegistry") -> None:
+    confirm = typer.prompt(f"Delete profile '{name}'? Type 'yes' to confirm")
+    if confirm.lower() != "yes":
+        console.print("[yellow]Cancelled[/yellow]")
+        return
+
+    try:
+        registry.delete_profile(name)
+        console.print(f"[green]✓[/green] Deleted profile '{name}'")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+
+
+def _interactive_assign_agent(name: str, console: Console, registry: "ProfileRegistry") -> None:
+    from traderbot.profiles.discovery import discover_agents
+    from traderbot.profiles.injection import inject_token, propagate_workspace_files
+    from traderbot.profiles.tokens import assign_token, generate_token
+
+    agents = discover_agents()
+    if not agents:
+        console.print("[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]")
+        return
+
+    console.print("\n[bold]Available agents:[/bold]")
+    for i, agent in enumerate(agents, 1):
+        console.print(f"  {i}. {agent['name']} ({agent['agent_id']}) — {agent['path']}")
+
+    try:
+        choice = typer.prompt("Select agent number", type=int)
+    except (ValueError, KeyboardInterrupt):
+        return
+
+    if choice < 1 or choice > len(agents):
+        console.print("[red]Invalid selection[/red]")
+        return
+
+    agent = agents[choice - 1]
+    agent_id = agent["agent_id"]
+
+    profile = registry.get_profile(name)
+    if profile is None:
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        return
+
+    token = generate_token()
+    assign_token(name, agent_id, token)
+    console.print(f"[green]✓[/green] Assigned token to profile '{name}' for agent '{agent_id}'")
+    console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
+
+    agent_path = _resolve_agent_path(agent_id)
+    if agent_path and agent_path.exists():
+        propagate_workspace_files(profile, agent_path)
+        inject_token(str(agent_path), token)
+        console.print(f"[green]✓[/green] Workspace files and token injected into {agent_id}/")
+    else:
+        console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
+        console.print("Token assigned but not injected into workspace")
+
+
+def _apply_profile_update(
+    name: str,
+    mode: str | None,
+    description: str | None,
+    categories: str | None,
+    risk_multiplier: float | None,
+    max_position_pct: float | None,
+    max_daily_loss_pct: float | None,
+    max_drawdown_pct: float | None,
+    max_open_positions: int | None,
+    min_liquidity: int | None,
+    min_edge_pct: float | None,
+    console: Console,
+    registry: "ProfileRegistry",
+) -> None:
+    from traderbot.kalshi.models import MarketCategory
 
     if not registry.profile_exists(name):
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
@@ -2400,6 +2657,19 @@ def profile_update(
         if mode not in ("paper", "live"):
             console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
             raise typer.Exit(1)
+        update_kwargs["mode"] = mode
+
+    if description is not None:
+        update_kwargs["description"] = description
+
+    if categories is not None:
+        try:
+            update_kwargs["enabled_categories"] = [
+                MarketCategory(cat.strip().lower()) for cat in categories.split(",")
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Invalid category: {e}")
+            raise typer.Exit(1) from None
         update_kwargs["mode"] = mode
 
     if description is not None:
