@@ -2,9 +2,30 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 
 import pytest
+
+from traderbot.kalshi.provider import (
+    MarketSnapshot,
+    MockDataProvider,
+    OrderBookLevelSnapshot,
+    OrderBookSnapshot,
+    SettlementResult,
+)
+from traderbot.simulation.paper_trader import PaperSlippageModel, PaperTrader
+
+# ---------------------------------------------------------------------------
+# Re-apply existing fixtures (kept from original conftest) — they are still
+# used by older tests.  We add new fixtures below without disturbing them.
+# ---------------------------------------------------------------------------
+
+# The existing conftest defined fixtures: sample_market_data, sample_orderbook_data,
+# sample_trade_data, sample_portfolio_state.  They are imported from the original
+# file which we read.  Since we are *overwriting* conftest.py, we must include them.
+
+TIMESTAMP = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -56,10 +77,88 @@ def sample_trade_data() -> dict:
 def sample_portfolio_state() -> dict:
     """Portfolio state for risk checking."""
     return {
-        "portfolio_value_cents": 100000_00,  # $100,000
-        "peak_value_cents": 110000_00,  # $110,000
-        "current_positions_value_cents": 4000_00,  # $4,000
-        "today_realized_loss_cents": 500_00,  # $500
-        "today_unrealized_loss_cents": 200_00,  # $200
+        "portfolio_value_cents": 100000_00,
+        "peak_value_cents": 110000_00,
+        "current_positions_value_cents": 4000_00,
+        "today_realized_loss_cents": 500_00,
+        "today_unrealized_loss_cents": 200_00,
         "open_positions_count": 8,
     }
+
+
+# ---------------------------------------------------------------------------
+# New fixtures for unit-test modules
+# ---------------------------------------------------------------------------
+
+
+def _make_ob_levels(*pairs: tuple[int, int]) -> tuple[OrderBookLevelSnapshot, ...]:
+    """Helper: list of (price_cents, size) → tuple[OrderBookLevelSnapshot, ...]."""
+    return tuple(OrderBookLevelSnapshot(price_cents=p, size=s) for p, s in pairs)
+
+
+@pytest.fixture
+def mock_provider() -> MockDataProvider:
+    """MockDataProvider with pre-configured markets, orderbooks, and settlements."""
+    markets = {
+        "TEST-MKT1": MarketSnapshot(
+            ticker="TEST-MKT1",
+            status="open",
+            open_interest_cents=10_000_00,
+            close_time=datetime(2026, 12, 31, 23, 59, 0, tzinfo=UTC),
+        ),
+        "TEST-MKT2": MarketSnapshot(
+            ticker="TEST-MKT2",
+            status="open",
+            open_interest_cents=5_000_00,
+            close_time=datetime(2026, 12, 31, 23, 59, 0, tzinfo=UTC),
+        ),
+        "TEST-SETTLED": MarketSnapshot(
+            ticker="TEST-SETTLED",
+            status="settled",
+            open_interest_cents=0,
+            close_time=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
+        ),
+    }
+
+    orderbooks = {
+        "TEST-MKT1": OrderBookSnapshot(
+            yes_bids=_make_ob_levels((50, 200), (49, 300)),
+            no_bids=_make_ob_levels((50, 200), (51, 150)),
+            timestamp=TIMESTAMP,
+        ),
+        "TEST-MKT2": OrderBookSnapshot(
+            yes_bids=_make_ob_levels((40, 100)),
+            no_bids=_make_ob_levels((60, 100)),
+            timestamp=TIMESTAMP,
+        ),
+    }
+
+    settlements = {
+        "TEST-SETTLED": SettlementResult(
+            ticker="TEST-SETTLED",
+            outcome=True,
+            settled_at=datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC),
+        ),
+    }
+
+    return MockDataProvider(markets=markets, orderbooks=orderbooks, settlements=settlements)
+
+
+@pytest.fixture
+def in_memory_db() -> sqlite3.Connection:
+    """In-memory SQLite connection for PaperTrader tests."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def paper_trader(mock_provider: MockDataProvider, in_memory_db: sqlite3.Connection) -> PaperTrader:
+    """PaperTrader wired to mock_provider and in-memory DB."""
+    return PaperTrader(
+        provider=mock_provider,
+        db_conn=in_memory_db,
+        initial_cash_cents=1_000_00,
+        slippage_model=PaperSlippageModel(base_slippage_cents=1),
+    )
