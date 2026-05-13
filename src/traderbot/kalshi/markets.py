@@ -86,12 +86,13 @@ class MarketService:
         response.raise_for_status()
         data = response.json()
 
-        yes_bids = [
-            _normalize_orderbook_level(level) for level in data.get("yes_bids", data.get("yes", []))
-        ]
-        no_bids = [
-            _normalize_orderbook_level(level) for level in data.get("no_bids", data.get("no", []))
-        ]
+        ob_data = data.get("orderbook_fp", data)
+
+        yes_raw = ob_data.get("yes_bids", ob_data.get("yes_dollars", ob_data.get("yes", [])))
+        no_raw = ob_data.get("no_bids", ob_data.get("no_dollars", ob_data.get("no", [])))
+
+        yes_bids = [_normalize_orderbook_level(level) for level in yes_raw]
+        no_bids = [_normalize_orderbook_level(level) for level in no_raw]
 
         return OrderBook(yes_bids=yes_bids, no_bids=no_bids)
 
