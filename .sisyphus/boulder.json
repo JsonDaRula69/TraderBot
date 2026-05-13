@@ -1,76 +1,12 @@
 {
-  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/news-data-sources.md",
-  "started_at": "2026-05-12T16:31:29.994Z",
+  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/prod-data-local-sim.md",
+  "started_at": "2026-05-13T14:39:21.907Z",
   "session_ids": [
-    "ses_1e2f88579ffedDQL1cRXMOtpXe"
+    "ses_1de38d31affevc6xSOyw1NCfGe"
   ],
   "session_origins": {
-    "ses_1e2f88579ffedDQL1cRXMOtpXe": "direct"
+    "ses_1de38d31affevc6xSOyw1NCfGe": "direct"
   },
-  "plan_name": "news-data-sources",
-  "agent": "atlas",
-  "task_sessions": {
-    "todo:1": {
-      "task_key": "todo:1",
-      "task_label": "1",
-      "task_title": "DataPoint Model + NewsSource Enum Expansion",
-      "session_id": "ses_1e2e8ee81ffeK6US8v1QGmkl6H",
-      "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-05-12T16:49:45.594Z"
-    },
-    "todo:2": {
-      "task_key": "todo:2",
-      "task_label": "2",
-      "task_title": "DataSourcesConfig + SOURCE_CATEGORY_COVERAGE",
-      "session_id": "ses_1e2e2fef8ffeTciLIPbbYpcHW6",
-      "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-05-12T16:56:33.658Z"
-    },
-    "todo:4": {
-      "task_key": "todo:4",
-      "task_label": "4",
-      "task_title": "Open-Meteo Weather Source",
-      "session_id": "ses_1e2dc02a7ffeajq5H9ZlJZezup",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-12T17:11:45.734Z"
-    },
-    "todo:9": {
-      "task_key": "todo:9",
-      "task_label": "9",
-      "task_title": "OpenWeatherMap Weather Source",
-      "session_id": "ses_1e2c37636ffedG2ds5T8kvjITh",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-05-12T17:33:37.456Z"
-    },
-    "todo:12": {
-      "task_key": "todo:12",
-      "task_label": "12",
-      "task_title": "CLI Integration + fetch_all Refactor",
-      "session_id": "ses_1e29d0251ffef6kB03Wt1ODDs4",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-05-12T18:16:13.459Z"
-    },
-    "todo:13": {
-      "task_key": "todo:13",
-      "task_label": "13",
-      "task_title": "Workspace Docs Update — TOOLS.md + AGENTS.md",
-      "session_id": "ses_1e27d5ad3ffeAFAFu0SXXnd4mD",
-      "agent": "Sisyphus-Junior",
-      "category": "writing",
-      "updated_at": "2026-05-12T18:53:10.833Z"
-    },
-    "final-wave:f1": {
-      "task_key": "final-wave:f1",
-      "task_label": "F1",
-      "task_title": "**Plan Compliance Audit** — `oracle`",
-      "session_id": "ses_1e25ab719fferz60aDQFdJiH47",
-      "agent": "oracle",
-      "updated_at": "2026-05-12T19:28:53.109Z"
-    }
-  }
+  "plan_name": "prod-data-local-sim",
+  "agent": "atlas"
 }

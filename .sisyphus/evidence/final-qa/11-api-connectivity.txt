@@ -1,0 +1,7 @@
+{
+  "api_connectivity": "unavailable",
+  "alerts": [
+    "Kalshi API unreachable"
+  ],
+  "open_positions": 3
+}
