@@ -768,11 +768,11 @@ interactive_config_flow() {
 
         local key
         while true; do
-            IFS= read -rsn1 key
+            IFS= read -rn1 key
             if [[ "$key" == $'\x1b' ]]; then
-                IFS= read -rsn1 -t 0.1 key
+                IFS= read -rn1 -t 0.1 key
                 if [[ "$key" == '[' ]]; then
-                    IFS= read -rsn1 key
+                    IFS= read -rn1 key
                     if [[ "$key" == 'A' ]]; then
                         ((cur > 0)) && ((cur--)) || true
                         _clear_cat_menu
@@ -791,7 +791,7 @@ interactive_config_flow() {
                 fi
                 _clear_cat_menu
                 _render_cat_menu
-            elif [[ "$key" == $'\n' ]] || [[ "$key" == $'\r' ]] || [[ "$key" == 'q' ]]; then
+            elif [[ -z "$key" || "$key" == $'\n' || "$key" == $'\r' || "$key" == 'q' ]]; then
                 break
             fi
         done
