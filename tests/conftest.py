@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+
+pytest_plugins = ["tests.integration_conftest"]
 from datetime import UTC, datetime
 
 import pytest
