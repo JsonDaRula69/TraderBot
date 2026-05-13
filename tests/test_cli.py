@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timezone
 from typing import ClassVar
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -423,15 +423,20 @@ class TestAnalyze:
             no_bids=[OrderBookLevel(price=40, size=80)],
         )
 
+        async_market = AsyncMock(return_value=market)
+        async_orderbook = AsyncMock(return_value=orderbook)
+        mock_client = MagicMock()
+        mock_client.close = AsyncMock()
+
         with (
-            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_market",
-                return_value=market,
+                async_market,
             ),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_orderbook",
-                return_value=orderbook,
+                async_orderbook,
             ),
         ):
             result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000"])
@@ -460,15 +465,20 @@ class TestAnalyze:
             no_bids=[OrderBookLevel(price=40, size=80)],
         )
 
+        async_market = AsyncMock(return_value=market)
+        async_orderbook = AsyncMock(return_value=orderbook)
+        mock_client = MagicMock()
+        mock_client.close = AsyncMock()
+
         with (
-            patch("traderbot.kalshi.client.KalshiClient"),
+            patch("traderbot.kalshi.client.KalshiClient", return_value=mock_client),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_market",
-                return_value=market,
+                async_market,
             ),
             patch(
                 "traderbot.kalshi.markets.MarketService.get_orderbook",
-                return_value=orderbook,
+                async_orderbook,
             ),
         ):
             result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000", "--json"])

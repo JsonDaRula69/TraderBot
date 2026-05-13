@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -209,12 +210,11 @@ class MarketService:
         works around it by:
         1. Fetching all open events via ``/events?status=open``
         2. Filtering client-side by matching ``category`` case-insensitively
-        3. Fetching markets for each matched event via ``/markets?event_ticker=``
-        4. Merging and enriching the results
+        3. Fetching markets for matched events in parallel (asyncio.gather)
+        4. Enriching category from the known event data directly
         """
         logger = logging.getLogger(__name__)
 
-        # The category param is broken on both /events and /markets — filter client-side.
         try:
             events_resp = await self._client.get("/events", limit=max(limit, 100), status="open")
             events_resp.raise_for_status()
@@ -225,22 +225,43 @@ class MarketService:
 
         raw_events = events_data.get("events", [])
         target_cat = category.lower().replace("_", " ")
-        event_tickers = [
-            e["event_ticker"] for e in raw_events
+        matched_events = [
+            e for e in raw_events
             if "event_ticker" in e and (e.get("category", "") == category or target_cat in e.get("category", "").lower())
         ]
 
-        if not event_tickers:
+        if not matched_events:
             return MarketListResponse(markets=[], cursor=None)
 
-        all_markets: list[Market] = []
-        for evt_ticker in event_tickers:
+        # Build category lookup from event data we already have
+        event_category_map: dict[str, str] = {
+            e["event_ticker"]: e.get("category", "") for e in matched_events if e.get("category")
+        }
+
+        async def _fetch_event_markets(evt_ticker: str) -> list[Market]:
             try:
                 result = await self.list_markets(event_ticker=evt_ticker, limit=limit)
-                all_markets.extend(result.markets)
+                return result.markets
             except Exception:
                 logger.warning("Failed to fetch markets for event=%s, skipping", evt_ticker)
-                continue
+                return []
+
+        results = await asyncio.gather(
+            *[_fetch_event_markets(e["event_ticker"]) for e in matched_events]
+        )
+
+        all_markets: list[Market] = []
+        for market_list in results:
+            all_markets.extend(market_list)
+
+        # Enrich category from event data we already fetched (no extra API calls)
+        for m in all_markets:
+            if m.event_ticker in event_category_map:
+                raw_cat = event_category_map[m.event_ticker]
+                if m.category is None:
+                    m.category = raw_cat
+                if m.market_category is None:
+                    m.market_category = _map_category(raw_cat)
 
         markets = all_markets[:limit]
         return MarketListResponse(markets=markets, cursor=None)

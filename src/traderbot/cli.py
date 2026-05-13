@@ -154,8 +154,14 @@ def analyze(
 
         client = KalshiClient()
         service = MarketService(client)
-        market = asyncio.run(service.get_market(ticker))
-        orderbook = asyncio.run(service.get_orderbook(ticker))
+
+        async def _fetch(ticker: str):
+            market = await service.get_market(ticker)
+            orderbook = await service.get_orderbook(ticker)
+            await client.close()
+            return market, orderbook
+
+        market, orderbook = asyncio.run(_fetch(ticker))
     except Exception as exc:
         logger.warning("analyze failed for %s: %s", ticker, exc)
         if json_output:
@@ -471,8 +477,17 @@ def positions(
 ) -> None:
     """List current positions from SQLite."""
     from traderbot.db.positions import list_all
+    from traderbot.profiles.runtime import get_current_profile
 
-    all_positions = _with_db(_resolve_db_path(db_path), list_all)
+    db = _resolve_db_path(db_path)
+    profile = get_current_profile()
+    if profile is None and db_path is None:
+        logger.info(
+            "No active profile; using default DB at %s. Set TRADERBOT_PROFILE_TOKEN or pass --db to query a profile-specific DB.",
+            db,
+        )
+
+    all_positions = _with_db(db, list_all)
 
     if json_output:
         json_lib.dump([p.model_dump(mode="json") for p in all_positions], sys.stdout, default=str)
