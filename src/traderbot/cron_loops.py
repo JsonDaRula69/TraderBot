@@ -34,6 +34,7 @@ class DecisionLoopPayload(BaseModel):
     kind: Literal["agentTurn"] = "agentTurn"
     message: str = (
         "AUTONOMOUS: Run traderbot decision loop. "
+        "source .env 2>/dev/null || true; "
         "Read SESSION-STATE.md for tracked markets. "
         "Execute analysis, risk-check, and trades within guard rails. "
         "Log all decisions."
@@ -51,6 +52,7 @@ class HeartbeatLoopPayload(BaseModel):
     kind: Literal["agentTurn"] = "agentTurn"
     message: str = (
         "HEARTBEAT: Run traderbot self-improvement cycle. "
+        "source .env 2>/dev/null || true; "
         "Check circuit breaker, review recent decisions, "
         "update Bayesian parameters, promote learnings. "
         "Write HEARTBEAT_DATA.md."
@@ -78,6 +80,7 @@ class NewsLoopPayload(BaseModel):
         if not self.message:
             self.message = (
                 f"ALERT: High-impact event detected ({self.topic}). "
+                f"source .env 2>/dev/null || true; "
                 f"Run `traderbot sentiment {self.topic}` for analysis."
             )
 
