@@ -1904,64 +1904,6 @@ def learnings(
     _with_db(_resolve_db_path(db_path), _run)
 
 
-@auth_app.command("login")
-def auth_login() -> None:
-    """Interactive credential setup for all services."""
-    from traderbot.paths import get_data_dir
-
-    console = Console()
-
-    services = ["kalshi", "voyage", "newsapi", "twitter", "reddit", "openweathermap", "fred"]
-    service_keys = {
-        "kalshi": ["api_key", "private_key_pem"],
-        "voyage": ["api_key"],
-        "newsapi": ["api_key"],
-        "twitter": ["api_key"],
-        "reddit": ["client_id", "client_secret"],
-        "openweathermap": ["api_key"],
-        "fred": ["api_key"],
-    }
-
-    env_lines: list[str] = []
-    for service in services:
-        for key in service_keys[service]:
-            value = typer.prompt(f"  {service}.{key}", default="", show_default=False)
-            if value:
-                env_key = f"{service.upper()}_{key.upper()}"
-                env_lines.append(f"{env_key}={value}")
-                console.print(f"[green]Saved:[/green] {env_key}")
-
-    if env_lines:
-        env_path = get_data_dir() / ".env"
-        env_path.parent.mkdir(parents=True, exist_ok=True)
-        existing = env_path.read_text() if env_path.exists() else ""
-        new_content = existing.rstrip() + "\n" + "\n".join(env_lines) + "\n"
-        env_path.write_text(new_content)
-        os.chmod(env_path, 0o600)
-        console.print(f"[dim]Credentials written to {env_path}[/dim]")
-
-
-@auth_app.command("set-key")
-def auth_set_key(
-    service: Annotated[str, typer.Argument(help="Service name (e.g. kalshi, voyage)")],
-    key: Annotated[str, typer.Argument(help="Credential key (e.g. api_key)")],
-) -> None:
-    """Store a credential in the .env file."""
-    from traderbot.paths import get_data_dir
-
-    console = Console()
-
-    value = typer.prompt(f"Enter value for {service}.{key}", hide_input=True)
-    env_key = f"{service.upper()}_{key.upper()}"
-    env_path = get_data_dir() / ".env"
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = env_path.read_text() if env_path.exists() else ""
-    new_content = existing.rstrip() + f"\n{env_key}={value}\n"
-    env_path.write_text(new_content)
-    os.chmod(env_path, 0o600)
-    console.print(f"[green]Saved[/green] {env_key} to {env_path}")
-
-
 @auth_app.command("list-keys")
 def auth_list_keys() -> None:
     """List configured services and keys (never values)."""
@@ -2017,28 +1959,30 @@ def auth_rotate(
 
 
 @auth_app.command("check")
-def auth_check() -> None:
-    """Verify all required credentials are configured."""
-    from traderbot.auth import AuthManager
-
+def auth_check(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Verify KALSHI_API_KEY is configured in environment."""
     console = Console()
-    mgr = AuthManager()
-    status = mgr.check_credentials()
+    key = os.getenv("KALSHI_API_KEY")
 
-    table = Table(title="Credential Status")
-    table.add_column("Service", style="cyan")
-    table.add_column("Key")
-    table.add_column("Status")
-    for service_name, keys in sorted(status.items()):
-        for key, ok in keys.items():
-            mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
-            table.add_row(service_name, key, mark)
-    console.print(table)
+    if key and key.strip():
+        ok = True
+        if json_output:
+            print(json_lib.dumps({"status": "ok", "key_found": True}))
+        else:
+            console.print("[green]OK: KALSHI_API_KEY configured[/green]")
+    else:
+        ok = False
+        if json_output:
+            print(json_lib.dumps({"status": "missing", "key_found": False}))
+        else:
+            console.print("[red]Missing: KALSHI_API_KEY not found in .env or environment[/red]")
 
-    missing = [f"{s}.{k}" for s, keys in status.items() for k, ok in keys.items() if not ok]
-    if missing:
-        console.print(f"[yellow]Missing credentials:[/yellow] {', '.join(missing)}")
-        console.print("Run [bold]traderbot auth login[/bold] to configure.")
+    if not ok and not json_output:
+        console.print(
+            "[dim]Add KALSHI_API_KEY to your .env file in the data directory.[/dim]"
+        )
 
 
 @update_app.command("check")
@@ -2830,39 +2774,6 @@ def profile_discover_agents(
             )
 
         console.print(table)
-
-
-@profile_app.command("set-auth")
-def profile_set_auth(
-    profile_name: str,
-    service: str,
-    key: str,
-) -> None:
-    """Store a credential for a profile in .env (prompts for secret)."""
-    from traderbot.paths import get_data_dir
-    from traderbot.profiles.registry import ProfileRegistry
-
-    console = Console()
-    registry = ProfileRegistry()
-
-    profile = registry.get_profile(profile_name)
-    if profile is None:
-        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
-        raise typer.Exit(1)
-
-    secret = typer.prompt("Secret", hide_input=True)
-    prefix = profile_name.upper().replace("-", "_").replace(" ", "_")
-    env_key = f"{service.upper()}_{key.upper()}_PROFILE_{prefix}"
-
-    env_path = get_data_dir() / ".env"
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = env_path.read_text() if env_path.exists() else ""
-    new_content = existing.rstrip() + f"\n{env_key}={secret}\n"
-    env_path.write_text(new_content)
-    os.chmod(env_path, 0o600)
-    console.print(
-        f"[green]✓[/green] Stored credential for '{service}' on profile '{profile_name}' in {env_path}"
-    )
 
 
 @profile_app.command("auth")
