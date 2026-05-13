@@ -201,7 +201,7 @@ class MarketService:
     async def list_markets_by_category(
         self,
         category: str,
-        limit: int = 100,
+        limit: int = 500,
     ) -> MarketListResponse:
         """Fetch markets by category via the events endpoint.
 
@@ -214,12 +214,13 @@ class MarketService:
         4. Enriching category from the known event data directly
         """
         logger = logging.getLogger(__name__)
+        logger.info("Fetching markets for category %s", category)
 
         all_events: list[dict] = []
         cursor: str | None = None
         for _ in range(10):
             try:
-                params: dict[str, Any] = {"limit": 100, "status": "open"}
+                params: dict[str, Any] = {"limit": 500, "status": "open"}
                 if cursor:
                     params["cursor"] = cursor
                 events_resp = await self._client.get("/events", **params)
@@ -240,6 +241,10 @@ class MarketService:
             e for e in all_events
             if "event_ticker" in e and (e.get("category", "") == category or target_cat in e.get("category", "").lower())
         ]
+        logger.info(
+            "Found %d events, %d matched category filter",
+            len(all_events), len(matched_events),
+        )
 
         if not matched_events:
             return MarketListResponse(markets=[], cursor=None)
@@ -257,17 +262,18 @@ class MarketService:
                 logger.warning("Failed to fetch markets for event=%s, skipping", evt_ticker)
                 return []
 
-        batch_size = 3
+        semaphore = asyncio.Semaphore(10)
+
+        async def _fetch_with_limit(evt_ticker: str) -> list[Market]:
+            async with semaphore:
+                return await _fetch_event_markets(evt_ticker)
+
         all_markets: list[Market] = []
-        for i in range(0, len(matched_events), batch_size):
-            batch = matched_events[i:i + batch_size]
-            results = await asyncio.gather(
-                *[_fetch_event_markets(e["event_ticker"]) for e in batch]
-            )
-            for market_list in results:
-                all_markets.extend(market_list)
-            if i + batch_size < len(matched_events):
-                await asyncio.sleep(0.5)
+        results = await asyncio.gather(
+            *[_fetch_with_limit(e["event_ticker"]) for e in matched_events]
+        )
+        for market_list in results:
+            all_markets.extend(market_list)
 
         # Enrich category from event data we already fetched (no extra API calls)
         for m in all_markets:
@@ -277,33 +283,6 @@ class MarketService:
                     m.category = raw_cat
                 if m.market_category is None:
                     m.market_category = _map_category(raw_cat)
-
-        # Fallback: the /events endpoint misses many daily weather markets
-        # (KXHIGH*, KXLOW*, KXTEMP*) whose events don't appear there.
-        # Query /markets directly and merge any category matches missed above.
-        weather_prefixes = ("KXHIGH", "KXLOW", "KXTEMP")
-        if target_cat in ("climate and weather", "weather") and len(all_markets) < limit:
-            try:
-                direct = await self.list_all_markets(limit=min(limit, 500), status="open")
-                seen_tickers = {m.ticker for m in all_markets}
-                raw_cat_full = "Climate and Weather"
-                for m in direct.markets:
-                    if m.ticker in seen_tickers:
-                        continue
-                    is_weather = (
-                        (m.category and target_cat in m.category.lower())
-                        or (m.market_category and target_cat in m.market_category.value.lower())
-                        or (m.event_ticker and m.event_ticker.startswith(weather_prefixes))
-                    )
-                    if is_weather:
-                        if m.category is None:
-                            m.category = raw_cat_full
-                        if m.market_category is None:
-                            m.market_category = _map_category(raw_cat_full)
-                        all_markets.append(m)
-                        seen_tickers.add(m.ticker)
-            except Exception:
-                logger.warning("Direct market scan fallback failed for category=%s", category)
 
         markets = all_markets[:limit]
         return MarketListResponse(markets=markets, cursor=None)
