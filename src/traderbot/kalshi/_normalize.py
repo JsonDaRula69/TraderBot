@@ -75,9 +75,12 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
             outcome_prices = ["0.50", "0.50"]
 
     # V2 API uses "active"/"initialized" for open markets; map to "open" for Market model
+    # V2 API uses "finalized" for settled markets; map to "settled"
     raw_status = raw.get("state", raw.get("status", "closed"))
     if raw_status in ("active", "initialized"):
         status_val = "open"
+    elif raw_status == "finalized":
+        status_val = "settled"
     else:
         status_val = raw_status
 

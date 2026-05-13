@@ -39,6 +39,9 @@ class DemoAdapter:
     def client(self) -> KalshiClient:
         return self._client
 
+    def get_client(self) -> KalshiClient:
+        return self._client
+
     def get_market_service(self) -> MarketService:
         return MarketService(self._client)
 

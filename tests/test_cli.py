@@ -484,16 +484,17 @@ class TestAnalyze:
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")):
             result = runner.invoke(app, ["analyze", "TEST-TICKER"])
             assert result.exit_code == 0
-            assert "requires API connection" in result.output
+        assert "Error analyzing" in result.output and "TEST-TICKER" in result.output
 
     @pytest.mark.unit
     def test_analyze_json_fallback_without_api(self):
-        """Analyze --json call that fails API connection returns empty JSON object."""
+        """Analyze --json call that fails API connection returns error JSON."""
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("API error")):
             result = runner.invoke(app, ["analyze", "TEST-TICKER", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert isinstance(data, dict)
+            assert "error" in data
 
 
 class TestSignals:

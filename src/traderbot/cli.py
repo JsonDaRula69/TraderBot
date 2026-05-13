@@ -156,11 +156,12 @@ def analyze(
         service = MarketService(client)
         market = asyncio.run(service.get_market(ticker))
         orderbook = asyncio.run(service.get_orderbook(ticker))
-    except Exception:
+    except Exception as exc:
+        logger.warning("analyze failed for %s: %s", ticker, exc)
         if json_output:
-            json_lib.dump({}, sys.stdout)
+            json_lib.dump({"error": str(exc)}, sys.stdout)
             return
-        console.print(f"Market analysis for {ticker}... (requires API connection)")
+        console.print(f"[red]Error analyzing {ticker}:[/red] {exc}")
         return
 
     if json_output:
