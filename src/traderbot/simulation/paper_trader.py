@@ -1,4 +1,4 @@
-"""PaperTrader — live-simulated trading against the Kalshi demo API."""
+"""PaperTrader — live-simulated trading with real market data."""
 
 from __future__ import annotations
 
@@ -17,10 +17,11 @@ DEFAULT_INITIAL_BALANCE_CENTS: int = 1_000_00
 if TYPE_CHECKING:
     import sqlite3
 
-    from traderbot.kalshi.demo import DemoAdapter
-    from traderbot.kalshi.models import OrderBook
+    from traderbot.kalshi.cache import MarketDataCache
+    from traderbot.kalshi.provider import MarketDataProvider, OrderBookSnapshot
     from traderbot.profiles.models import TradingProfile
     from traderbot.risk.circuit_breaker import CircuitBreaker
+    from traderbot.simulation.settlement import SettlementVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class PaperSlippageModel:
 
     def compute_fill_price(
         self,
-        orderbook: OrderBook,
+        orderbook: OrderBookSnapshot,
         side: Literal["yes", "no"],
         quantity: int,
     ) -> int:
@@ -76,7 +77,7 @@ class PaperSlippageModel:
             if remaining <= 0:
                 break
             fill_at_level = min(remaining, level.size)
-            total_cost += fill_at_level * level.price
+            total_cost += fill_at_level * level.price_cents
             total_filled += fill_at_level
             remaining -= fill_at_level
 
@@ -115,35 +116,29 @@ def _init_paper_positions_table(conn: sqlite3.Connection) -> None:
 class PaperTrader:
     def __init__(
         self,
-        demo_adapter: DemoAdapter,
+        provider: MarketDataProvider,
         db_conn: sqlite3.Connection,
         initial_cash_cents: int,
         slippage_model: PaperSlippageModel | None = None,
         breaker: CircuitBreaker | None = None,
         profile: TradingProfile | None = None,
-        default_open_interest: int = 5000,
+        cache: MarketDataCache | None = None,
+        settlement_verifier: SettlementVerifier | None = None,
     ) -> None:
         if breaker is None:
             from traderbot.risk.circuit_breaker import CircuitBreaker as _CircuitBreaker
             breaker = _CircuitBreaker()
-        self._demo = demo_adapter
+        self._provider = provider
         self._conn = db_conn
         self._cash_cents = initial_cash_cents
         self._initial_cash_cents = initial_cash_cents
         self._slippage = slippage_model or PaperSlippageModel()
         self._breaker = breaker
         self._profile = profile
-        self._default_open_interest = default_open_interest
+        self._cache = cache
+        self._settlement = settlement_verifier
         self._realized_pnl_cents = 0
         _init_paper_positions_table(db_conn)
-
-    @property
-    def demo_adapter(self) -> DemoAdapter:
-        return self._demo
-
-    @property
-    def is_demo(self) -> bool:
-        return True
 
     @property
     def breaker(self) -> CircuitBreaker:
@@ -254,6 +249,27 @@ class PaperTrader:
         if self._cash_cents <= 0:
             raise BacktestError(f"Cash balance must be positive, got {self._cash_cents}")
 
+        logger.info("Submitting paper order for %s", ticker)
+
+        # 1. Settlement check — reject if market already settled
+        if self._settlement is not None:
+            settled = await self._settlement.check_settlement_before_order(ticker)
+            if settled:
+                logger.info("Market %s already settled — rejecting", ticker)
+                return None
+
+        # 2. Invalidate cache for ticker before fill-critical reads
+        if self._cache is not None:
+            await self._cache.invalidate(ticker)
+
+        # 3. Fetch market data from provider → extract OI for risk check
+        market_oi = 0
+        try:
+            market = await self._provider.get_market(ticker)
+            market_oi = market.open_interest_cents
+        except Exception:
+            logger.info("Cache miss for %s — using OI=0", ticker)
+
         portfolio = PortfolioState(
             portfolio_value_cents=self._cash_cents,
             peak_value_cents=self._cash_cents,
@@ -267,14 +283,6 @@ class PaperTrader:
         # by at least edge_estimate (default 5%). This ensures the min_edge check passes.
         market_price_prob = price_cents / 100.0 if price_cents > 0 else 0.5
         est_prob = min(max(market_price_prob + edge_estimate, 0.01), 0.99)
-        market_oi = self._default_open_interest
-        try:
-            market_svc = self._demo.get_market_service()
-            market = await market_svc.get_market(ticker)
-            if market and market.open_interest:
-                market_oi = market.open_interest
-        except Exception:
-            pass  # Use default when market data is unavailable
 
         trade_request = TradeRequest(
             ticker=ticker,
@@ -298,11 +306,11 @@ class PaperTrader:
             logger.info("Paper trade sized to zero: ticker=%s sized=%d price=%d", ticker, sized, price_cents)
             return None
 
+        # 4. Get orderbook from provider for slippage calculation
         try:
-            market_service = self._demo.get_market_service()
-            orderbook = await market_service.get_orderbook(ticker)
+            orderbook = await self._provider.get_orderbook(ticker)
         except Exception:
-            logger.exception("DemoAdapter failure fetching orderbook for %s", ticker)
+            logger.exception("Provider failure fetching orderbook for %s", ticker)
             return None
 
         fill_price = self._slippage.compute_fill_price(orderbook, side, risk_adjusted_qty)
