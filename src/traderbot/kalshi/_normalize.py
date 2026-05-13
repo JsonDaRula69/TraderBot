@@ -49,6 +49,12 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     close_time_val = raw.get("close_time")
     if isinstance(close_time_val, int):
         close_time_val = _unix_to_datetime(close_time_val)
+    elif isinstance(close_time_val, str):
+        from datetime import fromisoformat
+        try:
+            close_time_val = fromisoformat(close_time_val.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            close_time_val = _unix_to_datetime(0)
 
     category_str = raw.get("category")
 
@@ -69,6 +75,10 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         else:
             outcome_prices = ["0.50", "0.50"]
 
+    # V2 API uses "active" for open markets; map to "open" for Market model
+    raw_status = raw.get("state", raw.get("status", "closed"))
+    status_val = "open" if raw_status == "active" else raw_status
+
     return Market(
         ticker=raw["ticker"],
         question=question,
@@ -76,7 +86,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         volume=volume,
         open_interest=open_interest,
         close_time=close_time_val,
-        status=raw.get("state", raw.get("status")),
+        status=status_val,
         event_ticker=raw["event_ticker"],
         category=category_str,
         market_category=_map_category(category_str),

@@ -12,6 +12,8 @@ class TokenBucketRateLimiter:
     """
 
     def __init__(self, tokens_per_second: float, burst_capacity: int | None = None) -> None:
+        if tokens_per_second <= 0:
+            tokens_per_second = 20.0
         self._rate = tokens_per_second
         self.tokens_per_second = tokens_per_second
         self._burst = burst_capacity or int(tokens_per_second * 2)

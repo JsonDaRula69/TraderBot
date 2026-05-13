@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import SecretStr  # noqa: TC002 - needed at runtime for Pydantic model fields
+from pydantic import SecretStr, field_validator  # noqa: TC002 - needed at runtime for Pydantic model fields
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,13 @@ class KeyringKalshiConfig(BaseSettings):
     rate_limit_rps: float = 20.0
     max_retries: int = 3
     retry_base_delay: float = 1.0
+
+    @field_validator("rate_limit_rps", mode="before")
+    @classmethod
+    def _validate_rate_limit(cls, v: object) -> float:
+        if isinstance(v, (int, float)) and v <= 0:
+            return 20.0
+        return float(v) if isinstance(v, (int, float)) else 20.0
 
     @property
     def active_url(self) -> str:
