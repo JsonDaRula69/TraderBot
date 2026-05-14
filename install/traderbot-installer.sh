@@ -26,6 +26,52 @@ _sed_inplace() {
     fi
 }
 
+_read_tier() {
+    local prompt="$1"
+    local min="$2"
+    local max="$3"
+    local default="${4:-1}"
+    local choice=""
+    while true; do
+        read -r -p "$prompt" choice
+        if [[ -z "$choice" ]]; then
+            echo "$default"
+            return
+        fi
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= min && choice <= max )); then
+            echo "$choice"
+            return
+        fi
+        echo "  Invalid selection. Enter a number between $min and $max." >&2
+    done
+}
+
+_validate_key() {
+    local key="$1"
+    local name="$2"
+    local min_len="${3:-8}"
+    if [[ ${#key} -lt "$min_len" ]]; then
+        read -r -p "  Warning: $name seems too short (${#key} chars, expected at least $min_len). Continue? [y/N]: " confirm
+        if [[ ! "$confirm" =~ ^[Yy] ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+_validate_prefix() {
+    local key="$1"
+    local prefix="$2"
+    local name="$3"
+    if [[ "$key" != "$prefix"* ]]; then
+        read -r -p "  Warning: $name typically starts with '$prefix'. Continue? [y/N]: " confirm
+        if [[ ! "$confirm" =~ ^[Yy] ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
 _write_heartbeat_to_config() {
     local agent_id="$1"
     local interval="$2"
@@ -520,47 +566,55 @@ setup_api_credentials() {
     echo "--- Kalshi (required) ---"
     local kalshi_key=""
     local kalshi_secret=""
-    read -r -p "Kalshi API key: " kalshi_key
-    if [[ -z "$kalshi_key" ]]; then
-        echo "Warning: Kalshi API key is required. Set it later with: traderbot auth set-key kalshi api_key" >&2
-    else
-        echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers):"
-        kalshi_secret=""
-        while IFS= read -r -s line; do
-            kalshi_secret+="$line"$'\n'
-            if [[ "$line" == *"END"*"KEY"*"---" ]]; then
-                break
-            fi
-            if [[ -z "$line" ]]; then
-                break
-            fi
-        done
-        echo
-        kalshi_secret="${kalshi_secret%$'\n'}"
-        _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
-        if [[ -n "$kalshi_secret" ]]; then
-            local pem_path="${HOME}/.traderbot/kalshi_key.pem"
-            printf '%s' "$kalshi_secret" > "$pem_path"
-            chmod 600 "$pem_path"
-            _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
+    while true; do
+        read -r -p "Kalshi API key: " kalshi_key
+        if [[ -z "$kalshi_key" ]]; then
+            echo "  Kalshi API key is required. Enter it or press Ctrl+C to abort." >&2
+            continue
         fi
-        echo "Kalshi credentials stored."
-        echo
-        echo "Select Kalshi API tier:"
-        echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
-        echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
-        echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
-        echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
-        echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
-        read -r -p "Tier [1]: " kalshi_tier
-        case "$kalshi_tier" in
-            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
-            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
-            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
-            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
-            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
-        esac
+        if _validate_key "$kalshi_key" "Kalshi API key" 20; then
+            break
+        fi
+    done
+    echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers):"
+    kalshi_secret=""
+    while IFS= read -r -s line; do
+        kalshi_secret+="$line"$'\n'
+        if [[ "$line" == *"END"*"KEY"*"---" ]]; then
+            break
+        fi
+        if [[ -z "$line" ]]; then
+            break
+        fi
+    done
+    echo
+    kalshi_secret="${kalshi_secret%$'\n'}"
+    if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
+        echo "  Warning: PEM key should contain BEGIN/END markers. The key may be invalid." >&2
     fi
+    _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
+    if [[ -n "$kalshi_secret" ]]; then
+        local pem_path="${HOME}/.traderbot/kalshi_key.pem"
+        printf '%s' "$kalshi_secret" > "$pem_path"
+        chmod 600 "$pem_path"
+        _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
+    fi
+    echo "Kalshi credentials stored."
+    echo
+    echo "Select Kalshi API tier:"
+    echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
+    echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
+    echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
+    echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
+    echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
+    kalshi_tier=$(_read_tier "Tier [1]: " 1 5 1)
+    case "$kalshi_tier" in
+        2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
+        3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
+        4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
+        5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
+        *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
+    esac
 
     # --- NewsAPI (optional) ---
     echo
@@ -568,18 +622,22 @@ setup_api_credentials() {
     local newsapi_key=""
     read -r -p "NewsAPI key (press Enter to skip): " newsapi_key
     if [[ -n "$newsapi_key" ]]; then
-        _env_set "$env_file" "NEWSAPI_API_KEY" "$newsapi_key"
-        echo "NewsAPI key stored."
-        echo
-        echo "Select NewsAPI tier:"
-        echo "  1) Free      (100 requests/day)"
-        echo "  2) Business  (2,500 requests/day)"
-        read -r -p "Tier [1]: " newsapi_tier
-        case "$newsapi_tier" in
-            2) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "2500" ;;
-            *) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "100" ;;
-        esac
-    else
+        _validate_key "$newsapi_key" "NewsAPI key" 20 || newsapi_key=""
+        if [[ -n "$newsapi_key" ]]; then
+            _env_set "$env_file" "NEWSAPI_API_KEY" "$newsapi_key"
+            echo "NewsAPI key stored."
+            echo
+            echo "Select NewsAPI tier:"
+            echo "  1) Free      (100 requests/day)"
+            echo "  2) Business  (2,500 requests/day)"
+            newsapi_tier=$(_read_tier "Tier [1]: " 1 2 1)
+            case "$newsapi_tier" in
+                2) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "2500" ;;
+                *) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "100" ;;
+            esac
+        fi
+    fi
+    if [[ -z "$newsapi_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key newsapi api_key"
     fi
 
@@ -589,9 +647,16 @@ setup_api_credentials() {
     local voyage_key=""
     read -r -p "Voyage API key (press Enter to skip): " voyage_key
     if [[ -n "$voyage_key" ]]; then
-        _env_set "$env_file" "VOYAGE_API_KEY" "$voyage_key"
-        echo "Voyage key stored."
-    else
+        _validate_prefix "$voyage_key" "pa-" "Voyage API key" || voyage_key=""
+        if [[ -n "$voyage_key" ]]; then
+            _validate_key "$voyage_key" "Voyage API key" 20 || voyage_key=""
+        fi
+        if [[ -n "$voyage_key" ]]; then
+            _env_set "$env_file" "VOYAGE_API_KEY" "$voyage_key"
+            echo "Voyage key stored."
+        fi
+    fi
+    if [[ -z "$voyage_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key voyage api_key"
     fi
 
@@ -601,9 +666,13 @@ setup_api_credentials() {
     local twitter_key=""
     read -r -p "Twitter API key (press Enter to skip): " twitter_key
     if [[ -n "$twitter_key" ]]; then
-        _env_set "$env_file" "TWITTER_API_KEY" "$twitter_key"
-        echo "Twitter key stored."
-    else
+        _validate_key "$twitter_key" "Twitter API key" 20 || twitter_key=""
+        if [[ -n "$twitter_key" ]]; then
+            _env_set "$env_file" "TWITTER_API_KEY" "$twitter_key"
+            echo "Twitter key stored."
+        fi
+    fi
+    if [[ -z "$twitter_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key twitter api_key"
     fi
 
@@ -614,14 +683,18 @@ setup_api_credentials() {
     local reddit_secret=""
     read -r -p "Reddit client ID (press Enter to skip): " reddit_id
     if [[ -n "$reddit_id" ]]; then
-        read -r -p "Reddit client secret: " -s reddit_secret
-        echo
-        _env_set "$env_file" "REDDIT_CLIENT_ID" "$reddit_id"
-        if [[ -n "$reddit_secret" ]]; then
-            _env_set "$env_file" "REDDIT_CLIENT_SECRET" "$reddit_secret"
+        _validate_key "$reddit_id" "Reddit client ID" 10 || reddit_id=""
+        if [[ -n "$reddit_id" ]]; then
+            read -r -p "Reddit client secret: " -s reddit_secret
+            echo
+            _env_set "$env_file" "REDDIT_CLIENT_ID" "$reddit_id"
+            if [[ -n "$reddit_secret" ]]; then
+                _env_set "$env_file" "REDDIT_CLIENT_SECRET" "$reddit_secret"
+            fi
+            echo "Reddit credentials stored."
         fi
-        echo "Reddit credentials stored."
-    else
+    fi
+    if [[ -z "$reddit_id" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key reddit client_id"
     fi
 
