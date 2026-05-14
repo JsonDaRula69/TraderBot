@@ -1008,7 +1008,7 @@ interactive_config_flow() {
         if [[ -n "$TOKEN_OUTPUT" ]]; then
             echo "$TOKEN_OUTPUT"
             echo
-            token_value=$(echo "$TOKEN_OUTPUT" | sed -n 's/^Token: //p' || echo "")
+            token_value=$(echo "$TOKEN_OUTPUT" | sed -n 's/^RAW_TOKEN://p' || echo "")
         fi
     else
         echo "Assignment skipped. TraderBot not found."

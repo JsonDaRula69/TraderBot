@@ -2444,6 +2444,7 @@ def profile_assign(
             f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
         )
         console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
+        print(f"RAW_TOKEN:{token}")
 
         try:
             agent_path = _resolve_agent_path(agent_id)
