@@ -1,4 +1,4 @@
-"""Auto-update checker for TraderBot — checks GitHub releases for new versions."""
+"""Auto-update checker for TraderBot — checks GitHub tags for new versions."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from traderbot.paths import get_data_dir
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "JsonDaRula69/TraderBot"
-GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_TAGS_URL = f"https://api.github.com/repos/{GITHUB_REPO}/tags"
 GITHUB_DEV_BRANCH_URL = f"https://api.github.com/repos/{GITHUB_REPO}/branches/dev"
 CACHE_DIR = get_data_dir()
 CACHE_FILE = CACHE_DIR / ".update_check_cache.json"
@@ -34,7 +34,7 @@ def fetch_latest_version(timeout: float = 10.0, dev: bool = False) -> tuple[str,
 
     Args:
         timeout: HTTP request timeout in seconds.
-        dev: If True, check the dev branch commit instead of latest release.
+        dev: If True, check the dev branch commit instead of latest tag.
     """
     try:
         if dev:
@@ -51,11 +51,10 @@ def fetch_latest_version(timeout: float = 10.0, dev: bool = False) -> tuple[str,
             data = resp.json()
             commit = data.get("commit", {})
             sha = commit.get("sha", "")[:8]
-            date = commit.get("commit", {}).get("committer", {}).get("date", "")
             branch_url = f"https://github.com/{GITHUB_REPO}/tree/dev"
             return f"dev-{sha}", branch_url
         resp = httpx.get(
-            GITHUB_API_URL,
+            GITHUB_TAGS_URL,
             headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "traderbot-update-checker"},
             timeout=timeout,
             follow_redirects=True,
@@ -63,10 +62,14 @@ def fetch_latest_version(timeout: float = 10.0, dev: bool = False) -> tuple[str,
         if resp.status_code != 200:
             logger.debug("GitHub API returned %s", resp.status_code)
             return None
-        data = resp.json()
-        tag = data.get("tag_name", "")
-        release_url = data.get("html_url", "")
-        return tag.lstrip("v"), release_url
+        tags = resp.json()
+        if not isinstance(tags, list) or not tags:
+            logger.debug("No tags found")
+            return None
+        latest_tag = tags[0]
+        tag_name = latest_tag.get("name", "").lstrip("v")
+        tag_url = latest_tag.get("html_url", f"https://github.com/{GITHUB_REPO}/releases/tag/{latest_tag.get('name', '')}")
+        return tag_name, tag_url
     except (httpx.HTTPError, KeyError, json.JSONDecodeError) as exc:
         logger.debug("Update check failed: %s", exc)
         return None
