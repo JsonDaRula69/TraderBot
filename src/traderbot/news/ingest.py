@@ -2,13 +2,10 @@
 
 No LLM required. Runs as a pure data pipeline.
 """
-from __future__ import annotations
-
 import hashlib
 import logging
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from traderbot.db.vectors import VectorStore
 from traderbot.news.classifier import NewsClassifier
@@ -228,7 +225,11 @@ def ingest_news(
         category_str = classified.category.value if hasattr(classified.category, "value") else str(classified.category)
         text = _flatten_text(item)
         sentiment = scorer.score(text, item.source, item.id)
-        impact = assessor.assess(text, category=category_str)
+        impact = assessor.assess(
+            news_item=item,
+            classified_news=classified,
+            sentiment_result=sentiment,
+        )
 
         batch_texts.append(text)
         batch_items.append(item)
