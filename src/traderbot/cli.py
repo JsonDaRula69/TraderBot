@@ -2415,6 +2415,7 @@ def profile_assign(
     profile_name: str,
     agent_id: str,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting")] = False,
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite workspace files instead of merging")] = False,
 ) -> None:
     """Assign a token to an agent for profile access."""
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
@@ -2452,10 +2453,11 @@ def profile_assign(
                 )
                 console.print("Token assigned but not injected into TOOLS.md")
             else:
-                propagate_workspace_files(profile, agent_path)
+                propagate_workspace_files(profile, agent_path, overwrite=overwrite)
                 inject_token(str(agent_path), token)
+                mode = "overwritten" if overwrite else "merged"
                 console.print(
-                    f"[green]✓[/green] Workspace files and token injected into {agent_id}/"
+                    f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/"
                 )
         except FileNotFoundError:
             console.print("[yellow]Warning:[/yellow] Agent directory not found")

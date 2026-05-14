@@ -898,10 +898,20 @@ interactive_config_flow() {
 
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     local token_value=""
+    local merge_mode="--yes"
+    echo
+    echo "Workspace file mode:"
+    echo "  1) Merge — backup existing files, then merge TraderBot templates (recommended)"
+    echo "  2) Overwrite — replace workspace files with TraderBot templates"
+    read -r -p "Select [1]: " ws_choice
+    case "$ws_choice" in
+        2) merge_mode="--yes --overwrite" ;;
+        *) merge_mode="--yes" ;;
+    esac
     if [[ -x "$tb_cmd" ]]; then
         echo "Assigning agent $agent_name to profile $profile_name..."
         set +e
-        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$profile_name" "$agent_name" --yes 2>&1)
+        TOKEN_OUTPUT=$("$tb_cmd" profile assign "$profile_name" "$agent_name" $merge_mode 2>&1)
         local assign_exit=$?
         set -e
         if [[ $assign_exit -ne 0 ]]; then

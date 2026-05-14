@@ -6,6 +6,7 @@ OpenClaw agent TOOLS.md files for automatic authentication.
 
 import logging
 import re
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -24,8 +25,12 @@ from traderbot.profiles.injection_strategies import (
 logger = logging.getLogger(__name__)
 
 
-def propagate_workspace_files(profile, target_dir: Path) -> None:
-    """Deploy workspace templates using merge strategies per FILE_STRATEGIES."""
+def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False) -> None:
+    """Deploy workspace templates using merge strategies per FILE_STRATEGIES.
+
+    If overwrite is True, template content replaces target files entirely.
+    If overwrite is False (default), templates are merged using fenced blocks.
+    """
     _src_dir = Path(__file__).resolve().parent.parent.parent
     template_dir = _src_dir.parent / ".openclaw" / "workspace"
 
@@ -45,6 +50,11 @@ def propagate_workspace_files(profile, target_dir: Path) -> None:
             continue
 
         template_content = template_path.read_text()
+
+        if overwrite and target_path.exists():
+            shutil.copy2(template_path, target_path)
+            logger.info("Overwrote %s", target_path)
+            continue
 
         if strategy == InjectionStrategy.FENCED_MERGE:
             match filename:
