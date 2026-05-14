@@ -2412,12 +2412,16 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
 
 @profile_app.command("assign")
 def profile_assign(
-    profile_name: str,
-    agent_id: str,
+    profile_name: Annotated[str | None, typer.Argument(help="Profile name")] = None,
+    agent_id: Annotated[str | None, typer.Argument(help="Agent ID or name")] = None,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite workspace files instead of merging")] = False,
 ) -> None:
-    """Assign a token to an agent for profile access."""
+    """Assign a token to an agent for profile access.
+
+    Called without arguments, enters interactive mode: select a profile, then an agent, then choose merge or overwrite.
+    Called with profile_name and agent_id, applies directly (non-interactive with --yes).
+    """
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.injection_strategies import set_skip_prompts
     from traderbot.profiles.registry import ProfileRegistry
@@ -2429,14 +2433,38 @@ def profile_assign(
     console = Console()
     registry = ProfileRegistry()
 
-    # Verify profile exists
+    if profile_name is None or agent_id is None:
+        if not sys.stdin.isatty():
+            console.print("[red]Error:[/red] profile_name and agent_id required in non-interactive mode")
+            raise typer.Exit(1)
+        _interactive_assign(console, registry, overwrite=overwrite)
+        return
+
+    _do_assign(profile_name, agent_id, overwrite=overwrite, console=console)
+
+
+def _do_assign(
+    profile_name: str,
+    agent_id: str,
+    overwrite: bool = False,
+    console: Console | None = None,
+) -> None:
+    from traderbot.profiles.injection import inject_token, propagate_workspace_files
+    from traderbot.profiles.injection_strategies import set_skip_prompts
+    from traderbot.profiles.registry import ProfileRegistry
+    from traderbot.profiles.tokens import assign_token, generate_token
+
+    if console is None:
+        console = Console()
+
+    registry = ProfileRegistry()
+
     if not registry.profile_exists(profile_name):
         console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
         raise typer.Exit(1)
 
     profile = registry.get_profile(profile_name)
 
-    # Generate and assign token
     try:
         token = generate_token()
         assign_token(profile_name, agent_id, token)
@@ -2471,7 +2499,66 @@ def profile_assign(
         raise typer.Exit(1) from None
 
 
-@profile_app.command("revoke")
+def _interactive_assign(console: Console, registry: "ProfileRegistry", overwrite: bool = False) -> None:
+    from traderbot.profiles.discovery import discover_agents
+
+    profiles = registry.list_profiles()
+    if not profiles:
+        console.print("[yellow]No profiles found.[/yellow] Create one with: traderbot profile create")
+        return
+
+    console.print("\n[bold]Select a profile:[/bold]")
+    for i, p_name in enumerate(profiles, 1):
+        profile = registry.get_profile(p_name)
+        mode = f" [{profile.mode}]" if profile else ""
+        desc = f" — {profile.description}" if profile and profile.description else ""
+        console.print(f"  {i}. {p_name}{mode}{desc}")
+
+    try:
+        choice = typer.prompt("Enter number", type=int)
+    except (ValueError, KeyboardInterrupt):
+        return
+
+    if choice < 1 or choice > len(profiles):
+        console.print("[red]Invalid selection[/red]")
+        return
+
+    profile_name = profiles[choice - 1]
+
+    agents = discover_agents()
+    if not agents:
+        console.print("[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]")
+        console.print(f"\n[dim]To assign manually: traderbot profile assign {profile_name} <agent_id>[/dim]")
+        return
+
+    console.print("\n[bold]Select an agent:[/bold]")
+    for i, agent in enumerate(agents, 1):
+        console.print(f"  {i}. {agent['name']} ({agent['agent_id']}) — {agent['path']}")
+
+    try:
+        agent_choice = typer.prompt("Enter number", type=int)
+    except (ValueError, KeyboardInterrupt):
+        return
+
+    if agent_choice < 1 or agent_choice > len(agents):
+        console.print("[red]Invalid selection[/red]")
+        return
+
+    agent = agents[agent_choice - 1]
+    agent_id = agent["agent_id"]
+
+    console.print("\n[bold]Workspace file mode:[/bold]")
+    console.print("  1. Merge — backup existing files, then merge TraderBot templates (recommended)")
+    console.print("  2. Overwrite — replace workspace files with TraderBot templates")
+
+    try:
+        ws_choice = typer.prompt("Select [1]", type=int)
+    except (ValueError, KeyboardInterrupt):
+        ws_choice = 1
+
+    overwrite = ws_choice == 2
+
+    _do_assign(profile_name, agent_id, overwrite=overwrite, console=console)
 def profile_revoke(
     profile_name: str,
 ) -> None:
@@ -2781,7 +2868,7 @@ def _interactive_assign_agent(name: str, console: Console, registry: "ProfileReg
         console.print("[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]")
         return
 
-    console.print("\n[bold]Available agents:[/bold]")
+    console.print("\n[bold]Select an agent:[/bold]")
     for i, agent in enumerate(agents, 1):
         console.print(f"  {i}. {agent['name']} ({agent['agent_id']}) — {agent['path']}")
 
@@ -2797,6 +2884,17 @@ def _interactive_assign_agent(name: str, console: Console, registry: "ProfileReg
     agent = agents[choice - 1]
     agent_id = agent["agent_id"]
 
+    console.print("\n[bold]Workspace file mode:[/bold]")
+    console.print("  1. Merge — backup existing files, then merge TraderBot templates (recommended)")
+    console.print("  2. Overwrite — replace workspace files with TraderBot templates")
+
+    try:
+        ws_choice = typer.prompt("Select [1]", type=int)
+    except (ValueError, KeyboardInterrupt):
+        ws_choice = 1
+
+    overwrite = ws_choice == 2
+
     profile = registry.get_profile(name)
     if profile is None:
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
@@ -2806,12 +2904,14 @@ def _interactive_assign_agent(name: str, console: Console, registry: "ProfileReg
     assign_token(name, agent_id, token)
     console.print(f"[green]✓[/green] Assigned token to profile '{name}' for agent '{agent_id}'")
     console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
+    print(f"RAW_TOKEN:{token}")
 
     agent_path = _resolve_agent_path(agent_id)
     if agent_path and agent_path.exists():
-        propagate_workspace_files(profile, agent_path)
+        propagate_workspace_files(profile, agent_path, overwrite=overwrite)
         inject_token(str(agent_path), token)
-        console.print(f"[green]✓[/green] Workspace files and token injected into {agent_id}/")
+        mode = "overwritten" if overwrite else "merged"
+        console.print(f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/")
     else:
         console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
         console.print("Token assigned but not injected into workspace")
