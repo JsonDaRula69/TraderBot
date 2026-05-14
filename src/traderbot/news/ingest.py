@@ -32,8 +32,6 @@ _EMBED_DIMENSION = 1024
 
 
 class IngestReport:
-    """Result of a single ingest run."""
-
     def __init__(self) -> None:
         self.new: int = 0
         self.duplicates: int = 0
@@ -56,8 +54,6 @@ class IngestReport:
 
 
 class NewsSummaryItem:
-    """A single news item from the accumulated store, ready for agent consumption."""
-
     def __init__(
         self,
         doc_id: str,
@@ -93,7 +89,6 @@ class NewsSummaryItem:
 
 
 def _url_hash(url: str) -> str:
-    """Deterministic hash for deduplication."""
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
 
@@ -107,7 +102,7 @@ def _build_metadata(
     meta: dict[str, str] = {
         "source": str(item.source.value) if hasattr(item.source, "value") else str(item.source),
         "category": category_str,
-        "published": item.published.isoformat() if item.published else "",
+        "published": item.published_at.isoformat() if item.published_at else "",
         "title": item.title[:200] if item.title else "",
         "url_hash": _url_hash(item.url) if item.url else "",
     }
@@ -140,8 +135,6 @@ def _is_signal(
     sentiment: object | None,
     impact: object | None,
 ) -> bool:
-    """Decide if a news item qualifies as a signal."""
-    # High-impact events
     if impact is not None:
         try:
             mag = getattr(impact, "magnitude", 0) or 0
@@ -150,7 +143,6 @@ def _is_signal(
                 return True
         except (ValueError, TypeError):
             pass
-    # Extreme sentiment
     if sentiment is not None:
         try:
             score = getattr(sentiment, "score", 0) or 0
@@ -163,12 +155,9 @@ def _is_signal(
 
 
 def _flatten_text(item: NewsItem) -> str:
-    """Build a single text block for embedding."""
     parts = [item.title or ""]
     if item.body:
         parts.append(item.body)
-    if item.summary:
-        parts.append(item.summary)
     return " — ".join(parts)
 
 
@@ -190,10 +179,8 @@ def ingest_news(
     start = time.monotonic()
     vs = vector_store or VectorStore()
 
-    # Ensure collections exist
     vs.init_collections()
 
-    # Count existing docs for reporting
     try:
         news_col = vs.get_collection(_NEWS_COLLECTION)
         sig_col = vs.get_collection(_NEWS_SIGNALS_COLLECTION)
@@ -202,14 +189,12 @@ def ingest_news(
     except Exception:
         pass
 
-    # Build aggregator, classifier, scorer, assessor
     aggregator = NewsAggregator()
     classifier = NewsClassifier()
     scorer = SentimentScorer()
     assessor = ImpactAssessor()
     voyage = VoyageClient()
 
-    # Fetch news
     try:
         import asyncio
 
@@ -346,9 +331,8 @@ def get_news_summary(
     if source:
         filters["source"] = source
     if since:
-        filters["published"] = since.isoformat()  # ChromaDB won't do range on strings — handled post-filter
+        filters["published"] = since.isoformat()
     if filters:
-        # ChromaDB filter format: {"$and": [{"field": {"$eq": "val"}}, ...]}
         conditions: list[dict[str, dict[str, str]]] = []
         for field, val in filters.items():
             conditions.append({field: {"$eq": val}})
@@ -415,7 +399,6 @@ def get_news_summary(
 
 
 def get_news_collection_stats(vector_store: VectorStore | None = None) -> dict[str, int]:
-    """Return item counts per collection."""
     vs = vector_store or VectorStore()
     stats: dict[str, int] = {}
     for name in (_NEWS_COLLECTION, _NEWS_SIGNALS_COLLECTION):
