@@ -223,9 +223,8 @@ class MarketService:
 
         Strategy (minimizes API calls):
         1. Build event_ticker → category map from /events (cached for 5 min)
-        2. Filter events by requested category
-        3. Fetch markets only for matched events (not all 4000+)
-        4. For remaining markets with no event match, look up individually
+        2. Re-fetch events with with_nested_markets=True for matched events
+        3. For remaining markets with no event match, do gap-fill
         """
         logger = logging.getLogger(__name__)
         logger.info("Fetching markets for category %s", category)
@@ -239,98 +238,84 @@ class MarketService:
         logger.info("Found %d events matching '%s' out of %d total", len(matched_events), category, len(event_category_map))
 
         all_markets: list[Market] = []
-        semaphore = asyncio.Semaphore(3)
-
-        async def _fetch_markets_for_event(evt_ticker: str) -> list[Market]:
-            async with semaphore:
-                await asyncio.sleep(0.15)
-                try:
-                    result = await self.list_markets(event_ticker=evt_ticker, limit=200)
-                    return result.markets
-                except Exception:
-                    logger.debug("Failed to fetch markets for event=%s", evt_ticker)
-                    return []
 
         if matched_events:
-            results = await asyncio.gather(*[_fetch_markets_for_event(t) for t, _ in matched_events])
-            event_ticker_to_cat = dict(matched_events)
-            for market_list in results:
-                all_markets.extend(market_list)
-            for m in all_markets:
-                if m.event_ticker in event_ticker_to_cat:
-                    raw_cat = event_ticker_to_cat[m.event_ticker]
-                    m.category = raw_cat
-                    m.market_category = _map_category(raw_cat)
+            all_markets = await self._fetch_markets_for_events([t for t, _ in matched_events], event_category_map)
 
-        filtered = [
-            m for m in all_markets
-            if m.category and (m.category.lower() == target_cat or target_cat in m.category.lower())
-        ]
+        if not all_markets:
+            all_markets = await self._gap_fill_category(category, target_cat, event_category_map, limit)
 
-        if not filtered:
-            filtered = await self._gap_fill_category(category, target_cat, event_category_map, limit)
+        logger.info("Category '%s': %d markets found", category, len(all_markets))
+        return MarketListResponse(markets=all_markets[:limit], cursor=None)
 
-        logger.info("Category '%s': %d matched markets", category, len(filtered))
-        return MarketListResponse(markets=filtered[:limit], cursor=None)
-
-    async def _gap_fill_category(
+    async def _fetch_markets_for_events(
         self,
-        category: str,
-        target_cat: str,
+        event_tickers: list[str],
         event_category_map: dict[str, str],
-        limit: int,
     ) -> list[Market]:
-        """Find markets whose events aren't in the events list (e.g. daily weather).
-
-        Some Kalshi events (notably daily temperature markets) don't appear
-        in /events?status=open. This method discovers them by sampling recent
-        open markets, looking up their missing events, and adding any that
-        match the requested category.
-        """
+        """Fetch markets for specific events using with_nested_markets, with fallback to per-event calls."""
         logger = logging.getLogger(__name__)
-        logger.info("No markets found via event filter, attempting gap fill for '%s'", category)
 
-        cursor: str | None = None
         all_markets: list[Market] = []
-        unknown_tickers: set[str] = set()
+        matched_tickers = set(event_tickers)
+        found_tickers: set[str] = set()
+        cursor: str | None = None
 
-        for _ in range(5):
+        for page in range(20):
             try:
-                params: dict[str, Any] = {"limit": 200, "status": "open"}
+                params: dict[str, Any] = {"limit": 200, "status": "open", "with_nested_markets": True}
                 if cursor:
                     params["cursor"] = cursor
-                resp = await self._client.get("/markets", **params)
+                resp = await self._client.get("/events", **params)
                 resp.raise_for_status()
                 data = resp.json()
             except Exception:
+                logger.warning("Failed to fetch events page with nested markets (page %d)", page + 1)
                 break
 
-            batch = [_normalize_market(m) for m in data.get("markets", [])]
-            for m in batch:
-                if m.event_ticker:
-                    if m.event_ticker in event_category_map:
-                        raw_cat = event_category_map[m.event_ticker]
-                        m.category = raw_cat
-                        m.market_category = _map_category(raw_cat)
-                    else:
-                        unknown_tickers.add(m.event_ticker)
-            all_markets.extend(batch)
-            cursor = data.get("cursor")
-            if not cursor or not data.get("markets"):
-                break
-
-        if unknown_tickers:
-            await self._resolve_event_categories(unknown_tickers, event_category_map)
-            for m in all_markets:
-                if m.category is None and m.event_ticker in event_category_map:
-                    raw_cat = event_category_map[m.event_ticker]
+            for evt in data.get("events", []):
+                evt_ticker = evt.get("ticker") or evt.get("event_ticker")
+                if evt_ticker not in matched_tickers:
+                    continue
+                found_tickers.add(evt_ticker)
+                raw_cat = event_category_map.get(evt_ticker, evt.get("category", ""))
+                for m_raw in evt.get("markets", []):
+                    m = _normalize_market(m_raw)
                     m.category = raw_cat
                     m.market_category = _map_category(raw_cat)
+                    all_markets.append(m)
 
-        return [
-            m for m in all_markets
-            if m.category and (m.category.lower() == target_cat or target_cat in m.category.lower())
-        ][:limit]
+            cursor = data.get("cursor") or data.get("next_cursor")
+            if not cursor or not data.get("events"):
+                break
+
+            if found_tickers == matched_tickers and all(found_tickers):
+                break
+
+        missing_tickers = matched_tickers - found_tickers
+        if missing_tickers:
+            logger.info("Falling back to per-event fetch for %d missing events", len(missing_tickers))
+            semaphore = asyncio.Semaphore(3)
+
+            async def _fetch_one(ticker: str) -> list[Market]:
+                async with semaphore:
+                    await asyncio.sleep(0.15)
+                    try:
+                        result = await self.list_markets(event_ticker=ticker, limit=200)
+                        return result.markets
+                    except Exception:
+                        logger.debug("Failed to fetch markets for event=%s", ticker)
+                        return []
+
+            results = await asyncio.gather(*[_fetch_one(t) for t in missing_tickers])
+            for market_list in results:
+                for m in market_list:
+                    if m.event_ticker in event_category_map:
+                        m.category = event_category_map[m.event_ticker]
+                        m.market_category = _map_category(event_category_map[m.event_ticker])
+                all_markets.extend(market_list)
+
+        return all_markets
 
     async def _get_event_category_map(self) -> dict[str, str]:
         """Return cached event category map, refreshing if stale."""
