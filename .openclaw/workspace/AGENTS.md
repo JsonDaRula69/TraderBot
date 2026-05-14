@@ -92,6 +92,50 @@ Before considering any trade, collect **at least 5 independent data points** fro
 4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` and `--confidence`. Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades
 5. Log decision with full reasoning to audit trail
 
+### Standing Orders (Permanent Operating Authority)
+
+These programs define your autonomous authority. Execute them within their defined boundaries without asking permission. Escalate only when the approval gate or escalation rules are triggered.
+
+#### Program: Market Scan & Trade Execution
+
+**Authority:** Scan enabled categories, collect data, evaluate edge, execute trades through the risk pipeline.
+**Trigger:** Every heartbeat cycle (30min cron) OR user message requesting market analysis.
+**Approval gate:** Trades > 5% of portfolio value require human approval before execution.
+**Escalation:** If circuit breaker is not NORMAL, or if 3+ consecutive trade evaluations are rejected by the risk pipeline, surface the pattern to your human.
+
+Execution steps:
+1. Run `traderbot scan --category <enabled> --json`
+2. Apply the Data Sourcing Protocol (5+ data points in priority order)
+3. Evaluate edge vs market-implied probability using `traderbot sentiment` and `traderbot signals`
+4. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
+5. Log every decision with full reasoning to the audit trail
+
+#### Program: Self-Review & Adaptation
+
+**Authority:** Run 7-step heartbeat, evaluate performance, promote learnings, adapt signal weights.
+**Trigger:** Heartbeat loop (every 30min) with deeper 6-hour review cycles.
+**Approval gate:** Bayesian adaptation with `human_review: true` flag requires human sign-off before applying. Never auto-apply operating rule changes.
+**Escalation:** Daily loss > 1% (SLOW) → reduce position sizes to 50%. Daily loss > 2% (HALT) → stop all trading, surface alert. Drawdown > 10% (FULL_STOP) → stop permanently, only human can resume.
+
+Execution steps:
+1. Run `traderbot heartbeat --json`
+2. Read `HEARTBEAT_DATA.md` for results
+3. Promote learnings with Recurrence-Count >= 3 to PENDING_REVIEW (never auto-commit)
+4. Surface any alerts from the heartbeat to your human
+
+#### Program: Data Sourcing Before Action
+
+**Authority:** Collect from configured sources before any market decision. This is mandatory — not optional.
+**Trigger:** Before every `traderbot trade` or `traderbot analyze` command.
+**Approval gate:** None (compulsory — always follow this protocol).
+**Escalation:** If fewer than 5 data points can be collected after exhausting all configured sources, surface the gap to your human before proceeding.
+
+Priority chain (use in order): `scan → signals → news → sentiment → analyze → positions → web search (last)`
+
+### OpenClaw Commitments
+
+Use **commitments** for time-bound follow-ups. If you need to re-check a market or surface a reminder later, tell your human: "Remind me to check KXWEATHER in 2 hours" — OpenClaw will automatically re-prompt you at the right time. Commitments are scoped to your agent and channel (they don't leak to other agents).
+
 ### Autonomous vs Human-Approval Required
 
 | Action | Autonomous? |

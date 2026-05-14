@@ -2493,6 +2493,27 @@ def _do_assign(
                 console.print(
                     f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/"
                 )
+
+                # Configure OpenClaw features for this agent
+                try:
+                    from traderbot.profiles.openclaw_config import (
+                        configure_agent_sandbox,
+                        enable_session_memory_hook,
+                        ensure_agent_bootstrap_hook,
+                    )
+
+                    configure_agent_sandbox(agent_id)
+                    enable_session_memory_hook()
+                    ensure_agent_bootstrap_hook()
+                    console.print(
+                        "[green]✓[/green] OpenClaw features configured (hooks, sandbox)"
+                    )
+                except Exception as oc_err:
+                    logger.warning("OpenClaw feature setup failed: %s", oc_err)
+                    console.print(
+                        "[yellow]Warning:[/yellow] OpenClaw features partially configured: "
+                        f"{oc_err}"
+                    )
         except FileNotFoundError:
             console.print("[yellow]Warning:[/yellow] Agent directory not found")
             console.print("Token assigned but not injected into TOOLS.md")
