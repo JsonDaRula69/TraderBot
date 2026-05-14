@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
@@ -21,6 +22,17 @@ from traderbot.kalshi.models import (
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
+
+_EVENT_CACHE_TTL = 300  # seconds — reuse event map for 5 minutes
+_event_category_cache: dict[str, str] = {}
+_event_cache_ts: float = 0.0
+
+
+def _clear_event_cache() -> None:
+    """Clear the event category cache (for testing)."""
+    global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+    _event_category_cache = {}
+    _event_cache_ts = 0.0
 
 
 class MarketService:
@@ -203,51 +215,80 @@ class MarketService:
         category: str,
         limit: int = 500,
     ) -> MarketListResponse:
-        """Fetch markets by category using two-phase discovery.
+        """Fetch markets by category using event-first discovery with caching.
 
-        The Kalshi V2 API ``/events?category=`` and ``/markets?category=``
-        filters are both broken (return unfiltered results).  Additionally,
-        some events (notably daily weather) do not appear in the ``/events``
-        list at all.
+        The Kalshi V2 ``/events?category=`` and ``/markets?category=``
+        filters are both broken (return unfiltered results).  Some events
+        (notably daily weather) don't appear in ``/events`` at all.
 
-        This method works around both issues by:
-        1. Fetching all open events via ``/events?status=open`` (paginated)
-           to build an event_ticker → category map
-        2. Fetching all open markets via ``/markets?status=open`` (paginated)
-        3. Resolving each market's category via the event map, then looking up
-           uncategorized markets' events individually via ``/events/{ticker}``
-        4. Filtering by the requested category client-side
+        Strategy (minimizes API calls):
+        1. Build event_ticker → category map from /events (cached for 5 min)
+        2. Filter events by requested category
+        3. Fetch markets only for matched events (not all 4000+)
+        4. For remaining markets with no event match, look up individually
         """
         logger = logging.getLogger(__name__)
         logger.info("Fetching markets for category %s", category)
 
-        # Phase 1: Build event_ticker → category map from /events
-        event_category_map = await self._build_event_category_map()
-
-        # Phase 2: Fetch all open markets from /markets (paginated)
-        all_markets = await self._fetch_all_open_markets()
-
-        logger.info("Fetched %d open markets, %d events in category map", len(all_markets), len(event_category_map))
-
-        # Phase 3: Resolve categories for all markets
-        await self._resolve_market_categories(all_markets, event_category_map)
-
-        # Phase 4: Filter by requested category
+        event_category_map = await self._get_event_category_map()
         target_cat = category.lower().replace("_", " ")
+        matched_events = [
+            (ticker, cat) for ticker, cat in event_category_map.items()
+            if target_cat in cat.lower()
+        ]
+        logger.info("Found %d events matching '%s' out of %d total", len(matched_events), category, len(event_category_map))
+
+        all_markets: list[Market] = []
+        semaphore = asyncio.Semaphore(3)
+
+        async def _fetch_markets_for_event(evt_ticker: str) -> list[Market]:
+            async with semaphore:
+                await asyncio.sleep(0.15)
+                try:
+                    result = await self.list_markets(event_ticker=evt_ticker, limit=200)
+                    return result.markets
+                except Exception:
+                    logger.debug("Failed to fetch markets for event=%s", evt_ticker)
+                    return []
+
+        if matched_events:
+            results = await asyncio.gather(*[_fetch_markets_for_event(t) for t, _ in matched_events])
+            event_ticker_to_cat = dict(matched_events)
+            for market_list in results:
+                all_markets.extend(market_list)
+            for m in all_markets:
+                if m.event_ticker in event_ticker_to_cat:
+                    raw_cat = event_ticker_to_cat[m.event_ticker]
+                    m.category = raw_cat
+                    m.market_category = _map_category(raw_cat)
+
+        uncategorized = {m.event_ticker for m in all_markets if m.event_ticker and m.category is None and m.event_ticker not in event_category_map}
+        if uncategorized:
+            await self._resolve_event_categories(uncategorized, event_category_map)
+            for m in all_markets:
+                if m.category is None and m.event_ticker in event_category_map:
+                    raw_cat = event_category_map[m.event_ticker]
+                    m.category = raw_cat
+                    m.market_category = _map_category(raw_cat)
+
         filtered = [
             m for m in all_markets
-            if m.category and (
-                m.category.lower() == target_cat
-                or target_cat in m.category.lower()
-            )
+            if m.category and (m.category.lower() == target_cat or target_cat in m.category.lower())
         ]
 
-        logger.info(
-            "Category filter: %d of %d markets match '%s'",
-            len(filtered), len(all_markets), category,
-        )
-
+        logger.info("Category '%s': %d matched markets", category, len(filtered))
         return MarketListResponse(markets=filtered[:limit], cursor=None)
+
+    async def _get_event_category_map(self) -> dict[str, str]:
+        """Return cached event category map, refreshing if stale."""
+        global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+        now = time.monotonic()
+        if _event_category_cache and (now - _event_cache_ts) < _EVENT_CACHE_TTL:
+            return _event_category_cache
+        fresh = await self._build_event_category_map()
+        _event_category_cache = fresh
+        _event_cache_ts = now
+        return fresh
 
     async def _build_event_category_map(self) -> dict[str, str]:
         """Fetch all open events and return event_ticker → category mapping."""
@@ -255,7 +296,7 @@ class MarketService:
         event_map: dict[str, str] = {}
         cursor: str | None = None
 
-        for _ in range(20):  # safety limit
+        for _ in range(20):
             try:
                 params: dict[str, Any] = {"limit": 200, "status": "open"}
                 if cursor:
@@ -280,69 +321,21 @@ class MarketService:
         logger.info("Built event category map with %d events", len(event_map))
         return event_map
 
-    async def _fetch_all_open_markets(self) -> list[Market]:
-        """Fetch all open markets via paginated /markets?status=open."""
-        logger = logging.getLogger(__name__)
-        all_markets: list[Market] = []
-        cursor: str | None = None
-
-        for _ in range(50):  # safety limit
-            try:
-                params: dict[str, Any] = {"limit": 200, "status": "open"}
-                if cursor:
-                    params["cursor"] = cursor
-                resp = await self._client.get("/markets", **params)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception:
-                logger.warning("Failed to fetch markets page (collected %d so far)", len(all_markets))
-                break
-
-            batch = [_normalize_market(m) for m in data.get("markets", [])]
-            all_markets.extend(batch)
-            cursor = data.get("cursor")
-            if not cursor or not data.get("markets"):
-                break
-
-        logger.info("Fetched %d open markets", len(all_markets))
-        return all_markets
-
-    async def _resolve_market_categories(
+    async def _resolve_event_categories(
         self,
-        markets: list[Market],
+        tickers: set[str],
         event_category_map: dict[str, str],
     ) -> None:
-        """Resolve categories for markets using event map, with on-demand lookups for unknown events.
-
-        Mutates markets in-place, setting category and market_category.
-        """
-        logger = logging.getLogger(__name__)
-
-        # First pass: resolve from event map
-        resolved = 0
-        uncached_tickers: set[str] = set()
-        for m in markets:
-            if m.event_ticker and m.event_ticker in event_category_map:
-                raw_cat = event_category_map[m.event_ticker]
-                m.category = raw_cat
-                m.market_category = _map_category(raw_cat)
-                resolved += 1
-            elif m.event_ticker and m.category is None:
-                uncached_tickers.add(m.event_ticker)
-
-        logger.info(
-            "Resolved %d markets from event map, %d need individual lookup",
-            resolved, len(uncached_tickers),
-        )
-
-        # Second pass: look up uncached events individually
-        if not uncached_tickers:
+        """Look up uncached event categories via /events/{ticker} with batching."""
+        if not tickers:
             return
 
-        semaphore = asyncio.Semaphore(5)
+        logger = logging.getLogger(__name__)
+        semaphore = asyncio.Semaphore(3)
 
-        async def _lookup_event(ticker: str) -> tuple[str, str | None]:
+        async def _lookup(ticker: str) -> tuple[str, str | None]:
             async with semaphore:
+                await asyncio.sleep(0.15)
                 try:
                     resp = await self._client.get(f"/events/{ticker}")
                     if resp.status_code != 200:
@@ -354,19 +347,7 @@ class MarketService:
                     logger.debug("Failed to look up event %s", ticker)
                     return ticker, None
 
-        results = await asyncio.gather(*[_lookup_event(t) for t in uncached_tickers])
-        extra_resolved = 0
+        results = await asyncio.gather(*[_lookup(t) for t in tickers])
         for ticker, cat in results:
             if cat:
                 event_category_map[ticker] = cat
-                extra_resolved += 1
-
-        # Apply newly resolved categories
-        for m in markets:
-            if m.event_ticker in event_category_map and m.category is None:
-                raw_cat = event_category_map[m.event_ticker]
-                m.category = raw_cat
-                m.market_category = _map_category(raw_cat)
-
-        if extra_resolved:
-            logger.info("Resolved %d additional markets via individual event lookup", extra_resolved)
