@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
@@ -24,12 +26,16 @@ if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
 
 _EVENT_CACHE_TTL = 300  # seconds
-_EVENT_CACHE_WARM_INTERVAL = 240  # seconds — refresh before TTL expires
 _EVENT_CACHE_PAGE_DELAY = 0.3  # seconds between pagination requests
+
 _event_category_cache: dict[str, str] = {}
 _event_cache_ts: float = 0.0
 _event_cache_lock = asyncio.Lock()
-_event_cache_task: asyncio.Task | None = None
+
+
+def _event_cache_path() -> Path:
+    from traderbot.paths import get_data_dir
+    return get_data_dir() / "event_category_cache.json"
 
 
 def _clear_event_cache() -> None:
@@ -37,6 +43,34 @@ def _clear_event_cache() -> None:
     global _event_category_cache, _event_cache_ts  # noqa: PLW0603
     _event_category_cache = {}
     _event_cache_ts = 0.0
+
+
+def _load_event_cache_from_disk() -> bool:
+    """Load event category cache from disk if fresh. Returns True if loaded."""
+    global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+    cache_file = _event_cache_path()
+    if not cache_file.exists():
+        return False
+    try:
+        data = json.loads(cache_file.read_text())
+        ts = data.get("ts", 0)
+        if time.time() - ts > _EVENT_CACHE_TTL:
+            return False
+        _event_category_cache = data.get("map", {})
+        _event_cache_ts = ts
+        return bool(_event_category_cache)
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
+
+
+def _save_event_cache_to_disk() -> None:
+    """Persist event category cache to disk for cross-process reuse."""
+    cache_file = _event_cache_path()
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({
+        "ts": _event_cache_ts,
+        "map": _event_category_cache,
+    }))
 
 
 class MarketService:
@@ -278,12 +312,17 @@ class MarketService:
         now = time.monotonic()
         if _event_category_cache and (now - _event_cache_ts) < _EVENT_CACHE_TTL:
             return dict(_event_category_cache)
+        if _load_event_cache_from_disk():
+            return dict(_event_category_cache)
         async with _event_cache_lock:
             if _event_category_cache and (time.monotonic() - _event_cache_ts) < _EVENT_CACHE_TTL:
+                return dict(_event_category_cache)
+            if _load_event_cache_from_disk():
                 return dict(_event_category_cache)
             fresh = await self._build_event_category_map()
             _event_category_cache = fresh
             _event_cache_ts = time.monotonic()
+            _save_event_cache_to_disk()
             return dict(fresh)
 
     async def _build_event_category_map(self) -> dict[str, str]:
@@ -348,38 +387,3 @@ class MarketService:
         for ticker, cat in results:
             if cat:
                 event_category_map[ticker] = cat
-
-
-async def start_event_cache_warmer(client: KalshiClient) -> None:
-    """Start a background task that refreshes the event category map before it expires.
-
-    Call this once at application startup. The warmer sleeps and refreshes on
-    ``_EVENT_CACHE_WARM_INTERVAL`` so that ``scan`` calls always hit a hot cache
-    and never trigger a full pagination sweep themselves.
-    """
-    global _event_cache_task  # noqa: PLW0603
-    if _event_cache_task is not None:
-        return
-
-    async def _warmer() -> None:
-        svc = MarketService(client)
-        while True:
-            try:
-                fresh = await svc._build_event_category_map()
-                async with _event_cache_lock:
-                    global _event_category_cache, _event_cache_ts  # noqa: PLW0603
-                    _event_category_cache = fresh
-                    _event_cache_ts = time.monotonic()
-            except Exception:
-                logging.getLogger(__name__).warning("Event cache warmer refresh failed, will retry")
-            await asyncio.sleep(_EVENT_CACHE_WARM_INTERVAL)
-
-    _event_cache_task = asyncio.create_task(_warmer())
-
-
-def stop_event_cache_warmer() -> None:
-    """Cancel the background event cache warmer."""
-    global _event_cache_task  # noqa: PLW0603
-    if _event_cache_task is not None:
-        _event_cache_task.cancel()
-        _event_cache_task = None

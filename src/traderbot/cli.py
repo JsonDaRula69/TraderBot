@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -3555,6 +3556,47 @@ def uninstall(
             print("Nothing to remove — TraderBot is not installed.")
         else:
             print(f"\n✓ TraderBot uninstalled. {len(removed)} items removed.")
+
+
+@app.command("cache")
+def cache_command(
+    action: Annotated[
+        str,
+        typer.Argument(help="Cache action: 'warm' to pre-populate event cache"),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON"),
+    ] = False,
+) -> None:
+    """Manage TraderBot caches. Use 'warm' to pre-populate the event category cache."""
+    from traderbot.kalshi.client import KalshiClient
+    from traderbot.kalshi.markets import MarketService, _save_event_cache_to_disk
+
+    console = Console()
+
+    if action != "warm":
+        console.print(f"[red]Unknown cache action:[/red] {action}. Use 'warm'.")
+        raise typer.Exit(1)
+
+    async def _warm() -> dict[str, int]:
+        from traderbot.kalshi.markets import _event_category_cache, _event_cache_ts
+
+        client = KalshiClient()
+        svc = MarketService(client)
+        event_map = await svc._build_event_category_map()
+        _event_category_cache.update(event_map)
+        _event_cache_ts = time.monotonic()
+        _save_event_cache_to_disk()
+        await client.close()
+        return {"events": len(event_map), "categories": len(set(event_map.values()))}
+
+    result = asyncio.run(_warm())
+
+    if json_output:
+        json_lib.dump({"status": "warmed", **result}, sys.stdout)
+    else:
+        console.print(f"[green]✓[/green] Event cache warmed: {result['events']} events across {result['categories']} categories")
 
 
 def main() -> None:
