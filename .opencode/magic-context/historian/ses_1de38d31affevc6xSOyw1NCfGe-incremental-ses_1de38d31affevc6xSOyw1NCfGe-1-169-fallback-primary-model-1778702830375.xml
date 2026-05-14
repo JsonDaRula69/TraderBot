@@ -1,0 +1,58 @@
+<unprocessed_from>1</unprocessed_from>
+
+<compartment start="1" end="48">
+  <fact category="OPERATIONS">Session ses_1de38d31affevc6xSOyw1NCfGe started at 2026-05-13T14:39:21Z on plan prod-data-local-sim; later continued as ses_1dd0d1cf8ffe2wigWgk4N7H8Rc at 2026-05-13T20:06:43Z</fact>
+  <fact category="OPERATIONS">User instructed switch to `next-gen` branch and bump version to 0.11.nn series</fact>
+  <fact category="OPERATIONS">`next-gen` branch created from current state; version bumped from v0.10.217 to v0.11.00 via VERSION file edit</fact>
+  <fact category="PLAN">Plan prod-data-local-sim at .sisyphus/plans/prod-data-local-sim.md has 26 tasks across waves: Wave 1 (T1-T6), Wave 2 (T7-T12), Wave 3 (T13-T15), Wave 4 (T16-T22), Final Wave (F1-F4)</fact>
+  <fact category="OPERATIONS">Notepad initialized at .sisyphus/notepads/prod-data-local-sim/ with learnings.md, decisions.md, issues.md, problems.md</fact>
+  <fact category="EXECUTION">Wave 1 tasks (T1-T6) launched in parallel; T1 (keyring removal from config.py) committed first; T2-T6 follow</fact>
+</compartment>
+
+<compartment start="49" end="67">
+  <fact category="CREDENTIALS">test-keys.txt at project root /Users/djtchill/Desktop/TraderBot/test-keys.txt contains real API keys for live testing</fact>
+  <fact category="EXECUTION">Wave 1 complete (T1-T6: 6/6) at v0.11.00–0.11.06; Wave 2 tasks (T7-T12) launched in parallel</fact>
+</compartment>
+
+<compartment start="68" end="80">
+  <fact category="PERFORMANCE">API requests must be batched wherever possible for efficiency and reduced API call count</fact>
+  <fact category="EXECUTION">Wave 2 completed and committed at v0.11.07–0.11.12; 19 provider tests pass</fact>
+  <fact category="EXECUTION">Wave 3 started: T13 (PaperTrader) first, then T14+T15 in parallel</fact>
+</compartment>
+
+<compartment start="81" end="100">
+  <fact category="CONSTRAINTS">Kalshi V2 API only — V1 deprecated and must not be used; kalshi/ codebase already V2-only (base URL trade-api/v2)</fact>
+  <fact category="ARCHITECTURE">_normalize.py handles Kalshi V2-to-internal-model normalization (not V1→V2); handles volume_fp, yes_ask_dollars, state=finalized</fact>
+  <fact category="EXECUTION">Wave 3 complete (15/22 ✅); Wave 4 launched (T16-T22)</fact>
+</compartment>
+
+<compartment start="101" end="119">
+  <fact category="TESTING">Integration tests must read API keys from test-keys.txt, create a temporary .env for the test duration, and destroy .env when tests complete — keys must NOT be hardcoded in test files</fact>
+  <fact category="TESTING">Shared integration conftest at tests/integration_conftest.py creates temp .env from test-keys.txt and cleans up after tests</fact>
+  <fact category="TESTING">Integration test files: tests/test_provider_integration.py, tests/test_auth_integration.py, tests/test_cache_integration.py, tests/test_settlement_integration.py</fact>
+  <fact category="TESTING">test-keys.txt was corrupted by subagent overwrite and had to be restored</fact>
+  <fact category="EXECUTION">Only test_integration_comprehensive.py kept as e2e test; test_integration_e2e.py and test_integration_papertrader.py deleted as duplicates</fact>
+</compartment>
+
+<compartment start="120" end="134">
+  <fact category="CREDENTIALS">test-keys.txt fully restored to 41 lines with all keys: Kalshi API key + RSA PEM private key, NewsAPI, VoyageAI (VoyageAI_API_KEY), Ollama (OLLAMA_BASE_URL), OpenWeatherMap, FRED, CoinGecko</fact>
+  <fact category="CREDENTIALS">Kalshi API key updated — old key was for demo env, new key is for live env with Read Access only</fact>
+  <fact category="CREDENTIALS">test-keys.txt added to .gitignore; previous commit amended to purge it from git history with force push</fact>
+  <fact category="EXECUTION">T17 (integration tests) committed; T18 (e2e tests) + T20 (docs) + T21 (docs) + T22 (CLI auth) launched in parallel</fact>
+</compartment>
+
+<compartment start="135" end="157">
+  <fact category="EXECUTION">All Wave 4 tasks (T16-T22) completed and committed after user requested git commit before next task</fact>
+  <fact category="EXECUTION">17 old test files with demo/keyring references identified for deletion as part of T19</fact>
+  <fact category="EXECUTION">T22 (CLI auth commands) cleanup: `auth login` → `auth check` at cli.py line 717 still needed fix</fact>
+  <fact category="EXECUTION">T19 old test deletion delegated + T22 fix in parallel</fact>
+</compartment>
+
+<compartment start="158" end="169">
+  <fact category="OPERATIONS">Subagents went offline — all remaining work done directly by Atlas</fact>
+  <fact category="EXECUTION">T22 CLI fix applied: `auth login` → `auth check` at cli.py line 717</fact>
+  <fact category="EXECUTION">17 old test files with demo/keyring references deleted</fat>
+  <fat category="EXECUTION">respx test dependency removed from pyproject.toml</fat>
+  <fat category="TESTING">Full test suite (excluding live integration) runs clean — all unit tests pass</fat>
+  <fact category="PLAN">All 26 tasks of prod-data-local-sim plan completed; final verification passed</fat>
+</compartment>

@@ -202,9 +202,6 @@ def ingest_news(
     except Exception:
         pass
 
-    # Resolve profile for env vars (api keys, sources config)
-    profile = get_current_profile() if profile_name is None else None  # noqa: F841
-
     # Build aggregator, classifier, scorer, assessor
     aggregator = NewsAggregator()
     classifier = NewsClassifier()

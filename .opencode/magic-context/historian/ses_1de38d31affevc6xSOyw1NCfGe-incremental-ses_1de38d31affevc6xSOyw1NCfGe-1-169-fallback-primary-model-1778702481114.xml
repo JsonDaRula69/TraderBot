@@ -1,0 +1,107 @@
+<unprocessed_from>1</unprocessed_from>
+
+<compartment start="1" end="48">
+## Setup + Wave 1 (T1–T6): Provider, Demo Cleanup, Auth, Positions, Keyring
+
+- Session started with `/start-work prod-data-local-sim`. Plan: `.sisyphus/plans/prod-data-local-sim.md` (0/26 tasks).
+- Switched to `next-gen` branch. Bumped `VERSION` to `0.11.00`. Initial commit: `chore: start v0.11 on next-gen branch`.
+- Wave 1 (parallel, 6 tasks):
+  - **T1** — `KalshiProvider` gets `live_mode=True` default. Uses `_authenticate()` to real API. `get_markets()` delegates to `KalshiClient`.
+  - **T2** — `demo.py` deleted. `KalshiDemoConfig` removed from config. Demo auth branch removed from `client.py` and `websocket.py`. No `demo_mode`/`active_url`/`demo_url` references remain.
+  - **T3** — `AuthManager` in `src/traderbot/kalshi/auth.py` reads `.env`, requests session token, stores in `_session_token`. `KalshiClient` uses `AuthManager` for Bearer token.
+  - **T4** — `PaperPosition` with `position_id`, `yes_cost`, `no_cost`, `max_loss`, `max_gain`, `status="PENDING"`, `created_at` timestamp.
+  - **T5** — `TradingProfile` gets `paper_mode: bool = False`. `KalshiConfig` has `paper_mode` field. Profile resolution reads from profile config.
+  - **T6** — Keyring dependency removed. `KeyringKalshiConfig` deleted. All env vars go through `.env` + `python-dotenv`.
+- All Wave 1 verified: 17 provider tests pass, 0 LSP errors, zero keyring/demo references.
+</compartment>
+
+<compartment start="49" end="100">
+## Wave 2–3 (T7–T15): Real API Refactor, PaperTrader Rewrite, Settlement
+
+- **test-keys.txt** at project root contains real Kalshi API keys (plus NewsAPI, FRED, CoinGecko, etc.). Integration tests load from this file.
+- User reminder: batch API calls for efficiency.
+- Wave 2 (parallel, 6 tasks):
+  - **T7** — `src/traderbot/kalshi/markets.py` uses `KalshiClient` for `list_markets_by_category()`. No `KalshiProvider` dependency in markets module.
+  - **T8** — `KalshiProvider.batch_get_markets()` fetches in 3-at-a-time batches with 0.5s delay. `batch_get_orderbooks()` and `batch_get_positions()` also batch.
+  - **T9** — `SimulatedOrderManager` replaces old simulation. Wraps `KalshiClient`; `submit_order()` logs instead of placing; `fill_order()` simulates fill at mid-price.
+  - **T10** — `LiveMarketCache` in `src/traderbot/kalshi/cache.py`. 60s TTL. Uses `KalshiClient.list_markets()` for refresh.
+  - **T11** — `PaperPosition` CLI integration: `traderbot positions` shows paper positions when profile has `paper_mode=True`.
+  - **T12** — `client.py` and `websocket.py` fully cleaned — no demo references, no `active_url`, no `demo_url`.
+- Wave 2 verified: all imports pass, 19 provider tests, 0 LSP errors, 0 demo references.
+- User clarified: Kalshi V2 API only. Confirmed `src/traderbot/kalshi/` uses `trade-api/v2` base URL throughout. V1 fully eliminated.
+- Wave 3:
+  - **T13** — `PaperTrader` in `src/traderbot/simulation/paper_trader.py` rewritten. Uses real `KalshiClient` (not `DemoAdapter`). `self.client` from provider. Order lifecycle: `create_order` → `PaperOrder` → `fill_order` → `PaperPosition`.
+  - **T14** — CLI settlement command: `traderbot settlement <market_id> <outcome>` uses `KalshiClient.settle_market()`.
+  - **T15** — Settlement webhook endpoint (`/webhook/settlement`) calls `PaperTrader.settle_position()`.
+- Wave 3 verified, committed (v0.11.13–v0.11.15).
+</compartment>
+
+<compartment start="101" end="157">
+## Wave 4 (T16–T22): Tests, Docs, Cleanup
+
+- Integration tests fix: temp `.env` pattern. `integration_conftest.py` reads `test-keys.txt`, writes temp `.env`, destroys on teardown. Keys never hardcoded.
+- Subagent corrupted `test-keys.txt` (overwrote with Kalshi-only). Restored to full 41 lines (NewsAPI, VoyageAI, Ollama, OpenWeatherMap, FRED, CoinGecko).
+- User updated Kalshi API key: old demo key → live read-only key. Applied to `test-keys.txt`.
+- `test-keys.txt` added to `.gitignore`. Amended prior commit to exclude it.
+- Integration test files committed: `integration_conftest.py`, `test_provider_integration.py`, `test_auth_integration.py`, `test_cache_integration.py`, `test_settlement_integration.py`.
+- **T16** — 77 unit tests: risk, slippage, P&L, positions, cache, settlement, logging. All pass.
+- **T17** — Integration tests for provider, cache, settlement (live API via temp `.env`).
+- **T18** — E2E integration tests: PaperTrader, CLI end-to-end via live API.
+- **T19** — Pending: delete old test files (17 identified — e.g., `test_provider.py` old version, `test_config_kalshi.py`, `test_kalshi_old.py`, `test_cache_old.py`, `test_cli_old.py`).
+- **T20** — Docs updated: `.openclaw/workspace/` documentation for new architecture.
+- **T21** — `docs/` and installer updated for `.env`-only auth, no keyring.
+- **T22** — CLI auth commands: `traderbot auth check` replaces stale references. One remaining old reference on `cli.py:717`.
+- Plan progress: 19/26 tasks. Remaining unchecked: T19, T20, T22 checkboxes + Final Wave F1–F4.
+</compartment>
+
+<compartment start="158" end="169">
+## Subagents Offline, Manual Cleanup
+
+- User instructed: subagents are offline — conduct remaining work directly.
+- T22 fix applied manually: CLI auth command reference (`keyring login` → `auth check`) on `cli.py:717`.
+- T19 cleanup started manually:
+  - Old test files deleted: `test_provider.py` (old), `test_config_kalshi.py`, `test_kalshi_old.py`, `test_cache_old.py`, `test_cli_old.py`, `test_logging_old.py`, `test_risk_old.py` (list of 17 files total).
+  - Old conftest fixtures (demo/KalshiDemoConfig references) cleaned.
+  - `respx` dev dependency removed from `pyproject.toml`.
+- Full test suite running (excluding live integration tests which need `test-keys.txt`).
+- Remaining: complete T19 verification, update T20/T22 checkboxes in plan file, Final Verification Wave (F1–F4).
+</compartment>
+
+<normalized_facts>
+<CONSTRAINTS existing="false">
+- Integration test keys loaded from `test-keys.txt` (project root), NEVER hardcoded. Temp `.env` created/destroyed per test run via `integration_conftest.py` session-scoped fixture.
+- Kalshi API key is live read-only key (updated by user msg 126-127). Old demo key replaced.
+- `test-keys.txt` is in `.gitignore` — must never be committed or tracked.
+- `test-keys.txt` temporarily corrupted by subagent (overwritten with Kalshi-only content); restored to full 41 lines covering all services.
+- Subagents went offline at msg 158 — remaining work conducted manually.
+</CONSTRAINTS>
+
+<ENVIRONMENT existing="false">
+- Working branch: `next-gen` (created from `main`).
+- Version: v0.11.XX, started at v0.11.00, incremented per commit. Each completed task has its own commit + `v0.11.XX` tag.
+- Plan: `.sisyphus/plans/prod-data-local-sim.md`. Progress: 19/26 tasks.
+- Kalshi V1 references fully eliminated from `src/traderbot/kalshi/` — all use `trade-api/v2` base URL.
+- Kalshi demo mode fully removed: no `demo_mode`, `active_url`, `demo_url`, `KalshiDemoConfig`, `KeyringKalshiConfig`, keyring dependencies.
+- `KalshiProvider` now uses `live_mode=True` by default, authenticates via `AuthManager` `.env` → session token.
+- `PaperTrader` uses real `KalshiClient`, not `DemoAdapter`. `SimulatedOrderManager` wraps `KalshiClient`.
+- `TradingProfile` has `paper_mode: bool` field. When True, `PaperTrader` uses `SimulatedOrderManager`.
+- Integration test files created: `integration_conftest.py`, `test_provider_integration.py`, `test_auth_integration.py`, `test_cache_integration.py`, `test_settlement_integration.py`.
+- 77 unit tests pass. 19 provider tests pass.
+- Old test files marked for deletion (17 files): `test_provider.py` (old), `test_config_kalshi.py`, `test_kalshi_old.py`, `test_cache_old.py`, `test_cli_old.py`, `test_logging_old.py`, `test_risk_old.py`, etc. `respx` dev dependency removed.
+- One remaining CLI reference to old auth pattern on `cli.py:717` — fixed to `auth check`.
+- `LiveMarketCache` in `src/traderbot/kalshi/cache.py` with 60s TTL, uses `KalshiClient.list_markets()`.
+- `KalshiProvider.batch_get_markets()` fetches 3 at a time with 0.5s delay. Batch methods for orderbooks and positions also implemented.
+</ENVIRONMENT>
+
+<WORKFLOW_RULES existing="false">
+- Each completed task gets its own commit + `v0.11.XX` tag + push on `next-gen` branch.
+- Plan checkboxes updated in `.sisyphus/plans/prod-data-local-sim.md` after each verified task.
+- Subagents offline from msg 158 — remaining work done manually by Atlas.
+</WORKFLOW_RULES>
+
+<KNOWN_ISSUES existing="false">
+- Integration tests require live API keys from `test-keys.txt`; skip/mark when file is missing or read-only.
+- `PaperPosition` defaults to `PENDING` status (simulated — never hits exchange).
+- `test-keys.txt` was temporarily corrupted by subagent; had to be manually restored.
+</KNOWN_ISSUES>
+</normalized_facts>
