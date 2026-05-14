@@ -3380,17 +3380,18 @@ def uninstall(
         else:
             console.print("[bold]Step 3: Removing repository[/bold]")
             shutil.rmtree(repo_dir)
-            console.print(f"  Removed: {repo_dir}")
+            print(f"  Removed: {repo_dir}")
             removed.append(str(repo_dir))
 
-    # Result
+    # Result — use print() instead of console.print() because repo removal
+    # may have deleted the venv (including rich), making Rich unusable.
     if json_output:
         json_lib.dump({"removed": removed, "data_removed": remove_data, "repo_removed": remove_repo}, sys.stdout, default=str)
     else:
         if not removed:
-            console.print("[yellow]Nothing to remove — TraderBot is not installed.[/yellow]")
+            print("Nothing to remove — TraderBot is not installed.")
         else:
-            console.print(f"\n[green]✓ TraderBot uninstalled.[/green] {len(removed)} items removed.")
+            print(f"\n✓ TraderBot uninstalled. {len(removed)} items removed.")
 
 
 def main() -> None:
