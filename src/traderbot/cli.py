@@ -1299,9 +1299,36 @@ def news_ingest(
     automatically deduplicate by URL hash.
     """
     from traderbot.news.ingest import ingest_news
+    from traderbot.profiles.runtime import get_current_profile
+    from traderbot.profiles.config import resolve_newsapi_key, resolve_openweather_key, resolve_fred_key
 
     console = Console()
-    report = ingest_news(limit=limit)
+
+    profile = get_current_profile()
+    newsapi_key = resolve_newsapi_key(profile)
+    openweather_key = resolve_openweather_key(profile)
+    fred_key = resolve_fred_key(profile)
+
+    if newsapi_key:
+        os.environ["NEWSAPI_API_KEY"] = newsapi_key
+    if openweather_key:
+        os.environ["OPENWEATHER_API_KEY"] = openweather_key
+    if fred_key:
+        os.environ["FRED_API_KEY"] = fred_key
+    if profile:
+        voyage_key = os.environ.get(
+            f"VOYAGE_API_KEY_PROFILE_{profile.name.upper()}",
+            os.environ.get("VOYAGE_API_KEY", "")
+        )
+        if voyage_key:
+            os.environ["VOYAGE_API_KEY"] = voyage_key
+
+    report = ingest_news(
+        limit=limit,
+        newsapi_key=newsapi_key,
+        openweather_key=openweather_key,
+        fred_key=fred_key,
+    )
 
     if json_output:
         json_lib.dump(report.to_dict(), sys.stdout, default=str)

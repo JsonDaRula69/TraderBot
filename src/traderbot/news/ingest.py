@@ -23,7 +23,6 @@ _DEFAULT_INGEST_LIMIT = 50
 _DEFAULT_SUMMARY_LIMIT = 30
 _NEWS_COLLECTION = "news"
 _NEWS_SIGNALS_COLLECTION = "news_signals"
-_EMBED_DIMENSION = 1024
 
 # ── Public types ─────────────────────────────────────────────────────────
 
@@ -161,19 +160,51 @@ def _flatten_text(item: NewsItem) -> str:
 # ── Public API ───────────────────────────────────────────────────────────
 
 
+def _collection_dim(vs: VectorStore, name: str) -> int:
+    try:
+        col = vs.get_collection(name)
+        count = col.count()
+        if count == 0:
+            return 384
+        sample = col.get(limit=1, include=["embeddings"])
+        embs = sample.get("embeddings", [])
+        if embs and embs[0] is not None:
+            return len(embs[0])
+    except Exception:
+        pass
+    return 384
+
+
 def ingest_news(
     limit: int = _DEFAULT_INGEST_LIMIT,
     max_age_hours: int = 72,
     profile_name: str | None = None,
     vector_store: VectorStore | None = None,
+    newsapi_key: str | None = None,
+    openweather_key: str | None = None,
+    fred_key: str | None = None,
 ) -> IngestReport:
     """Fetch news from all sources, classify, embed, and store in ChromaDB.
 
     No LLM required. Gracefully degrades when VoyageAI key is missing.
+    Accepts optional API keys; falls back to env vars.
     Returns an IngestReport with counts.
     """
     report = IngestReport()
     start = time.monotonic()
+
+    import os as _os
+    from traderbot.news.sources import DataSourcesConfig
+
+    resolved_newsapi = newsapi_key or _os.environ.get("NEWSAPI_API_KEY")
+    resolved_ow = openweather_key or _os.environ.get("OPENWEATHER_API_KEY")
+    resolved_fred = fred_key or _os.environ.get("FRED_API_KEY")
+
+    ds_config = DataSourcesConfig(
+        newsapi_key=resolved_newsapi,
+        openweather_key=resolved_ow,
+        fred_key=resolved_fred,
+    )
     vs = vector_store or VectorStore()
 
     vs.init_collections()
@@ -186,7 +217,7 @@ def ingest_news(
     except Exception:
         pass
 
-    aggregator = NewsAggregator()
+    aggregator = NewsAggregator(config=ds_config)
     classifier = NewsClassifier()
     scorer = SentimentScorer()
     assessor = ImpactAssessor()
@@ -359,12 +390,8 @@ def get_news_summary(
                 collection=collection_name,
             )
         else:
-            # Fallback: use ChromaDB's ability to return all with filter
-            # ChromaDB requires an embedding even for filtered "dumb" search.
-            # Use zero vector as placeholder.
-            zero_embed = [0.0] * _EMBED_DIMENSION
             results = vs.search(
-                zero_embed,
+                [0.0] * _collection_dim(vs, collection_name),
                 n=limit,
                 filter_metadata=where_clause,
                 collection=collection_name,
