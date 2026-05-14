@@ -2441,7 +2441,7 @@ def profile_assign(
         _interactive_assign(console, registry, overwrite=overwrite)
         return
 
-    _do_assign(profile_name, agent_id, overwrite=overwrite, force=force, console=console)
+    _do_assign(profile_name, agent_id, overwrite=overwrite, force=force, console=console, script_output=yes)
 
 
 def _do_assign(
@@ -2450,6 +2450,7 @@ def _do_assign(
     overwrite: bool = False,
     force: bool = False,
     console: Console | None = None,
+    script_output: bool = False,
 ) -> None:
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.injection_strategies import set_skip_prompts
@@ -2473,8 +2474,9 @@ def _do_assign(
         console.print(
             f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
         )
-        console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
-        print(f"RAW_TOKEN:{token}")
+        if script_output:
+            console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
+            print(f"RAW_TOKEN:{token}")
 
         try:
             agent_path = _resolve_agent_path(agent_id)
@@ -2915,8 +2917,6 @@ def _interactive_assign_agent(name: str, console: Console, registry: "ProfileReg
         return
 
     console.print(f"[green]✓[/green] Assigned token to profile '{name}' for agent '{agent_id}'")
-    console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
-    print(f"RAW_TOKEN:{token}")
 
     agent_path = _resolve_agent_path(agent_id)
     if agent_path and agent_path.exists():
