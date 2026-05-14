@@ -29,7 +29,11 @@ class TradingProfile(BaseModel):
     max_open_positions: Annotated[int, Field(gt=0)]
     min_liquidity_threshold: Annotated[int, Field(gt=0)]
     min_edge_pct: Annotated[float, Field(gt=0)]
-    paper_mode: bool = False
+    @computed_field
+    @property
+    def paper_mode(self) -> bool:
+        return self.mode == "paper"
+
     initial_balance_cents: int | None = None
 
     @computed_field
