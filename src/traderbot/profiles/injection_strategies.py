@@ -118,6 +118,15 @@ def init_if_missing(template_content: str, target_path: Path) -> bool:
     return True
 
 
+_SKIP_PROMPTS = False
+
+
+def set_skip_prompts(skip: bool) -> None:
+    """Enable non-interactive mode for workspace injection."""
+    global _SKIP_PROMPTS
+    _SKIP_PROMPTS = skip
+
+
 def ask_then_merge(
     template_content: str,
     target_path: Path,
@@ -126,12 +135,15 @@ def ask_then_merge(
 ) -> bool:
     """Prompt user for confirmation, then fenced_merge if accepted.
 
-    In non-interactive mode (no TTY), falls back to init_if_missing.
+    In non-interactive mode (no TTY or skip_prompts enabled), falls back to init_if_missing.
+    When skip_prompts is enabled, auto-applies the merge.
 
     Returns True if merge was applied, False otherwise.
     """
-    if not sys.stdin.isatty():
-        return init_if_missing(template_content, target_path)
+    if _SKIP_PROMPTS or not sys.stdin.isatty():
+        markers = FENCED_BLOCK_MARKERS.get(file_label, markers)
+        fenced_merge(template_content, target_path, markers)
+        return True
     try:
         response = input(f"Apply TraderBot template for {file_label}? [y/N]: ")
         if response.lower().startswith("y"):

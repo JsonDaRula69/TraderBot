@@ -2414,11 +2414,16 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
 def profile_assign(
     profile_name: str,
     agent_id: str,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting")] = False,
 ) -> None:
     """Assign a token to an agent for profile access."""
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
+    from traderbot.profiles.injection_strategies import set_skip_prompts
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import assign_token, generate_token
+
+    if yes:
+        set_skip_prompts(True)
 
     console = Console()
     registry = ProfileRegistry()
