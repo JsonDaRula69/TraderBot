@@ -9,7 +9,7 @@ tasks:
   prompt: "Run `traderbot halt` to check circuit breaker status. If SLOW or worse, report immediately."
 - name: performance-review
   interval: 6h
-  prompt: "Run `traderbot heartbeat --json` to run the 7-step self-review cycle (performance → decision review → Bayesian adaptation → learning promotion → circuit breaker check → system health → update HEARTBEAT_DATA.md)."
+  prompt: "Run `traderbot heartbeat --json` to run the 7-step self-review cycle (performance → decision review → Bayesian adaptation → learning promotion → circuit breaker check → system health → update HEARTBEAT_DATA.md). The heartbeat loop cron runs this automatically every 30 minutes — this is a deeper 6-hour review that also promotes learnings and checks for drift."
 - name: learning-promotion
   interval: 6h
   prompt: "Review `.learnings/LEARNINGS.md` for entries with Recurrence-Count >= 3. Promote to PENDING_REVIEW status if not already. Never auto-commit to AGENTS.md."

@@ -51,7 +51,6 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot compare --profiles name1,name2 --json` | Compare across risk profiles |
 | `traderbot --version` | Show version |
 | `traderbot halt --json` | Check circuit breaker state (read-only) |
-| `traderbot resume --json` | Clear FULL_STOP/HALT state and resume trading |
 | `traderbot update` | Update TraderBot to latest version |
 
 ### Profile Inspection (read-only)
@@ -74,6 +73,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | Command | Why Restricted |
 |---|---|
 | `traderbot halt --force` | Emergency override — requires human judgment |
+| `traderbot resume` | Clears circuit breaker halt — agent must alert, not auto-resume |
 | `traderbot resume` | Clears circuit breaker halt — requires human judgment (agent should alert, not auto-resume) |
 
 ### Profile Management (changes config or credentials)

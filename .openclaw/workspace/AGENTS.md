@@ -70,6 +70,20 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 | `max_open_positions` | 20 | Maximum concurrent open positions |
 | `min_edge_pct` | 3% | Minimum required edge over market price |
 
+### Data Sourcing Protocol
+
+Before considering any trade, collect **at least 5 independent data points** from the configured sources, in this priority order:
+
+1. **`traderbot scan --json`** — discover open markets in your enabled categories
+2. **`traderbot signals --json`** — statistical indicator signals (RSI, Bollinger, EMA crossover, edge)
+3. **`traderbot news --json`** — news articles relevant to the market category
+4. **`traderbot sentiment TICKER --json`** — aggregate sentiment analysis
+5. **`traderbot analyze TICKER --json`** — orderbook depth + implied probability
+6. **`traderbot positions --json`** — current positions and exposure
+7. **Web search** — ONLY after exhausting the above sources. Web search is a supplement, not a primary source.
+
+**Minimum 5 data points** must be collected before submitting any trade. More is better — when multiple sources converge on the same signal, confidence increases. Log all sources consulted in the trade's audit trail.
+
 ### Decision Sequence
 
 1. Statistical indicators first (signals module)
@@ -94,10 +108,12 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 - **Decide overall strategy** — human and agent collaborate; improvements require human approval
 - **Modify TraderBot source code** — NEVER edit files in `src/traderbot/`, the installed package, or repository
 - **Read raw credentials** — NEVER read `.env` files or credential strings directly. Use `traderbot auth` commands
-- **Access files outside agent workspace** — ONLY read/write within `~/.openclaw/workspace/{agent}/`. No `cat`, `less`, `head`, or `python import` of TraderBot source, `~/.traderbot/`, or system directories. Your ONLY interfaces are `traderbot` CLI commands and web search
+- **Access files outside agent workspace** — ONLY read/write within `~/.openclaw/workspace/{agent}/`. Never use `python -c "import traderbot"`, `python -m`, or `open`/`read` calls on TraderBot source files (`src/traderbot/`, `.traderbot/`, or system directories). Your ONLY interfaces are `traderbot` CLI commands and web search
 - **Override risk limits** — immutable hard-coded constants in `HARD_LIMITS`
 - **Bypass the risk pipeline** — every trade must go through `evaluate_trade()`
 - **Trade during HALT/FULL_STOP** — no new trades when circuit breaker is active
+- **Use web search as primary source** — always exhaust `traderbot` data commands first (scan, signals, news, sentiment, analyze) before searching the internet. Web search is a supplement, never a replacement
+- **Act on fewer than 5 data points** — minimum 5 independent sources must be consulted before any trade decision
 - Don't exfiltrate private data (API keys, wallet credentials)
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask the human

@@ -60,8 +60,8 @@ The agent spawns a sub-agent that executes independently. No human attention is 
 }
 ```
 
-**Decision Loop cron**: Runs every 5 minutes during market hours.
-**Heartbeat Loop cron**: Runs every 6 hours.
+**Decision Loop cron**: Runs every 5 minutes, 24/7 (Kalshi prediction markets never close).
+**Heartbeat Loop cron**: Runs every 30 minutes.
 
 The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
 
