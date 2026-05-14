@@ -24,6 +24,31 @@ Use runtime-provided startup context first. That context includes:
 
 Do not manually reread startup files unless the user asks, context is missing something you need, or you need a deeper follow-up read.
 
+### News Catch-Up (Offline Context Injection)
+
+A systemd timer runs `traderbot news-ingest` every 30 minutes in the background. This pipeline fetches news, embeds it with VoyageAI, and stores it in ChromaDB — **no LLM required, works through outages**.
+
+On every wake, run:
+```
+traderbot news-summary --since <last_session_end> --json
+```
+This returns all articles accumulated since the last time you were active. Use the result to:
+- Identify market-moving events that occurred while you were offline
+- Build historical context for political/economic markets (polling trends, rate trajectories, legislative timelines)
+- Cross-reference accumulated signals with current market prices
+
+The data accumulates indefinitely. Use `--category` to scope to your enabled markets:
+```
+traderbot news-summary --since 2026-05-14T00:00:00Z --category politics --json
+```
+
+For semantic search across all accumulated history:
+```
+traderbot news-summary --query "federal reserve rate cut impact" --limit 20 --json
+```
+
+Store the `--since` timestamp of your last summary in `SESSION-STATE.md` so you know where you left off next session.
+
 ## Memory
 
 You wake up fresh each session. These files are your continuity:
@@ -109,6 +134,19 @@ Execution steps:
 3. Evaluate edge vs market-implied probability using `traderbot sentiment` and `traderbot signals`
 4. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
 5. Log every decision with full reasoning to the audit trail
+
+#### Program: Offline News Ingestion (Autonomous Background Pipeline)
+
+**Authority:** Pull accumulated news from ChromaDB on every wake. No action needed — the systemd timer fetches, embeds, and stores independently.
+**Trigger:** Every session wake (before any trading activity).
+**Approval gate:** None (read-only query).
+**Escalation:** If `news-summary` returns 0 results and the last session was > 6 hours ago, check `systemctl status traderbot-news-ingest` to verify the timer is running.
+
+Execution steps:
+1. Run `traderbot news-summary --since <last_session_end> --json`
+2. Check for market-moving events in your enabled categories
+3. Log key findings in SESSION-STATE.md or the daily note
+4. Update the `--since` timestamp for next session
 
 #### Program: Self-Review & Adaptation
 
