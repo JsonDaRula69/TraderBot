@@ -14,6 +14,12 @@ from traderbot.paths import get_data_dir
 logger = logging.getLogger(__name__)
 
 
+class TokenAlreadyAssignedError(ValueError):
+    def __init__(self, profile_name: str) -> None:
+        self.profile_name = profile_name
+        super().__init__(f"Profile '{profile_name}' already has a token assigned")
+
+
 def _mask_token(token: str) -> str:
     return "****" + token[-4:] if len(token) > 4 else "****"
 
@@ -71,10 +77,13 @@ def generate_token() -> str:
     return secrets.token_urlsafe(9)[:12]
 
 
-def assign_token(profile_name: str, agent_id: str, token: str) -> None:
+def assign_token(profile_name: str, agent_id: str, token: str, force: bool = False) -> None:
     existing_token = get_profile_token(profile_name)
-    if existing_token is not None:
-        raise ValueError(f"Profile '{profile_name}' already has a token assigned")
+    if existing_token is not None and not force:
+        raise TokenAlreadyAssignedError(profile_name)
+
+    if existing_token is not None and force:
+        revoke_token(existing_token)
 
     data = {
         "token": token,

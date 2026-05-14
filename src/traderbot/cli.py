@@ -2416,6 +2416,7 @@ def profile_assign(
     agent_id: Annotated[str | None, typer.Argument(help="Agent ID or name")] = None,
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite workspace files instead of merging")] = False,
+    force: Annotated[bool, typer.Option("--force", help="Reassign token even if profile already has one")] = False,
 ) -> None:
     """Assign a token to an agent for profile access.
 
@@ -2440,19 +2441,20 @@ def profile_assign(
         _interactive_assign(console, registry, overwrite=overwrite)
         return
 
-    _do_assign(profile_name, agent_id, overwrite=overwrite, console=console)
+    _do_assign(profile_name, agent_id, overwrite=overwrite, force=force, console=console)
 
 
 def _do_assign(
     profile_name: str,
     agent_id: str,
     overwrite: bool = False,
+    force: bool = False,
     console: Console | None = None,
 ) -> None:
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.injection_strategies import set_skip_prompts
     from traderbot.profiles.registry import ProfileRegistry
-    from traderbot.profiles.tokens import assign_token, generate_token
+    from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
 
     if console is None:
         console = Console()
@@ -2467,7 +2469,7 @@ def _do_assign(
 
     try:
         token = generate_token()
-        assign_token(profile_name, agent_id, token)
+        assign_token(profile_name, agent_id, token, force=force)
         console.print(
             f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
         )
@@ -2494,8 +2496,9 @@ def _do_assign(
         except Exception as e:
             console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
             console.print("Token assigned but not injected")
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
+    except TokenAlreadyAssignedError:
+        console.print(f"[yellow]Profile '{profile_name}' already has a token assigned.[/yellow]")
+        console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
         raise typer.Exit(1) from None
 
 
@@ -2558,7 +2561,10 @@ def _interactive_assign(console: Console, registry: "ProfileRegistry", overwrite
 
     overwrite = ws_choice == 2
 
-    _do_assign(profile_name, agent_id, overwrite=overwrite, console=console)
+    _do_assign(profile_name, agent_id, overwrite=overwrite, force=True, console=console)
+
+
+@profile_app.command("revoke")
 def profile_revoke(
     profile_name: str,
 ) -> None:
@@ -2861,7 +2867,7 @@ def _interactive_delete_profile(name: str, console: Console, registry: "ProfileR
 def _interactive_assign_agent(name: str, console: Console, registry: "ProfileRegistry") -> None:
     from traderbot.profiles.discovery import discover_agents
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
-    from traderbot.profiles.tokens import assign_token, generate_token
+    from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
 
     agents = discover_agents()
     if not agents:
@@ -2900,8 +2906,14 @@ def _interactive_assign_agent(name: str, console: Console, registry: "ProfileReg
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
         return
 
-    token = generate_token()
-    assign_token(name, agent_id, token)
+    try:
+        token = generate_token()
+        assign_token(name, agent_id, token, force=True)
+    except TokenAlreadyAssignedError:
+        console.print(f"[yellow]Profile '{name}' already has a token assigned.[/yellow]")
+        console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
+        return
+
     console.print(f"[green]✓[/green] Assigned token to profile '{name}' for agent '{agent_id}'")
     console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
     print(f"RAW_TOKEN:{token}")
