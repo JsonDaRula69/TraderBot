@@ -3383,6 +3383,35 @@ def uninstall(
             print(f"  Removed: {repo_dir}")
             removed.append(str(repo_dir))
 
+    # Step 4: Clean temp files and caches
+    import tempfile
+    tmp_cleaned: list[str] = []
+    for tmp_file in Path(tempfile.gettempdir()).glob("traderbot*"):
+        try:
+            if tmp_file.is_dir():
+                shutil.rmtree(tmp_file)
+            else:
+                tmp_file.unlink()
+            tmp_cleaned.append(str(tmp_file))
+        except OSError:
+            pass
+    pip_cache = Path.home() / ".cache" / "pip"
+    wheel_cache_glob = list(pip_cache.glob("wheels/*traderbot*")) if pip_cache.exists() else []
+    for wc in wheel_cache_glob:
+        try:
+            if wc.is_dir():
+                shutil.rmtree(wc)
+            else:
+                wc.unlink()
+            tmp_cleaned.append(str(wc))
+        except OSError:
+            pass
+    if tmp_cleaned:
+        removed.extend(tmp_cleaned)
+        if not json_output:
+            for t in tmp_cleaned:
+                print(f"  Cleaned: {t}")
+
     # Result — use print() instead of console.print() because repo removal
     # may have deleted the venv (including rich), making Rich unusable.
     if json_output:
