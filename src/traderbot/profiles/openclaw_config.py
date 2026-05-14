@@ -22,6 +22,15 @@ _OPENCLAW_DIR = Path.home() / ".openclaw"
 _OPENCLAW_CONFIG_PATH = _OPENCLAW_DIR / "openclaw.json"
 _HOOKS_DIR = _OPENCLAW_DIR / "hooks"
 
+# Common locations for the openclaw CLI
+_OPENCLAW_CLI_CANDIDATES = [
+    "openclaw",                                 # on PATH
+    Path.home() / ".npm-global" / "bin" / "openclaw",
+    Path.home() / ".local" / "bin" / "openclaw",
+    Path("/usr/local/bin/openclaw"),
+    Path("/usr/bin/openclaw"),
+]
+
 BOOTSTRAP_HOOK_DIRNAME = "traderbot-bootstrap"
 
 # ---------------------------------------------------------------------------
@@ -125,17 +134,24 @@ def _write_openclaw_config(config: dict[str, Any]) -> None:
 
 
 def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
-    """Run an ``openclaw`` CLI command. Returns ``True`` on success."""
-    try:
-        result = subprocess.run(
-            ["openclaw", *args],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+    """Run an ``openclaw`` CLI command. Returns ``True`` on success.
+
+    Searches common install locations — the ``openclaw`` binary is often
+    installed via npm global but not always on the default SSH ``PATH``.
+    """
+    for cli_path in _OPENCLAW_CLI_CANDIDATES:
+        try:
+            result = subprocess.run(
+                [str(cli_path), *args],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return False
 
 
 # ---------------------------------------------------------------------------
