@@ -262,22 +262,75 @@ class MarketService:
                     m.category = raw_cat
                     m.market_category = _map_category(raw_cat)
 
-        uncategorized = {m.event_ticker for m in all_markets if m.event_ticker and m.category is None and m.event_ticker not in event_category_map}
-        if uncategorized:
-            await self._resolve_event_categories(uncategorized, event_category_map)
+        filtered = [
+            m for m in all_markets
+            if m.category and (m.category.lower() == target_cat or target_cat in m.category.lower())
+        ]
+
+        if not filtered:
+            filtered = await self._gap_fill_category(category, target_cat, event_category_map, limit)
+
+        logger.info("Category '%s': %d matched markets", category, len(filtered))
+        return MarketListResponse(markets=filtered[:limit], cursor=None)
+
+    async def _gap_fill_category(
+        self,
+        category: str,
+        target_cat: str,
+        event_category_map: dict[str, str],
+        limit: int,
+    ) -> list[Market]:
+        """Find markets whose events aren't in the events list (e.g. daily weather).
+
+        Some Kalshi events (notably daily temperature markets) don't appear
+        in /events?status=open. This method discovers them by sampling recent
+        open markets, looking up their missing events, and adding any that
+        match the requested category.
+        """
+        logger = logging.getLogger(__name__)
+        logger.info("No markets found via event filter, attempting gap fill for '%s'", category)
+
+        cursor: str | None = None
+        all_markets: list[Market] = []
+        unknown_tickers: set[str] = set()
+
+        for _ in range(5):
+            try:
+                params: dict[str, Any] = {"limit": 200, "status": "open"}
+                if cursor:
+                    params["cursor"] = cursor
+                resp = await self._client.get("/markets", **params)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception:
+                break
+
+            batch = [_normalize_market(m) for m in data.get("markets", [])]
+            for m in batch:
+                if m.event_ticker:
+                    if m.event_ticker in event_category_map:
+                        raw_cat = event_category_map[m.event_ticker]
+                        m.category = raw_cat
+                        m.market_category = _map_category(raw_cat)
+                    else:
+                        unknown_tickers.add(m.event_ticker)
+            all_markets.extend(batch)
+            cursor = data.get("cursor")
+            if not cursor or not data.get("markets"):
+                break
+
+        if unknown_tickers:
+            await self._resolve_event_categories(unknown_tickers, event_category_map)
             for m in all_markets:
                 if m.category is None and m.event_ticker in event_category_map:
                     raw_cat = event_category_map[m.event_ticker]
                     m.category = raw_cat
                     m.market_category = _map_category(raw_cat)
 
-        filtered = [
+        return [
             m for m in all_markets
             if m.category and (m.category.lower() == target_cat or target_cat in m.category.lower())
-        ]
-
-        logger.info("Category '%s': %d matched markets", category, len(filtered))
-        return MarketListResponse(markets=filtered[:limit], cursor=None)
+        ][:limit]
 
     async def _get_event_category_map(self) -> dict[str, str]:
         """Return cached event category map, refreshing if stale."""
