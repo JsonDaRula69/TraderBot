@@ -2120,14 +2120,40 @@ def profile_create(
         "min_edge_pct": min_edge_pct or HARD_LIMITS["min_edge_pct"],
     }
 
+    registry = ProfileRegistry()
+
     try:
         profile = TradingProfile(**profile_data)
-        registry = ProfileRegistry()
-        registry.create_profile(profile)
-        console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
+
+    if registry.profile_exists(name):
+        console.print(f"[yellow]Profile '{name}' already exists.[/yellow]")
+        console.print("  [1] Overwrite the existing profile")
+        console.print("  [2] Choose a different name")
+        console.print("  [3] Cancel")
+        choice = typer.prompt("  Select an option", default="3")
+        if choice == "1":
+            registry.delete_profile(name)
+            registry.create_profile(profile)
+            console.print(f"[green]✓[/green] Overwrote profile '{name}' in {mode} mode")
+        elif choice == "2":
+            new_name = typer.prompt("  New profile name")
+            profile_data["name"] = new_name
+            try:
+                profile = TradingProfile(**profile_data)
+                registry.create_profile(profile)
+                console.print(f"[green]✓[/green] Created profile '{new_name}' in {mode} mode")
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                raise typer.Exit(1) from None
+        else:
+            console.print("[dim]Cancelled.[/dim]")
+        return
+
+    registry.create_profile(profile)
+    console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
 
 
 @profile_app.command("list")
