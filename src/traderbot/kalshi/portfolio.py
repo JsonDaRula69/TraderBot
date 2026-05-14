@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -11,18 +12,38 @@ from traderbot.kalshi.models import Fill, Position, Settlement
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
 
+BALANCE_CACHE_TTL: int = 3600  # 1 hour in seconds
+
 
 class PortfolioService:
     """Reads portfolio data from the Kalshi API via a KalshiClient."""
 
     def __init__(self, client: KalshiClient) -> None:
         self._client = client
+        self._balance_cache: dict[str, Any] | None = None
+        self._balance_cache_ts: float = 0.0
 
     async def get_balance(self) -> dict:
-        """Return the current account balance."""
+        """Return the current account balance (no cache)."""
         response = await self._client.get("/portfolio/balance")
         response.raise_for_status()
         return response.json()
+
+    async def get_cached_balance(self) -> dict | None:
+        """Return account balance, cached with hourly TTL.
+
+        Returns None if the API call fails (stale cache kept on error).
+        """
+        now = time.monotonic()
+        if self._balance_cache is not None and (now - self._balance_cache_ts) < BALANCE_CACHE_TTL:
+            return self._balance_cache
+        try:
+            data = await self.get_balance()
+            self._balance_cache = data
+            self._balance_cache_ts = now
+            return data
+        except Exception:
+            return self._balance_cache  # return stale cache on error
 
     async def get_positions(
         self,

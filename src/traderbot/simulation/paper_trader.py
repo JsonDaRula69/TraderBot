@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from traderbot.risk import evaluate_trade
 from traderbot.simulation.engine import BacktestError
 
-DEFAULT_INITIAL_BALANCE_CENTS: int = 1_000_00
+DEFAULT_INITIAL_BALANCE_CENTS: int = 10_000  # $100
 
 if TYPE_CHECKING:
     import sqlite3

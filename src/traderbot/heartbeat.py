@@ -115,6 +115,7 @@ class SystemHealthReview(BaseModel):
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
+    balance_cents: int | None = None
     api_connectivity: str = "unknown"
     db_integrity: str = "unknown"
     data_freshness: str = "unknown"
@@ -376,6 +377,7 @@ async def step_system_health(
         freshness = "unknown"
 
     api_status = "not_checked"
+    balance_cents: int | None = None
     try:
         import asyncio
 
@@ -386,6 +388,17 @@ async def step_system_health(
             response = await asyncio.wait_for(client.get("/platform/status"), timeout=5.0)
             status = response.json() if hasattr(response, "json") else response
             api_ok = isinstance(status, dict) and status.get("status") == "alive"
+            if api_ok:
+                from traderbot.kalshi.portfolio import PortfolioService
+                ps = PortfolioService(client)
+                balance_data = await ps.get_cached_balance()
+                if balance_data:
+                    raw = balance_data.get("balance") or balance_data.get("available_balance")
+                    if raw is not None:
+                        if isinstance(raw, str):
+                            balance_cents = int(float(raw) * 100)
+                        else:
+                            balance_cents = int(raw)
         except Exception:
             try:
                 response = await asyncio.wait_for(client.get("/"), timeout=5.0)
@@ -404,6 +417,7 @@ async def step_system_health(
         alerts.append("Kalshi API unreachable")
 
     return SystemHealthReview(
+        balance_cents=balance_cents,
         api_connectivity=api_status,
         db_integrity=db_status,
         data_freshness=freshness,
