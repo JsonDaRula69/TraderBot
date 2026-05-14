@@ -3106,11 +3106,9 @@ def uninstall(
                 for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
                     label = plist.stem
                     subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
-                    try:
-                        plist.unlink()
+                    result = subprocess.run(["sudo", "rm", "-f", str(plist)], capture_output=True)
+                    if result.returncode == 0:
                         removed_services.append(str(plist))
-                    except OSError:
-                        pass
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
             if service_dir.exists():
@@ -3118,11 +3116,9 @@ def uninstall(
                     unit = svc.name
                     subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
                     subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
-                    try:
-                        svc.unlink()
+                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    if result.returncode == 0:
                         removed_services.append(str(svc))
-                    except OSError:
-                        pass
                 subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
         removed.extend(removed_services)
     else:
@@ -3133,11 +3129,11 @@ def uninstall(
                 for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
                     label = plist.stem
                     subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
-                    try:
-                        plist.unlink()
+                    result = subprocess.run(["sudo", "rm", "-f", str(plist)], capture_output=True)
+                    if result.returncode == 0:
                         console.print(f"  Removed: {plist}")
                         removed.append(str(plist))
-                    except OSError:
+                    else:
                         console.print(f"  [yellow]Could not remove: {plist}[/yellow]")
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
@@ -3146,11 +3142,11 @@ def uninstall(
                     unit = svc.name
                     subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
                     subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
-                    try:
-                        svc.unlink()
+                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    if result.returncode == 0:
                         console.print(f"  Removed: {svc}")
                         removed.append(str(svc))
-                    except OSError:
+                    else:
                         console.print(f"  [yellow]Could not remove: {svc}[/yellow]")
                 subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
 
@@ -3160,8 +3156,7 @@ def uninstall(
             pass  # Non-interactive — skip data removal unless flag is set
         else:
             registry = ProfileRegistry()
-            profiles = registry.list_profiles()
-            profile_names = [p.name for p in profiles] if profiles else []
+            profile_names = registry.list_profiles()
 
             console.print(f"\n[bold]Data directory:[/bold] {data_dir}")
             if data_dir.exists():
