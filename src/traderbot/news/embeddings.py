@@ -103,7 +103,6 @@ class VoyageClient(BaseModel):
                 [text],
                 model=model,
                 input_type="document",
-                timeout=_EMBED_TIMEOUT_SECS,
             )
             return result.embeddings[0]  # type: ignore[no-any-return]
         except Exception:
@@ -127,7 +126,6 @@ class VoyageClient(BaseModel):
                 texts,
                 model=model,
                 input_type="document",
-                timeout=_EMBED_TIMEOUT_SECS,
             )
             return result.embeddings  # type: ignore[no-any-return]
         except Exception:
