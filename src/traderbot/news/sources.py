@@ -960,13 +960,21 @@ class NewsAggregator:
         category_filter: list[NewsCategory] | None = None,
         limit: int = 20,
     ) -> list[DataPoint]:
-        """Fetch crypto market data from CoinGecko /coins/markets (free tier, no API key).
+        """Fetch crypto market data from CoinGecko /coins/markets.
 
+        Uses x-cg-demo-api-key header when COINGECKO_API_KEY is set for
+        higher rate limits. Falls back to unauthenticated (free tier) otherwise.
         Returns DataPoint objects with prices/market caps in integer cents.
         If MENTIONS is in category_filter, also fetches /search/trending.
         """
         if category_filter is not None and NewsCategory.CRYPTO not in category_filter and NewsCategory.MENTIONS not in category_filter:
             return []
+
+        from traderbot.auth import get_credential
+        coingecko_key = get_credential("coingecko", "api_key")
+        headers: dict[str, str] = {}
+        if coingecko_key is not None:
+            headers["x-cg-demo-api-key"] = coingecko_key.get_secret_value()
 
         results: list[DataPoint] = []
 
@@ -985,6 +993,7 @@ class NewsAggregator:
                     response = await self._client.get(
                         "https://api.coingecko.com/api/v3/coins/markets",
                         params=params,
+                        headers=headers,
                     )
 
                     if response.status_code == 429:
@@ -1081,6 +1090,7 @@ class NewsAggregator:
                     try:
                         trending_resp = await self._client.get(
                             "https://api.coingecko.com/api/v3/search/trending",
+                            headers=headers,
                         )
                         if trending_resp.status_code == 429:
                             if attempt < max_retries:

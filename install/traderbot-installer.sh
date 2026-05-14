@@ -638,6 +638,20 @@ setup_api_credentials() {
         echo "Skipped. Set later with: traderbot auth set-key openweathermap api_key"
     fi
 
+    # --- CoinGecko (optional) ---
+    echo
+    echo "--- CoinGecko (optional) ---"
+    echo "Free tier works without a key (30 req/min). API key increases rate limits."
+    echo "Register at https://www.coingecko.com/en/api"
+    local cg_key=""
+    read -r -p "CoinGecko API key (press Enter to skip): " cg_key
+    if [[ -n "$cg_key" ]]; then
+        _env_set "$env_file" "COINGECKO_API_KEY" "$cg_key"
+        echo "CoinGecko key stored."
+    else
+        echo "Skipped. Set later with: traderbot auth set-key coingecko api_key"
+    fi
+
     # --- FRED (optional) ---
     echo
     echo "--- FRED (optional) ---"

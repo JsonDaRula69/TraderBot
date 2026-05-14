@@ -20,6 +20,9 @@ _OPTIONAL_SERVICES: dict[str, list[str]] = {
     "newsapi": ["api_key"],
     "twitter": ["api_key"],
     "reddit": ["client_id", "client_secret"],
+    "coingecko": ["api_key"],
+    "openweathermap": ["api_key"],
+    "fred": ["api_key"],
 }
 
 _ALL_SERVICES: dict[str, list[str]] = {**_REQUIRED_SERVICES, **_OPTIONAL_SERVICES}
@@ -114,6 +117,8 @@ class AuthManager:
             return ["KALSHI_PRIVATE_KEY_PEM", "KALSHI_PRIVATE_KEY_PATH"]
         if service == "newsapi" and key == "api_key":
             return ["NEWSAPI_API_KEY", "NEWSAPI_KEY"]
+        if service == "coingecko" and key == "api_key":
+            return ["COINGECKO_API_KEY"]
         service_prefix = service.upper()
         return [f"{service_prefix}_{key.upper()}"]
 
