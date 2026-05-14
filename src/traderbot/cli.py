@@ -2066,11 +2066,11 @@ app.add_typer(profile_app, name="profile")
 
 @profile_app.command("create")
 def profile_create(
-    name: str,
-    mode: Annotated[str, typer.Option(help="Trading mode: paper or live")] = "paper",
-    description: Annotated[str, typer.Option(help="Profile description")] = "",
-    categories: Annotated[str, typer.Option(help="Comma-separated market categories")] = "",
-    risk_multiplier: Annotated[float, typer.Option(help="Risk multiplier (0-1)")] = 1.0,
+    name: Annotated[str | None, typer.Argument(help="Profile name (omit for interactive mode)")] = None,
+    mode: Annotated[str | None, typer.Option(help="Trading mode: paper or live")] = None,
+    description: Annotated[str | None, typer.Option(help="Profile description")] = None,
+    categories: Annotated[str | None, typer.Option(help="Comma-separated market categories")] = None,
+    risk_multiplier: Annotated[float | None, typer.Option(help="Risk multiplier (0-1)")] = None,
     max_position_pct: Annotated[
         float | None, typer.Option(help="Max position per market %")
     ] = None,
@@ -2080,20 +2080,33 @@ def profile_create(
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
 ) -> None:
-    """Create a new trading profile with risk parameters."""
+    """Create a new trading profile. Interactive if no name given; uses flags if name provided."""
     from traderbot.kalshi.models import MarketCategory
     from traderbot.profiles.models import TradingProfile
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.risk.limits import HARD_LIMITS
 
     console = Console()
+    registry = ProfileRegistry()
 
-    # Validate mode
-    if mode not in ("paper", "live"):
+    if name is None and sys.stdin.isatty():
+        _interactive_profile_create(console, registry)
+        return
+
+    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier,
+                                              max_position_pct, max_daily_loss_pct, max_drawdown_pct,
+                                              max_open_positions, min_liquidity, min_edge_pct])
+
+    if name is None:
+        console.print("[dim]Use: traderbot profile create <name> [options][/dim]")
+        console.print("[dim]Or run without arguments for interactive mode.[/dim]")
+        raise typer.Exit(0)
+
+    profile_mode = mode or "paper"
+    if profile_mode not in ("paper", "live"):
         console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
         raise typer.Exit(1)
 
-    # Parse categories
     enabled_categories = []
     if categories:
         try:
@@ -2104,23 +2117,19 @@ def profile_create(
             console.print(f"[red]Error:[/red] Invalid category: {e}")
             raise typer.Exit(1) from None
 
-    # Use HARD_LIMITS as defaults for unspecified params
     profile_data = {
         "name": name,
-        "mode": mode,
+        "mode": profile_mode,
         "description": description or f"{name} trading profile",
         "enabled_categories": enabled_categories,
-        "risk_multiplier": risk_multiplier,
-        "max_position_per_market_pct": max_position_pct
-        or HARD_LIMITS["max_position_per_market_pct"],
+        "risk_multiplier": risk_multiplier or 1.0,
+        "max_position_per_market_pct": max_position_pct or HARD_LIMITS["max_position_per_market_pct"],
         "max_daily_loss_pct": max_daily_loss_pct or HARD_LIMITS["max_daily_loss_pct"],
         "max_drawdown_pct": max_drawdown_pct or HARD_LIMITS["max_drawdown_pct"],
         "max_open_positions": max_open_positions or int(HARD_LIMITS["max_open_positions"]),
         "min_liquidity_threshold": min_liquidity or int(HARD_LIMITS["min_liquidity_threshold"]),
         "min_edge_pct": min_edge_pct or HARD_LIMITS["min_edge_pct"],
     }
-
-    registry = ProfileRegistry()
 
     try:
         profile = TradingProfile(**profile_data)
@@ -2137,14 +2146,14 @@ def profile_create(
         if choice == "1":
             registry.delete_profile(name)
             registry.create_profile(profile)
-            console.print(f"[green]✓[/green] Overwrote profile '{name}' in {mode} mode")
+            console.print(f"[green]✓[/green] Overwrote profile '{name}' in {profile_mode} mode")
         elif choice == "2":
             new_name = typer.prompt("  New profile name")
             profile_data["name"] = new_name
             try:
                 profile = TradingProfile(**profile_data)
                 registry.create_profile(profile)
-                console.print(f"[green]✓[/green] Created profile '{new_name}' in {mode} mode")
+                console.print(f"[green]✓[/green] Created profile '{new_name}' in {profile_mode} mode")
             except ValueError as e:
                 console.print(f"[red]Error:[/red] {e}")
                 raise typer.Exit(1) from None
@@ -2153,7 +2162,121 @@ def profile_create(
         return
 
     registry.create_profile(profile)
-    console.print(f"[green]✓[/green] Created profile '{name}' in {mode} mode")
+    console.print(f"[green]✓[/green] Created profile '{name}' in {profile_mode} mode")
+
+
+def _interactive_profile_create(console: Console, registry: "ProfileRegistry") -> None:
+    """Walk user through profile creation with numbered selections."""
+    from traderbot.kalshi.models import MarketCategory
+    from traderbot.profiles.models import TradingProfile
+    from traderbot.risk.limits import HARD_LIMITS
+
+    console.print("\n[bold]=== TraderBot Profile Setup ===[/bold]\n")
+
+    profile_name = ""
+    while not profile_name:
+        profile_name = typer.prompt("Profile name")
+        if not profile_name:
+            console.print("[red]Profile name cannot be empty.[/red]")
+
+    if registry.profile_exists(profile_name):
+        console.print(f"[yellow]Profile '{profile_name}' already exists.[/yellow]")
+        console.print("  [1] Overwrite")
+        console.print("  [2] Choose a different name")
+        console.print("  [3] Cancel")
+        choice = typer.prompt("Select", default="3")
+        if choice == "1":
+            registry.delete_profile(profile_name)
+        elif choice == "2":
+            profile_name = typer.prompt("New profile name")
+        else:
+            console.print("[dim]Cancelled.[/dim]")
+            return
+
+    console.print("\n[bold]Trading mode:[/bold]")
+    console.print("  1) paper  (recommended — no real money at risk)")
+    console.print("  2) live   (real money — use with caution)")
+    mode_choice = typer.prompt("Choice", default="1")
+    profile_mode = "live" if mode_choice == "2" else "paper"
+
+    description = typer.prompt("Description", default=f"{profile_name} trading profile")
+
+    console.print("\n[bold]Market categories[/bold] (comma-separated numbers, or 'a' for all):")
+    cat_keys = [c.value for c in MarketCategory]
+    cat_labels = [c.name.replace("_", " ").title() for c in MarketCategory]
+    for i, label in enumerate(cat_labels, 1):
+        console.print(f"  {i:2d}) {label}")
+    console.print("   a) All categories")
+    cat_input = typer.prompt("Choice", default="a")
+    enabled_categories = []
+    if cat_input.lower() in ("a", ""):
+        enabled_categories = list(MarketCategory)
+    else:
+        for num in cat_input.split(","):
+            num = num.strip()
+            if num.isdigit() and 1 <= int(num) <= len(cat_keys):
+                cat_val = cat_keys[int(num) - 1]
+                try:
+                    enabled_categories.append(MarketCategory(cat_val))
+                except ValueError:
+                    pass
+
+    console.print("\n[bold]Risk parameters[/bold] (press Enter for defaults)")
+    rm = typer.prompt("  Risk multiplier", default="1.0")
+    risk_mult = float(rm)
+
+    mpp = typer.prompt(f"  Max position per market %", default=f"{HARD_LIMITS['max_position_per_market_pct']:.0%}")
+    max_pos_pct = _parse_pct(mpp)
+
+    mdl = typer.prompt(f"  Max daily loss %", default=f"{HARD_LIMITS['max_daily_loss_pct']:.0%}")
+    max_daily = _parse_pct(mdl)
+
+    mdd = typer.prompt(f"  Max drawdown %", default=f"{HARD_LIMITS['max_drawdown_pct']:.0%}")
+    max_drawdown = _parse_pct(mdd)
+
+    mop = typer.prompt(f"  Max open positions", default=str(int(HARD_LIMITS["max_open_positions"])))
+    max_open = int(mop)
+
+    ml = typer.prompt(f"  Min liquidity threshold (cents)", default=str(int(HARD_LIMITS["min_liquidity_threshold"])))
+    min_liq = int(ml)
+
+    me = typer.prompt(f"  Min edge %", default=f"{HARD_LIMITS['min_edge_pct']:.0%}")
+    min_edge = _parse_pct(me)
+
+    profile_data = {
+        "name": profile_name,
+        "mode": profile_mode,
+        "description": description,
+        "enabled_categories": enabled_categories,
+        "risk_multiplier": risk_mult,
+        "max_position_per_market_pct": max_pos_pct or HARD_LIMITS["max_position_per_market_pct"],
+        "max_daily_loss_pct": max_daily or HARD_LIMITS["max_daily_loss_pct"],
+        "max_drawdown_pct": max_drawdown or HARD_LIMITS["max_drawdown_pct"],
+        "max_open_positions": max_open or int(HARD_LIMITS["max_open_positions"]),
+        "min_liquidity_threshold": min_liq or int(HARD_LIMITS["min_liquidity_threshold"]),
+        "min_edge_pct": min_edge or HARD_LIMITS["min_edge_pct"],
+    }
+
+    try:
+        profile = TradingProfile(**profile_data)
+        registry.create_profile(profile)
+        console.print(f"\n[green]✓[/green] Created profile '{profile_name}' in {profile_mode} mode")
+        cat_str = ", ".join(str(c.value) for c in enabled_categories) if enabled_categories else "all"
+        console.print(f"  Mode: {profile_mode}  Categories: {cat_str}")
+    except ValueError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+def _parse_pct(value: str) -> float | None:
+    """Parse a percentage string like '5%' or '0.05' into a float ratio."""
+    try:
+        cleaned = value.strip().rstrip("%")
+        if "%" in value:
+            return float(cleaned) / 100
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return None
 
 
 @profile_app.command("list")
