@@ -3390,7 +3390,21 @@ def uninstall(
             print(f"  Removed: {repo_dir}")
             removed.append(str(repo_dir))
 
-    # Step 4: Clean temp files and caches
+    # Step 4: Remove binary symlinks
+    for bin_path in [Path("/usr/local/bin/traderbot"), Path.home() / ".local" / "bin" / "traderbot"]:
+        if bin_path.is_symlink() or bin_path.exists():
+            try:
+                if json_output:
+                    bin_path.unlink()
+                    removed.append(str(bin_path))
+                else:
+                    subprocess.run(["sudo", "rm", "-f", str(bin_path)], capture_output=True)
+                    print(f"  Removed: {bin_path}")
+                    removed.append(str(bin_path))
+            except OSError:
+                pass
+
+    # Step 5: Clean temp files and caches
     import tempfile
     tmp_cleaned: list[str] = []
     for tmp_file in Path(tempfile.gettempdir()).glob("traderbot*"):
