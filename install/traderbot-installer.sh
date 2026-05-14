@@ -524,7 +524,7 @@ setup_api_credentials() {
     if [[ -z "$kalshi_key" ]]; then
         echo "Warning: Kalshi API key is required. Set it later with: traderbot auth set-key kalshi api_key" >&2
     else
-        echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers, then press Enter on a blank line):"
+        echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers):"
         kalshi_secret=""
         while IFS= read -r -s line; do
             kalshi_secret+="$line"$'\n'
