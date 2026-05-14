@@ -22,7 +22,7 @@ Type=oneshot
 User=%i
 WorkingDirectory=/home/%i/traderbot
 
-EnvironmentFile=%h/.traderbot/.env
+EnvironmentFile=/home/%i/.traderbot/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
@@ -33,10 +33,6 @@ StandardError=journal
 SyslogIdentifier=traderbot-news-ingest-%i
 
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/home/%i/traderbot /home/%i/.traderbot
 
 [Install]
 WantedBy=multi-user.target
