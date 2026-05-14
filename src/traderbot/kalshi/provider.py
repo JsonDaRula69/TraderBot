@@ -158,7 +158,7 @@ class ProdDataProvider:
 
     async def get_market(self, ticker: str) -> MarketSnapshot:
         if self._cache is not None:
-            cached = self._cache.get_market(ticker)
+            cached = await self._cache.get_market(ticker)
             if cached is not None:
                 log_cache_event(logger, "market", ticker, hit=True)
                 return cached
@@ -180,13 +180,13 @@ class ProdDataProvider:
         log_market_event(logger, "fetch_market", ticker, open_interest=market.open_interest)
 
         if self._cache is not None:
-            self._cache.set_market(ticker, snapshot)
+            await self._cache.set_market(ticker, snapshot)
 
         return snapshot
 
     async def get_orderbook(self, ticker: str) -> OrderBookSnapshot:
         if self._cache is not None:
-            cached = self._cache.get_orderbook(ticker)
+            cached = await self._cache.get_orderbook(ticker)
             if cached is not None:
                 log_cache_event(logger, "orderbook", ticker, hit=True)
                 return cached
@@ -215,7 +215,7 @@ class ProdDataProvider:
         log_market_event(logger, "fetch_orderbook", ticker, levels=len(yes_bids) + len(no_bids))
 
         if self._cache is not None:
-            self._cache.set_orderbook(ticker, snapshot)
+            await self._cache.set_orderbook(ticker, snapshot)
 
         return snapshot
 
