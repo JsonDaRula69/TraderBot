@@ -18,7 +18,7 @@ class UpdateConfig(BaseModel):
 
     enabled: bool = Field(default=True, description="Enable auto-update checking")
     check_on_startup: bool = Field(default=True, description="Check for updates on CLI startup")
-    check_interval_hours: int = Field(default=6, ge=1, le=720, description="Hours between update checks")
+    check_interval_minutes: int = Field(default=30, ge=1, le=10080, description="Minutes between update checks")
     auto_apply: bool = Field(default=False, description="Automatically apply updates without prompting")
     include_prerelease: bool = Field(default=False, description="Include pre-release versions in checks")
 

@@ -60,9 +60,6 @@ auth_app = typer.Typer(
 )
 app.add_typer(auth_app, name="auth")
 
-update_app = typer.Typer(name="update", help="Check and apply TraderBot updates.")
-app.add_typer(update_app, name="update")
-
 cron_app = typer.Typer(name="cron", help="Register cron loops and heartbeat with OpenClaw.")
 app.add_typer(cron_app, name="cron")
 
@@ -1985,50 +1982,51 @@ def auth_check(
         )
 
 
-@update_app.command("check")
-def update_check(
-    force: Annotated[bool, typer.Option("--force", help="Bypass cache and check now")] = False,
+@app.command()
+def update(
+    dev: Annotated[bool, typer.Option("--dev", help="Update from dev branch instead of main")] = False,
+    check: Annotated[bool, typer.Option("--check", help="Check for update only, do not apply")] = False,
+    force: Annotated[bool, typer.Option("--force", help="Bypass cache when checking")] = False,
 ) -> None:
-    """Check if a newer version is available."""
+    """Check for and apply updates. Defaults to check+apply; use --check to check only."""
     from traderbot.update_config import UpdateConfig
-    from traderbot.updater import check_for_updates
+    from traderbot.updater import apply_update, check_for_updates, get_current_version
 
     console = Console()
     config = UpdateConfig.load()
-    if not config.enabled:
-        console.print("[yellow]Update checking is disabled.[/yellow]")
+    current = get_current_version()
+
+    if check:
+        result = check_for_updates(force=force, check_interval_minutes=config.check_interval_minutes, dev=dev)
+        if result:
+            if dev:
+                console.print(f"[yellow]Dev branch update available: {result['latest']}[/yellow]")
+            else:
+                console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+            console.print(f"[dim]Release: {result['url']}[/dim]")
+        else:
+            console.print(f"[green]Already up to date (v{current}).[/green]")
         return
 
-    result = check_for_updates(force=force, check_interval_hours=config.check_interval_hours)
+    # No flags: force check + apply
+    result = check_for_updates(force=True, check_interval_minutes=config.check_interval_minutes, dev=dev)
     if result:
-        console.print(
-            f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]"
-        )
-        console.print(f"[dim]Release: {result['url']}[/dim]")
-        console.print("[dim]Run 'traderbot update apply' to update.[/dim]")
+        branch_label = "dev" if dev else "main"
+        console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+        console.print(f"[bold]Applying update from {branch_label} branch...[/bold]")
+        if apply_update(dev=dev):
+            console.print("[green]✓ Update applied successfully.[/green]")
+        else:
+            console.print("[red]✗ Update failed. Check logs for details.[/red]")
     else:
-        console.print("[green]Already up to date.[/green]")
+        console.print(f"[green]Already up to date (v{current}).[/green]")
 
 
-@update_app.command("apply")
-def update_apply(
-    restart: Annotated[bool, typer.Option("--restart", help="Restart after update")] = False,
-) -> None:
-    """Apply the latest update."""
-    from traderbot.updater import apply_update
-
-    console = Console()
-    if apply_update(restart=restart):
-        console.print("[green]Update applied successfully.[/green]")
-    else:
-        console.print("[red]Update failed. Check logs for details.[/red]")
-
-
-@update_app.command("configure")
+@app.command("update-configure")
 def update_configure(
     enabled: Annotated[bool | None, typer.Option(help="Enable/disable update checking")] = None,
     check_on_startup: Annotated[bool | None, typer.Option(help="Check on startup")] = None,
-    check_interval_hours: Annotated[int | None, typer.Option(help="Hours between checks")] = None,
+    check_interval_minutes: Annotated[int | None, typer.Option(help="Minutes between checks")] = None,
     auto_apply: Annotated[bool | None, typer.Option(help="Auto-apply updates")] = None,
 ) -> None:
     """Configure auto-update settings."""
@@ -2040,8 +2038,8 @@ def update_configure(
         config.enabled = enabled
     if check_on_startup is not None:
         config.check_on_startup = check_on_startup
-    if check_interval_hours is not None:
-        config.check_interval_hours = check_interval_hours
+    if check_interval_minutes is not None:
+        config.check_interval_minutes = check_interval_minutes
     if auto_apply is not None:
         config.auto_apply = auto_apply
     config.save()
@@ -3062,14 +3060,185 @@ def _check_updates_on_startup() -> None:
         if not config.enabled or not config.check_on_startup:
             return
 
-        result = check_for_updates(check_interval_hours=config.check_interval_hours)
+        result = check_for_updates(check_interval_minutes=config.check_interval_minutes)
         if result:
             Console().print(
                 f"[dim]Update available: v{result['current']} → v{result['latest']}. "
-                f"Run 'traderbot update apply' to update.[/dim]"
+                f"Run 'traderbot update' to update.[/dim]"
             )
     except Exception:
         pass
+
+
+@app.command()
+def uninstall(
+    remove_data: Annotated[
+        bool,
+        typer.Option("--remove-data", help="Remove all profiles, databases, and user data (~/.traderbot/)"),
+    ] = False,
+    remove_repo: Annotated[
+        bool,
+        typer.Option("--remove-repo", help="Remove the TraderBot repository (~/traderbot/)"),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON for machine consumption"),
+    ] = False,
+) -> None:
+    """Uninstall TraderBot — remove services, data, and optionally the repository."""
+    from traderbot.paths import get_data_dir, list_all_data_paths
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    data_dir = get_data_dir()
+    repo_dir = Path.home() / "traderbot"
+    removed: list[str] = []
+
+    # Step 1: Stop and remove system services
+    import platform
+    import subprocess
+
+    if json_output:
+        removed_services = []
+        if platform.system() == "Darwin":
+            daemon_dir = Path("/Library/LaunchDaemons")
+            if daemon_dir.exists():
+                for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
+                    label = plist.stem
+                    subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
+                    try:
+                        plist.unlink()
+                        removed_services.append(str(plist))
+                    except OSError:
+                        pass
+        elif platform.system() == "Linux":
+            service_dir = Path("/etc/systemd/system")
+            if service_dir.exists():
+                for svc in service_dir.glob("traderbot-agent@*.service"):
+                    unit = svc.name
+                    subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
+                    subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
+                    try:
+                        svc.unlink()
+                        removed_services.append(str(svc))
+                    except OSError:
+                        pass
+                subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
+        removed.extend(removed_services)
+    else:
+        console.print("[bold]Step 1: Removing system services[/bold]")
+        if platform.system() == "Darwin":
+            daemon_dir = Path("/Library/LaunchDaemons")
+            if daemon_dir.exists():
+                for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
+                    label = plist.stem
+                    subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
+                    try:
+                        plist.unlink()
+                        console.print(f"  Removed: {plist}")
+                        removed.append(str(plist))
+                    except OSError:
+                        console.print(f"  [yellow]Could not remove: {plist}[/yellow]")
+        elif platform.system() == "Linux":
+            service_dir = Path("/etc/systemd/system")
+            if service_dir.exists():
+                for svc in service_dir.glob("traderbot-agent@*.service"):
+                    unit = svc.name
+                    subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
+                    subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
+                    try:
+                        svc.unlink()
+                        console.print(f"  Removed: {svc}")
+                        removed.append(str(svc))
+                    except OSError:
+                        console.print(f"  [yellow]Could not remove: {svc}[/yellow]")
+                subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
+
+    # Step 2: Prompt about data removal
+    if not remove_data:
+        if json_output:
+            pass  # Non-interactive — skip data removal unless flag is set
+        else:
+            registry = ProfileRegistry()
+            profiles = registry.list_profiles()
+            profile_names = [p.name for p in profiles] if profiles else []
+
+            console.print(f"\n[bold]Data directory:[/bold] {data_dir}")
+            if data_dir.exists():
+                data_paths = list_all_data_paths()
+                existing = [p for p in data_paths if p.exists()]
+                if existing:
+                    console.print(f"  [yellow]{len(existing)} data paths found[/yellow]")
+                if profile_names:
+                    console.print(f"  Profiles: {', '.join(profile_names)}")
+
+            console.print("\n[bold]Remove all profiles, databases, and user data?[/bold]")
+            console.print("[dim]This will permanently delete ~/.traderbot/ including all audit trails and credentials.[/dim]")
+            answer = typer.confirm("  Remove data", default=False)
+            if answer:
+                remove_data = True
+
+    if remove_data and data_dir.exists():
+        if json_output:
+            data_paths = list_all_data_paths()
+            for p in data_paths:
+                if p.exists():
+                    if p.is_dir():
+                        shutil.rmtree(p)
+                    else:
+                        p.unlink()
+                    removed.append(str(p))
+            if data_dir.exists():
+                shutil.rmtree(data_dir)
+                removed.append(str(data_dir))
+        else:
+            console.print("[bold]Step 2: Removing user data[/bold]")
+            data_paths = list_all_data_paths()
+            for p in data_paths:
+                if not p.exists():
+                    continue
+                label = p.relative_to(data_dir) if p.is_relative_to(data_dir) else p
+                if p.is_dir():
+                    shutil.rmtree(p)
+                    console.print(f"  Removed dir:  {label}")
+                else:
+                    p.unlink()
+                    console.print(f"  Removed file: {label}")
+                removed.append(str(p))
+            if data_dir.exists():
+                shutil.rmtree(data_dir)
+                console.print(f"  Removed data dir: {data_dir}")
+                removed.append(str(data_dir))
+
+    # Step 3: Prompt about repo removal
+    if not remove_repo:
+        if json_output:
+            pass
+        elif repo_dir.exists():
+            console.print(f"\n[bold]Repository:[/bold] {repo_dir}")
+            console.print("[dim]This will permanently delete the source code and virtual environment.[/dim]")
+            answer = typer.confirm("  Remove repository", default=False)
+            if answer:
+                remove_repo = True
+
+    if remove_repo and repo_dir.exists():
+        if json_output:
+            shutil.rmtree(repo_dir)
+            removed.append(str(repo_dir))
+        else:
+            console.print("[bold]Step 3: Removing repository[/bold]")
+            shutil.rmtree(repo_dir)
+            console.print(f"  Removed: {repo_dir}")
+            removed.append(str(repo_dir))
+
+    # Result
+    if json_output:
+        json_lib.dump({"removed": removed, "data_removed": remove_data, "repo_removed": remove_repo}, sys.stdout, default=str)
+    else:
+        if not removed:
+            console.print("[yellow]Nothing to remove — TraderBot is not installed.[/yellow]")
+        else:
+            console.print(f"\n[green]✓ TraderBot uninstalled.[/green] {len(removed)} items removed.")
 
 
 def main() -> None:

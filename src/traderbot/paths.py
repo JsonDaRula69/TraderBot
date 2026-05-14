@@ -46,3 +46,34 @@ def ensure_data_dir() -> Path:
     path = get_data_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def list_all_data_paths() -> list[Path]:
+    """Return all well-known paths that TraderBot creates at runtime.
+
+    Used by the uninstall command to enumerate files for removal.
+    Does NOT include the repo/install directory or venv — only runtime data.
+    """
+    base = get_data_dir()
+    paths: list[Path] = [
+        base / ".env",
+        base / ".profile_key",
+        base / "profiles.enc",
+        base / "profiles.json",  # legacy
+        base / "update_config.json",
+        base / ".update_check_cache.json",
+        base / "circuit_breaker_state.json",
+        base / "traderbot.db",  # legacy global DB
+        base / "audit",
+        base / "chromadb",
+        base / "logs",
+    ]
+    # Per-profile directories: {mode}-{name}/db, chroma, audit
+    if base.exists():
+        for child in base.iterdir():
+            if child.is_dir() and "-" in child.name:
+                for subdir in ("db", "chroma", "audit"):
+                    candidate = child / subdir
+                    if candidate.exists():
+                        paths.append(candidate)
+    return paths

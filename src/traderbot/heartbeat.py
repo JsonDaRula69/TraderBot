@@ -461,7 +461,7 @@ async def run_heartbeat_cycle(
 
     _update_cfg = _UpdateConfig.load()
     if _update_cfg.enabled:
-        update_result = check_for_updates(check_interval_hours=_update_cfg.check_interval_hours)
+        update_result = check_for_updates(check_interval_minutes=_update_cfg.check_interval_minutes)
         if update_result:
             logger.info("Update available: v%s → v%s", update_result["current"], update_result["latest"])
     else:
