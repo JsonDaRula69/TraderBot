@@ -1986,7 +1986,7 @@ def auth_check(
 def update(
     dev: Annotated[bool, typer.Option("--dev", help="Update from dev branch instead of main")] = False,
     check: Annotated[bool, typer.Option("--check", help="Check for update only, do not apply")] = False,
-    force: Annotated[bool, typer.Option("--force", help="Bypass cache when checking")] = False,
+    force: Annotated[bool, typer.Option("--force", help="Pull and apply even if versions match")] = False,
 ) -> None:
     """Check for and apply updates. Defaults to check+apply; use --check to check only."""
     from traderbot.update_config import UpdateConfig
@@ -1996,8 +1996,8 @@ def update(
     config = UpdateConfig.load()
     current = get_current_version()
 
-    if check:
-        result = check_for_updates(force=force, check_interval_minutes=config.check_interval_minutes, dev=dev)
+    if check and not force:
+        result = check_for_updates(force=True, check_interval_minutes=config.check_interval_minutes, dev=dev)
         if result:
             if dev:
                 console.print(f"[yellow]Dev branch update available: {result['latest']}[/yellow]")
@@ -2008,7 +2008,15 @@ def update(
             console.print(f"[green]Already up to date (v{current}).[/green]")
         return
 
-    # No flags: force check + apply
+    if force:
+        branch_label = "dev" if dev else "main"
+        console.print(f"[bold]Forcing update from {branch_label} branch...[/bold]")
+        if apply_update(dev=dev):
+            console.print("[green]✓ Update applied successfully.[/green]")
+        else:
+            console.print("[red]✗ Update failed. Check logs for details.[/red]")
+        return
+
     result = check_for_updates(force=True, check_interval_minutes=config.check_interval_minutes, dev=dev)
     if result:
         branch_label = "dev" if dev else "main"
