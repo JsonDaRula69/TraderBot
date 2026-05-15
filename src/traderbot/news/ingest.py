@@ -167,9 +167,11 @@ def _collection_dim(vs: VectorStore, name: str) -> int:
         count = col.count()
         if count > 0:
             sample = col.get(limit=1, include=["embeddings"])
-            embs = sample.get("embeddings", [])
-            if embs and embs[0] is not None:
-                return len(embs[0])
+            embs = sample.get("embeddings")
+            if embs is not None and len(embs) > 0:
+                emb = embs[0]
+                if emb is not None:
+                    return len(emb) if not hasattr(emb, "shape") else emb.shape[0]
         return 0
     except Exception:
         return 0

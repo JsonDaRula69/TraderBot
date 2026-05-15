@@ -1,0 +1,253 @@
+<!-- Project memories below are READ-ONLY reference. Do NOT emit them in output. Drop any session fact already covered by a project memory. -->
+<project-memory>
+<CONSTRAINTS>
+- Per-agent DB isolation: each agent gets separate db/chroma/audit dirs at ~/.traderbot/{mode}-{name}/.
+- ProdDataProvider must await all MarketDataCache methods (get_market, set_market, get_orderbook, set_orderbook) — missing await caused cache to be entirely non-functional (fixed v0.11.53).
+- Paper initial balance defaults to 10_000 cents ($100) when no profile balance is configured (src/traderbot/simulation/paper.py: DEFAULT_INITIAL_BALANCE_CENTS).
+- PortfolioService.get_cached_balance() has 3600s TTL — first call queries live Kalshi API, subsequent calls within 1 hour return cached value. On API error, returns stale cache (src/traderbot/kalshi/portfolio.py).
+- HARD_LIMITS is immutable at runtime via MappingProxyType (src/traderbot/risk/limits.py).
+- API credentials support both global and per-profile resolution. Global credentials come from ~/.traderbot/.env (KALSHI_API_KEY, KALSHI_PRIVATE_KEY_PEM). Per-profile overrides use KALSHI_API_KEY_PROFILE_{NAME} env vars or the ProfileAuthStore (src/traderbot/profiles/auth.py). The fallback chain: profile-scoped env vars → profile .env → global AuthManager → raise ValueError (src/traderbot/profiles/config.py).
+- All Pydantic models use ConfigDict(strict=True, extra="forbid"). Exception: KalshiConfig and src/traderbot/kalshi/config.py use extra="ignore" to allow non-model env vars.
+- PEM key reader in installer uses stty -echo for input and strips content before -----BEGIN and after -----END markers (install/traderbot-installer.sh).
+- Kalshi V2 API category param on /markets and /events is broken server-side (returns unfiltered results). Use list_markets_by_category() instead: fetches all open events, filters client-side with underscore-to-space normalization, then fetches markets per event_ticker. No weather-specific fallback — returns empty if no events match. Never pass category= directly to the API.
+- AgentRiskLimits resolves min_liquidity_threshold using max(profile value, HARD_LIMITS value) — higher is more restrictive (src/traderbot/risk/limits.py).
+- Event category map in src/traderbot/kalshi/markets.py uses Phase 1 events + Phase 2 per-event /markets?event_ticker=X fetches + Phase 3 gap-fill via /events/{event_ticker} lookups for unknown event_tickers. No prefix hardcoding — pure client-side category matching.
+- Event category map in src/traderbot/kalshi/markets.py is file-backed: persists to ~/.traderbot/event_category_cache.json. Cross-process: any traderbot process loads from disk if cache is fresh (&lt;5min TTL). `traderbot cache warm` pre-populates the cache independent of agent. No async background warmer — each scan warm-refreshes automatically. Inter-page delay of 0.3s in _build_event_category_map prevents 429s.
+- Event category map in src/traderbot/kalshi/markets.py is cached 5 min (TTL) with a background warmer (4 min refresh). Module-level functions start_event_cache_warmer()/stop_event_cache_warmer() control the warmer. _build_event_category_map has 0.3s inter-page delay to avoid 429s. No more prefix-based category filtering — all categories use event-first discovery + gap-fill fallback.
+</CONSTRAINTS>
+<ENVIRONMENT>
+- Offline news ingestion pipeline (v0.11.61+):
+- `traderbot news-ingest` — pure data pipeline, no LLM. Fetches from Reddit, FRED, NewsAPI, CoinGecko, OpenWeather. Classifies, embeds (ChromaDB with all-MiniLM-L6-v2 local model, VoyageAI for semantic summar queries), stores. Deduplicates by URL hash.
+- `traderbot news-summary` — retrieves accumulated news from ChromaDB. Supports `--since`, `--category`, `--source`, `--query` (semantic), `--signals` (high-impact only), `--json`.
+- Systemd timer on macpro-linux: `traderbot-news-ingest@jsondarula.timer` fires every 30min, runs the service as a oneshot. EnvironmentFile at `~/.traderbot/.env` provides API keys. Service binary at `~/traderbot/.venv/bin/traderbot`.
+- The AGENTS.md standing orders and bootstrap hook reference `traderbot news-summary --since &lt;last_session&gt; --json` for pre-session context.
+- Timer is installed during `traderbot profile assign`. Removed during `traderbot uninstall`.
+- traderbot cache warm CLI command pre-populates event category cache independent of agent; supports --json output.
+- ProdDataProvider caches market detail + orderbook in-memory via MarketDataCache (fixed in v0.11.53 to properly await).
+- Profile paper_mode is a @computed_field that auto-derives from mode at runtime (src/traderbot/profiles/models.py). No serialization/deserialization needed.
+- CLI db-path resolution order: explicit --db &gt; profile-specific &gt; global default (src/traderbot/cli.py:_resolve_db_path, line 69).
+- min_liquidity_threshold in HARD_LIMITS defaults to 1000 cents (src/traderbot/risk/limits.py:18).
+- Heartbeat step_system_health uses KalshiClient() without args to auto-resolve auth from profile (src/traderbot/heartbeat.py:384).
+- Remote deployment target: ssh macpro-linux. TraderBot update command runs git pull origin main — if diverged, hard reset is needed.
+- Analyze CLI command (src/traderbot/cli.py:155-166) wraps get_market + get_orderbook + client.close in a single asyncio.run call — properly closes the client.
+- Event category cache file: ~/.traderbot/event_category_cache.json — auto-refreshed on scan if stale or missing.
+- Trade CLI command (src/traderbot/cli.py:370-374) uses two separate asyncio.run calls (one for get_market, one for get_orderbook) and does NOT close the client — known resource leak.
+- cron_loops module (src/traderbot/cron_loops.py) defines Decision Loop (5min, market hours), Heartbeat Loop (30min), and News Loop (event-driven, impact &gt; 0.7).
+</ENVIRONMENT>
+<WORKFLOW_RULES>
+- Git workflow: tag every commit with git tag v0.XX.XXX. Always push both dev and main branches.
+- traderbot resume clears FULL_STOP/HALT circuit breaker state back to NORMAL. Listed as human-only in TOOLS.md — agents must alert the human rather than auto-resuming.
+</WORKFLOW_RULES>
+<KNOWN_ISSUES>
+- test_profile_stricter_than_hard_limits assertion fails (assert 0 &gt; 0) because evaluate_trade rejects trades at the 1% max_position_per_market_pct limit (tests/risk/test_evaluate_trade_profile.py:62). Profile fixture uses min_liquidity_threshold=1000 matching HARD_LIMITS.
+- FRED API returns HTTP 500 intermittently for some series (UNRATE, FEDFUNDS, DFF, T10Y2Y) — not a TraderBot bug.
+- _normalize_market() in src/traderbot/kalshi/_normalize.py handles Kalshi V2→V1 field fallbacks: title→question, volume_fp→volume, yes_ask_dollars→outcome_prices.
+- Weather agent heartbeat_loop and news_loop fail when running on the remote deployment target (ssh macpro-linux) — deployment environment issue, not local.
+- Weather agent Vane on macpro-linux is blocked from trading: (1) paper_mode was always false due to model bug (fixed v0.11.51), (2) .env.paper file doesn't exist for paper credential isolation, (3) initial_balance_cents is null so paper trading engine has no starting balance (defaults to 10_000 cents/$100 since v0.11.52), (4) KALSHI_API_KEY is missing from ~/.traderbot/.env. Need to: fix profile env_file resolution fallback, set initial_balance_cents, and ensure Kalshi credentials are available.
+- Weather agent Vane on macpro-linux is blocked from trading: (1) paper_mode was always false due to model bug (fixed v0.11.51), (2) .env.paper file doesn't exist for paper credential isolation, (3) initial_balance_cents is null so paper trading engine has no starting balance, (4) KALSHI_API_KEY is missing from ~/.traderbot/.env. Need to: fix profile env_file resolution fallback, set initial_balance_cents, and ensure Kalshi credentials are available.
+</KNOWN_ISSUES>
+</project-memory>
+
+<compartment start="1" end="26" title="Add traderbot uninstall command">
+Implemented `traderbot uninstall` CLI command with `list_all_data_paths()` helper in `paths.py`. Three-step process: remove system services (systemd/launchd), remove user data (`~/.traderbot/`), remove repo (`~/traderbot/`). Supports `--json`, `--remove-data`, `--remove-repo` flags.
+U: this command should prompt the user if they want to remove profiles and user data as well (yes/no) and then remove all files including binaries, cache, and temp files
+Prompts for data removal (y/N) and repo removal (y/N) interactively; `--remove-data` and `--remove-repo` flags skip prompts. JSON mode (non-interactive) only removes what flags specify.
+</compartment>
+
+<compartment start="27" end="80" title="Redesign update command with flags + auto-update">
+Replaced `traderbot update {check,apply,configure}` subcommands with a single command: `--check`, `--dev`, `--force` flags. No-flags mode force-checks and applies. `apply_update()` and `fetch_latest_version()` accept `dev: bool` for dev branch. Preserved auto-update via `traderbot update-configure` (renamed from `update configure`). Changed default check interval from 6 hours to 30 minutes; renamed `check_interval_hours` → `check_interval_minutes` across `update_config.py`, `updater.py`, `heartbeat.py`, `cli.py`.
+U: traderbot update with no flags should force update. traderbot update --dev should update from dev branch and traderbot update --check or traderbot update --dev --check should just check for update without applying the update
+U: auto update functionality should remain. auto update should check for update every 30 minutes automatically
+</compartment>
+
+<compartment start="81" end="90" title="Push uninstall + update redesign to main">
+Bumped VERSION to 0.11.23. Committed uninstall + update redesign together (shared cli.py changes), tagged v0.11.23, pushed to main. Stale local tag v0.11.17 ignored.
+</compartment>
+
+<compartment start="91" end="104" title="Fix uninstall bugs on macpro-linux">
+Fixed `AttributeError: 'str' object has no attribute 'name'` — `ProfileRegistry.list_profiles()` returns `list[str]`, not `list[TradingProfile]`. Changed iteration from `p.name` to direct string use. Fixed `PermissionError` on service file removal — systemd files are root-owned, switched from `Path.unlink()` to `subprocess.run(["sudo", "rm", "-f", ...])`.
+</compartment>
+
+<compartment start="105" end="111" title="Fix --force to skip version comparison">
+`traderbot update --force` now skips version comparison entirely — runs `git pull` + `pip install` regardless of whether local version matches remote. Previously --force only bypassed the check cache but still bailed on "already up to date" if versions matched.
+U: traderbot update --force needs to force update even if version number is the same
+</compartment>
+
+<compartment start="112" end="123" title="Fix update not detecting available version">
+Root cause: `fetch_latest_version()` queried GitHub `/releases/latest` which returns empty because the repo uses git tags, not GitHub Releases. Switched to `/tags?per_page=1` which returns the latest tag directly.
+</compartment>
+
+<compartment start="124" end="137" title="Add overwrite prompt on profile create duplicate">
+When `profile create` detects an existing profile name, prompts: [1] Overwrite, [2] Choose a different name, [3] Cancel. Uses `ProfileRegistry.profile_exists()` and `delete_profile()` methods.
+U: needs to ask if you want to overwrite existing profile or pick name another name
+</compartment>
+
+<compartment start="138" end="157" title="Interactive profile create wizard">
+`traderbot profile create` with no args launches interactive wizard (name → mode → categories → risk params) using numbered selections with HARD_LIMITS defaults. Uses Rich `IntPrompt` for mode/categories and `Prompt` for text input. Backward compatible: `profile create &lt;name&gt; --mode paper --categories weather` still works non-interactively.
+U: traderbot profile create should launch interactive prompt that walks user through the process same way installer does
+</compartment>
+
+<compartment start="158" end="164" title="Fix uninstall crash after repo removal">
+Crash occurred because `shutil.rmtree(repo_dir)` deletes the venv containing Rich's unicode data files, then `console.print()` tries to load from the deleted path and crashes. Fix: output the summary `print()` calls after repo removal instead of `console.print()`, so no dependency on the deleted venv.
+</compartment>
+
+<compartment start="165" end="168" title="Verify TraderBot cleanup on macpro-linux">
+SSH'd to macpro-linux after uninstall: confirmed all TraderBot artifacts removed (binary, `~/.traderbot/`, `~/traderbot/` repo, systemd services, pip/pipx packages, shell config references). Only `/tmp/traderbot-installer.sh` remained — removed it.
+</compartment>
+
+<compartment start="169" end="176" title="Add temp file + binary symlink cleanup to uninstall">
+Added Step 4 (temp/cache) and Step 5 (binary symlinks) to uninstall. Cleans `/tmp/traderbot*`, pip wheel cache for traderbot, and stale symlinks at `/usr/local/bin/traderbot` and `~/.local/bin/traderbot`.
+U: traderbot uninstall should clean temp files as well. update the command to also remove any files you cleaned manually
+</compartment>
+
+<compartment start="177" end="201" title="Add multiline PEM key input to installer">
+Kalshi API secret prompt now reads multiline PEM input: shows instruction about BEGIN/END markers, reads lines via loop with END marker detection. Fixed: previously `read -s` only captured the first line, causing PEM remainder to be interpreted as shell commands. User feedback removed the extra instruction text about pressing Enter on a blank line.
+</compartment>
+
+<compartment start="202" end="229" title="Add optional CoinGecko API key to installer + auth">
+Added CoinGecko (optional) to installer credential flow after OpenWeatherMap, before FRED. Added `coingecko` to `_OPTIONAL_SERVICES` in `auth.py` with `COINGECKO_API_KEY` env mapping. Updated `news/sources.py` to pass `x-cg-demo-api-key` header when key is configured. Verified from docs: CoinGecko free tier works without key (30 req/min), key increases rate limits.
+</compartment>
+
+<compartment start="230" end="257" title="Fix installer hang on profile assign">
+Root cause: `ask_then_merge` strategy in `injection_strategies.py` calls `input()` during `profile assign`, which blocks the installer because stdin is captured. Fix: added `set_skip_prompts()` global flag — when enabled, `ask_then_merge` auto-applies merges instead of blocking. Added `--yes`/`-y` flag to `profile assign` CLI; installer now passes `--yes`.
+</compartment>
+
+<compartment start="258" end="271" title="Add backup/merge/overwrite prompt to installer">
+After agent name input in installer, prompts "Workspace file mode: [1] Merge (recommended) / [2] Overwrite". Added `--overwrite` flag to `profile assign` CLI and `overwrite` parameter to `propagate_workspace_files()`. Option 1 (default) uses fenced merge injection preserving existing content; Option 2 replaces workspace files with templates entirely.
+</compartment>
+
+<compartment start="272" end="282" title="Add stale symlink cleanup to uninstall">
+SSH'd to macpro-linux, found stale `/usr/local/bin/traderbot` symlink pointing to deleted repo. Added Step 5 to uninstall: check and remove stale binary symlinks in common PATH locations (already implemented in previous compartment, verified working).
+</compartment>
+
+<compartment start="283" end="302" title="Add input validation to installer prompts">
+Rewrote credential sections with reusable validation helpers: `_validate_key(min_len)` re-prompts on short/invalid input, `_validate_tier(max)` ensures numeric range, `_read_pem_key()` validates BEGIN/END markers. Each prompt re-asks until valid input or Enter-to-skip for optional fields.
+U: implement data vaildation and error handling in the install script
+</compartment>
+
+<compartment start="303" end="314" title="Fix PEM key reader: stty -echo + BEGIN/END stripping">
+Replaced `read -s` with `stty -echo` / `stty echo` — `read -s` only silenced the first line of multiline paste, exposing remaining PEM lines. Strips content before `-----BEGIN` and after `-----END` markers so copy-pasted terminal artifacts are discarded. Only content between markers is saved.
+U: installer should discard anything before the begin marker. currently it just breaks
+</compartment>
+
+<compartment start="315" end="333" title="Fix masked token extracted by installer for service install">
+Root cause: `profile assign` output `Token: ****Ctl7` (masked) to stdout; installer extracted `****Ctl7` with `sed` and passed it to service install validation, which rejected `*` characters. Fix: `profile assign` now emits `RAW_TOKEN:&lt;actual_token&gt;` on a separate line alongside the masked `Token:` display. Installer extracts `RAW_TOKEN:` instead of `Token:`.
+</compartment>
+
+<compartment start="334" end="355" title="Interactive profile assign flow">
+`traderbot profile assign` with no args now lists profiles → lists agents → merge/overwrite choice. Non-interactive still works with `profile assign &lt;profile&gt; &lt;agent&gt; [--yes] [--overwrite]`. Also updated `_interactive_assign_agent` (from `profile update` → action 3) to include merge/overwrite prompt and RAW_TOKEN emission.
+U: traderbot profile assign we want interactive flow here. list profiles, list agents, ask whether to merge or overwrite.
+</compartment>
+
+<compartment start="356" end="390" title="TokenAlreadyAssignedError with --force">
+When a profile already has a token, `assign_token` raises `TokenAlreadyAssignedError` (new `ValueError` subclass) instead of a generic error. Interactive mode auto-forces reassignment. Added `--force` flag: `traderbot profile assign weatherman weather --force` revokes old token and assigns new. Non-interactive mode shows clear error with hint to use `--force` or `profile revoke`.
+</compartment>
+
+<compartment start="391" end="409" title="Hide raw token from interactive output">
+Interactive mode (`traderbot profile assign` with no args, or `profile update` → action 3): no token displayed in output at all. Script mode (`--yes` flag, used by installer): prints masked `Token:` + `RAW_TOKEN:` lines on stdout for extraction. Added `script_output` parameter to `_do_assign` and `_interactive_assign_agent`.
+U: raw token should be passed invisibly. it should never be displayed. displaying masked token is not necessary either
+</compartment>
+
+<compartment start="410" end="499" title="Fix weather category scan with prefix-free Kalshi API workaround">
+Live API investigation confirmed: Kalshi V2 `/events?category=X` and `/markets?category=X` return unfiltered results (server-side bug). Daily weather markets (KXHIGH, KXLOW, KXTEMP) are absent from `/events?status=open` — only long-dated climate events appear. New `list_markets_by_category()`: Phase 1 fetches all events → builds event→category map. Phase 2 fetches markets only for matched events via `/markets?event_ticker=X`. Phase 3 gap-fills unknown event_tickers via individual `/events/{event_ticker}` path-based lookup. No prefix hardcoding — pure client-side category matching.
+U: I don't like using the prefixes because this can break easily if new prefixes are introduced
+U: yes, and apply this logic to all categories
+</compartment>
+
+<compartment start="500" end="523" title="Add caching + batching to event category map">
+Event→category map cached with 5-minute TTL, protected by `asyncio.Lock` to prevent cache stampede. Gap-fill fallback: when no events match a category, fetches one page of `/markets?status=open`, looks up unknown event_tickers individually via `/events/{ticker}`. Semaphore(3) + 0.15s delay between batched API calls for rate limit safety.
+U: rememeber to implement caching and batching wherever possible. We want to minimize the number of API calls / to remain within API limits
+</compartment>
+
+<compartment start="524" end="548" title="Optimize with with_nested_markets parameter">
+Document review found `with_nested_markets=true` for `/events`. Simplified approach: build event category map from paginated events, then fetch markets only for matched events via per-event `/markets?event_ticker=X` calls — no re-pagination of all events. Daily weather events still require gap-fill since they don't appear in `/events`.
+</compartment>
+
+<compartment start="549" end="580" title="Add background cache warmer + 0.3s inter-page delay">
+"Failed to fetch events page" warning was caused by rate limiting during pagination (no delay between pages). Fixed with 0.3s `asyncio.sleep()` between pages — all events now fetched successfully (~4000 events). Added `start_event_cache_warmer(client)` / `stop_event_cache_warmer()` — asyncio task that refreshes the event map every 4 minutes (before 5-min TTL). Warmer is toolkit-level, independent of agent cron loops. `asyncio.Lock` for concurrent safety across concurrent scan calls.
+U: we don't want to miss events that could potentially be profitable. since events are cached, the traderbot toolkit can continuously refresh events in the background asychronously from the agent while remaining within rate limits.
+</compartment>
+
+<compartment start="581" end="602" title="Design step-gated BOOTSTRAP.md">
+Designed 6-step gated BOOTSTRAP.md with verification gates: (1) Identity → verify IDENTITY.md, (2) Your Human → verify USER.md, (3) Learn the Rules → `traderbot --version`, (4) Init Workspace → verify files, (5) Warm Cache → `traderbot cache warm`, (6) Cron + Heartbeat → `traderbot cron setup --agent &lt;ID&gt;` + first heartbeat. NO delete BOOTSTRAP.md until all steps verified. No code changes in this compartment.
+</compartment>
+
+<compartment start="603" end="644" title="File-backed event cache + traderbot cache warm CLI">
+Background warmer removed (couldn't survive `asyncio.run()` process boundaries — each CLI command starts a new event loop). Cache now file-backed: persists to `~/.traderbot/event_category_cache.json`. Any process loads from disk if fresh (&lt;5min TTL). `_load_event_cache_from_disk()` / `_save_event_cache_to_disk()` handle serialization. `traderbot cache warm` CLI command pre-populates cache independent of agent. `traderbot cache warm --json` for machine-readable output.
+U: cache warmer should be autostarted on boot independent of the agent
+</compartment>
+
+<compartment start="645" end="668" title="Investigate agent bootstrap + implement step-gated BOOTSTRAP.md">
+Investigated weather agent Vane on macpro-linux: bootstrap completed (IDENTITY.md, USER.md, MEMORY.md present, BOOTSTRAP.md deleted) but cron/heartbeat was NOT set up — agent deleted BOOTSTRAP.md without running `traderbot cron setup`. Implemented step-gated BOOTSTRAP.md with 6 mandatory steps and verification gates. "DO NOT skip" warnings on critical steps. Still missing: cron setup on remote.
+</compartment>
+
+<compartment start="669" end="721" title="Analyze agent sessions + fix paper_mode as computed_field">
+Analyzed 2 weather agent sessions (119-message Telegram chat + 78-message cron loop). Discovered 4 blocking issues: (1) `paper_mode` always false due to model bug, (2) `.env.paper` doesn't exist, (3) `initial_balance_cents` is null, (4) `KALSHI_API_KEY` missing from `.env`. All trade attempts rejected by risk pipeline. Fixed paper_mode: changed from stored field to `@computed_field` that auto-derives from `mode` at runtime — paper profiles always report `paper_mode: true`. No serialization/deserialization needed.
+</compartment>
+
+<compartment start="722" end="770" title="Paper $100 default balance + live hourly balance refresh">
+Set `DEFAULT_INITIAL_BALANCE_CENTS = 10_000` ($100) in `simulation/paper.py` — any paper invocation without explicit balance defaults to $100. Added `PortfolioService.get_cached_balance()` with 3600s TTL: first call queries Kalshi API live, subsequent calls within 1 hour return cached value (no API hit). On API error, returns stale cache — never blocks trading. Wired into heartbeat's `step_system_health` as `SystemHealth.balance_cents`.
+U: paper engline should start with $100 by default. live trading should query actual account balance every hour
+</compartment>
+
+<compartment start="771" end="803" title="Fix ProdDataProvider missing await on cache methods">
+Investigation found market/orderbook cache was entirely non-functional: `ProdDataProvider` called all 4 cache methods (`get_market`, `set_market`, `get_orderbook`, `set_orderbook`) without `await` — coroutines were created but never executed. Cache always returned None, every request hit the API. Added `await` to all 4 calls. Verified: hot cache hits dropped from 90ms to &lt;1ms (92x speedup on markets, 90x on orderbooks).
+</compartment>
+
+<compartment start="804" end="851" title="Audit workspace docs + implement changes">
+Full audit of `.openclaw/workspace/` + `docs/` found 7 issues. Implemented: TOOLS.md — moved `resume` from Agent-Autonomous → Human-Only. AGENTS.md — added Data Sourcing Protocol (7-step priority chain: scan→signals→news→sentiment→analyze→positions→web search last), minimum 5 data points per trade, new Red Lines for web search as primary source and insufficient data, clarified filesystem restriction. SOUL.md — synced filesystem restriction wording. BOOT.md — added `traderbot cron list --json` to step 6. HEARTBEAT.md — clarified 30min auto-heartbeat vs 6h deep review. `docs/openclaw-integration.md` — fixed heartbeat interval to 30min (was 6h), decision loop to 24/7 (was "market hours"). Synced all 5 files to weather agent workspace on macpro-linux. Committed as v0.11.54 (doc fixes) and v0.11.55 (SOUL.md sync).
+U: The agent should analyze multiple sources before taking action. (minimum 5 data points, encouraged to find as many as possible)
+Implemented as the Data Sourcing Protocol in AGENTS.md: mandatory 7-step priority chain with minimum 5 data points before any trade action.
+</compartment>
+
+<compartment start="852" end="854" title="Verify push to main">
+User requested push; assistant confirmed v0.11.55 already on main with no pending changes.
+</compartment>
+
+<compartment start="855" end="860" title="Switch to dev branch">
+Created `dev` branch from current state at v0.11.55, set upstream tracking to `origin/dev`, pushed.
+</compartment>
+
+<!-- Rewrite all facts below into canonical present-tense operational form. Do not copy wording verbatim. Drop stale or task-local facts. Drop facts already covered by project memories above. -->
+
+<CONSTRAINTS>
+* Event category map in src/traderbot/kalshi/markets.py is file-backed: persists to ~/.traderbot/event_category_cache.json. Cross-process: any traderbot process loads from disk if cache is fresh (&lt;5min TTL). `traderbot cache warm` pre-populates the cache independent of agent. No async background warmer — each scan warm-refreshes automatically. Inter-page delay of 0.3s in _build_event_category_map prevents 429s.
+* Event category map in src/traderbot/kalshi/markets.py uses Phase 1 events + Phase 2 per-event /markets?event_ticker=X fetches + Phase 3 gap-fill via /events/{event_ticker} lookups for unknown event_tickers. No prefix hardcoding — pure client-side category matching.
+* All Pydantic models use ConfigDict(strict=True, extra="forbid"). Exception: KalshiConfig and src/traderbot/kalshi/config.py use extra="ignore" to allow non-model env vars.
+* AgentRiskLimits resolves min_liquidity_threshold using max(profile value, HARD_LIMITS value) — higher is more restrictive (src/traderbot/risk/limits.py).
+* Kalshi V2 API category param on /markets and /events is broken server-side (returns unfiltered results). Use list_markets_by_category() instead: fetches all open events, filters client-side with underscore-to-space normalization, then fetches markets per event_ticker. No weather-specific fallback — returns empty if no events match. Never pass category= directly to the API.
+* PEM key reader in installer uses stty -echo for input and strips content before -----BEGIN and after -----END markers (install/traderbot-installer.sh).
+* API credentials support both global and per-profile resolution. Global credentials come from ~/.traderbot/.env (KALSHI_API_KEY, KALSHI_PRIVATE_KEY_PEM). Per-profile overrides use KALSHI_API_KEY_PROFILE_{NAME} env vars or the ProfileAuthStore (src/traderbot/profiles/auth.py). The fallback chain: profile-scoped env vars → profile .env → global AuthManager → raise ValueError (src/traderbot/profiles/config.py).
+* HARD_LIMITS is immutable at runtime via MappingProxyType (src/traderbot/risk/limits.py).
+* Per-agent DB isolation: each agent gets separate db/chroma/audit dirs at ~/.traderbot/{mode}-{name}/.
+* ProdDataProvider must await all MarketDataCache methods (get_market, set_market, get_orderbook, set_orderbook) — missing await caused cache to be entirely non-functional (fixed v0.11.53).
+* Paper initial balance defaults to 10_000 cents ($100) when no profile balance is configured (src/traderbot/simulation/paper.py: DEFAULT_INITIAL_BALANCE_CENTS).
+* PortfolioService.get_cached_balance() has 3600s TTL — first call queries live Kalshi API, subsequent calls within 1 hour return cached value. On API error, returns stale cache (src/traderbot/kalshi/portfolio.py).
+</CONSTRAINTS>
+
+<ENVIRONMENT>
+* cron_loops module (src/traderbot/cron_loops.py) defines Decision Loop (5min, market hours), Heartbeat Loop (30min), and News Loop (event-driven, impact &gt; 0.7).
+* Trade CLI command (src/traderbot/cli.py:370-374) uses two separate asyncio.run calls (one for get_market, one for get_orderbook) and does NOT close the client — known resource leak.
+* Analyze CLI command (src/traderbot/cli.py:155-166) wraps get_market + get_orderbook + client.close in a single asyncio.run call — properly closes the client.
+* min_liquidity_threshold in HARD_LIMITS defaults to 1000 cents (src/traderbot/risk/limits.py:18).
+* CLI db-path resolution order: explicit --db &gt; profile-specific &gt; global default (src/traderbot/cli.py:_resolve_db_path, line 69).
+* Heartbeat step_system_health uses KalshiClient() without args to auto-resolve auth from profile (src/traderbot/heartbeat.py:384).
+* Remote deployment target: ssh macpro-linux. TraderBot update command runs git pull origin main — if diverged, hard reset is needed.
+* Event category cache file: ~/.traderbot/event_category_cache.json — auto-refreshed on scan if stale or missing.
+* traderbot cache warm CLI command pre-populates event category cache independent of agent; supports --json output.
+* ProdDataProvider caches market detail + orderbook in-memory via MarketDataCache (fixed in v0.11.53 to properly await).
+* Profile paper_mode is a @computed_field that auto-derives from mode at runtime (src/traderbot/profiles/models.py). No serialization/deserialization needed.
+</ENVIRONMENT>
+
+<KNOWN_ISSUES>
+* Weather agent Vane on macpro-linux is blocked from trading: (1) paper_mode was always false due to model bug (fixed v0.11.51), (2) .env.paper file doesn't exist for paper credential isolation, (3) initial_balance_cents is null so paper trading engine has no starting balance (defaults to 10_000 cents/$100 since v0.11.52), (4) KALSHI_API_KEY is missing from ~/.traderbot/.env. Need to: fix profile env_file resolution fallback, set initial_balance_cents, and ensure Kalshi credentials are available.
+* FRED API returns HTTP 500 intermittently for some series (UNRATE, FEDFUNDS, DFF, T10Y2Y) — not a TraderBot bug.
+* _normalize_market() in src/traderbot/kalshi/_normalize.py handles Kalshi V2→V1 field fallbacks: title→question, volume_fp→volume, yes_ask_dollars→outcome_prices.
+* Weather agent heartbeat_loop and news_loop fail when running on the remote deployment target (ssh macpro-linux) — deployment environment issue, not local.
+* test_profile_stricter_than_hard_limits assertion fails (assert 0 &gt; 0) because evaluate_trade rejects trades at the 1% max_position_per_market_pct limit (tests/risk/test_evaluate_trade_profile.py:62). Profile fixture uses min_liquidity_threshold=1000 matching HARD_LIMITS.
+</KNOWN_ISSUES>
+
+<WORKFLOW_RULES>
+* traderbot resume clears FULL_STOP/HALT circuit breaker state back to NORMAL. Listed as human-only in TOOLS.md — agents must alert the human rather than auto-resuming.
+* Git workflow: tag every commit with git tag v0.XX.XXX. Always push both dev and main branches.
+</WORKFLOW_RULES>
