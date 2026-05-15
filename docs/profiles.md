@@ -48,9 +48,15 @@ class TradingProfile(BaseModel):
 ### Computed Properties
 
 ```python
-profile.base_dir      # ".traderbot-paper" or ".traderbot-live"
-profile.env_file      # ".env.paper" or ".env.live"
+profile.base_dir      # "~/.traderbot/{mode}-{name}" (e.g., "~/.traderbot/paper-weather-agent")
+profile.env_file      # ".env.{mode}" (e.g., ".env.paper") 
+profile.paper_mode    # bool — True if mode == "paper"
 ```
+
+Each profile gets an isolated data directory at `~/.traderbot/{mode}-{name}/` containing:
+- `db/` — SQLite database (decisions, positions, learnings)
+- `chroma/` — ChromaDB vector store
+- `audit/` — Audit trail logs
 
 ### HARD_LIMITS Ceiling
 
@@ -167,31 +173,32 @@ API keys (`KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`) are stored once in `~/.tra
 
 ### Credential Resolution Chain
 
-When resolving API credentials:
+When resolving Kalshi API credentials, `resolve_kalshi_credentials()` uses a multi-step fallback chain:
 
-1. `.env` file (`~/.traderbot/.env` with mode 0600)
-2. Environment variable fallback
+1. **Profile keyring** (`ProfileAuthStore`) — per-profile credential store
+2. **Profile-scoped env vars** — `KALSHI_API_KEY_PROFILE_{NAME}` and `KALSHI_PRIVATE_KEY_PEM_PROFILE_{NAME}` in `.env`
+3. **Global AuthManager** — shared system keyring (macOS Keychain), then global `.env`
+4. **Raise `ValueError`** — explicitly fail if no credentials found
 
-The resolution chain in `resolve_kalshi_credentials()` reads from `.env` first, then falls back to `KALSHI_API_KEY` / `KALSHI_PRIVATE_KEY_PEM` environment variables.
+Other API keys (NewsAPI, Voyage AI, etc.) are global-only — shared via `resolve_newsapi_key()` and similar helpers.
 
 ## Data Isolation
 
-Each profile has isolated data directories:
+Each profile has isolated data directories, ensuring multiple agents do not share state:
 
 | Path | Purpose |
 |---|---|
-| `~/.traderbot-paper/` | Paper trading data |
-| `~/.traderbot-live/` | Live trading data |
+| `~/.traderbot/{mode}-{name}/` | Profile root (e.g., `~/.traderbot/paper-weather-agent`) |
 
 ### Isolated Paths
 
 ```python
-get_profile_db_path(profile, "decisions.db")  # ~/.traderbot-paper/db/decisions.db
-get_profile_chroma_path(profile)                 # ~/.traderbot-paper/chroma
-get_profile_audit_path(profile)                 # ~/.traderbot-paper/audit
+get_profile_db_path(profile, "decisions.db")     # ~/.traderbot/{mode}-{name}/db/decisions.db
+get_profile_chroma_path(profile)                  # ~/.traderbot/{mode}-{name}/chroma
+get_profile_audit_path(profile)                  # ~/.traderbot/{mode}-{name}/audit
 ```
 
-Directories are created on demand via `ensure_profile_dirs(profile)`.
+Directories are created on demand via `ensure_profile_dirs(profile)`. This isolates SQLite, ChromaDB, and audit logs per-agent.
 
 ## Runtime Resolution
 

@@ -20,8 +20,8 @@ List open markets from Kalshi.
 
 | Arg | Default | Description |
 |---|---|---|
-| `--limit` | 20 | Max markets to return |
-| `--category` | None | Filter by market category |
+| `--limit` | 500 | Max markets to return |
+| `--category` | None | Filter by market category (uses profile categories if set) |
 
 ### traderbot analyze
 
@@ -31,13 +31,61 @@ traderbot analyze TICKER [--json]
 
 Get market details, orderbook, indicators, and edge estimate.
 
+### traderbot signals
+
+```bash
+traderbot signals [--category STR] [--min-edge FLOAT] [--json]
+```
+
+Scan open markets for active trading signals. Returns markets where the estimated edge exceeds the minimum threshold.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--category` | None | Filter by market category |
+| `--min-edge` | 0.03 | Minimum edge threshold |
+| `--json` | false | JSON output |
+
+### traderbot bootstrap
+
+```bash
+traderbot bootstrap [--json]
+```
+
+One-time setup wizard. Checks Python version, creates config directory, and launches interactive credential setup.
+
+### traderbot news
+
+```bash
+traderbot news [--category STR] [--limit N] [--json]
+```
+
+Fetch news from all active sources (NewsAPI, Reddit, specialized APIs).
+
+### traderbot sentiment
+
+```bash
+traderbot sentiment TICKER [--json]
+```
+
+Aggregate sentiment analysis for a market ticker from all news sources.
+
+### traderbot resume
+
+```bash
+traderbot resume [--json]
+```
+
+Clear circuit breaker FULL_STOP state. Only works if the breaker is in FULL_STOP.
+
 ### traderbot trade
 
 ```bash
-traderbot trade TICKER --direction yes|no --quantity N --price CENTS [--json]
+traderbot trade TICKER --direction yes|no --quantity N --price CENTS [--estimated-prob FLOAT] [--confidence FLOAT] [--json]
 ```
 
 Place a trade through the risk pipeline. Returns sized position in cents or rejection reason.
+
+Use `--estimated-prob` and `--confidence` to override market-implied probability. Without these, Kelly sees ~0 edge and rejects all trades.
 
 ### traderbot positions
 
@@ -232,6 +280,22 @@ traderbot auth rotate SERVICE
 
 Rotate credentials for a service.
 
+### traderbot cron setup
+
+```bash
+traderbot cron setup [--json]
+```
+
+Register cron loops with OpenClaw Gateway. Registers decision loop (every 5 min), heartbeat loop (every 30 min), and news loop (event-driven).
+
+### traderbot update
+
+```bash
+traderbot update [--json]
+```
+
+Check for updates on GitHub.
+
 ### traderbot auth check
 
 ```bash
@@ -239,3 +303,11 @@ traderbot auth check
 ```
 
 Verify all required credentials are configured.
+
+### traderbot cron setup
+
+```bash
+traderbot cron setup
+```
+
+Register the three-loop cron system with OpenClaw Gateway (decision loop every 5 minutes, heartbeat loop every 30 minutes, news loop event-driven).

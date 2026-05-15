@@ -144,7 +144,7 @@ bash install/traderbot-installer.sh --uninstall
 This:
 - Stops all running TraderBot services
 - Removes systemd unit files (Linux) or launchd plist files (macOS)
-- Preserves data at `~/.traderbot/`, `~/.traderbot-paper/`, `~/.traderbot-live/`
+- Preserves data at `~/.traderbot/` (all profiles and data)
 
 ## Update
 
@@ -217,17 +217,17 @@ Each plist has `RunAtLoad=true` and `KeepAlive=true` for automatic start and res
 
 ## Data Isolation
 
-Each profile mode has its own data directory:
+Each profile has its own data directory under `~/.traderbot/{mode}-{name}/`:
 
-| Mode | Base Directory |
+| Profile | Base Directory |
 |---|---|
-| Paper | `~/.traderbot-paper/` |
-| Live | `~/.traderbot-live/` |
+| `paper-weather-agent` | `~/.traderbot/paper-weather-agent/` |
+| `live-portfolio` | `~/.traderbot/live-portfolio/` |
 | Global (no profile) | `~/.traderbot/` |
 
-Within each directory:
-- `db/` — SQLite database
+Within each profile directory:
+- `db/` — SQLite database (decisions, positions, learnings)
 - `chroma/` — ChromaDB vector store
-- `audit/` — Audit logs
+- `audit/` — Audit trail logs
 
-When a profile is active, TraderBot uses the profile-specific paths. When no profile token is set, it uses the global `~/.traderbot/`.
+When a profile token is set via `TRADERBOT_PROFILE_TOKEN`, TraderBot uses the profile-specific paths. When no profile token is set, it uses the global `~/.traderbot/`.

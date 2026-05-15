@@ -2,6 +2,8 @@
 
 Implementation phases, dependencies between them, success criteria, and future expansion plans.
 
+> **Current status**: v0.11.55 — all phases up through Phase 8 complete, with ongoing refinements across the entire system. Version targets listed below are historical milestones; see [ROADMAP_PROGRESS.md](../ROADMAP_PROGRESS.md) for current completion status.
+
 ## Phase 1: Kalshi Data Foundation
 
 **Goal**: Connect to Kalshi, authenticate, fetch market data, normalize into our models.
@@ -13,7 +15,9 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Market data | `kalshi/markets.py` | List markets, get detail, orderbook, recent trades |
 | Historical data | `kalshi/history.py` | Cutoff queries, historical trades, settled markets |
 | WebSocket | `kalshi/websocket.py` | Real-time price/streaming data |
-| Demo adapter | `kalshi/demo.py` | Paper trading adapter (deprecated) |
+| Normalization | `kalshi/_normalize.py` | V2→internal model field normalization |
+| Config | `kalshi/config.py` | API URLs, rate limits, environment detection |
+| Rate limiter | `kalshi/rate_limit.py` | Token bucket rate limiting (default 20 req/s) |
 
 **Dependencies**: None — this is the foundation.
 **Version target**: v0.01.00
@@ -97,11 +101,10 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Paper trader | `simulation/paper_trader.py` | Simulated execution against prod data |
 | Performance | `simulation/performance.py` | Strategy metrics and comparison |
 | **StrategyProfile** | `simulation/profiles.py` | Preset risk/signal profiles for multi-profile backtesting |
-| **Bootstrap command** | CLI (`traderbot bootstrap`) | Calibrates strategy parameters against historical data |
+| **Bootstrap command** | CLI (`traderbot bootstrap`) | One-time setup wizard (Python version check, credential config, .env creation) |
 
 **Key enhancements** (from production implementation analysis):
 - **StrategyProfile**: Predefined risk profiles (Conservative 0.5x, Moderate 1.0x, Aggressive 0.8x) that scale within HARD_LIMITS — never override. Multi-profile backtesting via `BacktestEngine.run_profiles()`.
-- **Bootstrap calibration**: Per-horizon calibration fits for strategy parameters, with warm-up period handling for indicators on insufficient data.
 - **Explicit formula**: `effective_limit = risk_multiplier * HARD_LIMITS[key]` — profiles scale limits, never exceed them.
 
 **Dependencies**: Phase 1 (historical data), Phase 2 (risk checks), Phase 4 (signals).
@@ -124,10 +127,9 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Learnings | `db/learnings.py` | Pattern tracking with recurrence counts, semantic search, clustering |
 | Vector store | `db/vectors.py` | ChromaDB interface for embedding storage and retrieval |
 | WAL protocol | (in Decision Loop) | Write-to-SESSION-STATE before executing |
-| Workspace files | `.openclaw/workspace/` | LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md |
+| Workspace files | `.openclaw/workspace/` | AGENTS.md, SOUL.md, TOOLS.md, BOOT.md, BOOTSTRAP.md, HEARTBEAT.md, IDENTITY.md, USER.md, MEMORY.md |
 
 **Key enhancements**:
-- **FEATURE_REQUESTS.md flow**: Capability gap logging with recurrence-based promotion. Feature requests follow the same 3+ recurrence / 2+ tasks / 30-day window criteria as learnings, but are promoted to PENDING_REVIEW status (never auto-committed).
 - **Pattern staleness constraint**: `max_age_days=30` enforced in `db/learnings.py` — patterns older than 30 days from last recurrence are not eligible for promotion.
 - **PENDING_REVIEW promotion**: Learnings and feature requests are promoted to PENDING_REVIEW status, surfaced in heartbeat reviews, and require explicit human approval before any operating rule changes.
 - **Graceful degradation logging**: All fallback paths (Voyage, ChromaDB, news sources) MUST log WARNING-level messages when degrading.
@@ -149,7 +151,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 
 | Component | Files | Description |
 |---|---|---|
-| Sources | `news/sources.py` | Unified interface for NewsAPI, Twitter, Reddit |
+| Sources | `news/sources.py` | Unified interface for NewsAPI, Reddit, Open-Meteo, CoinGecko, FRED, TheSportsDB, Google Trends |
 | Classifier | `news/classifier.py` | Map news to Kalshi categories (Voyage-enhanced semantic classification) |
 | Sentiment | `news/sentiment_scorer.py` | VADER + TextBlob scoring with Voyage semantic enrichment |
 | Impact | `news/impact_assessor.py` | Filter noise from signal (Voyage-boosted relevance scoring) |
@@ -157,7 +159,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | ChromaDB integration | `db/vectors.py` | Vector storage and similarity search for news embeddings |
 | Semantic classification | (in `news/classifier.py`) | Embedding-based category matching with `voyage-finance-2` |
 | Reranker fallback | `news/embeddings.py` | `rerank-2.5` for ambiguous classifications |
-| **MarketCategory enum** | `news/models.py` | Type-safe category enum (ECONOMICS, POLITICS, WEATHER, SPORTS, CULTURE, TECHNOLOGY, SCIENCE) |
+| **MarketCategory enum** | `kalshi/models.py` | Type-safe category enum (ECONOMICS, POLITICS, WEATHER, SPORTS, SCIENCE_AND_TECHNOLOGY, CRYPTO, COMMODITIES, COMPANIES, ELECTIONS, ENTERTAINMENT, FINANCIALS, HEALTH, MENTIONS, SOCIAL) |
 | **CategoryAnalyzer Protocol** | `news/classifier.py` | Per-category analysis protocol with `analyze` method and `CategorySignals` model |
 | **AnalysisRegistry** | `news/classifier.py` | Central dispatch for `register`, `get`, `analyze` — enables per-category specialized analyzers |
 | **Domain authority scoring** | `news/impact_assessor.py` | Per-news-source authority scores per category, used as impact multiplier |
@@ -199,7 +201,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 **Success criteria**:
 - Bayesian updates produce mathematically correct posteriors
 - Parameter bounds enforced (no >20% change per update)
-- Heartbeat runs every 6 hours autonomously
+- Heartbeat runs every 30 minutes autonomously
 - Full three-loop system operates without human intervention
 - Agent recovers from crash by reading SESSION-STATE.md
 

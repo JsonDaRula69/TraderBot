@@ -10,7 +10,7 @@ The agent operates via three independent loops, each with a distinct responsibil
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Continuous during market hours |
+| **Frequency** | Every 5 minutes (24/7) — Kalshi prediction markets never close |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous, no human attention needed) |
 | **Responsibility** | Analyze markets → generate signals → risk-check → execute |
 
@@ -28,8 +28,8 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 ### Heartbeat Loop
 
 | Attribute | Value |
-|---|---|
-| **Frequency** | Every 6 hours |
+|---|---|---|
+| **Frequency** | Every 30 minutes |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous background work) |
 | **Responsibility** | Performance review → adapt parameters → log learnings |
 
@@ -73,32 +73,40 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
-│  traderbot scan | analyze | trade | positions | backtest |    │
-│  paper | compare | performance | news | sentiment |          │
-│  heartbeat | learnings | bootstrap | auth                     │
+│  traderbot scan | analyze | trade | positions | audit |       │
+│  backtest | paper | compare | performance | news |            │
+│  sentiment | signals | heartbeat | halt | resume | bootstrap  │
+│  learnings | cron setup | profile | auth                       │
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
 ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
-   │        │ │        │ │        │ │        │ │        │
-   │ client │ │indic.  │ │limits  │ │engine  │ │sources │
-   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
-   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
-   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-   │ history│ │        │ │        │ │profiles│ │embed.  │
-   │ ws     │ │        │ │        │ │data_ldr│ │vectors │
-   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
+    │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
+    │        │ │        │ │        │ │        │ │        │
+    │ client │ │indic.  │ │limits  │ │engine  │ │sources │
+    │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
+    │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
+    │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
+    │ events │ │registry│ │agent   │ │profiles│ │embed.  │
+    │ history│ │        │ │limits  │ │data_ldr│ │models  │
+    │ ws     │ │        │ │        │ │settle  │ │cache   │
+    │ exchange│ │        │ │        │ │strateg.│ │paths   │
+    │ signing│ │        │ │        │ │adapter │ │        │
+    │ config │ │        │ │        │ │state   │ │        │
+    │ cache  │ │        │ │        │ │        │ │        │
+    │ provider│ │        │ │        │ │        │ │        │
+    │ rate_lim│ │        │ │        │ │        │ │        │
+    │ _norm. │ │        │ │        │ │        │ │        │
+    └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
        │                      │
        ▼                      ▼
    ┌────────┐            ┌────────┐
-   │ Kalshi │            │  db    │
-   │   API  │            │positions│
-   │        │            │decisions│
-   └────────┘            │learnings│
-                         │ chroma  │
-                         │ vectors │
-                         └────────┘
+    │ Kalshi │            │  db    │
+    │   API  │            │positions│
+    │        │            │decisions│
+    └────────┘            │learnings│
+                          │ vectors │
+                          └────────┘
 ```
 
 ## Toolkit vs. Agent Boundary
@@ -149,7 +157,7 @@ The semantic layer provides search-optimized index capabilities. It is NOT the a
 - Persistent vector store with metadata filtering (ticker, category, date range)
 - TTL policy: embeddings auto-expire after configurable window (default 90 days)
 - Async support: embedding generation and querying run without blocking the hot path
-- Collections: `decisions`, `heartbeats`, `news_signals`, `chart_embeddings`
+- Collections: `decisions`, `news`, `market_patterns`, `news_signals`, `market_conditions`
 
 ### Architecture Constraint
 
@@ -182,16 +190,15 @@ Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
    → db/positions updates on fill
 ```
 
-### Bootstrap Flow
+### Bootstrap Flow (Setup Wizard)
 
 ```
-Agent → "traderbot bootstrap --from 2026-01-01 --to 2026-03-01 --profile Moderate"
-   → simulation/data_loader fetches historical data (cached in SQLite)
-   → simulation/engine replays events through StrategyProfile
-   → Warm-up period: first N data points skipped for indicator stability
-   → Calibration parameters fit per-horizon (daily, weekly, monthly)
-   → Report: fit quality, recommended parameters, data sufficiency warnings
-   → IF data < 30 days → WARNING logged, partial results returned (never crashes)
+Agent → "traderbot bootstrap"
+   → Checks Python version (3.12.x required for chromadb compatibility)
+   → Creates default config directory (~/.traderbot/)
+   → Launches interactive credential setup for all services
+   → Writes credentials to .env file
+   → Reports completion status
 ```
 
 ### Analysis Flow

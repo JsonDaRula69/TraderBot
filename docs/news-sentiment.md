@@ -11,38 +11,42 @@ The toolkit doesn't interpret news (that's the agent's job). It **collects, clas
 ## Pipeline Architecture
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  NewsAPI    │  │  X/Twitter  │  │  Reddit RSS │  ← Sources
-└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       │                │                │
-       ▼                ▼                ▼
-┌─────────────────────────────────────────────────┐
+┌─────────────┐  ┌─────────────┐  ┌─────────────────┐
+│  NewsAPI    │  │  Reddit RSS │  │ Specialized APIs │  ← Sources
+│             │  │             │  │ (Open-Meteo,     │
+│             │  │             │  │  CoinGecko, FRED,│
+│             │  │             │  │  TheSportsDB,    │
+│             │  │             │  │  Google Trends)  │
+└──────┬──────┘  └──────┬──────┘  └────────┬────────┘
+       │                │                  │
+       ▼                ▼                  ▼
+┌──────────────────────────────────────────────────┐
 │              sources.py (unified interface)       │
-└──────────────────────┬──────────────────────────┘
+└──────────────────────┬───────────────────────────┘
                        │
                        ▼
-┌───────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────┐
 │  classifier.py — Map news to Kalshi market categories │
 │  ┌─────────────────┐    ┌─────────────────────┐   │
-│  │ Keyword matching │───▶│ Voyage semantic (opt-in)│  ← [NEW]
+│  │ Keyword matching │───▶│ Embeddings semantic │  ← [NEW]
 │  └─────────────────┘    └─────────────────────┘   │
-└──────────────────────┬────────────────────────────┘
+└──────────────────────┬─────────────────────────────┘
                        │
                        ▼
-┌───────────────────────────────────────────────────┐
-│  sentiment_scorer.py — VADER + TextBlob scoring   │
+┌────────────────────────────────────────────────────┐
+│  sentiment_scorer.py — VADER + TextBlob scoring    │
 │  ┌─────────┐    ┌─────────────┐                    │
-│  │  VADER  │───▶│ Voyage uplift │  ← [NEW]        │
+│  │  VADER  │───▶│ Embs uplift │  ← [NEW]          │
 │  └─────────┘    └─────────────┘                    │
-└──────────────────────┬────────────────────────────┘
+└──────────────────────┬─────────────────────────────┘
                        │
                        ▼
-┌───────────────────────────────────────────────────┐
-│  impact_assessor.py — Does this news matter?      │
+┌────────────────────────────────────────────────────┐
+│  impact_assessor.py — Does this news matter?       │
 │  ┌──────────────────┐    ┌────────────────────┐   │
-│  │ Heuristic rules  │───▶│ Voyage relevance    │  ← [NEW]
+│  │ Heuristic rules  │───▶│ Embs relevance     │  ← [NEW]
 │  └──────────────────┘    └────────────────────┘   │
-└──────────────────────┬────────────────────────────┘
+└──────────────────────┬─────────────────────────────┘
                        │
                        ▼
               Agent receives structured news item
@@ -52,7 +56,7 @@ The toolkit doesn't interpret news (that's the agent's job). It **collects, clas
 ## Semantic Enhancement Layer (Voyage AI)
 > Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
 
-`news/voyage_client.py` — domain-optimized semantic analysis for financial text.
+`news/embeddings.py` — domain-optimized semantic analysis for financial text (Voyage AI integration).
 
 ### Why Semantic Enhancement?
 
@@ -99,18 +103,6 @@ The pipeline continues with degraded capability rather than failing. All degrade
 
 Use for: Political events, economic indicators, general news that maps to Kalshi categories like economics, politics, weather.
 
-### X/Twitter API
-
-| Detail | Value |
-|---|---|
-| **Coverage** | Real-time social — often first to break news |
-| **Update frequency** | Streaming (real-time) |
-| **Rate limit** | Varies by tier (basic: 10,000 tweets/month read) |
-| **Strength** | Speed — news breaks here first; sentiment from replies/likes |
-| **Weakness** | Noisy, requires filtering; API access increasingly restricted |
-
-Use for: Breaking news detection, real-time sentiment shifts, journalist/pundit reactions that signal market movement.
-
 ### Reddit RSS
 
 | Detail | Value |
@@ -123,13 +115,26 @@ Use for: Breaking news detection, real-time sentiment shifts, journalist/pundit 
 
 Use for: Subreddit-specific monitoring (r/politics, r/economics, r/weather) for narrative shifts and community consensus signals.
 
+### Additional Sources
+
+| Source | Authentication | Coverage | Implementation |
+|---|---|---|---|
+| **Open-Meteo** | Free, no key | Historical weather data | `_fetch_open_meteo()` |
+| **OpenWeatherMap** | API key required | Current weather conditions | `_fetch_openweathermap()` |
+| **FRED (Federal Reserve)** | API key required | Economic data series | `_fetch_fred()` |
+| **CoinGecko** | Free, no key | Cryptocurrency market data | `_fetch_coingecko()` |
+| **TheSportsDB** | Free tier with key | Sports events and scores | `_fetch_thesportsdb()` |
+| **Google Trends** | Free, no key | Search volume trends | `_fetch_google_trends()` |
+
+> Note: X/Twitter API is defined in `NewsSource` enum but has no active fetcher implementation (subject to ongoing API access restrictions).
+
 ### Source Priority for Speed
 
 For latency-sensitive prediction market trading:
 
-1. **X/Twitter** — fastest to break news, but noisiest
-2. **NewsAPI** — structured, reliable, minutes behind Twitter
-3. **Reddit** — slowest but provides depth and community consensus
+1. **NewsAPI** — structured, reliable, fastest aggregate source
+2. **Reddit** — community signals, deeper analysis
+3. **Specialized APIs** — sports, weather, economic data via targeted fetchers
 
 ## Classifier
 
@@ -137,18 +142,27 @@ For latency-sensitive prediction market trading:
 
 ### MarketCategory Enum
 
-The `MarketCategory` enum defines the supported news classification categories, mapping directly to Kalshi's market categories:
+The `MarketCategory` enum (`kalshi/models.py`) defines the 14 supported market categories, mapping to Kalshi's API:
 
 ```python
-class MarketCategory(str, Enum):
+class MarketCategory(StrEnum):
     ECONOMICS = "economics"
     POLITICS = "politics"
     WEATHER = "weather"
     SPORTS = "sports"
-    CULTURE = "culture"
-    TECHNOLOGY = "technology"
-    SCIENCE = "science"
+    SCIENCE_AND_TECHNOLOGY = "science_and_technology"
+    CRYPTO = "crypto"
+    COMMODITIES = "commodities"
+    COMPANIES = "companies"
+    ELECTIONS = "elections"
+    ENTERTAINMENT = "entertainment"
+    FINANCIALS = "financials"
+    HEALTH = "health"
+    MENTIONS = "mentions"
+    SOCIAL = "social"
 ```
+
+> Note: `MarketCategory` is the single source of truth for all modules (analysis, simulation, news, profiles). News pipeline maps sourced articles to these categories. The Kalshi API uses title-case variants: "Science and Technology", "Climate and Weather", "Mentions", etc.
 
 Each category has:
 - Associated keyword lists for initial classification

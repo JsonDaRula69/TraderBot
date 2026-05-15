@@ -88,11 +88,10 @@ The strategy can read but **cannot bypass** risk limits. The engine enforces the
 
 ### Loading Workflow
 
-1. Call `GET /historical/cutoff` to get the live/historical boundary
-2. Fetch resolved markets via `GET /historical/markets` with time range
-3. For each market, fetch trade history via `GET /historical/trades`
-4. Paginate through trades (1000 per page) to build complete timeline
-5. Cache locally in SQLite — avoid re-fetching on repeated backtests
+1. Fetch resolved markets via `GET /historical/markets` with time range
+2. For each market, fetch trade history via `GET /historical/trades`
+3. Paginate through trades (1000 per page) to build complete timeline
+4. Cache locally in SQLite — avoid re-fetching on repeated backtests
 
 ### Caching Strategy
 
@@ -193,10 +192,10 @@ class StrategyProfile(BaseModel):
 ### Preset Profiles
 
 | Profile | `risk_multiplier` | Signal Weights | Category Focus | Purpose |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | **Conservative** | 0.5x | statistical: 0.8, sentiment: 0.2 | economics, politics | Capital preservation; minimizes losses |
-| **Moderate** | 1.0x | statistical: 0.5, sentiment: 0.5 | economics, politics, technology | Balanced approach; default profile |
-| **Aggressive** | 0.8x | statistical: 0.3, sentiment: 0.7 | all categories | Seeks higher returns; tolerates more volatility |
+| **Moderate** | 1.0x | statistical: 0.5, sentiment: 0.5 | economics, politics, science_and_technology | Balanced approach; default profile |
+| **Aggressive** | 0.8x | statistical: 0.3, sentiment: 0.7 | economics, politics, science_and_technology, sports, entertainment | Seeks higher returns; tolerates more volatility |
 
 - **Conservative (0.5x)**: Halves all position sizes relative to hard limits. Heavy statistical signal weight. Designed for capital preservation.
 - **Moderate (1.0x)**: Operates at full hard limits. Equal signal weighting. The default profile.
