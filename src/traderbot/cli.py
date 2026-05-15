@@ -2651,6 +2651,23 @@ def _do_assign(
                     console.print(
                         "[green]✓[/green] OpenClaw features configured (hooks, sandbox)"
                     )
+
+                    # Install news ingestion timer
+                    try:
+                        news_result = _install_news_ingest_timer(
+                            agent_user=agent_id,
+                            console=console,
+                        )
+                        if news_result.get("registered"):
+                            console.print(
+                                "[green]✓[/green] News ingestion timer installed"
+                            )
+                    except Exception as ni_err:
+                        logger.warning("News ingest timer install failed: %s", ni_err)
+                        console.print(
+                            "[yellow]Warning:[/yellow] News ingestion timer could not be installed "
+                            f"({ni_err})"
+                        )
                 except Exception as oc_err:
                     logger.warning("OpenClaw feature setup failed: %s", oc_err)
                     console.print(
@@ -3356,7 +3373,7 @@ def _install_news_ingest_timer(
         return result
 
     repo_root = Path(__file__).resolve().parent.parent.parent.parent
-    service_template = repo_root / "install" / "services" / "traderbot-news-ingest.service"
+    service_template = repo_root / "install" / "services" / "traderbot-news-ingest@.service"
     timer_template = repo_root / "install" / "services" / "traderbot-news-ingest@.timer"
 
     if not service_template.exists() or not timer_template.exists():
@@ -3684,6 +3701,18 @@ def uninstall(
                     result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         removed_services.append(str(svc))
+                for svc in list(service_dir.glob("traderbot-news-ingest@*.service")):
+                    unit = svc.name
+                    timer_unit = unit.replace(".service", ".timer")
+                    subprocess.run(["sudo", "systemctl", "stop", timer_unit], capture_output=True)
+                    subprocess.run(["sudo", "systemctl", "disable", timer_unit], capture_output=True)
+                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    if result.returncode == 0:
+                        removed_services.append(str(svc))
+                    timer_path = service_dir / timer_unit
+                    if timer_path.exists():
+                        subprocess.run(["sudo", "rm", "-f", str(timer_path)], capture_output=True)
+                        removed_services.append(str(timer_path))
                 subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
         removed.extend(removed_services)
     else:
