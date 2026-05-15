@@ -161,18 +161,18 @@ def _flatten_text(item: NewsItem) -> str:
 
 
 def _collection_dim(vs: VectorStore, name: str) -> int:
+    """Collection embedding dimension, or 0 if collection doesn't exist or is empty."""
     try:
         col = vs.get_collection(name)
         count = col.count()
-        if count == 0:
-            return 384
-        sample = col.get(limit=1, include=["embeddings"])
-        embs = sample.get("embeddings", [])
-        if embs and embs[0] is not None:
-            return len(embs[0])
+        if count > 0:
+            sample = col.get(limit=1, include=["embeddings"])
+            embs = sample.get("embeddings", [])
+            if embs and embs[0] is not None:
+                return len(embs[0])
+        return 0
     except Exception:
-        pass
-    return 384
+        return 0
 
 
 def ingest_news(
@@ -216,6 +216,15 @@ def ingest_news(
         report.collection_sizes["news_signals"] = sig_col.count()
     except Exception:
         pass
+
+    # Detect collection embedding dimension
+    news_dim = _collection_dim(vs, _NEWS_COLLECTION)
+    sig_dim = _collection_dim(vs, _NEWS_SIGNALS_COLLECTION)
+    existing_dim = news_dim or sig_dim or 0
+    # Voyage voyage-finance-2 outputs 1024-dim. Legacy local model is 384-dim.
+    # Use Voyage for fresh collections (dim=0) or 1024-dim collections.
+    # For legacy 384-dim collections, let ChromaDB auto-embed (all-MiniLM-L6-v2, 384-dim).
+    use_voyage_storage = existing_dim == 0 or existing_dim == 1024
 
     aggregator = NewsAggregator(config=ds_config)
     classifier = NewsClassifier()
@@ -268,12 +277,18 @@ def ingest_news(
         batch_sentiments.append(sentiment)
         batch_impacts.append(impact)
 
-    # Embed in batch (graceful if Voyage key missing)
+    # Embed in batch — use Voyage for new/1024-dim collections,
+    # let ChromaDB auto-embed for legacy 384-dim collections
     embeddings: list[list[float]] | None = None
-    try:
-        embeddings = voyage.embed_batch(batch_texts)
-    except Exception as exc:
-        logger.warning("Voyage batch embed failed — storing without embeddings: %s", exc)
+    if use_voyage_storage:
+        try:
+            embeddings = voyage.embed_batch(batch_texts)
+        except Exception as exc:
+            logger.warning("Voyage batch embed failed — storing without embeddings: %s", exc)
+    else:
+        logger.info(
+            "Legacy 384-dim collection — ChromaDB auto-embedding with all-MiniLM-L6-v2"
+        )
 
     # Store each item
     for i, item in enumerate(batch_items):
@@ -370,9 +385,11 @@ def get_news_summary(
             conditions.append({field: {"$eq": val}})
         where_clause = {"$and": conditions} if len(conditions) > 1 else conditions[0]
 
+    col_dim = _collection_dim(vs, collection_name)
+
     # If semantic query, try Voyage embed
     query_embedding: list[float] | None = None
-    if query:
+    if query and col_dim == 1024:
         try:
             voyage = VoyageClient()
             query_embedding = voyage.embed(query, model="voyage-finance-2")
@@ -391,7 +408,7 @@ def get_news_summary(
             )
         else:
             results = vs.search(
-                [0.0] * _collection_dim(vs, collection_name),
+                [0.0] * col_dim,
                 n=limit,
                 filter_metadata=where_clause,
                 collection=collection_name,
