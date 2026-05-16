@@ -1288,6 +1288,152 @@ def sentiment(
 
 
 @app.command()
+def news_ingest(
+    limit: Annotated[int, typer.Option("--limit", help="Max items to fetch per run")] = 50,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Fetch, classify, embed, and store news articles into ChromaDB.
+
+    Runs as a pure data pipeline — no LLM required. Call from cron/timer
+    to accumulate news while the agent is offline. Subsequent calls
+    automatically deduplicate by URL hash.
+    """
+    from traderbot.news.ingest import ingest_news
+    from traderbot.profiles.runtime import get_current_profile
+    from traderbot.profiles.config import resolve_newsapi_key, resolve_openweather_key, resolve_fred_key
+
+    console = Console()
+
+    profile = get_current_profile()
+    newsapi_key = resolve_newsapi_key(profile)
+    openweather_key = resolve_openweather_key(profile)
+    fred_key = resolve_fred_key(profile)
+
+    if newsapi_key:
+        os.environ["NEWSAPI_API_KEY"] = newsapi_key
+    if openweather_key:
+        os.environ["OPENWEATHER_API_KEY"] = openweather_key
+    if fred_key:
+        os.environ["FRED_API_KEY"] = fred_key
+    if profile:
+        voyage_key = os.environ.get(
+            f"VOYAGE_API_KEY_PROFILE_{profile.name.upper()}",
+            os.environ.get("VOYAGE_API_KEY", "")
+        )
+        if voyage_key:
+            os.environ["VOYAGE_API_KEY"] = voyage_key
+
+    report = ingest_news(
+        limit=limit,
+        newsapi_key=newsapi_key,
+        openweather_key=openweather_key,
+        fred_key=fred_key,
+    )
+
+    if json_output:
+        json_lib.dump(report.to_dict(), sys.stdout, default=str)
+        return
+
+    console.print(f"[green]✓[/green] Ingest report — "
+                  f"[bold]{report.new}[/bold] new, "
+                  f"{report.duplicates} duplicates, "
+                  f"{report.skipped} skipped, "
+                  f"{report.signals} signals, "
+                  f"{report.errors} errors "
+                  f"({report.elapsed_seconds:.1f}s)")
+    console.print(f"  News collection: {report.collection_sizes.get('news', 0)} items")
+    console.print(f"  Signals collection: {report.collection_sizes.get('news_signals', 0)} items")
+    dp_count = report.collection_sizes.get("data_points", 0)
+    if dp_count:
+        console.print(f"  DataPoints collection: {dp_count} items")
+
+
+@app.command()
+def news_summary(
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="ISO 8601 timestamp — only articles after this time"),
+    ] = None,
+    category: Annotated[
+        str | None,
+        typer.Option("--category", help="Filter by category (Economics, Politics, Weather, ...)"),
+    ] = None,
+    source: Annotated[
+        str | None,
+        typer.Option("--source", help="Filter by source (newsapi, reddit, coingecko, ...)"),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max articles to return")] = 30,
+    query: Annotated[
+        str | None,
+        typer.Option("--query", help="Semantic search query (uses VoyageAI embedding)"),
+    ] = None,
+    signal_only: Annotated[
+        bool,
+        typer.Option("--signals", help="Only return high-impact signals"),
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Retrieve accumulated news from ChromaDB.
+
+    Supports time-range filtering, category/source filters, and
+    semantic search via VoyageAI. Without --since, returns the
+    most recent articles across all time.
+    """
+    from traderbot.news.ingest import get_news_summary
+
+    console = Console()
+
+    since_dt: datetime | None = None
+    if since is not None:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            err_console = Console(stderr=True)
+            err_console.print(f"[red]Invalid timestamp:[/red] {since}. Use ISO 8601 format.")
+            raise typer.Exit(code=1) from None
+
+    items = get_news_summary(
+        since=since_dt,
+        category=category,
+        source=source,
+        limit=limit,
+        query=query,
+        signal_only=signal_only,
+    )
+
+    if json_output:
+        json_lib.dump([it.to_dict() for it in items], sys.stdout, default=str)
+        return
+
+    if not items:
+        console.print("No accumulated news found.")
+        return
+
+    table = Table(title="Accumulated News")
+    table.add_column("Title", style="white", max_width=50)
+    table.add_column("Source", style="cyan")
+    table.add_column("Category", style="green")
+    table.add_column("Sentiment", justify="right")
+    table.add_column("Impact", justify="right")
+    table.add_column("Published", style="dim")
+
+    for item in items:
+        meta = item.metadata
+        title = meta.get("title", item.text[:80]) or item.text[:80]
+        score_str = meta.get("sentiment_score", "")
+        imp_str = meta.get("impact_magnitude", "")
+        table.add_row(
+            title,
+            meta.get("source", ""),
+            meta.get("category", ""),
+            f"{score_str}" if score_str else "",
+            f"{imp_str}" if imp_str else "",
+            meta.get("published", "")[:10],
+        )
+    console.print(table)
+
+
+@app.command()
 def backtest(
     strategy: Annotated[str, typer.Option("--strategy", help="Strategy name")] = "momentum",
     from_date: Annotated[
@@ -2493,6 +2639,44 @@ def _do_assign(
                 console.print(
                     f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/"
                 )
+
+                # Configure OpenClaw features for this agent
+                try:
+                    from traderbot.profiles.openclaw_config import (
+                        configure_agent_sandbox,
+                        enable_session_memory_hook,
+                        ensure_agent_bootstrap_hook,
+                    )
+
+                    configure_agent_sandbox(agent_id)
+                    enable_session_memory_hook()
+                    ensure_agent_bootstrap_hook()
+                    console.print(
+                        "[green]✓[/green] OpenClaw features configured (hooks, sandbox)"
+                    )
+
+                    # Install news ingestion timer
+                    try:
+                        news_result = _install_news_ingest_timer(
+                            agent_user=agent_id,
+                            console=console,
+                        )
+                        if news_result.get("registered"):
+                            console.print(
+                                "[green]✓[/green] News ingestion timer installed"
+                            )
+                    except Exception as ni_err:
+                        logger.warning("News ingest timer install failed: %s", ni_err)
+                        console.print(
+                            "[yellow]Warning:[/yellow] News ingestion timer could not be installed "
+                            f"({ni_err})"
+                        )
+                except Exception as oc_err:
+                    logger.warning("OpenClaw feature setup failed: %s", oc_err)
+                    console.print(
+                        "[yellow]Warning:[/yellow] OpenClaw features partially configured: "
+                        f"{oc_err}"
+                    )
         except FileNotFoundError:
             console.print("[yellow]Warning:[/yellow] Agent directory not found")
             console.print("Token assigned but not injected into TOOLS.md")
@@ -3169,6 +3353,118 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
     return True
 
 
+def _install_news_ingest_timer(
+    agent_user: str,
+    interval_minutes: int = 30,
+    console: object | None = None,
+) -> dict[str, str | bool]:
+    """Install systemd timer for offline news ingestion.
+
+    Returns dict with 'registered' key and optional 'error'.
+    No-op on non-Linux or non-systemd systems.
+    """
+    import subprocess
+
+    result: dict[str, str | bool] = {
+        "name": "news_ingest_timer",
+        "registered": False,
+    }
+
+    if sys.platform != "linux":
+        return result
+    if not _systemd_available():
+        return result
+
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    service_template = repo_root / "install" / "services" / "traderbot-news-ingest@.service"
+    timer_template = repo_root / "install" / "services" / "traderbot-news-ingest@.timer"
+
+    if not service_template.exists() or not timer_template.exists():
+        result["error"] = "service/timer template not found"
+        if console:
+            console.print(f"  [red]✗[/red] news_ingest_timer: template not found at {service_template}")
+        return result
+
+    import getpass as _gp
+
+    user = agent_user or _gp.getuser()
+    home = Path(f"/home/{user}")
+
+    svc_content = service_template.read_text()
+    svc_content = svc_content.replace("User=%i", f"User={user}")
+    svc_content = svc_content.replace("/home/%i/", f"/home/{user}/")
+    svc_content = svc_content.replace("%h/.traderbot/.env", f"{home}/.traderbot/.env")
+
+    tmp_svc = Path(f"/tmp/traderbot-news-ingest@{user}.service")
+    tmp_svc.write_text(svc_content)
+
+    tmr_content = timer_template.read_text()
+    tmr_content = tmr_content.replace("(%i)", f"({user})")
+    tmr_content = tmr_content.replace("@<user>", f"@{user}")
+    tmp_tmr = Path(f"/tmp/traderbot-news-ingest@{user}.timer")
+    tmp_tmr.write_text(tmr_content)
+
+    try:
+        subprocess.run(["sudo", "cp", str(tmp_svc), f"/etc/systemd/system/traderbot-news-ingest@{user}.service"], check=True, capture_output=True)
+        subprocess.run(["sudo", "cp", str(tmp_tmr), f"/etc/systemd/system/traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True, capture_output=True)
+        subprocess.run(["sudo", "systemctl", "enable", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run(["sudo", "systemctl", "start", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        result["registered"] = True
+    except subprocess.CalledProcessError as exc:
+        result["error"] = str(exc.stderr.decode() if exc.stderr else exc)
+    except Exception as exc:
+        result["error"] = str(exc)
+    finally:
+        tmp_svc.unlink(missing_ok=True)
+        tmp_tmr.unlink(missing_ok=True)
+
+    return result
+
+
+def _systemd_available() -> bool:
+    """Check if systemd is available on this system."""
+    import subprocess
+    try:
+        subprocess.run(["systemctl", "--version"], capture_output=True, timeout=5)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _remove_news_ingest_timer(
+    agent_user: str,
+    console: object | None = None,
+) -> None:
+    import subprocess
+
+    if sys.platform != "linux":
+        return
+    if not _systemd_available():
+        return
+
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "stop", f"traderbot-news-ingest@{agent_user}.timer"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["sudo", "systemctl", "disable", f"traderbot-news-ingest@{agent_user}.timer"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["sudo", "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.service"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.timer"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, timeout=15)
+    except Exception:
+        pass
+
+
 @cron_app.command("setup")
 def cron_setup(
     agent_id: Annotated[
@@ -3187,6 +3483,10 @@ def cron_setup(
         str,
         typer.Option("--heartbeat-every", help="Heartbeat interval (e.g. 30m, 1h, 6h)"),
     ] = "6h",
+    news_ingest_interval: Annotated[
+        int | None,
+        typer.Option("--news-ingest-every", help="News ingestion interval in minutes. 0=disable, omit=skip"),
+    ] = None,
     skip_heartbeat_config: Annotated[
         bool,
         typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
@@ -3307,6 +3607,14 @@ def cron_setup(
                 hb_result["error"] = str(e)
     results.append(hb_result)
 
+    if news_ingest_interval is not None:
+        if news_ingest_interval > 0:
+            news_result = _install_news_ingest_timer(agent_user=agent_id, console=console)
+            results.append(news_result)
+        else:
+            _remove_news_ingest_timer(agent_user=agent_id, console=console)
+            results.append({"name": "news_ingest_timer", "registered": True, "removed": True})
+
     if json_output:
         print(json_lib.dumps({"agent_id": agent_id, "loops": results}, indent=2))
         return
@@ -3397,6 +3705,18 @@ def uninstall(
                     result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         removed_services.append(str(svc))
+                for svc in list(service_dir.glob("traderbot-news-ingest@*.service")):
+                    unit = svc.name
+                    timer_unit = unit.replace(".service", ".timer")
+                    subprocess.run(["sudo", "systemctl", "stop", timer_unit], capture_output=True)
+                    subprocess.run(["sudo", "systemctl", "disable", timer_unit], capture_output=True)
+                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    if result.returncode == 0:
+                        removed_services.append(str(svc))
+                    timer_path = service_dir / timer_unit
+                    if timer_path.exists():
+                        subprocess.run(["sudo", "rm", "-f", str(timer_path)], capture_output=True)
+                        removed_services.append(str(timer_path))
                 subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
         removed.extend(removed_services)
     else:
@@ -3426,6 +3746,21 @@ def uninstall(
                         removed.append(str(svc))
                     else:
                         console.print(f"  [yellow]Could not remove: {svc}[/yellow]")
+                for svc in service_dir.glob("traderbot-news-ingest@*.service"):
+                    unit = svc.name
+                    timer_unit = unit.replace(".service", ".timer")
+                    subprocess.run(["sudo", "systemctl", "stop", timer_unit], capture_output=True)
+                    subprocess.run(["sudo", "systemctl", "disable", timer_unit], capture_output=True)
+                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    if result.returncode == 0:
+                        console.print(f"  Removed: {svc}")
+                        removed.append(str(svc))
+                    else:
+                        console.print(f"  [yellow]Could not remove: {svc}[/yellow]")
+                    timer_path = service_dir / timer_unit
+                    if timer_path.exists():
+                        subprocess.run(["sudo", "rm", "-f", str(timer_path)], capture_output=True)
+                        console.print(f"  Removed: {timer_path}")
                 subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
 
     # Step 2: Prompt about data removal

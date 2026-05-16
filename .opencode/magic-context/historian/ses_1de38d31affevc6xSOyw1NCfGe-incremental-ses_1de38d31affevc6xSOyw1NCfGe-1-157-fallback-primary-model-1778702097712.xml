@@ -1,0 +1,103 @@
+<new-compartments>
+<compartment start="1" end="48">
+## Wave 1 Initialization & Execution
+
+Began executing plan `prod-data-local-sim`. Switched from `main` to `next-gen` branch, bumped VERSION from v0.10.215 to v0.11.00. Created notepad dirs, committed initial branch setup. Read full 26-task plan. Gathered context for all Wave 1 tasks. Launched 6 parallel tasks (T1-T6):
+- **T1**: KalshiProvider — rewrite to use `KalshiConfig` instead of `KalshiClient` dependency injection, add `_get_page_size()`, `_get_list_markets_kwargs()`, `_get_batch_size()`, `_get_batch_delay()` overrides. Loads credentials from `.env`. Added tests (17 passing provider tests). Committed v0.11.01.
+- **T2–T6**: Remainder of Wave 1 tasks launched.
+</compartment>
+<compartment start="49" end="67">
+## Real Keys & Wave 1 Completion
+
+User clarified: deliverables include integration tests against live API using real keys from `test-keys.txt`. Verified file exists at project root. All Wave 1 tasks (T1-T6) verified and committed (v0.11.01–v0.11.06). T3 created `env_loader.py` that reads from `.env` (not `test-keys.txt` directly). T4 created `AuthManager` with `env_or_keyring` priority, imports verified. T5 added `paper_mode` flag to `TradingProfile`. T6 confirmed no keyring dependency exists. Plan checkboxes updated. Wave 2 (T7-T12) launched in parallel.
+</compartment>
+<compartment start="68" end="80">
+## Batching Reminder & Wave 2 Completion
+
+User reiterated: batch API requests for efficiency, reduce API calls. All 6 Wave 2 tasks completed, verified, committed (T7=v0.11.07, T8=v0.11.08, T9=v0.11.09, T10=v0.11.10, T11=v0.11.11, T12=v0.11.12):
+- T7: RawMarket JSON schema updated (no V1 `ticker`, `completion_prices`).
+- T8: `list_markets_by_category()` — batch size=20, batch delay=1.0s, with-as refresh + enrichment from event cache.
+- T9: `SimulatedLiquidityProvider` → `DirectMarketDataProvider` (real API calls with batching, enriched from event data).
+- T10: Batch `MarketCache` — market+orderbook caching with read-batching up to `CACHE_BATCH_SIZE=20`.
+- T11: CLI `--db` path resolution to profile-specific.
+- T12: `client.py` + `websocket.py` cleanup — removed demo references.
+</compartment>
+<compartment start="81" end="100">
+## V2-Only Mandate & Wave 3 Completion
+
+User mandated: Kalshi V2 API ONLY, V1 deprecated. Grep confirmed Kalshi already V2-only — base URL `trade-api/v2` throughout, `_normalize.py` handles V2-to-internal-model normalization (not V1→V2). Wave 3 completed:
+- T13: `PaperTrader` rewrite — `submit_order` → `submit_market_order`, `_submit_order_with_retry`, `DirectMarketDataProvider` integration, `paper_mode` bypass. No `DemoAdapter` references. Committed v0.11.13.
+- T14: Settlement engine — `settle_expired_positions` and `_settle_order` using `DirectMarketDataProvider`. Committed v0.11.14.
+- T15: CLI integration for `paper_mode` + settlement. Committed v0.11.15.
+</compartment>
+<compartment start="101" end="119">
+## API Key Handling Fix
+
+Subagent hardcoded keys in integration tests instead of reading from `test-keys.txt`. Correct pattern enforced: shared `integration_conftest.py` creates temp `.env` from `test-keys.txt` at session start, destroys it after tests. No `os.environ.setdefault()` leakage. Reset flawed files, delegated proper implementation. `test-keys.txt` accidentally corrupted by subagent; restored via ctx_search. Integration tests verified: 4 integration test files (conftest, provider, auth, cache, settlement).
+</compartment>
+<compartment start="120" end="134">
+## test-keys.txt Restoration & Gitignore
+
+`test-keys.txt` was incompletely restored (missing NewsAPI, VoyageAI, Ollama, OpenWeatherMap, FRED, CoinGecko keys). Full 41-line restoration completed. User updated Kalshi key to live read-only. `test-keys.txt` added to `.gitignore`, previous commit amended, force pushed. Wave 4 remaining tasks (T18 e2e integration, T20 docs, T21 docs/installer, T22 CLI auth) launched in parallel.
+</compartment>
+<compartment start="135" end="144">
+## Wave 4 Completion
+
+All Wave 4 tasks completed and committed (v0.11.16–v0.11.19): T18 (e2e PaperTrader + CLI integration tests), T20 (CLI auth docs in `.openclaw/`), T21 (docs/ and installer updated), T22 (CLI auth — `--use-env`, `--use-keyring` removed). TODO continuation triggered with 8 remaining tasks claimed but already done.
+</compartment>
+<compartment start="145" end="157">
+## Final Cleanup & Verification Wave
+
+Verified T20+T22 docs fully clean (no keyring/demo references). Identified 17 old test files for T19 deletion. Delegated T19 cleanup + Final Wave F1-F4 launch.
+</compartment>
+</new-compartments>
+
+<normalized-facts>
+<PLAN_AND_VERSION>
+- Active plan: `prod-data-local-sim` at `.sisyphus/plans/prod-data-local-sim.md`, 26 tasks total.
+- Branch: `next-gen` (switched from `main`). Initial version v0.11.00; incremental commits after each task.
+- Every task committed independently with version bump + tag on `next-gen` branch.
+</PLAN_AND_VERSION>
+<CONSTRAINTS>
+- API keys MUST NOT be hard-coded in tests. Read from `test-keys.txt`, generate temp `.env` for test duration, destroy `.env` after tests complete.
+- Kalshi V2 API ONLY — V1 is deprecated, unusable. Base URL is `trade-api/v2` throughout codebase.
+- Batch API requests wherever possible to minimize API calls and respect rate limits.
+- `test-keys.txt` is in `.gitignore`, must never be committed.
+</CONSTRAINTS>
+<ENVIRONMENT>
+- `test-keys.txt` at project root contains real live API keys: Kalshi (live, read-only), NewsAPI, VoyageAI, Ollama, OpenWeatherMap, FRED, CoinGecko.
+- Old Kalshi key was for demo env; replaced with live read-only key.
+- Integration tests use shared `integration_conftest.py` fixture that creates/ephemeral `.env` from `test-keys.txt`.
+- `_normalize.py` handles V2-to-internal-model field fallbacks (`volume_fp→volume`, `yes_ask_dollars→outcome_prices`, `state=finalized`) — not V1→V2 conversion.
+</ENVIRONMENT>
+<WORKFLOW_RULES>
+- Git workflow: commit + tag (`v0.11.NN`) + push to `next-gen` after every task.
+- Maintain separate `next-gen` branch for v0.11.* iteration; all plan work stays on this branch.
+- Force push used for amended commits (`.gitignore` inclusion).
+</WORKFLOW_RULES>
+<ARCHITECTURE>
+- `KalshiProvider` rewritten: uses `KalshiConfig` instead of `KalshiClient` DI, with override hooks (`_get_page_size()`, `_get_list_markets_kwargs()`, `_get_batch_size()`, `_get_batch_delay()`).
+- `env_loader.py` reads credentials from `.env` (not `test-keys.txt` directly).
+- `AuthManager` resolves credentials via `env_or_keyring` priority chain.
+- `TradingProfile` has `paper_mode` flag.
+- No keyring dependency exists anywhere in the project.
+- `DirectMarketDataProvider` replaces `SimulatedLiquidityProvider` — makes real API calls with batching (batch_size=20, batch_delay=1.0s), enriched from event cache.
+- `list_markets_by_category()` uses with-as pattern for client lifecycle, enrichment from event cache.
+- `MarketCache` provides market+orderbook caching with read-batching up to `CACHE_BATCH_SIZE=20`.
+- `PaperTrader` rewritten: `submit_order()` → `submit_market_order()`, `_submit_order_with_retry()`, `DirectMarketDataProvider` dep, `paper_mode` bypass in `submit_market_order()`.
+- Settlement engine: `settle_expired_positions()` + `_settle_order()` using `DirectMarketDataProvider`.
+- CLI: `--db` resolves to profile-specific path; no `--use-env`/`--use-keyring` flags; `paper_mode` commands integrated.
+- No demo references remain in `client.py`, `websocket.py`, or any kalshi/ module.
+- No `KeyringKalshiConfig` or `100_000_00` sentinel value exists.
+- RawMarket JSON schema updated (no V1 `ticker`, `completion_prices`).
+</ARCHITECTURE>
+<PROGRESS>
+- Tasks committed: T1 (v0.11.01), T2-T6 (v0.11.02–0.11.06), T7-T12 (v0.11.07–0.11.12), T13 (v0.11.13), T14 (v0.11.14), T15 (v0.11.15), T16 (v0.11.16), T17 (v0.11.17), T18-T21 (v0.11.18–0.11.19).
+- 17 old test files identified for T19 deletion.
+- Remaining unchecked plan items: T19 (delete old tests), T20 checkbox, T22 checkbox, plus F1-F4 Final Verification Wave.
+</PROGRESS>
+<KNOWN_ISSUES>
+- Subagent for T17 originally hardcoded keys and duplicated `_load_credentials()` across 4 files instead of using shared conftest fixture; corrected.
+- `test-keys.txt` was corrupted by subagent (overwritten instead of restored); had to be restored via ctx_search from earlier reads.
+</KNOWN_ISSUES>
+</normalized-facts>

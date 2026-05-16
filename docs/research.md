@@ -127,7 +127,7 @@ Kalshi partitions data into live and historical tiers:
 
 | Model | Dimensions | Context | Best For | Pricing |
 |-------|-----------|---------|----------|---------|
-| `voyage-finance-2` | 1024 | 32K tokens | Financial text (FOMC, CPI, earnings) | $0.12/M tokens |
+| `voyage-4-large` (prev. `voyage-finance-2`) | 1024 (default) | 32K tokens | Financial text, news articles, market commentary | $0.12/M tokens |
 | `voyage-4-large` | 256/512/1024/2048 (configurable) | 32K tokens | General text, decision logs, heartbeat patterns | $0.12/M tokens |
 | `voyage-multimodal-3.5` | 1024 (256/512/2048 configurable) | 32K tokens | Text+image embeddings (chart screenshots) | $0.12/M tokens + $0.60/B pixels |
 

@@ -126,3 +126,19 @@ Voyage Batch API (33% discount, 12-hour completion window) is used **only for de
 - Fast path (VADER/TextBlob) must **always** work without `VOYAGE_API_KEY`
 - ChromaDB TTL policy required to prevent unbounded growth
 - Rate limiting: Max 60 Voyage API calls/minute; queue overflow falls back to fast path
+
+---
+
+## Amendment 2026-05-16: Switch from voyage-finance-2 to voyage-4-large
+
+**Reason**: voyage-4-large uses a mixture-of-experts (MoE) architecture that delivers state-of-the-art retrieval at the same price ($0.12/M tokens) with 4× the free tier (200M vs 50M tokens). Independent benchmarks (Agentset, Feb 2026) show voyage-4-large dominates on business/financial document retrieval — the exact regime TraderBot operates in.
+
+**Change**:
+- `_DEFAULT_EMBED_MODEL` changed from `"voyage-finance-2"` to `"voyage-4-large"` (default 1024-dim — no dimension migration needed)
+- All call sites updated; existing ChromaDB news collections purged and re-ingested
+- voyage-finance-2 remains available as a fallback model name but is no longer the default
+
+**Impact**:
+- 0.11.71: 367 news articles + 40 signals re-embedded with voyage-4-large
+- ChromaDB collections unchanged (both models use 1024-dim vectors)
+- News pipeline dimension detection (`_collection_dim`) unchanged — still auto-detects 384 vs 1024

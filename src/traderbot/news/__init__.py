@@ -1,7 +1,8 @@
-"""News & social media pipeline — source aggregation and parsing."""
+"""News & social media pipeline — source aggregation, ingestion, and parsing."""
 
 from traderbot.news.classifier import NewsClassifier
 from traderbot.news.impact_assessor import ImpactAssessor
+from traderbot.news.ingest import ingest_news, get_news_summary
 from traderbot.news.models import (
     ClassifiedNews,
     DataPoint,
@@ -25,5 +26,7 @@ __all__ = [
     "NewsItem",
     "NewsSource",
     "SentimentResult",
-    "SentimentScorer"
+    "SentimentScorer",
+    "get_news_summary",
+    "ingest_news",
 ]

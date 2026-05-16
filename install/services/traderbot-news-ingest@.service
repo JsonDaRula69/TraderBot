@@ -1,0 +1,38 @@
+# TraderBot News Ingestion Systemd Service (one-shot)
+#
+# Runs traderbot news-ingest to fetch, classify, embed, and store
+# news articles into ChromaDB. Designed to be triggered by a timer.
+# No LLM required — pure data pipeline.
+#
+# USAGE:
+#   systemctl start traderbot-news-ingest@<username>
+#   systemctl enable --now traderbot-news-ingest@<username>.timer
+#
+# VENV_PATH: /home/%i/traderbot/.venv/bin/traderbot
+# CONFIG_DIR: /home/%i/.traderbot/
+
+[Unit]
+Description=TraderBot News Ingestion (%i)
+Documentation=https://github.com/JsonDaRula69/TraderBot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=%i
+WorkingDirectory=/home/%i/traderbot
+
+EnvironmentFile=/home/%i/.traderbot/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
+
+ExecStart=/home/%i/traderbot/.venv/bin/traderbot news-ingest --json
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=traderbot-news-ingest-%i
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

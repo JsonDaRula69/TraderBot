@@ -66,7 +66,7 @@ Keyword matching catches obvious signals ("Fed raises rates") but misses subtle 
 
 | Model | Use Case | Latency |
 |---|---|---|
-| `voyage-finance-2` | News articles, market descriptions, financial text | ~200-500ms |
+| `voyage-4-large` | News articles, market descriptions, financial text | ~200-500ms |
 | `rerank-2.5` | Ambiguous classification (0.5–0.7 confidence range) | ~100-300ms |
 
 ### Invocation Triggers
@@ -237,7 +237,7 @@ The classifier uses lightweight keyword matching + category heuristics as a firs
 
 1. **Keyword filter**: Pre-built keyword lists per category ("Fed", "interest rate", "FOMC" → Economics)
 2. **Entity extraction**: Named entities (people, places, organizations) mapped to categories
-3. **Voyage semantic classification**: For financial text, embed with `voyage-finance-2` → classify. If confidence 0.5–0.7, use `rerank-2.5` to refine
+3. **Voyage semantic classification**: For financial text, embed with `voyage-4-large` → classify. If confidence 0.5–0.7, use `rerank-2.5` to refine
 4. **Fallback to LLM**: If confidence <0.5 after reranking, defer to the agent for interpretation
 
 This hybrid approach minimizes API calls while ensuring the agent sees relevant news. Voyage is the primary path for financial text; keyword matching catches obvious non-financial signals.
@@ -246,7 +246,7 @@ This hybrid approach minimizes API calls while ensuring the agent sees relevant 
 
 For text identified as potentially financial (via initial keyword filter), the pipeline:
 
-1. Embeds the text with `voyage-finance-2` (optimized for financial domain)
+1. Embeds the text with `voyage-4-large`
 2. Compares against known category embeddings in ChromaDB
 3. Returns classification with confidence score
 
@@ -319,7 +319,7 @@ def score(text: str, source: SourceType) -> SentimentResult:
 
 When VADER returns a compound score in the neutral range (-0.3 to +0.3), the text may carry sentiment that VADER misses. The uplift path:
 
-1. Embeds the text with `voyage-finance-2`
+1. Embeds the text with `voyage-4-large`
 2. Compares against known sentiment-anchor embeddings
 3. Returns a refined compound score that accounts for semantic nuance
 

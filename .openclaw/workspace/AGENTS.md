@@ -24,6 +24,31 @@ Use runtime-provided startup context first. That context includes:
 
 Do not manually reread startup files unless the user asks, context is missing something you need, or you need a deeper follow-up read.
 
+### News Catch-Up (Offline Context Injection)
+
+A systemd timer runs `traderbot news-ingest` every 30 minutes in the background. This pipeline fetches news, embeds it with VoyageAI, and stores it in ChromaDB — **no LLM required, works through outages**.
+
+On every wake, run:
+```
+traderbot news-summary --since <last_session_end> --json
+```
+This returns all articles accumulated since the last time you were active. Use the result to:
+- Identify market-moving events that occurred while you were offline
+- Build historical context for political/economic markets (polling trends, rate trajectories, legislative timelines)
+- Cross-reference accumulated signals with current market prices
+
+The data accumulates indefinitely. Use `--category` to scope to your enabled markets:
+```
+traderbot news-summary --since 2026-05-14T00:00:00Z --category politics --json
+```
+
+For semantic search across all accumulated history:
+```
+traderbot news-summary --query "federal reserve rate cut impact" --limit 20 --json
+```
+
+Store the `--since` timestamp of your last summary in `SESSION-STATE.md` so you know where you left off next session.
+
 ## Memory
 
 You wake up fresh each session. These files are your continuity:
@@ -91,6 +116,63 @@ Before considering any trade, collect **at least 5 independent data points** fro
 3. The toolkit computes position sizing; agent provides confidence and estimated probability
 4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` and `--confidence`. Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades
 5. Log decision with full reasoning to audit trail
+
+### Standing Orders (Permanent Operating Authority)
+
+These programs define your autonomous authority. Execute them within their defined boundaries without asking permission. Escalate only when the approval gate or escalation rules are triggered.
+
+#### Program: Market Scan & Trade Execution
+
+**Authority:** Scan enabled categories, collect data, evaluate edge, execute trades through the risk pipeline.
+**Trigger:** Every heartbeat cycle (30min cron) OR user message requesting market analysis.
+**Approval gate:** Trades > 5% of portfolio value require human approval before execution.
+**Escalation:** If circuit breaker is not NORMAL, or if 3+ consecutive trade evaluations are rejected by the risk pipeline, surface the pattern to your human.
+
+Execution steps:
+1. Run `traderbot scan --category <enabled> --json`
+2. Apply the Data Sourcing Protocol (5+ data points in priority order)
+3. Evaluate edge vs market-implied probability using `traderbot sentiment` and `traderbot signals`
+4. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
+5. Log every decision with full reasoning to the audit trail
+
+#### Program: Offline News Ingestion (Autonomous Background Pipeline)
+
+**Authority:** Pull accumulated news from ChromaDB on every wake. No action needed — the systemd timer fetches, embeds, and stores independently.
+**Trigger:** Every session wake (before any trading activity).
+**Approval gate:** None (read-only query).
+**Escalation:** If `news-summary` returns 0 results and the last session was > 6 hours ago, check `systemctl status traderbot-news-ingest` to verify the timer is running.
+
+Execution steps:
+1. Run `traderbot news-summary --since <last_session_end> --json`
+2. Check for market-moving events in your enabled categories
+3. Log key findings in SESSION-STATE.md or the daily note
+4. Update the `--since` timestamp for next session
+
+#### Program: Self-Review & Adaptation
+
+**Authority:** Run 7-step heartbeat, evaluate performance, promote learnings, adapt signal weights.
+**Trigger:** Heartbeat loop (every 30min) with deeper 6-hour review cycles.
+**Approval gate:** Bayesian adaptation with `human_review: true` flag requires human sign-off before applying. Never auto-apply operating rule changes.
+**Escalation:** Daily loss > 1% (SLOW) → reduce position sizes to 50%. Daily loss > 2% (HALT) → stop all trading, surface alert. Drawdown > 10% (FULL_STOP) → stop permanently, only human can resume.
+
+Execution steps:
+1. Run `traderbot heartbeat --json`
+2. Read `HEARTBEAT_DATA.md` for results
+3. Promote learnings with Recurrence-Count >= 3 to PENDING_REVIEW (never auto-commit)
+4. Surface any alerts from the heartbeat to your human
+
+#### Program: Data Sourcing Before Action
+
+**Authority:** Collect from configured sources before any market decision. This is mandatory — not optional.
+**Trigger:** Before every `traderbot trade` or `traderbot analyze` command.
+**Approval gate:** None (compulsory — always follow this protocol).
+**Escalation:** If fewer than 5 data points can be collected after exhausting all configured sources, surface the gap to your human before proceeding.
+
+Priority chain (use in order): `scan → signals → news → sentiment → analyze → positions → web search (last)`
+
+### OpenClaw Commitments
+
+Use **commitments** for time-bound follow-ups. If you need to re-check a market or surface a reminder later, tell your human: "Remind me to check KXWEATHER in 2 hours" — OpenClaw will automatically re-prompt you at the right time. Commitments are scoped to your agent and channel (they don't leak to other agents).
 
 ### Autonomous vs Human-Approval Required
 

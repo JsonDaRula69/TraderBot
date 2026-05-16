@@ -17,14 +17,14 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 EMBED_DIMENSION: int = 1024
-"""voyage-finance-2 output dimension."""
+"""voyage-4-large output dimension (default)."""
 
-_DEFAULT_EMBED_MODEL = "voyage-finance-2"
+_DEFAULT_EMBED_MODEL = "voyage-4-large"
 _DEFAULT_RERANK_MODEL = "rerank-2.5"
 
 _RATE_LIMIT_WINDOW_SECS = 60
 _RATE_LIMIT_MAX_CALLS = 60
-_EMBED_TIMEOUT_SECS = 0.5
+_EMBED_TIMEOUT_SECS = 10.0
 _RERANK_TIMEOUT_SECS = 0.3
 
 
@@ -103,7 +103,6 @@ class VoyageClient(BaseModel):
                 [text],
                 model=model,
                 input_type="document",
-                timeout=_EMBED_TIMEOUT_SECS,
             )
             return result.embeddings[0]  # type: ignore[no-any-return]
         except Exception:
@@ -127,7 +126,6 @@ class VoyageClient(BaseModel):
                 texts,
                 model=model,
                 input_type="document",
-                timeout=_EMBED_TIMEOUT_SECS,
             )
             return result.embeddings  # type: ignore[no-any-return]
         except Exception:

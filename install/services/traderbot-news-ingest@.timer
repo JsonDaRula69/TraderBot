@@ -1,0 +1,24 @@
+# TraderBot News Ingestion Systemd Timer
+#
+# Triggers traderbot-news-ingest@.service periodically to accumulate
+# news articles into ChromaDB while the agent is offline.
+#
+# OnCalendar=*:0/30  → every 30 minutes
+# To change interval: systemctl edit traderbot-news-ingest@<user>.timer
+#
+# USAGE:
+#   sudo cp traderbot-news-ingest@.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now traderbot-news-ingest@<user>.timer
+
+[Unit]
+Description=TraderBot News Ingestion Timer (%i)
+Documentation=https://github.com/JsonDaRula69/TraderBot
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

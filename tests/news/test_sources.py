@@ -178,9 +178,14 @@ async def test_openweathermap_success() -> None:
     """OpenWeatherMap returns DataPoints with valid API key."""
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
-            "main": {"temp": 72.3, "temp_min": 62.1, "temp_max": 78.5, "humidity": 55},
-            "wind": {"speed": 8.2},
-            "weather": [{"id": 800, "description": "clear sky"}],
+            "cnt": 1,
+            "list": [{
+                "coord": {"lat": 40.71, "lon": -74.01},
+                "name": "New York",
+                "main": {"temp": 72.3, "temp_min": 62.1, "temp_max": 78.5, "humidity": 55},
+                "wind": {"speed": 8.2},
+                "weather": [{"id": 800, "description": "clear sky"}],
+            }],
         })
 
     with patch("traderbot.news.sources.resolve_openweather_key", return_value="fake-key"):
