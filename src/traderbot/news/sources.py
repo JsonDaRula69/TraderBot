@@ -154,6 +154,25 @@ class NewsAggregator:
         "KXHIGHTSF": ("San Francisco", 37.77, -122.42),
     }
 
+    # OWM city IDs for /group batch endpoint, keyed by Kalshi ticker
+    _OWM_CITY_IDS: ClassVar[dict[str, int]] = {
+        "KXHIGHNY": 5128581,
+        "KXHIGHPHIL": 4560349,
+        "KXHIGHTPHX": 5308655,
+        "KXHIGHTMIN": 5037649,
+        "KXHIGHTSEA": 5809844,
+        "KXHIGHTCHI": 4887398,
+        "KXHIGHTHOU": 4699066,
+        "KXHIGHTLA": 5368361,
+        "KXHIGHTMIA": 4164138,
+        "KXHIGHTDEN": 5419384,
+        "KXHIGHTATL": 4180439,
+        "KXHIGHTBOS": 4930956,
+        "KXHIGHTDAL": 4684888,
+        "KXHIGHTDET": 4990729,
+        "KXHIGHTSF": 5391959,
+    }
+
     # Source fetch priority order — all active sources (TWITTER is stub)
     _SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
         NewsSource.NEWSAPI,
@@ -845,31 +864,44 @@ class NewsAggregator:
             logger.warning("OpenWeatherMap daily budget exhausted (%d calls today), skipping", self._owm_daily_count)
             return []
 
-        async def _fetch_city(ticker: str, city_name: str, lat: float, lon: float) -> DataPoint | None:
-            if self._owm_daily_count >= 900:
-                return None
-            try:
-                params: dict[str, Any] = {
-                    "q": city_name,
-                    "appid": key,
-                    "units": "imperial",
-                }
-                response = await self._client.get(
-                    "https://api.openweathermap.org/data/2.5/weather",
-                    params=params,
-                )
-                self._owm_daily_count += 1
-                if response.status_code != 200:
-                    logger.warning(
-                        "OpenWeatherMap returned HTTP %d for %s, skipping",
-                        response.status_code, city_name,
-                    )
-                    return None
+        self._owm_daily_count += 1
 
-                data = response.json()
-                main = data.get("main", {})
-                wind = data.get("wind", {})
-                weather_list = data.get("weather", [{}])
+        coord_to_ticker: dict[tuple[float, float], str] = {}
+        for ticker, (name, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
+            coord_to_ticker[(round(lat, 2), round(lon, 2))] = ticker
+
+        try:
+            city_ids = [str(cid) for cid in self._OWM_CITY_IDS.values()]
+            response = await self._client.get(
+                "https://api.openweathermap.org/data/2.5/group",
+                params={"id": ",".join(city_ids), "appid": key, "units": "imperial"},
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    "OpenWeatherMap /group returned HTTP %d, falling back to individual calls",
+                    response.status_code,
+                )
+                return []  # Single batch call failed — return empty rather than hammering API
+
+            data = response.json()
+            entries = data.get("list", [])
+        except Exception:
+            logger.exception("OpenWeatherMap /group batch fetch failed")
+            return []
+
+        points: list[DataPoint] = []
+        for entry in entries:
+            if len(points) >= limit:
+                break
+            try:
+                lat = entry.get("coord", {}).get("lat")
+                lon = entry.get("coord", {}).get("lon")
+                match_key = (round(float(lat), 2), round(float(lon), 2)) if lat is not None and lon is not None else None
+                ticker = coord_to_ticker.get(match_key) if match_key else None
+                city_name = entry.get("name", "Unknown")
+                main = entry.get("main", {})
+                wind = entry.get("wind", {})
+                weather_list = entry.get("weather", [{}])
 
                 temp_f = int(main.get("temp", 0))
                 temp_min_f = int(main.get("temp_min", 0))
@@ -879,46 +911,29 @@ class NewsAggregator:
                 weather_code = int(weather_list[0].get("id", 0))
                 weather_desc = str(weather_list[0].get("description", "Unknown"))
 
-                return DataPoint(
-                    id=f"owm-{city_name.lower().replace(' ', '-')}",
-                    source=NewsSource.OPENWEATHERMAP,
-                    category=NewsCategory.WEATHER,
-                    title=f"{city_name}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
-                    data={
-                        "temp_f": temp_f,
-                        "temp_min_f": temp_min_f,
-                        "temp_max_f": temp_max_f,
-                        "humidity_pct": humidity_pct,
-                        "wind_mph": wind_mph,
-                        "weather_code": weather_code,
-                        "description": weather_desc,
-                    },
-                    timestamp=datetime.now(tz=UTC),
-                    ticker_refs=[ticker],
-                    metadata={"city": city_name, "lat": lat, "lon": lon},
+                points.append(
+                    DataPoint(
+                        id=f"owm-{city_name.lower().replace(' ', '-')}",
+                        source=NewsSource.OPENWEATHERMAP,
+                        category=NewsCategory.WEATHER,
+                        title=f"{city_name}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
+                        data={
+                            "temp_f": temp_f,
+                            "temp_min_f": temp_min_f,
+                            "temp_max_f": temp_max_f,
+                            "humidity_pct": humidity_pct,
+                            "wind_mph": wind_mph,
+                            "weather_code": weather_code,
+                            "description": weather_desc,
+                        },
+                        timestamp=datetime.now(tz=UTC),
+                        ticker_refs=[ticker] if ticker else [],
+                        metadata={"city": city_name, "lat": lat, "lon": lon},
+                    )
                 )
-
-            except httpx.HTTPError:
-                logger.warning("OpenWeatherMap HTTP error for %s, skipping", city_name)
-                return None
             except Exception:
-                logger.warning("OpenWeatherMap unexpected error for %s, skipping", city_name)
-                return None
-
-        tasks = [
-            asyncio.ensure_future(_fetch_city(ticker, name, lat, lon))
-            for ticker, (name, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        points: list[DataPoint] = []
-        for r in results:
-            if isinstance(r, DataPoint):
-                points.append(r)
-                if len(points) >= limit:
-                    break
-            elif isinstance(r, Exception):
-                logger.warning("OpenWeatherMap parallel fetch exception: %s", r)
+                logger.warning("Skipping malformed OWM /group entry for %s", entry.get("name", "?"))
+                continue
 
         return points
 
