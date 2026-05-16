@@ -17,9 +17,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 EMBED_DIMENSION: int = 1024
-"""voyage-finance-2 output dimension."""
+"""voyage-4-large output dimension (default)."""
 
-_DEFAULT_EMBED_MODEL = "voyage-finance-2"
+_DEFAULT_EMBED_MODEL = "voyage-4-large"
 _DEFAULT_RERANK_MODEL = "rerank-2.5"
 
 _RATE_LIMIT_WINDOW_SECS = 60

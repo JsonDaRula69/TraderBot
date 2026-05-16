@@ -223,7 +223,7 @@ def ingest_news(
     news_dim = _collection_dim(vs, _NEWS_COLLECTION)
     sig_dim = _collection_dim(vs, _NEWS_SIGNALS_COLLECTION)
     existing_dim = news_dim or sig_dim or 0
-    # Voyage voyage-finance-2 outputs 1024-dim. Legacy local model is 384-dim.
+    # Voyage voyage-4-large outputs 1024-dim by default. Legacy local model is 384-dim.
     # Use Voyage for fresh collections (dim=0) or 1024-dim collections.
     # For legacy 384-dim collections, let ChromaDB auto-embed (all-MiniLM-L6-v2, 384-dim).
     use_voyage_storage = existing_dim == 0 or existing_dim == 1024
@@ -394,7 +394,7 @@ def get_news_summary(
     if query and col_dim == 1024:
         try:
             voyage = VoyageClient()
-            query_embedding = voyage.embed(query, model="voyage-finance-2")
+            query_embedding = voyage.embed(query, model="voyage-4-large")
         except Exception as exc:
             logger.warning("Voyage embed for summary query failed: %s", exc)
             query_embedding = None
