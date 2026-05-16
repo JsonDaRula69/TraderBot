@@ -565,14 +565,18 @@ def get_news_context(
             limit=max_articles * 3,
         )
     except Exception:
-        try:
-            results = col.get(
-                where={"category": {"$eq": category}},
-                include=["metadatas", "documents"],
-                limit=max_articles * 3,
-            )
-        except Exception:
-            return {"sentiment": None, "article_count": 0, "articles": []}
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
+
+    if not results["ids"]:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
 
     if not results["ids"]:
         return {"sentiment": None, "article_count": 0, "articles": []}
