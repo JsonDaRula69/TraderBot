@@ -1343,6 +1343,9 @@ def news_ingest(
                   f"({report.elapsed_seconds:.1f}s)")
     console.print(f"  News collection: {report.collection_sizes.get('news', 0)} items")
     console.print(f"  Signals collection: {report.collection_sizes.get('news_signals', 0)} items")
+    dp_count = report.collection_sizes.get("data_points", 0)
+    if dp_count:
+        console.print(f"  DataPoints collection: {dp_count} items")
 
 
 @app.command()
