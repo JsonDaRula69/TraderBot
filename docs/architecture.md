@@ -139,8 +139,8 @@ The semantic layer provides search-optimized index capabilities. It is NOT the a
 
 | Model | Purpose | Dimensions | Use Case |
 |---|---|---|---|
-| `voyage-finance-2` | Financial text embeddings | 1024 | News articles, market commentary, sentiment signals |
-| `voyage-4-large` | General-purpose embeddings | 256/512/1024/2048 | Decision logs, heartbeat patterns, strategy fingerprints |
+| `voyage-4-large` | General-purpose embeddings (MoE) | 256/512/1024/2048 | News articles, market commentary, decision logs, heartbeat patterns, strategy fingerprints |
+| ~~`voyage-finance-2`~~ | ~~Financial text embeddings~~ | ~~1024~~ | ~~Retired — replaced by voyage-4-large~~ |
 | `voyage-multimodal-3.5` | Text + image embeddings | 1024 (256/512/2048 configurable) | Chart analysis, visual market patterns |
 | `rerank-2.5` | Reranking ambiguous classification results | N/A | Disambiguating borderline sentiment or category assignments |
 
