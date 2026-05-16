@@ -94,12 +94,13 @@ def _build_metadata(
     sentiment: object | None,
     impact: object | None,
     category_str: str,
-) -> dict[str, str]:
+) -> dict[str, str | float]:
     """Build ChromaDB metadata dict from a news item and its enrichments."""
-    meta: dict[str, str] = {
+    meta: dict[str, str | float] = {
         "source": str(item.source.value) if hasattr(item.source, "value") else str(item.source),
         "category": category_str,
         "published": item.published_at.isoformat() if item.published_at else "",
+        "published_epoch": item.published_at.timestamp() if item.published_at else 0.0,
         "title": item.title[:200] if item.title else "",
         "url_hash": _url_hash(item.url) if item.url else "",
     }
@@ -128,11 +129,12 @@ def _build_metadata(
     return meta
 
 
-def _build_datapoint_metadata(dp: DataPoint) -> dict[str, str]:
-    meta: dict[str, str] = {
+def _build_datapoint_metadata(dp: DataPoint) -> dict[str, str | float]:
+    meta: dict[str, str | float] = {
         "source": str(dp.source.value) if hasattr(dp.source, "value") else str(dp.source),
         "category": dp.category.value if dp.category else "",
         "timestamp": dp.timestamp.isoformat() if dp.timestamp else "",
+        "timestamp_epoch": dp.timestamp.timestamp() if dp.timestamp else 0.0,
         "ticker_refs": ",".join(dp.ticker_refs) if dp.ticker_refs else "",
     }
     for key, value in dp.data.items():
@@ -154,7 +156,7 @@ def _store_datapoints(
         return 0
 
     texts: list[str] = []
-    metadatas: list[dict[str, str]] = []
+    metadatas: list[dict[str, str | float]] = []
     for dp in dp_items:
         texts.append(dp.title or f"{dp.source.value}: {dp.timestamp.isoformat()}")
         metadatas.append(_build_datapoint_metadata(dp))
@@ -439,14 +441,14 @@ def get_news_summary(
         return []
 
     # Build metadata filter
-    where_clause: dict[str, dict[str, str] | list[dict]] | None = None
-    conditions: list[dict[str, dict[str, str]]] = []
+    where_clause: dict[str, dict[str, str | float] | list[dict]] | None = None
+    conditions: list[dict[str, dict[str, str | float]]] = []
     if category:
         conditions.append({"category": {"$eq": category}})
     if source:
         conditions.append({"source": {"$eq": source}})
     if since:
-        conditions.append({"published": {"$gte": since.isoformat()}})
+        conditions.append({"published_epoch": {"$gte": since.timestamp()}})
     if len(conditions) == 1:
         where_clause = conditions[0]
     elif len(conditions) > 1:
