@@ -256,6 +256,16 @@ def signals(
             console.print("[yellow]No open markets found.[/yellow]")
         return
 
+    news_context: dict | None = None
+    if category is not None:
+        try:
+            from traderbot.news.ingest import get_news_context
+            news_context = get_news_context(category=category.lower())
+        except Exception:
+            pass
+    news_sentiment: float | None = news_context.get("sentiment") if news_context else None
+    news_article_count: int = news_context.get("article_count", 0) if news_context else 0
+
     results: list[dict] = []
     for market in markets:
         try:
@@ -278,6 +288,7 @@ def signals(
             prices=prices_int,
             orderbook=orderbook,
             estimated_prob=prob.yes_prob,
+            news_sentiment=news_sentiment,
         )
         results.append(
             {
@@ -287,6 +298,8 @@ def signals(
                 "confidence": round(signal.confidence, 3),
                 "estimated_prob": round(signal.estimated_prob, 3),
                 "edge_cents": signal.edge_cents,
+                "news_sentiment": news_sentiment,
+                "news_article_count": news_article_count,
                 "sources": [
                     {"name": s.name, "weight": s.weight, "direction": s.direction, "strength": round(s.strength, 3)}
                     for s in signal.sources
@@ -305,15 +318,23 @@ def signals(
     table.add_column("Confidence", justify="right")
     table.add_column("Prob", justify="right")
     table.add_column("Edge", justify="right")
+    has_news = any(r.get("news_sentiment") is not None for r in results)
+    if has_news:
+        table.add_column("News Sent", justify="right")
     for r in results:
-        table.add_row(
+        row = [
             r["ticker"],
             r["category"],
             r["direction"],
             f"{r['confidence']:.1%}",
             f"{r['estimated_prob']:.1%}",
             f"{r['edge_cents']}¢",
-        )
+        ]
+        if has_news:
+            ns = r.get("news_sentiment")
+            ns_str = f"{ns:+.2f}" if ns is not None else "—"
+            row.append(ns_str)
+        table.add_row(*row)
     console.print(table)
 
 
@@ -1346,6 +1367,48 @@ def news_ingest(
     dp_count = report.collection_sizes.get("data_points", 0)
     if dp_count:
         console.print(f"  DataPoints collection: {dp_count} items")
+
+
+@app.command()
+def news_context(
+    category: Annotated[str, typer.Argument(help="News/market category (economics, weather, politics, ...)")],
+    hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 24,
+    limit: Annotated[int, typer.Option("--limit", "-l", help="Max articles to return")] = 10,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Get news context for a market category — aggregated sentiment + top articles.
+
+    Queries ChromaDB for news in the given category, computes aggregate
+    sentiment, and returns structured data. Use this before trading to
+    understand the news landscape for a market category.
+    """
+    from traderbot.news.ingest import get_news_context
+
+    console = Console()
+    ctx = get_news_context(category=category, since_hours=hours, max_articles=limit)
+
+    if json_output:
+        json_lib.dump(ctx, sys.stdout, default=str)
+        return
+
+    if ctx["article_count"] == 0:
+        console.print(f"[yellow]No news articles found for '{category}' in the last {hours}h.[/yellow]")
+        return
+
+    console.print(f"[bold]News Context:[/bold] {category} — last {hours}h")
+    console.print(f"  Articles: {ctx['article_count']}")
+    console.print(f"  Sentiment: [bold]{ctx['sentiment']}[/bold] "
+                  f"(+{ctx['positive_count']}/-{ctx['negative_count']}/{ctx['neutral_count']})")
+    console.print()
+
+    table = Table(title="Top Articles")
+    table.add_column("Source", style="cyan")
+    table.add_column("Sentiment", justify="right")
+    table.add_column("Title", style="white")
+    for a in ctx["articles"]:
+        sent_str = f"{a['sentiment_score']:.2f}" if a["sentiment_score"] is not None else "—"
+        table.add_row(a["source"], sent_str, a["title"][:80])
+    console.print(table)
 
 
 @app.command()

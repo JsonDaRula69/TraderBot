@@ -5,7 +5,7 @@ No LLM required. Runs as a pure data pipeline.
 import hashlib
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 from traderbot.db.vectors import VectorStore
 from traderbot.news.classifier import NewsClassifier
@@ -522,3 +522,95 @@ def get_news_collection_stats(vector_store: VectorStore | None = None) -> dict[s
         except Exception:
             stats[name] = 0
     return stats
+
+
+def get_news_context(
+    category: str,
+    since_hours: int = 24,
+    max_articles: int = 10,
+    vector_store: VectorStore | None = None,
+) -> dict:
+    """Query ChromaDB for news relevant to a market category.
+
+    Returns aggregate sentiment, article count, and top articles
+    for the given category within the time window.
+
+    Args:
+        category: News/market category (e.g. 'economics', 'weather')
+        since_hours: Look back window in hours
+        max_articles: Max articles to include in the returned list
+        vector_store: Optional VectorStore instance
+
+    Returns a dict with keys: sentiment (aggregate), article_count,
+    positive_count, negative_count, neutral_count, articles (list).
+    Returns empty result on any error.
+    """
+    from datetime import timedelta
+
+    vs = vector_store or VectorStore()
+    cutoff = (datetime.now(tz=UTC) - timedelta(hours=since_hours)).timestamp()
+
+    try:
+        col = vs.get_collection(_NEWS_COLLECTION)
+    except Exception:
+        return {"sentiment": None, "article_count": 0, "articles": []}
+
+    try:
+        results = col.get(
+            where={"$and": [
+                {"category": {"$eq": category}},
+                {"published_epoch": {"$gte": cutoff}},
+            ]},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
+    except Exception:
+        try:
+            results = col.get(
+                where={"category": {"$eq": category}},
+                include=["metadatas", "documents"],
+                limit=max_articles * 3,
+            )
+        except Exception:
+            return {"sentiment": None, "article_count": 0, "articles": []}
+
+    if not results["ids"]:
+        return {"sentiment": None, "article_count": 0, "articles": []}
+
+    sentiment_scores: list[float] = []
+    articles: list[dict] = []
+    for i, doc_id in enumerate(results["ids"]):
+        meta = results["metadatas"][i]
+        doc = results["documents"][i]
+        score_str = meta.get("sentiment_score")
+        score: float | None = None
+        if score_str:
+            try:
+                score = float(score_str)
+                sentiment_scores.append(score)
+            except (ValueError, TypeError):
+                pass
+        articles.append({
+            "id": doc_id,
+            "title": meta.get("title", "")[:120],
+            "source": meta.get("source", ""),
+            "published": meta.get("published", ""),
+            "sentiment_score": score,
+        })
+
+    articles.sort(key=lambda a: a["published"], reverse=True)
+    articles = articles[:max_articles]
+
+    avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else None
+    positive = sum(1 for s in sentiment_scores if s > 0.1)
+    negative = sum(1 for s in sentiment_scores if s < -0.1)
+    neutral = len(sentiment_scores) - positive - negative
+
+    return {
+        "sentiment": round(avg_sentiment, 4) if avg_sentiment is not None else None,
+        "article_count": len(sentiment_scores),
+        "positive_count": positive,
+        "negative_count": negative,
+        "neutral_count": neutral,
+        "articles": articles,
+    }

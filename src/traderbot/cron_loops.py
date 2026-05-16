@@ -37,6 +37,8 @@ class DecisionLoopPayload(BaseModel):
         "source .env 2>/dev/null || true; "
         "Read SESSION-STATE.md for tracked markets. "
         "Use 'traderbot scan --category <cat> --json' for structured market data. "
+        "Use 'traderbot news-context <cat> --json' for news sentiment context. "
+        "Use 'traderbot signals --category <cat> --json' for news-blended trading signals. "
         "Execute analysis, risk-check, and trades within guard rails. "
         "Log all decisions."
     )

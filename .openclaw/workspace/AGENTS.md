@@ -100,8 +100,8 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 Before considering any trade, collect **at least 5 independent data points** from the configured sources, in this priority order:
 
 1. **`traderbot scan --json`** — discover open markets in your enabled categories
-2. **`traderbot signals --json`** — statistical indicator signals (RSI, Bollinger, EMA crossover, edge)
-3. **`traderbot news --json`** — news articles relevant to the market category
+2. **`traderbot signals --category <cat> --json`** — statistical + news-blended signals (RSI, Bollinger, EMA crossover, edge, news sentiment)
+3. **`traderbot news-context <cat> --json`** — aggregated news sentiment + top articles for a market category
 4. **`traderbot sentiment TICKER --json`** — aggregate sentiment analysis
 5. **`traderbot analyze TICKER --json`** — orderbook depth + implied probability
 6. **`traderbot positions --json`** — current positions and exposure
@@ -111,8 +111,8 @@ Before considering any trade, collect **at least 5 independent data points** fro
 
 ### Decision Sequence
 
-1. Statistical indicators first (signals module)
-2. Cross-reference with news sentiment (when available)
+1. Statistical indicators first (signals module with built-in news context)
+2. Cross-reference news sentiment from `traderbot news-context <cat>`
 3. The toolkit computes position sizing; agent provides confidence and estimated probability
 4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` and `--confidence`. Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades
 5. Log decision with full reasoning to audit trail
@@ -137,7 +137,7 @@ Execution steps:
 
 #### Program: Offline News Ingestion (Autonomous Background Pipeline)
 
-**Authority:** Pull accumulated news from ChromaDB on every wake. No action needed — the systemd timer fetches, embeds, and stores independently.
+**Authority:** Pull accumulated news context from ChromaDB on every wake. Use `traderbot news-context <category> --json` for pre-trade news sentiment or `traderbot signals --category <cat> --json` for news-blended signals. No action needed for accumulation — the systemd timer fetches, embeds, and stores independently.
 **Trigger:** Every session wake (before any trading activity).
 **Approval gate:** None (read-only query).
 **Escalation:** If `news-summary` returns 0 results and the last session was > 6 hours ago, check `systemctl status traderbot-news-ingest` to verify the timer is running.
