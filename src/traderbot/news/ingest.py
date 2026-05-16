@@ -439,19 +439,18 @@ def get_news_summary(
         return []
 
     # Build metadata filter
-    where_clause: dict[str, dict[str, str]] | None = None
-    filters: dict[str, str] = {}
+    where_clause: dict[str, dict[str, str] | list[dict]] | None = None
+    conditions: list[dict[str, dict[str, str]]] = []
     if category:
-        filters["category"] = category
+        conditions.append({"category": {"$eq": category}})
     if source:
-        filters["source"] = source
+        conditions.append({"source": {"$eq": source}})
     if since:
-        filters["published"] = since.isoformat()
-    if filters:
-        conditions: list[dict[str, dict[str, str]]] = []
-        for field, val in filters.items():
-            conditions.append({field: {"$eq": val}})
-        where_clause = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+        conditions.append({"published": {"$gte": since.isoformat()}})
+    if len(conditions) == 1:
+        where_clause = conditions[0]
+    elif len(conditions) > 1:
+        where_clause = {"$and": conditions}
 
     col_dim = _collection_dim(vs, collection_name)
 
