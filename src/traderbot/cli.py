@@ -3388,6 +3388,7 @@ def _install_news_ingest_timer(
     home = Path(f"/home/{user}")
 
     svc_content = service_template.read_text()
+    svc_content = svc_content.replace("User=%i", f"User={user}")
     svc_content = svc_content.replace("/home/%i/", f"/home/{user}/")
     svc_content = svc_content.replace("%h/.traderbot/.env", f"{home}/.traderbot/.env")
 
