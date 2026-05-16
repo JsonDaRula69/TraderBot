@@ -414,19 +414,32 @@ class NewsAggregator:
             logger.warning("NEWSAPI_API_KEY not set, skipping category news")
             return []
 
-        items: list[NewsItem] = []
         per_cat = max(limit // len(categories), 5)
-        for cat in categories:
+
+        async def _fetch_one(cat: NewsCategory) -> list[NewsItem]:
             query = NEWSAPI_CATEGORY_QUERIES.get(cat)
             if not query:
-                logger.debug("No query mapping for category %s, skipping", cat.value)
-                continue
+                return []
             logger.debug("Fetching category %s with query=%r per_cat=%d", cat.value, query, per_cat)
-            cat_items = await self._fetch_everything(query, per_cat)
+            try:
+                cat_items = await self._fetch_everything(query, per_cat)
+            except Exception:
+                logger.warning("Category %s fetch failed, returning empty", cat.value)
+                return []
             for item in cat_items:
                 item.category = cat
             logger.debug("Category %s returned %d items", cat.value, len(cat_items))
-            items.extend(cat_items)
+            return cat_items
+
+        tasks = [asyncio.ensure_future(_fetch_one(cat)) for cat in categories]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        items: list[NewsItem] = []
+        for r in results:
+            if isinstance(r, list):
+                items.extend(r)
+            elif isinstance(r, Exception):
+                logger.warning("Category news parallel fetch exception: %s", r)
 
         seen: set[str] = set()
         unique: list[NewsItem] = []
@@ -739,10 +752,7 @@ class NewsAggregator:
             "timezone": "America/New_York",
         }
 
-        points: list[DataPoint] = []
-        for ticker, (city_label, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
-            if len(points) >= limit:
-                break
+        async def _fetch_city(ticker: str, city_label: str, lat: float, lon: float) -> DataPoint | None:
             try:
                 params = {**params_template, "latitude": lat, "longitude": lon}
                 response = await self._client.get(
@@ -753,7 +763,7 @@ class NewsAggregator:
                         "Open-Meteo returned HTTP %d for %s, skipping",
                         response.status_code, city_label,
                     )
-                    continue
+                    return None
 
                 data = response.json()
                 current = data.get("current", {})
@@ -769,32 +779,47 @@ class NewsAggregator:
 
                 weather_desc = wmo_codes.get(weather_code, "Unknown")
 
-                points.append(
-                    DataPoint(
-                        id=f"open-meteo-{city_label.lower().replace(' ', '-')}",
-                        source=NewsSource.OPEN_METEO,
-                        category=NewsCategory.WEATHER,
-                        title=f"{city_label}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
-                        data={
-                            "temp_f": temp_f,
-                            "temp_high_f": temp_high_f,
-                            "temp_low_f": temp_low_f,
-                            "humidity_pct": humidity_pct,
-                            "precip_mm": precip_mm,
-                            "wind_mph": wind_mph,
-                            "weather_code": weather_code,
-                            "weather_desc": weather_desc,
-                        },
-                        timestamp=datetime.now(tz=UTC),
-                        ticker_refs=[ticker],
-                        metadata={"city": city_label, "lat": lat, "lon": lon},
-                    )
+                return DataPoint(
+                    id=f"open-meteo-{city_label.lower().replace(' ', '-')}",
+                    source=NewsSource.OPEN_METEO,
+                    category=NewsCategory.WEATHER,
+                    title=f"{city_label}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
+                    data={
+                        "temp_f": temp_f,
+                        "temp_high_f": temp_high_f,
+                        "temp_low_f": temp_low_f,
+                        "humidity_pct": humidity_pct,
+                        "precip_mm": precip_mm,
+                        "wind_mph": wind_mph,
+                        "weather_code": weather_code,
+                        "weather_desc": weather_desc,
+                    },
+                    timestamp=datetime.now(tz=UTC),
+                    ticker_refs=[ticker],
+                    metadata={"city": city_label, "lat": lat, "lon": lon},
                 )
 
             except httpx.HTTPError:
                 logger.warning("Open-Meteo HTTP error for %s, skipping", city_label)
+                return None
             except Exception:
                 logger.warning("Open-Meteo unexpected error for %s, skipping", city_label)
+                return None
+
+        tasks = [
+            asyncio.ensure_future(_fetch_city(ticker, label, lat, lon))
+            for ticker, (label, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        points: list[DataPoint] = []
+        for r in results:
+            if isinstance(r, DataPoint):
+                points.append(r)
+                if len(points) >= limit:
+                    break
+            elif isinstance(r, Exception):
+                logger.warning("Open-Meteo parallel fetch exception: %s", r)
 
         return points
 
@@ -820,77 +845,80 @@ class NewsAggregator:
             logger.warning("OpenWeatherMap daily budget exhausted (%d calls today), skipping", self._owm_daily_count)
             return []
 
+        async def _fetch_city(ticker: str, city_name: str, lat: float, lon: float) -> DataPoint | None:
+            if self._owm_daily_count >= 900:
+                return None
+            try:
+                params: dict[str, Any] = {
+                    "q": city_name,
+                    "appid": key,
+                    "units": "imperial",
+                }
+                response = await self._client.get(
+                    "https://api.openweathermap.org/data/2.5/weather",
+                    params=params,
+                )
+                self._owm_daily_count += 1
+                if response.status_code != 200:
+                    logger.warning(
+                        "OpenWeatherMap returned HTTP %d for %s, skipping",
+                        response.status_code, city_name,
+                    )
+                    return None
+
+                data = response.json()
+                main = data.get("main", {})
+                wind = data.get("wind", {})
+                weather_list = data.get("weather", [{}])
+
+                temp_f = int(main.get("temp", 0))
+                temp_min_f = int(main.get("temp_min", 0))
+                temp_max_f = int(main.get("temp_max", 0))
+                humidity_pct = int(main.get("humidity", 0))
+                wind_mph = int(wind.get("speed", 0))
+                weather_code = int(weather_list[0].get("id", 0))
+                weather_desc = str(weather_list[0].get("description", "Unknown"))
+
+                return DataPoint(
+                    id=f"owm-{city_name.lower().replace(' ', '-')}",
+                    source=NewsSource.OPENWEATHERMAP,
+                    category=NewsCategory.WEATHER,
+                    title=f"{city_name}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
+                    data={
+                        "temp_f": temp_f,
+                        "temp_min_f": temp_min_f,
+                        "temp_max_f": temp_max_f,
+                        "humidity_pct": humidity_pct,
+                        "wind_mph": wind_mph,
+                        "weather_code": weather_code,
+                        "description": weather_desc,
+                    },
+                    timestamp=datetime.now(tz=UTC),
+                    ticker_refs=[ticker],
+                    metadata={"city": city_name, "lat": lat, "lon": lon},
+                )
+
+            except httpx.HTTPError:
+                logger.warning("OpenWeatherMap HTTP error for %s, skipping", city_name)
+                return None
+            except Exception:
+                logger.warning("OpenWeatherMap unexpected error for %s, skipping", city_name)
+                return None
+
+        tasks = [
+            asyncio.ensure_future(_fetch_city(ticker, name, lat, lon))
+            for ticker, (name, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         points: list[DataPoint] = []
-        try:
-            for ticker, (city_name, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
+        for r in results:
+            if isinstance(r, DataPoint):
+                points.append(r)
                 if len(points) >= limit:
                     break
-                if self._owm_daily_count >= 900:
-                    logger.warning("OpenWeatherMap daily budget exhausted mid-fetch, stopping")
-                    break
-
-                try:
-                    params: dict[str, Any] = {
-                        "q": city_name,
-                        "appid": key,
-                        "units": "imperial",
-                    }
-                    response = await self._client.get(
-                        "https://api.openweathermap.org/data/2.5/weather",
-                        params=params,
-                    )
-                    if response.status_code != 200:
-                        logger.warning(
-                            "OpenWeatherMap returned HTTP %d for %s, skipping",
-                            response.status_code, city_name,
-                        )
-                        self._owm_daily_count += 1
-                        continue
-
-                    data = response.json()
-                    main = data.get("main", {})
-                    wind = data.get("wind", {})
-                    weather_list = data.get("weather", [{}])
-
-                    temp_f = int(main.get("temp", 0))
-                    temp_min_f = int(main.get("temp_min", 0))
-                    temp_max_f = int(main.get("temp_max", 0))
-                    humidity_pct = int(main.get("humidity", 0))
-                    wind_mph = int(wind.get("speed", 0))
-                    weather_code = int(weather_list[0].get("id", 0))
-                    weather_desc = str(weather_list[0].get("description", "Unknown"))
-
-                    points.append(
-                        DataPoint(
-                            id=f"owm-{city_name.lower().replace(' ', '-')}",
-                            source=NewsSource.OPENWEATHERMAP,
-                            category=NewsCategory.WEATHER,
-                            title=f"{city_name}: {temp_f}°F, {weather_desc}, Wind {wind_mph}mph",
-                            data={
-                                "temp_f": temp_f,
-                                "temp_min_f": temp_min_f,
-                                "temp_max_f": temp_max_f,
-                                "humidity_pct": humidity_pct,
-                                "wind_mph": wind_mph,
-                                "weather_code": weather_code,
-                                "description": weather_desc,
-                            },
-                            timestamp=datetime.now(tz=UTC),
-                            ticker_refs=[ticker],
-                            metadata={"city": city_name, "lat": lat, "lon": lon},
-                        )
-                    )
-
-                except httpx.HTTPError:
-                    logger.warning("OpenWeatherMap HTTP error for %s, skipping", city_name)
-                except Exception:
-                    logger.warning("OpenWeatherMap unexpected error for %s, skipping", city_name)
-
-                self._owm_daily_count += 1
-
-        except Exception:
-            logger.warning("OpenWeatherMap fetch failed, returning partial results")
-            return points
+            elif isinstance(r, Exception):
+                logger.warning("OpenWeatherMap parallel fetch exception: %s", r)
 
         return points
 
@@ -900,23 +928,21 @@ class NewsAggregator:
         if category_filter and len(category_filter) == 1:
             single_category = category_filter[0]
 
-        items: list[NewsItem] = []
-
-        for sub in subreddits or self._reddit_subreddits:
+        async def _fetch_sub(sub: str) -> list[NewsItem]:
             try:
                 feed_url = f"https://www.reddit.com/r/{sub}/.rss"
-                response = await self._client.get(feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"})
-
+                response = await self._client.get(
+                    feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"}
+                )
                 if response.status_code != 200:
                     logger.warning(
                         "Reddit RSS for r/%s returned HTTP %d, skipping",
-                        sub,
-                        response.status_code,
+                        sub, response.status_code,
                     )
-                    continue
+                    return []
 
                 parsed = feedparser.parse(response.text)
-
+                sub_items: list[NewsItem] = []
                 for idx, entry in enumerate(parsed.entries[:limit]):
                     try:
                         published_at = datetime.now(tz=UTC)
@@ -930,7 +956,7 @@ class NewsAggregator:
                         entry_link = entry.get("link", "") or ""
                         entry_hash = hashlib.md5(entry_link.encode()).hexdigest()[:12] if entry_link else str(idx)
 
-                        items.append(
+                        sub_items.append(
                             NewsItem(
                                 id=f"reddit-{sub}-{entry_hash}",
                                 title=entry.get("title", "") or "",
@@ -948,10 +974,21 @@ class NewsAggregator:
                             "Skipping malformed Reddit entry at r/%s index %d", sub, idx
                         )
                         continue
-
+                return sub_items
             except Exception:
-                logger.exception("Reddit RSS for r/%s failed, continuing", sub)
-                continue
+                logger.exception("Reddit RSS for r/%s failed, returning empty", sub)
+                return []
+
+        subs = subreddits or self._reddit_subreddits
+        tasks = [asyncio.ensure_future(_fetch_sub(sub)) for sub in subs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        items: list[NewsItem] = []
+        for r in results:
+            if isinstance(r, list):
+                items.extend(r)
+            elif isinstance(r, Exception):
+                logger.warning("Reddit parallel fetch exception: %s", r)
 
         return items[:limit]
 
@@ -1160,11 +1197,8 @@ class NewsAggregator:
             return []
 
         today = datetime.now(tz=UTC).date().isoformat()
-        points: list[DataPoint] = []
 
-        for sport in self._THESPORTSDB_SPORTS:
-            if len(points) >= limit:
-                break
+        async def _fetch_sport(sport: str) -> list[DataPoint]:
             try:
                 response = await self._client.get(
                     "https://www.thesportsdb.com/api/v1/json/3/eventsday.php",
@@ -1173,20 +1207,18 @@ class NewsAggregator:
                 if response.status_code != 200:
                     logger.warning(
                         "TheSportsDB %s returned HTTP %d, skipping",
-                        sport,
-                        response.status_code,
+                        sport, response.status_code,
                     )
-                    await asyncio.sleep(1)
-                    continue
+                    return []
 
                 data = response.json()
                 events = data.get("events")
                 if not events:
-                    await asyncio.sleep(1)
-                    continue
+                    return []
 
+                sport_points: list[DataPoint] = []
                 for event in events:
-                    if len(points) >= limit:
+                    if len(sport_points) >= limit:
                         break
                     try:
                         event_id = event.get("idEvent", "")
@@ -1206,7 +1238,7 @@ class NewsAggregator:
                         else:
                             timestamp = datetime.now(tz=UTC)
 
-                        points.append(
+                        sport_points.append(
                             DataPoint(
                                 id=f"thesportsdb-{event_id}",
                                 source=NewsSource.THESPORTSDB,
@@ -1234,11 +1266,22 @@ class NewsAggregator:
                             event.get("idEvent", "?"),
                         )
                         continue
-
+                return sport_points
             except Exception:
-                logger.exception("TheSportsDB %s query failed, continuing", sport)
-            finally:
-                await asyncio.sleep(1)
+                logger.exception("TheSportsDB %s query failed, returning empty", sport)
+                return []
+
+        tasks = [asyncio.ensure_future(_fetch_sport(sport)) for sport in self._THESPORTSDB_SPORTS]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        points: list[DataPoint] = []
+        for r in results:
+            if isinstance(r, list):
+                points.extend(r)
+                if len(points) >= limit:
+                    break
+            elif isinstance(r, Exception):
+                logger.warning("TheSportsDB parallel fetch exception: %s", r)
 
         return points[:limit]
 
@@ -1279,90 +1322,91 @@ class NewsAggregator:
             if info["category"] in allowed_categories
         }
 
-        points: list[DataPoint] = []
+        async def _fetch_series(sid: str, info: dict[str, str]) -> DataPoint | None:
+            try:
+                response = await self._client.get(
+                    "https://api.stlouisfed.org/fred/series/observations",
+                    params={
+                        "series_id": sid,
+                        "api_key": key,
+                        "file_type": "json",
+                        "sort_order": "desc",
+                        "limit": 1,
+                    },
+                )
+                if response.status_code != 200:
+                    logger.warning(
+                        "FRED series %s returned HTTP %d, skipping",
+                        sid, response.status_code,
+                    )
+                    return None
 
-        try:
-            for sid, info in filtered_series.items():
+                data = response.json()
+                observations = data.get("observations", [])
+                if not observations:
+                    logger.warning("FRED series %s has no observations, skipping", sid)
+                    return None
+
+                obs = observations[0]
+                date = obs.get("date", "")
+                value = obs.get("value", ".")
+
+                series_name = info["name"]
+                units = info["units"]
+                series_category = info["category"]
+
+                if date:
+                    try:
+                        timestamp = datetime.fromisoformat(date + "T00:00:00+00:00")
+                    except ValueError:
+                        timestamp = datetime.now(tz=UTC)
+                else:
+                    timestamp = datetime.now(tz=UTC)
+
+                category = (
+                    NewsCategory.ECONOMICS
+                    if series_category == "ECONOMICS"
+                    else NewsCategory.FINANCIALS
+                )
+
+                freq = "daily" if sid in ("DFF", "T10Y2Y") else "monthly"
+
+                return DataPoint(
+                    id=f"fred-{sid.lower()}",
+                    source=NewsSource.FRED,
+                    category=category,
+                    title=f"{series_name}: {value} ({date})",
+                    data={
+                        "series_id": sid,
+                        "value": value,
+                        "date": date,
+                        "units": units,
+                    },
+                    timestamp=timestamp,
+                    ticker_refs=[],
+                    metadata={
+                        "series_name": series_name,
+                        "freq": freq,
+                    },
+                )
+            except Exception:
+                logger.warning("FRED series %s fetch failed, skipping", sid, exc_info=True)
+                return None
+
+        tasks = [
+            asyncio.ensure_future(_fetch_series(sid, info))
+            for sid, info in filtered_series.items()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        points: list[DataPoint] = []
+        for r in results:
+            if isinstance(r, DataPoint):
+                points.append(r)
                 if len(points) >= limit:
                     break
-
-                try:
-                    response = await self._client.get(
-                        "https://api.stlouisfed.org/fred/series/observations",
-                        params={
-                            "series_id": sid,
-                            "api_key": key,
-                            "file_type": "json",
-                            "sort_order": "desc",
-                            "limit": 1,
-                        },
-                    )
-
-                    if response.status_code != 200:
-                        logger.warning(
-                            "FRED series %s returned HTTP %d, skipping",
-                            sid,
-                            response.status_code,
-                        )
-                        continue
-
-                    data = response.json()
-                    observations = data.get("observations", [])
-                    if not observations:
-                        logger.warning("FRED series %s has no observations, skipping", sid)
-                        continue
-
-                    obs = observations[0]
-                    date = obs.get("date", "")
-                    value = obs.get("value", ".")
-
-                    series_name = info["name"]
-                    units = info["units"]
-                    series_category = info["category"]
-
-                    if date:
-                        try:
-                            timestamp = datetime.fromisoformat(date + "T00:00:00+00:00")
-                        except ValueError:
-                            timestamp = datetime.now(tz=UTC)
-                    else:
-                        timestamp = datetime.now(tz=UTC)
-
-                    category = (
-                        NewsCategory.ECONOMICS
-                        if series_category == "ECONOMICS"
-                        else NewsCategory.FINANCIALS
-                    )
-
-                    freq = "daily" if sid in ("DFF", "T10Y2Y") else "monthly"
-
-                    points.append(
-                        DataPoint(
-                            id=f"fred-{sid.lower()}",
-                            source=NewsSource.FRED,
-                            category=category,
-                            title=f"{series_name}: {value} ({date})",
-                            data={
-                                "series_id": sid,
-                                "value": value,
-                                "date": date,
-                                "units": units,
-                            },
-                            timestamp=timestamp,
-                            ticker_refs=[],
-                            metadata={
-                                "series_name": series_name,
-                                "freq": freq,
-                            },
-                        )
-                    )
-
-                except Exception:
-                    logger.warning("FRED series %s fetch failed, skipping", sid, exc_info=True)
-                    continue
-
-        except Exception:
-            logger.exception("FRED fetch failed, returning partial results")
+            elif isinstance(r, Exception):
+                logger.warning("FRED parallel fetch exception: %s", r)
 
         return points
 

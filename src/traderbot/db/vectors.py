@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_DIMENSION: int = 1024
 DEFAULT_PERSIST_DIR: Path = get_chromadb_dir()
-DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns", "news_signals", "market_conditions")
+DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns", "news_signals", "market_conditions", "data_points")
 
 SearchResult = tuple[str, str, dict[str, str], float]
 """(doc_id, text, metadata, distance)"""

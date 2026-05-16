@@ -72,7 +72,17 @@ class TestNewsSource:
         assert NewsSource.REDDIT == "reddit"
 
     def test_all_sources_present(self):
-        assert set(NewsSource) == {NewsSource.NEWSAPI, NewsSource.TWITTER, NewsSource.REDDIT}
+        assert set(NewsSource) == {
+            NewsSource.NEWSAPI,
+            NewsSource.TWITTER,
+            NewsSource.REDDIT,
+            NewsSource.OPEN_METEO,
+            NewsSource.COINGECKO,
+            NewsSource.THESPORTSDB,
+            NewsSource.OPENWEATHERMAP,
+            NewsSource.FRED,
+            NewsSource.GOOGLE_TRENDS,
+        }
 
 
 class TestNewsItem:
@@ -128,6 +138,12 @@ class TestNewsAggregatorInit:
         assert NewsAggregator._SOURCE_PRIORITY == [
             NewsSource.NEWSAPI,
             NewsSource.REDDIT,
+            NewsSource.OPEN_METEO,
+            NewsSource.COINGECKO,
+            NewsSource.THESPORTSDB,
+            NewsSource.OPENWEATHERMAP,
+            NewsSource.FRED,
+            NewsSource.GOOGLE_TRENDS,
         ]
 
 
@@ -424,12 +440,19 @@ class TestFetchAll:
             url="https://reddit.com/1",
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
+        empty_mock = AsyncMock(return_value=[])
 
-        agg = NewsAggregator()
+        agg = NewsAggregator(http_client=AsyncMock(spec=httpx.AsyncClient))
         with (
             patch.object(agg, "_fetch_twitter", new_callable=AsyncMock, return_value=[]),
             patch.object(agg, "_fetch_newsapi", new_callable=AsyncMock, return_value=[newsapi_item]),
             patch.object(agg, "_fetch_reddit", new_callable=AsyncMock, return_value=[reddit_item]),
+            patch.object(agg, "_fetch_open_meteo", empty_mock),
+            patch.object(agg, "_fetch_openweathermap", empty_mock),
+            patch.object(agg, "_fetch_coingecko", empty_mock),
+            patch.object(agg, "_fetch_thesportsdb", empty_mock),
+            patch.object(agg, "_fetch_fred", empty_mock),
+            patch.object(agg, "_fetch_google_trends", empty_mock),
         ):
             items = await agg.fetch_all(limit=20)
 
@@ -448,12 +471,19 @@ class TestFetchAll:
             url="https://example.com/dup",
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
+        empty_mock = AsyncMock(return_value=[])
 
-        agg = NewsAggregator()
+        agg = NewsAggregator(http_client=AsyncMock(spec=httpx.AsyncClient))
         with (
             patch.object(agg, "_fetch_twitter", new_callable=AsyncMock, return_value=[]),
             patch.object(agg, "_fetch_newsapi", new_callable=AsyncMock, return_value=[item]),
             patch.object(agg, "_fetch_reddit", new_callable=AsyncMock, return_value=[item]),
+            patch.object(agg, "_fetch_open_meteo", empty_mock),
+            patch.object(agg, "_fetch_openweathermap", empty_mock),
+            patch.object(agg, "_fetch_coingecko", empty_mock),
+            patch.object(agg, "_fetch_thesportsdb", empty_mock),
+            patch.object(agg, "_fetch_fred", empty_mock),
+            patch.object(agg, "_fetch_google_trends", empty_mock),
         ):
             items = await agg.fetch_all(limit=20)
 
@@ -472,12 +502,19 @@ class TestFetchAll:
             )
             for i in range(50)
         ]
+        empty_mock = AsyncMock(return_value=[])
 
-        agg = NewsAggregator()
+        agg = NewsAggregator(http_client=AsyncMock(spec=httpx.AsyncClient))
         with (
             patch.object(agg, "_fetch_twitter", new_callable=AsyncMock, return_value=[]),
             patch.object(agg, "_fetch_newsapi", new_callable=AsyncMock, return_value=items),
             patch.object(agg, "_fetch_reddit", new_callable=AsyncMock, return_value=[]),
+            patch.object(agg, "_fetch_open_meteo", empty_mock),
+            patch.object(agg, "_fetch_openweathermap", empty_mock),
+            patch.object(agg, "_fetch_coingecko", empty_mock),
+            patch.object(agg, "_fetch_thesportsdb", empty_mock),
+            patch.object(agg, "_fetch_fred", empty_mock),
+            patch.object(agg, "_fetch_google_trends", empty_mock),
         ):
             result = await agg.fetch_all(limit=10)
 
@@ -485,11 +522,19 @@ class TestFetchAll:
 
     @pytest.mark.asyncio
     async def test_source_failure_doesnt_crash(self):
-        agg = NewsAggregator()
+        empty_mock = AsyncMock(return_value=[])
+
+        agg = NewsAggregator(http_client=AsyncMock(spec=httpx.AsyncClient))
         with (
             patch.object(agg, "_fetch_twitter", new_callable=AsyncMock, side_effect=Exception("fail")),
             patch.object(agg, "_fetch_newsapi", new_callable=AsyncMock, return_value=[]),
             patch.object(agg, "_fetch_reddit", new_callable=AsyncMock, return_value=[]),
+            patch.object(agg, "_fetch_open_meteo", empty_mock),
+            patch.object(agg, "_fetch_openweathermap", empty_mock),
+            patch.object(agg, "_fetch_coingecko", empty_mock),
+            patch.object(agg, "_fetch_thesportsdb", empty_mock),
+            patch.object(agg, "_fetch_fred", empty_mock),
+            patch.object(agg, "_fetch_google_trends", empty_mock),
         ):
             items = await agg.fetch_all(limit=20)
 

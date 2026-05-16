@@ -11,7 +11,7 @@ from traderbot.db.vectors import VectorStore
 from traderbot.news.classifier import NewsClassifier
 from traderbot.news.embeddings import VoyageClient
 from traderbot.news.impact_assessor import ImpactAssessor
-from traderbot.news.models import NewsItem
+from traderbot.news.models import DataPoint, NewsItem
 from traderbot.news.sentiment_scorer import SentimentScorer
 from traderbot.news.sources import NewsAggregator
 
@@ -23,6 +23,7 @@ _DEFAULT_INGEST_LIMIT = 50
 _DEFAULT_SUMMARY_LIMIT = 30
 _NEWS_COLLECTION = "news"
 _NEWS_SIGNALS_COLLECTION = "news_signals"
+_DATA_COLLECTION = "data_points"
 
 # ── Public types ─────────────────────────────────────────────────────────
 
@@ -127,6 +128,62 @@ def _build_metadata(
     return meta
 
 
+def _build_datapoint_metadata(dp: DataPoint) -> dict[str, str]:
+    meta: dict[str, str] = {
+        "source": str(dp.source.value) if hasattr(dp.source, "value") else str(dp.source),
+        "category": dp.category.value if dp.category else "",
+        "timestamp": dp.timestamp.isoformat() if dp.timestamp else "",
+        "ticker_refs": ",".join(dp.ticker_refs) if dp.ticker_refs else "",
+    }
+    for key, value in dp.data.items():
+        if isinstance(value, (str, int, float, bool)):
+            meta[f"data_{key}"] = str(value)
+    for key, value in dp.metadata.items():
+        if isinstance(value, (str, int, float, bool)):
+            meta[f"meta_{key}"] = str(value)
+    return meta
+
+
+def _store_datapoints(
+    dp_items: list[DataPoint],
+    vs: VectorStore,
+    voyage: VoyageClient | None = None,
+    use_voyage_storage: bool = False,
+) -> int:
+    if not dp_items:
+        return 0
+
+    texts: list[str] = []
+    metadatas: list[dict[str, str]] = []
+    for dp in dp_items:
+        texts.append(dp.title or f"{dp.source.value}: {dp.timestamp.isoformat()}")
+        metadatas.append(_build_datapoint_metadata(dp))
+
+    embeddings: list[list[float]] | None = None
+    if use_voyage_storage and voyage is not None:
+        try:
+            embeddings = voyage.embed_batch(texts)
+        except Exception as exc:
+            logger.warning("Voyage batch embed failed for data_points: %s", exc)
+
+    stored = 0
+    for i, dp in enumerate(dp_items):
+        doc_id = f"datapoint-{dp.source.value}-{dp.id}"
+        try:
+            vs.add_document(
+                doc_id=doc_id,
+                text=texts[i],
+                metadata=metadatas[i],
+                embedding=embeddings[i] if embeddings else None,
+                collection=_DATA_COLLECTION,
+            )
+            stored += 1
+        except Exception:
+            logger.warning("Failed to store data point %s, skipping", doc_id)
+            continue
+    return stored
+
+
 def _is_signal(
     sentiment: object | None,
     impact: object | None,
@@ -219,14 +276,12 @@ def ingest_news(
     except Exception:
         pass
 
-    # Detect collection embedding dimension
     news_dim = _collection_dim(vs, _NEWS_COLLECTION)
     sig_dim = _collection_dim(vs, _NEWS_SIGNALS_COLLECTION)
+    dp_dim = _collection_dim(vs, _DATA_COLLECTION)
     existing_dim = news_dim or sig_dim or 0
-    # Voyage voyage-4-large outputs 1024-dim by default. Legacy local model is 384-dim.
-    # Use Voyage for fresh collections (dim=0) or 1024-dim collections.
-    # For legacy 384-dim collections, let ChromaDB auto-embed (all-MiniLM-L6-v2, 384-dim).
     use_voyage_storage = existing_dim == 0 or existing_dim == 1024
+    use_voyage_dp = dp_dim == 0 or dp_dim == 1024
 
     aggregator = NewsAggregator(config=ds_config)
     classifier = NewsClassifier()
@@ -248,9 +303,19 @@ def ingest_news(
         report.elapsed_seconds = time.monotonic() - start
         return report
 
-    # Filter for NewsItem instances only (skip DataPoint)
+    data_points: list[DataPoint] = [it for it in raw_items if isinstance(it, DataPoint)]
     news_items: list[NewsItem] = [it for it in raw_items if isinstance(it, NewsItem)]
-    report.skipped = len(raw_items) - len(news_items)
+
+    if data_points:
+        dp_stored = _store_datapoints(
+            data_points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp
+        )
+        report.skipped = len(raw_items) - len(news_items) - dp_stored
+
+    if not news_items:
+        report.collection_sizes[_DATA_COLLECTION] = vs.get_collection(_DATA_COLLECTION).count()
+        report.elapsed_seconds = time.monotonic() - start
+        return report
 
     # Collect batch embedding texts
     batch_texts: list[str] = []
@@ -337,6 +402,7 @@ def ingest_news(
     try:
         report.collection_sizes["news"] = news_col.count()
         report.collection_sizes["news_signals"] = sig_col.count()
+        report.collection_sizes[_DATA_COLLECTION] = vs.get_collection(_DATA_COLLECTION).count()
     except Exception:
         pass
 
