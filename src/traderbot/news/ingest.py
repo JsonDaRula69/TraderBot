@@ -292,7 +292,7 @@ def ingest_news(
     try:
         import asyncio
 
-        raw_items = asyncio.run(aggregator.fetch_all(limit=limit))
+        raw_items = asyncio.run(aggregator.fetch_all(limit=limit + 200))
     except Exception as exc:
         logger.error("fetch_all failed: %s", exc)
         report.errors += 1
