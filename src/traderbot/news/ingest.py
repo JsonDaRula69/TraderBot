@@ -246,6 +246,64 @@ def _collection_dim(vs: VectorStore, name: str) -> int:
         return 0
 
 
+def _store_newsapi_backfill(
+    items: list[NewsItem],
+    vs: VectorStore,
+    voyage: VoyageClient | None = None,
+) -> int:
+    """Store NewsAPI backfill items to the news collection with Voyage embeddings."""
+    if not items:
+        return 0
+
+    news_dim = _collection_dim(vs, _NEWS_COLLECTION)
+    use_voyage = news_dim == 0 or news_dim == 1024
+
+    texts = [f"{item.title}: {item.summary}" for item in items]
+
+    embeddings: list[list[float]] | None = None
+    if use_voyage:
+        if voyage is None:
+            logger.error("Cannot store NewsAPI backfill — collection needs Voyage but no client provided")
+            return 0
+        try:
+            embeddings = voyage.embed_batch(texts)
+        except Exception as exc:
+            logger.warning("Voyage embed failed for NewsAPI backfill: %s", exc)
+        if embeddings is None:
+            logger.error("Voyage unavailable — cannot store NewsAPI backfill to %d-dim collection", news_dim)
+            return 0
+
+    stored = 0
+    for i, item in enumerate(items):
+        doc_id = hashlib.sha256((item.url or item.title).encode()).hexdigest()
+        category_str = item.category.value if hasattr(item.category, "value") else str(item.category)
+        meta: dict[str, str | float] = {
+            "source": item.source.value if hasattr(item.source, "value") else str(item.source),
+            "category": category_str,
+            "published": item.published.isoformat() if item.published else "",
+            "published_epoch": str(int(item.published.timestamp())) if item.published else "",
+            "author": item.author or "",
+            "source_name": item.source_name or "",
+            "sentiment_label": "neutral",
+            "sentiment_score": "0.0",
+            "impact_magnitude": "0.0",
+            "impact_confidence": "0.0",
+        }
+        try:
+            vs.add_document(
+                doc_id=doc_id,
+                text=texts[i],
+                metadata=meta,
+                embedding=embeddings[i] if embeddings else None,
+                collection=_NEWS_COLLECTION,
+            )
+            stored += 1
+        except Exception as exc:
+            logger.warning("Failed to store NewsAPI backfill item %s: %s", doc_id[:12], exc)
+            continue
+    return stored
+
+
 def backfill_data(
     months: int = 6,
     vector_store: VectorStore | None = None,
@@ -284,7 +342,7 @@ def backfill_data(
         if not use_voyage_dp:
             logger.warning("data_points collection at %d-dim — backfill embeddings may be rejected", dp_dim)
 
-        counts: dict[str, int] = {"open_meteo": 0, "fred": 0}
+        counts: dict[str, int] = {"open_meteo": 0, "fred": 0, "coingecko": 0, "thesportsdb": 0, "newsapi": 0}
 
         # Open-Meteo: chunk past_days=92 (max allowed) and remainder
         remaining_days = int(months * 30.44)
@@ -319,6 +377,43 @@ def backfill_data(
                 logger.info("FRED backfill stored %d/%d data points", stored, len(points))
         except Exception as exc:
             logger.error("FRED backfill failed: %s", exc)
+
+        # CoinGecko: historical crypto prices
+        from_timestamp = int((now - timedelta(days=int(months * 30.44))).timestamp())
+        logger.info("CoinGecko backfill: from_timestamp=%s", from_timestamp)
+        try:
+            points = await aggregator._backfill_coingecko(from_timestamp=from_timestamp)
+            if points:
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                counts["coingecko"] = stored
+                logger.info("CoinGecko backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("CoinGecko backfill failed: %s", exc)
+
+        # TheSportsDB: historical sports events
+        start_date = (now - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+        logger.info("TheSportsDB backfill: start_date=%s", start_date)
+        try:
+            points = await aggregator._backfill_thesportsdb(start_date=start_date)
+            if points:
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                counts["thesportsdb"] = stored
+                logger.info("TheSportsDB backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("TheSportsDB backfill failed: %s", exc)
+
+        # NewsAPI: historical news (limited to 30 days on free tier)
+        from_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+        to_date = now.strftime("%Y-%m-%d")
+        logger.info("NewsAPI backfill: from=%s to=%s", from_date, to_date)
+        try:
+            items = await aggregator._backfill_newsapi(from_date=from_date, to_date=to_date)
+            if items:
+                stored = _store_newsapi_backfill(items, vs, voyage=voyage)
+                counts["newsapi"] = stored
+                logger.info("NewsAPI backfill stored %d/%d news items", stored, len(items))
+        except Exception as exc:
+            logger.error("NewsAPI backfill failed: %s", exc)
 
         return counts
 

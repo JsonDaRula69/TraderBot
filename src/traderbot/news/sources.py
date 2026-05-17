@@ -1579,6 +1579,265 @@ class NewsAggregator:
 
         return points[:limit]
 
+    async def _backfill_thesportsdb(
+        self,
+        start_date: str,
+        end_date: str | None = None,
+    ) -> list[DataPoint]:
+        """Fetch historical sports events from TheSportsDB.
+
+        Iterates day by day through the date range for each tracked sport.
+        Free tier returns current season data only.
+        """
+        from datetime import datetime, timedelta, UTC, date
+
+        end = (datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else datetime.now(tz=UTC).date())
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+
+        sem = asyncio.Semaphore(3)
+        all_points: list[DataPoint] = []
+        current = start
+
+        while current <= end:
+            day_str = current.isoformat()
+
+            async def _fetch_day(sport: str) -> list[DataPoint]:
+                async with sem:
+                    try:
+                        response = await self._client.get(
+                            "https://www.thesportsdb.com/api/v1/json/3/eventsday.php",
+                            params={"d": day_str, "s": sport},
+                        )
+                        if response.status_code != 200:
+                            return []
+                        data = response.json()
+                        events = data.get("events")
+                        if not events:
+                            return []
+                        sport_points: list[DataPoint] = []
+                        for event in events:
+                            try:
+                                event_id = event.get("idEvent", "")
+                                title = event.get("strEvent") or (
+                                    f"{event.get('strHomeTeam', '')} vs {event.get('strAwayTeam', '')}"
+                                )
+                                league = event.get("strLeague", "")
+                                home_team = event.get("strHomeTeam", "")
+                                away_team = event.get("strAwayTeam", "")
+                                event_date = event.get("dateEvent", day_str)
+                                time_str = event.get("strTime", "00:00:00")
+                                timestamp = datetime.fromisoformat(f"{event_date}T{time_str}+00:00")
+
+                                sport_points.append(
+                                    DataPoint(
+                                        id=f"thesportsdb-hist-{event_id}",
+                                        source=NewsSource.THESPORTSDB,
+                                        category=NewsCategory.SPORTS,
+                                        title=f"{title} — {league}",
+                                        data={
+                                            "home_team": home_team,
+                                            "away_team": away_team,
+                                            "home_score": event.get("intHomeScore"),
+                                            "away_score": event.get("intAwayScore"),
+                                            "league": league,
+                                            "sport": sport,
+                                        },
+                                        timestamp=timestamp,
+                                        ticker_refs=[home_team, away_team],
+                                        metadata={"event_id": event_id},
+                                    )
+                                )
+                            except Exception:
+                                continue
+                        return sport_points
+                    except Exception:
+                        return []
+
+            tasks = [asyncio.ensure_future(_fetch_day(sport)) for sport in self._THESPORTSDB_SPORTS]
+            day_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for r in day_results:
+                if isinstance(r, list):
+                    all_points.extend(r)
+
+            current += timedelta(days=1)
+
+        return all_points
+
+    async def _backfill_coingecko(
+        self,
+        from_timestamp: int,
+        to_timestamp: int | None = None,
+    ) -> list[DataPoint]:
+        """Fetch historical crypto prices from CoinGecko market_chart/range."""
+        import time as _time
+
+        end_ts = to_timestamp or int(_time.time())
+
+        headers: dict[str, str] = {}
+        from traderbot.auth import get_credential
+        cg_key = get_credential("coingecko", "api_key")
+        if cg_key is not None:
+            headers["x-cg-demo-api-key"] = cg_key.get_secret_value()
+
+        try:
+            response = await self._client.get(
+                "https://api.coingecko.com/api/v3/coins/markets",
+                params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 30, "page": 1, "sparkline": "false"},
+                headers=headers,
+            )
+            if response.status_code != 200:
+                logger.warning("CoinGecko /coins/markets returned HTTP %d, cannot backfill", response.status_code)
+                return []
+            coins = response.json()
+        except Exception as exc:
+            logger.warning("CoinGecko top coins fetch failed: %s", exc)
+            return []
+
+        coin_ids = [(c.get("id", ""), c.get("symbol", "").upper()) for c in coins if c.get("id")]
+        logger.info("CoinGecko backfill: %d coins from %s to %s", len(coin_ids), from_timestamp, end_ts)
+
+        sem = asyncio.Semaphore(3)
+
+        async def _fetch_coin_history(coin_id: str, symbol: str) -> list[DataPoint]:
+            async with sem:
+                try:
+                    response = await self._client.get(
+                        f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range",
+                        params={"vs_currency": "usd", "from": str(from_timestamp), "to": str(end_ts)},
+                        headers=headers,
+                    )
+                    if response.status_code == 429:
+                        logger.warning("CoinGecko rate limited on %s, skipping", coin_id)
+                        return []
+                    if response.status_code != 200:
+                        return []
+                    data = response.json()
+                    prices = data.get("prices", [])
+                    if not prices:
+                        return []
+                    points: list[DataPoint] = []
+                    for entry in prices:
+                        ts_ms, price = entry
+                        ts = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
+                        price_cents = int(round(float(price) * 100))
+                        points.append(
+                            DataPoint(
+                                id=f"coingecko-hist-{coin_id}-{ts.strftime('%Y%m%d')}",
+                                source=NewsSource.COINGECKO,
+                                category=NewsCategory.CRYPTO,
+                                title=f"{symbol}: ${float(price):,.2f} ({ts.strftime('%Y-%m-%d')})",
+                                data={"price_cents": price_cents, "symbol": symbol},
+                                timestamp=ts,
+                                ticker_refs=[symbol],
+                                metadata={"coin_id": coin_id},
+                            )
+                        )
+                    return points
+                except Exception:
+                    logger.warning("CoinGecko hist error for %s", coin_id)
+                    return []
+
+        all_points: list[DataPoint] = []
+        tasks = [asyncio.ensure_future(_fetch_coin_history(cid, sym)) for cid, sym in coin_ids]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in gathered:
+            if isinstance(result, list):
+                all_points.extend(result)
+            elif isinstance(result, BaseException):
+                logger.warning("CoinGecko backfill gather exception: %s", result)
+
+        return all_points
+
+    async def _backfill_newsapi(
+        self,
+        from_date: str,
+        to_date: str | None = None,
+    ) -> list[NewsItem]:
+        """Fetch historical news from NewsAPI /v2/everything.
+
+        Limited to 30-day lookback on free tier. Category-based queries
+        for broad coverage. Each query returns up to 100 articles.
+        """
+        if not self._newsapi_key:
+            logger.warning("NEWSAPI_API_KEY not set, skipping NewsAPI backfill")
+            return []
+
+        end_date = to_date or datetime.now(tz=UTC).strftime("%Y-%m-%d")
+        headers: dict[str, str] = {"X-Api-Key": self._newsapi_key}
+
+        categories = [
+            ("business", NewsCategory.ECONOMICS),
+            ("politics", NewsCategory.POLITICS),
+            ("technology", NewsCategory.SCIENCE_AND_TECHNOLOGY),
+            ("science", NewsCategory.SCIENCE_AND_TECHNOLOGY),
+            ("health", NewsCategory.HEALTH),
+            ("sports", NewsCategory.SPORTS),
+            ("entertainment", NewsCategory.ENTERTAINMENT),
+        ]
+
+        sem = asyncio.Semaphore(3)
+
+        async def _fetch_category(cat_name: str, news_cat: NewsCategory) -> list[NewsItem]:
+            async with sem:
+                try:
+                    response = await self._client.get(
+                        f"{self._newsapi_base}/everything",
+                        params={
+                            "q": cat_name,
+                            "from": from_date,
+                            "to": end_date,
+                            "language": "en",
+                            "sortBy": "publishedAt",
+                            "pageSize": 100,
+                        },
+                        headers=headers,
+                    )
+                    self._capture_rate_limits(response)
+                    if response.status_code != 200:
+                        return []
+                    data = response.json()
+                    articles = data.get("articles", [])
+                    if not articles:
+                        return []
+                    items: list[NewsItem] = []
+                    for art in articles:
+                        try:
+                            title = art.get("title") or ""
+                            description = art.get("description") or ""
+                            url = art.get("url", "")
+                            published = art.get("publishedAt", "")
+                            content = art.get("content") or description
+                            source_name = art.get("source", {}).get("name", "newsapi")
+                            timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")) if published else datetime.now(tz=UTC)
+                            items.append(NewsItem(
+                                id=hashlib.sha256(url.encode()).hexdigest(),
+                                source=NewsSource.NEWSAPI,
+                                title=title,
+                                summary=description,
+                                url=url,
+                                content=content[:2000] if content else "",
+                                published=timestamp,
+                                author=art.get("author"),
+                                category=news_cat,
+                                source_name=source_name,
+                            ))
+                        except Exception:
+                            continue
+                    return items
+                except Exception:
+                    return []
+
+        all_items: list[NewsItem] = []
+        tasks = [asyncio.ensure_future(_fetch_category(cn, nc)) for cn, nc in categories]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in gathered:
+            if isinstance(result, list):
+                all_items.extend(result)
+            elif isinstance(result, BaseException):
+                logger.warning("NewsAPI backfill gather exception: %s", result)
+
+        return all_items
+
     async def _fetch_fred(
         self,
         category_filter: list[NewsCategory] | None = None,
