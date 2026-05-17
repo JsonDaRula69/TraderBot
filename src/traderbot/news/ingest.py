@@ -162,11 +162,21 @@ def _store_datapoints(
         metadatas.append(_build_datapoint_metadata(dp))
 
     embeddings: list[list[float]] | None = None
-    if use_voyage_storage and voyage is not None:
+    if use_voyage_storage:
+        if voyage is None:
+            logger.error("Cannot store data_points — collection needs Voyage embeddings but no VoyageClient provided")
+            return 0
         try:
             embeddings = voyage.embed_batch(texts)
         except Exception as exc:
             logger.warning("Voyage batch embed failed for data_points: %s", exc)
+        if embeddings is None:
+            logger.error(
+                "Cannot store data_points — Voyage unavailable and collection is %d-dim. "
+                "The embedding source is configured at install and does not change.",
+                _collection_dim(vs, _DATA_COLLECTION),
+            )
+            return 0
 
     stored = 0
     for i, dp in enumerate(dp_items):

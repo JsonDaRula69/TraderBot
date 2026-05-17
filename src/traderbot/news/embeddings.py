@@ -24,8 +24,9 @@ _DEFAULT_RERANK_MODEL = "rerank-2.5"
 
 _RATE_LIMIT_WINDOW_SECS = 60
 _RATE_LIMIT_MAX_CALLS = 60
-_EMBED_TIMEOUT_SECS = 10.0
+_EMBED_TIMEOUT_SECS = 30.0
 _RERANK_TIMEOUT_SECS = 0.3
+_EMBED_BATCH_SIZE = 128  # Voyage max inputs per request
 
 
 class VoyageClient(BaseModel):
@@ -114,23 +115,36 @@ class VoyageClient(BaseModel):
         texts: list[str],
         model: str = _DEFAULT_EMBED_MODEL,
     ) -> list[list[float]] | None:
-        """Returns embeddings or None on failure/timeout/key-unset."""
+        """Returns embeddings or None on failure/timeout/key-unset.
+
+        Splits large payloads into batches of _EMBED_BATCH_SIZE (Voyage API limit).
+        """
         if not texts:
             return []
         if not self._is_available():
             return None
         if not self._check_rate_limit():
             return None
-        try:
-            result = self.client.embed(
-                texts,
-                model=model,
-                input_type="document",
-            )
-            return result.embeddings  # type: ignore[no-any-return]
-        except Exception:
-            logger.warning("Voyage embed_batch() failed", exc_info=True)
-            return None
+
+        all_embeddings: list[list[float]] = []
+        for i in range(0, len(texts), _EMBED_BATCH_SIZE):
+            chunk = texts[i : i + _EMBED_BATCH_SIZE]
+            try:
+                result = self.client.embed(
+                    chunk,
+                    model=model,
+                    input_type="document",
+                )
+                if result and result.embeddings:
+                    all_embeddings.extend(result.embeddings)
+                else:
+                    logger.warning("Voyage embed chunk returned no embeddings")
+                    return None
+            except Exception:
+                logger.warning("Voyage embed_batch() failed at chunk %d/%d", i // _EMBED_BATCH_SIZE + 1, (len(texts) + _EMBED_BATCH_SIZE - 1) // _EMBED_BATCH_SIZE)
+                return None
+
+        return all_embeddings
 
     def rerank(
         self,
