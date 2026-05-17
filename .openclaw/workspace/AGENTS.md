@@ -47,10 +47,16 @@ For semantic search across all accumulated history:
 traderbot news-summary --query "federal reserve rate cut impact" --limit 20 --json
 ```
 
-For pre-trade news context by category (aggregated sentiment + top articles):
+For pre-trade news context by category (aggregated sentiment + articles + quantitative data):
 ```
-traderbot news-context economics --json
-traderbot news-context politics --since 2026-05-14T00:00:00Z --json
+traderbot news-context economics --include-data --json
+traderbot news-context politics --since 2026-05-14T00:00:00Z --include-data --json
+```
+
+For standalone quantitative data inspection (weather readings, economic indicators, crypto prices, sports scores):
+```
+traderbot data-points weather --json
+traderbot data-points economics --limit 20 --json
 ```
 
 For automated news sentiment integration into trading signals:

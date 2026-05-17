@@ -60,7 +60,10 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     category_str = raw.get("category")
 
     # V2 API uses `title` instead of `question`
+    # Daily/resolution markets use `no_sub_title`/`yes_sub_title` instead
     question = raw.get("question") or raw.get("title", "")
+    if not question:
+        question = raw.get("no_sub_title") or raw.get("yes_sub_title", "")
 
     # V2 API uses `_fp` suffix for fixed-point string fields
     volume = int(float(raw.get("volume_fp", raw.get("volume", 0))))
@@ -95,6 +98,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         close_time=close_time_val,
         status=status_val,
         event_ticker=raw["event_ticker"],
+        series_ticker=raw.get("series_ticker"),
         category=category_str,
         market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),

@@ -89,17 +89,16 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot profile assign NAME --token TOKEN` | Binds agent to profile — deployment decision |
 | `traderbot profile revoke TOKEN` | Revokes access — security boundary |
 | `traderbot profile update NAME [OPTIONS]` | Changes risk limits, categories — **must request permission each time** |
-| `traderbot profile set-auth NAME --provider kalshi` | Configures .env credentials — security boundary |
+| `traderbot profile auth NAME --json` | Inspect profile's credential status (read-only) — informational |
 | `traderbot profile discover-agents --json` | Maps agents to profiles — deployment decision |
 
 ### Auth & Credentials
 
 | Command | Why Restricted |
 |---|---|
-| `traderbot auth login` | Interactive credential setup — security boundary |
-| `traderbot auth set-key SERVICE KEY` | Stores credential — security boundary |
-| `traderbot auth rotate SERVICE` | Rotates credential — security boundary |
-| `traderbot auth check` | Verifies .env credentials — informational but best with human awareness |
+| `traderbot auth list-keys` | List configured services (never reveals values) — informational |
+| `traderbot auth rotate SERVICE` | Rotate a service's credentials in .env — security boundary |
+| `traderbot auth check` | Verify KALSHI_API_KEY is configured — informational |
 
 ### System
 

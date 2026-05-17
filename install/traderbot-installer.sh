@@ -1114,7 +1114,6 @@ interactive_config_flow() {
 merge_openclaw_agent_config() {
     local config_path="${HOME}/.openclaw/openclaw.json"
     local agent_config="${INSTALL_DIR}/install/openclaw-agent-config.json"
-    local workspace_src="${INSTALL_DIR}/.openclaw/workspace"
 
     if [[ ! -f "$agent_config" ]]; then
         echo "Warning: Agent config snippet not found at $agent_config" >&2
@@ -1127,32 +1126,58 @@ merge_openclaw_agent_config() {
         cp "$agent_config" "$config_path"
         echo "Created $config_path from agent config template."
     else
-        if command -v jq &>/dev/null; then
-            local tmp_file
-            tmp_file="$(mktemp)"
-            jq -s '.[0] * .[1]' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
-            echo "Merged agent config into $config_path (using jq)."
-        elif command -v python3 &>/dev/null; then
+        # Use python3 for correct deep merge (deduplicates agents.list by ID)
+        if command -v python3 &>/dev/null; then
             python3 -c "
 import json, sys
-config_path, agent_config = sys.argv[1], sys.argv[2]
+config_path, agent_config_path = sys.argv[1], sys.argv[2]
 with open(config_path) as f: existing = json.load(f)
-with open(agent_config) as f: new = json.load(f)
-for key in ('agents', 'heartbeat'):
-    if key in new:
-        if key == 'agents' and key in existing:
-            existing_ids = {a['id'] for a in existing.get('agents', {}).get('list', [])}
-            new_list = existing.get('agents', {}).get('list', [])
-            for a in new['agents'].get('list', []):
-                if a['id'] not in existing_ids:
-                    new_list.append(a)
-            existing.setdefault('agents', {})['list'] = new_list
-        else:
-            existing[key] = new[key]
+with open(agent_config_path) as f: new = json.load(f)
+
+for key, value in new.items():
+    if key == 'agents' and key in existing:
+        existing_ids = {a.get('id') for a in existing.get('agents', {}).get('list', [])}
+        agent_list = existing.setdefault('agents', {}).setdefault('list', [])
+        for entry in value.get('list', []):
+            if entry.get('id') not in existing_ids:
+                agent_list.append(entry)
+        # Merge secrets if present
+        if 'secrets' in value:
+            existing_secret_ids = {s.get('id') for s in existing.get('secrets', [])}
+            secrets = existing.setdefault('secrets', [])
+            for s in value.get('secrets', []):
+                if s.get('id') not in existing_secret_ids:
+                    secrets.append(s)
+    else:
+        existing[key] = value
+
+# Preserve any sub-keys of agents that weren't in the template (e.g., hooks, sandbox)
+if 'agents' in existing and isinstance(existing['agents'], dict) and 'list' in existing['agents']:
+    for entry in existing['agents']['list']:
+        # __PROFILE_NAME__ placeholder was already expanded by profile assign
+        pass
+
 with open(config_path, 'w') as f:
     json.dump(existing, f, indent=2)
 " "$config_path" "$agent_config"
             echo "Merged agent config into $config_path (using python3)."
+        elif command -v jq &>/dev/null; then
+            # jq fallback — note: array merge is by index, not by element ID.
+            # Prefer python3 for correct dedup behavior.
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq -s '
+                .[0] as $existing |
+                .[1] as $new |
+                $existing * $new |
+                if $new.agents and ($existing.agents.list | length > 0) then
+                    .agents.list = (
+                        ($existing.agents.list | map({key: .id, value: .}) | from_entries) *
+                        ($new.agents.list | map({key: .id, value: .}) | from_entries)
+                    ) | [.[] | {key: ., value: .}] | map(.value)
+                else . end
+            ' "$config_path" "$agent_config" > "$tmp_file" && mv "$tmp_file" "$config_path"
+            echo "Merged agent config into $config_path (using jq)."
         else
             echo "Warning: Neither jq nor python3 available. Cannot merge agent config automatically." >&2
             echo "Manually merge $agent_config into $config_path" >&2
@@ -1167,45 +1192,7 @@ with open(config_path, 'w') as f:
         _sed_inplace "s|__PROFILE_NAME__|${profile_name:-economics}|g" "$config_path"
     fi
 
-    if [[ -d "$workspace_src" ]]; then
-        local agent_ws_dir="${HOME}/.openclaw/workspace/${profile_name:-economics}"
-        mkdir -p "$agent_ws_dir"
-
-        # Immutable files — always overwrite
-        for f in AGENTS.md SOUL.md TOOLS.md HEARTBEAT.md; do
-            if [[ -f "${workspace_src}/${f}" ]]; then
-                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
-            fi
-        done
-
-        # Merge-only files — skip if target exists
-        for f in IDENTITY.md; do
-            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
-                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
-            fi
-        done
-
-        # Fresh-deploy-only files — skip if target exists
-        for f in BOOTSTRAP.md BOOT.md; do
-            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
-                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
-            fi
-        done
-
-        # Init-if-missing files — only create on fresh deploy
-        for f in USER.md MEMORY.md SESSION-STATE.md HEARTBEAT_DATA.md; do
-            if [[ -f "${workspace_src}/${f}" ]] && [[ ! -f "${agent_ws_dir}/${f}" ]]; then
-                cp "${workspace_src}/${f}" "${agent_ws_dir}/${f}"
-            fi
-        done
-
-        # .learnings directory — only on fresh deploy
-        if [[ -d "${workspace_src}/.learnings" ]] && [[ ! -d "${agent_ws_dir}/.learnings" ]]; then
-            cp -r "${workspace_src}/.learnings" "${agent_ws_dir}/.learnings"
-        fi
-
-        echo "Deployed workspace template files to $agent_ws_dir"
-    fi
+    # Workspace files deployed by traderbot profile assign — not duplicated here.
 }
 
 main() {
