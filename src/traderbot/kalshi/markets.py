@@ -318,7 +318,6 @@ class MarketService:
         self,
         category: str,
         target_cat: str,
-        max_series: int = 50,
     ) -> list[Market]:
         """Fetch markets from daily/hourly series matching the category.
 
@@ -339,7 +338,7 @@ class MarketService:
                 ticker = s.get("ticker", "")
                 cat = s.get("category", "")
                 freq = s.get("frequency", "")
-                if ticker and cat and target_cat in cat.lower():
+                if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
                     series_map[ticker] = cat
         except Exception:
             logger.debug("Series category query failed for '%s', falling back to unscoped fetch", category)
@@ -350,7 +349,8 @@ class MarketService:
                 for s in data.get("series", []):
                     ticker = s.get("ticker", "")
                     cat = s.get("category", "")
-                    if ticker and cat and target_cat in cat.lower():
+                    freq = s.get("frequency", "")
+                    if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
                         series_map[ticker] = cat
             except Exception:
                 logger.warning("Failed to fetch any series data")
@@ -361,32 +361,35 @@ class MarketService:
             return []
 
         series_items = list(series_map.items())
-        logger.debug("Found %d series matching '%s', fetching markets (max %d)", len(series_items), category, max_series)
+        logger.debug("Found %d daily/hourly series matching '%s', fetching markets", len(series_items), category)
 
-        semaphore = asyncio.Semaphore(5)
+        semaphore = asyncio.Semaphore(10)
         all_markets: list[Market] = []
 
         async def _fetch_for_series(st: str, scat: str) -> list[Market]:
             async with semaphore:
                 await asyncio.sleep(0.1)
                 try:
-                    result = await self.list_markets(series_ticker=st, limit=50)
-                    for m in result.markets:
+                    resp = await self._client.get("/markets", series_ticker=st, status="open", limit=50)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    markets = [_normalize_market(m) for m in data.get("markets", [])]
+                    for m in markets:
                         m.series_ticker = st
                         if m.category is None:
                             m.category = scat
                         if m.market_category is None:
                             m.market_category = _map_category(scat)
-                    return result.markets
+                    return markets
                 except Exception:
                     return []
 
-        tasks = [_fetch_for_series(st, scat) for st, scat in series_items[:max_series]]
+        tasks = [_fetch_for_series(st, scat) for st, scat in series_items]
         results = await asyncio.gather(*tasks)
         for ml in results:
             all_markets.extend(ml)
 
-        logger.debug("Series discovery: %d markets from %d series", len(all_markets), len(series_items[:max_series]))
+        logger.debug("Series discovery: %d markets from %d series", len(all_markets), len(series_items))
         return all_markets
 
     async def _get_event_category_map(self) -> dict[str, str]:
