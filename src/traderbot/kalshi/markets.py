@@ -327,31 +327,49 @@ class MarketService:
         them by querying the series endpoint and fetching each series' markets.
         """
         logger = logging.getLogger(__name__)
-        # The series endpoint's category filter works (unlike events).
-        # Try with the user-facing category first, fall back to client-side filter.
+        # The series endpoint's category filter works with proper casing
+        # (unlike events). Map user-facing categories to API format.
+        _CAT_FMT: dict[str, str] = {
+            "weather": "Climate and Weather",
+            "politics": "Politics and Government",
+            "sports": "Sports",
+            "economics": "Economics",
+            "crypto": "Crypto",
+            "entertainment": "Entertainment",
+            "health": "Health",
+            "technology": "Science and Technology",
+            "science": "Science and Technology",
+        }
         series_map: dict[str, str] = {}
+        api_cat = _CAT_FMT.get(category, category.title())
         try:
-            resp = await self._client.get("/series", limit=500, category=category)
+            resp = await self._client.get("/series", limit=500, category=api_cat)
             resp.raise_for_status()
             data = resp.json()
-            for s in data.get("series", []):
-                ticker = s.get("ticker", "")
-                cat = s.get("category", "")
-                freq = s.get("frequency", "")
-                if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
-                    series_map[ticker] = cat
-        except Exception:
-            logger.debug("Series category query failed for '%s', falling back to unscoped fetch", category)
-            try:
-                resp = await self._client.get("/series", limit=500)
-                resp.raise_for_status()
-                data = resp.json()
-                for s in data.get("series", []):
+            raw_series = data.get("series")
+            if isinstance(raw_series, list):
+                for s in raw_series:
                     ticker = s.get("ticker", "")
                     cat = s.get("category", "")
                     freq = s.get("frequency", "")
                     if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
                         series_map[ticker] = cat
+        except Exception:
+            logger.debug("Series category query failed for '%s', falling back to unscoped fetch", category)
+
+        if not series_map:
+            try:
+                resp = await self._client.get("/series", limit=500)
+                resp.raise_for_status()
+                data = resp.json()
+                raw_series = data.get("series")
+                if isinstance(raw_series, list):
+                    for s in raw_series:
+                        ticker = s.get("ticker", "")
+                        cat = s.get("category", "")
+                        freq = s.get("frequency", "")
+                        if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
+                            series_map[ticker] = cat
             except Exception:
                 logger.warning("Failed to fetch any series data")
                 return []
@@ -363,12 +381,12 @@ class MarketService:
         series_items = list(series_map.items())
         logger.debug("Found %d daily/hourly series matching '%s', fetching markets", len(series_items), category)
 
-        semaphore = asyncio.Semaphore(10)
+        semaphore = asyncio.Semaphore(2)
         all_markets: list[Market] = []
 
         async def _fetch_for_series(st: str, scat: str) -> list[Market]:
             async with semaphore:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.25)
                 try:
                     resp = await self._client.get("/markets", series_ticker=st, status="open", limit=50)
                     resp.raise_for_status()
