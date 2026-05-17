@@ -236,6 +236,76 @@ def _collection_dim(vs: VectorStore, name: str) -> int:
         return 0
 
 
+def backfill_data(
+    months: int = 6,
+    vector_store: VectorStore | None = None,
+) -> dict[str, int]:
+    """One-time historical backfill of data point sources.
+
+    Fetches historical weather (Open-Meteo) and economic (FRED) data
+    from the last N months and stores to ChromaDB data_points collection.
+    Runs as a standalone kickstart — not part of the regular pipeline.
+
+    Returns a dict with source names and item counts.
+    """
+    import asyncio
+    import os as _os
+    from datetime import timedelta, datetime, UTC
+
+    from traderbot.news.sources import DataSourcesConfig, NewsAggregator
+    from traderbot.auth import get_credential
+
+    _fred_cred = get_credential("fred", "api_key")
+    fred_key = _fred_cred.get_secret_value() if _fred_cred else None
+    ds_config = DataSourcesConfig(fred_key=fred_key)
+    vs = vector_store or VectorStore()
+    vs.init_collections()
+
+    now = datetime.now(tz=UTC)
+
+    async def _run_all() -> dict[str, int]:
+        aggregator = NewsAggregator(config=ds_config)
+        counts: dict[str, int] = {"open_meteo": 0, "fred": 0}
+
+        # Open-Meteo: chunk past_days=92 (max allowed) and remainder
+        remaining_days = int(months * 30.44)
+        chunks: list[int] = []
+        while remaining_days > 0:
+            chunk = min(remaining_days, 92)
+            chunks.append(chunk)
+            remaining_days -= chunk
+
+        open_meteo_total = 0
+        for i, past_days in enumerate(chunks):
+            logger.info("Open-Meteo backfill chunk %d/%d: past_days=%d", i + 1, len(chunks), past_days)
+            try:
+                points = await aggregator._backfill_open_meteo(past_days=past_days)
+                if points:
+                    stored = _store_datapoints(points, vs)
+                    open_meteo_total += stored
+                    logger.info("Open-Meteo chunk stored %d/%d data points", stored, len(points))
+            except Exception as exc:
+                logger.error("Open-Meteo backfill chunk %d failed: %s", i + 1, exc)
+
+        counts["open_meteo"] = open_meteo_total
+
+        # FRED: single query per series with observation_start
+        start_date = (now - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+        logger.info("FRED backfill: observation_start=%s", start_date)
+        try:
+            points = await aggregator._backfill_fred(observation_start=start_date)
+            if points:
+                stored = _store_datapoints(points, vs)
+                counts["fred"] = stored
+                logger.info("FRED backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("FRED backfill failed: %s", exc)
+
+        return counts
+
+    return asyncio.run(_run_all())
+
+
 def ingest_news(
     limit: int = _DEFAULT_INGEST_LIMIT,
     max_age_hours: int = 72,

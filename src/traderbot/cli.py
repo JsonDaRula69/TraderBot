@@ -1425,6 +1425,32 @@ def news_context(
 
 
 @app.command()
+def backfill(
+    months: Annotated[int, typer.Option("--months", "-m", help="Months of history to backfill")] = 6,
+) -> None:
+    """One-time historical data backfill for weather and economic indicators.
+
+    Fetches 6 months (default) of historical weather data from Open-Meteo
+    and economic observations from FRED, storing to the data_points
+    ChromaDB collection. Run this once to bootstrap historical context
+    before regular news-ingest cycles take over.
+    """
+    from traderbot.news.ingest import backfill_data
+
+    console = Console()
+    console.print(f"[bold]Backfill:[/bold] fetching {months} months of historical data...")
+
+    counts = backfill_data(months=months)
+
+    console.print()
+    console.print("[bold green]Backfill complete:[/bold green]")
+    for source, count in counts.items():
+        console.print(f"  {source}: {count} data points stored")
+    total = sum(counts.values())
+    console.print(f"  [bold]Total: {total}[/bold]")
+
+
+@app.command()
 def data_points(
     category: Annotated[str, typer.Argument(help="Market category (weather, economics, politics, ...)")],
     hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 48,

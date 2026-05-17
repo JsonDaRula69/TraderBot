@@ -850,6 +850,210 @@ class NewsAggregator:
 
         return points
 
+    async def _backfill_open_meteo(
+        self,
+        past_days: int = 92,
+    ) -> list[DataPoint]:
+        """Fetch historical daily weather data from Open-Meteo.
+
+        Open-Meteo forecast endpoint supports `past_days` up to 92.
+        Call multiple times in chunks for deeper history.
+        """
+        if past_days > 92:
+            logger.warning("Open-Meteo past_days max is 92, clamping")
+            past_days = 92
+
+        wmo_codes: dict[int, str] = {
+            0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+            45: "Fog", 48: "Depositing rime fog",
+            51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
+            61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+            71: "Slight snowfall", 73: "Moderate snowfall", 75: "Heavy snowfall",
+            80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+            95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
+        }
+
+        params_template: dict[str, Any] = {
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code",
+            "past_days": past_days,
+            "temperature_unit": "fahrenheit",
+            "timezone": "auto",
+        }
+
+        sem = asyncio.Semaphore(3)
+
+        async def _fetch_city_historical(
+            ticker: str, city_label: str, lat: float, lon: float,
+        ) -> list[DataPoint]:
+            async with sem:
+                try:
+                    params = {**params_template, "latitude": lat, "longitude": lon}
+                    response = await self._client.get(
+                        "https://api.open-meteo.com/v1/forecast", params=params
+                    )
+                    if response.status_code != 200:
+                        logger.warning(
+                            "Open-Meteo hist HTTP %d for %s", response.status_code, city_label,
+                        )
+                        return []
+
+                    data = response.json()
+                    daily = data.get("daily", {})
+                    times: list[str] = daily.get("time", [])
+                    highs: list[float] = daily.get("temperature_2m_max", [])
+                    lows: list[float] = daily.get("temperature_2m_min", [])
+                    precip: list[float] = daily.get("precipitation_sum", [])
+                    codes: list[int] = daily.get("weather_code", [])
+                    if not times:
+                        return []
+
+                    points: list[DataPoint] = []
+                    for i, day_str in enumerate(times):
+                        high = round(highs[i]) if i < len(highs) else 0
+                        low = round(lows[i]) if i < len(lows) else 0
+                        precip_mm = float(precip[i]) if i < len(precip) else 0.0
+                        wcode = int(codes[i]) if i < len(codes) else 0
+                        desc = wmo_codes.get(wcode, "Unknown")
+
+                        from datetime import datetime, UTC
+                        try:
+                            ts = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=UTC)
+                        except ValueError:
+                            ts = datetime.now(tz=UTC)
+
+                        points.append(DataPoint(
+                            id=f"open-meteo-hist-{city_label.lower().replace(' ', '-')}-{day_str}",
+                            source=NewsSource.OPEN_METEO,
+                            category=NewsCategory.WEATHER,
+                            title=f"{city_label}: {day_str} High {high}°F Low {low}°F, {desc}",
+                            data={
+                                "temp_high_f": high,
+                                "temp_low_f": low,
+                                "precip_mm": precip_mm,
+                                "weather_code": wcode,
+                                "weather_desc": desc,
+                            },
+                            timestamp=ts,
+                            ticker_refs=[ticker],
+                            metadata={"city": city_label, "lat": str(lat), "lon": str(lon)},
+                        ))
+
+                    return points
+
+                except Exception:
+                    logger.warning("Open-Meteo hist error for %s", city_label)
+                    return []
+
+        all_points: list[DataPoint] = []
+        tasks = [
+            asyncio.ensure_future(_fetch_city_historical(ticker, label, lat, lon))
+            for ticker, (label, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
+        ]
+        for coro in asyncio.as_completed(tasks):
+            try:
+                result = await coro
+                all_points.extend(result)
+            except Exception:
+                pass
+
+        return all_points
+
+    async def _backfill_fred(
+        self,
+        observation_start: str,
+    ) -> list[DataPoint]:
+        """Fetch historical FRED observations for all series since a date."""
+        import httpx
+
+        key = resolve_fred_key(None)
+        if key is None:
+            logger.warning("FRED API key not available, skipping FRED backfill")
+            return []
+
+        allowed_categories: set[str] = {"ECONOMICS", "FINANCIALS"}
+        filtered_series = {
+            sid: info
+            for sid, info in self._FRED_SERIES.items()
+            if info["category"] in allowed_categories
+        }
+
+        sem = asyncio.Semaphore(5)
+
+        async def _fetch_series_range(
+            sid: str, info: dict[str, str],
+        ) -> list[DataPoint]:
+            async with sem:
+                try:
+                    response = await self._client.get(
+                        "https://api.stlouisfed.org/fred/series/observations",
+                        params={
+                            "series_id": sid,
+                            "api_key": key,
+                            "file_type": "json",
+                            "observation_start": observation_start,
+                            "sort_order": "asc",
+                            "limit": 500,
+                        },
+                    )
+                    if response.status_code != 200:
+                        logger.warning("FRED hist series %s HTTP %d", sid, response.status_code)
+                        return []
+
+                    data = response.json()
+                    observations = data.get("observations", [])
+                    if not observations:
+                        return []
+
+                    series_desc = info.get("name", sid)
+                    category = info.get("category", "ECONOMICS")
+
+                    from datetime import datetime, UTC
+                    points: list[DataPoint] = []
+                    for obs in observations:
+                        date_str = obs.get("date", "")
+                        value = obs.get("value", ".")
+                        if value == ".":
+                            continue  # FRED uses "." for missing values
+                        try:
+                            ts = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
+                        except ValueError:
+                            continue
+
+                        points.append(DataPoint(
+                            id=f"fred-hist-{sid}-{date_str}",
+                            source=NewsSource.FRED,
+                            category=NewsCategory(category.lower()) if category.lower() in {e.value for e in NewsCategory} else NewsCategory.ECONOMICS,
+                            title=f"{series_desc}: {value} ({date_str})",
+                            data={"value": value, "series_id": sid},
+                            timestamp=ts,
+                            ticker_refs=[sid],
+                            metadata={"series": series_desc, "units": info.get("units", ""), "frequency": info.get("frequency", "")},
+                        ))
+
+                    logger.info("FRED backfill: %s — %d observations", series_desc, len(points))
+                    return points
+
+                except httpx.HTTPError:
+                    logger.warning("FRED hist HTTP error for %s", sid)
+                    return []
+                except Exception:
+                    logger.warning("FRED hist error for %s", sid)
+                    return []
+
+        all_points: list[DataPoint] = []
+        tasks = [
+            asyncio.ensure_future(_fetch_series_range(sid, info))
+            for sid, info in filtered_series.items()
+        ]
+        for coro in asyncio.as_completed(tasks):
+            try:
+                result = await coro
+                all_points.extend(result)
+            except Exception:
+                pass
+
+        return all_points
+
     async def _fetch_openweathermap(
         self,
         category_filter: list[NewsCategory] | None = None,
