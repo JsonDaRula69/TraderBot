@@ -114,6 +114,7 @@ class Market(BaseModel):
         validation_alias=AliasChoices("status", "state"),
     )
     event_ticker: str
+    series_ticker: str | None = None
 
     category: str | None = None
     market_category: MarketCategory | None = None

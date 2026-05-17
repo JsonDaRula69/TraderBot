@@ -261,8 +261,9 @@ class MarketService:
 
         Strategy (minimizes API calls):
         1. Build event_ticker → category map from /events (cached for 5 min)
-        2. Re-fetch events with with_nested_markets=True for matched events
-        3. For remaining markets with no event match, do gap-fill
+        2. Fetch markets per matched event via /markets?event_ticker=X
+        3. Supplement with series-based discovery for daily/hourly resolution
+           markets that the /events endpoint doesn't return
         """
         logger = logging.getLogger(__name__)
         logger.info("Fetching markets for category %s", category)
@@ -300,11 +301,93 @@ class MarketService:
                         m.market_category = _map_category(raw_cat)
                 all_markets.extend(market_list)
 
-        if not all_markets:
-            all_markets = await self._gap_fill_category(category, target_cat, event_category_map, limit)
+        # If event-based discovery found nothing or too few markets, try series-based
+        # discovery for daily/hourly resolution markets that don't appear in /events.
+        if len(all_markets) < limit:
+            series_markets = await self._fetch_series_markets_by_category(category, target_cat)
+            existing_tickers = {m.ticker for m in all_markets}
+            for m in series_markets:
+                if m.ticker not in existing_tickers:
+                    all_markets.append(m)
+                    existing_tickers.add(m.ticker)
 
         logger.info("Category '%s': %d markets found", category, len(all_markets))
         return MarketListResponse(markets=all_markets[:limit], cursor=None)
+
+    async def _fetch_series_markets_by_category(
+        self,
+        category: str,
+        target_cat: str,
+        max_series: int = 50,
+    ) -> list[Market]:
+        """Fetch markets from daily/hourly series matching the category.
+
+        Kalshi V2's ``/events`` endpoint doesn't return daily/hourly resolution
+        markets (e.g. daily high temperature). These are organized under series
+        with ``frequency=daily`` or ``frequency=hourly``. This method discovers
+        them by querying the series endpoint and fetching each series' markets.
+        """
+        logger = logging.getLogger(__name__)
+        # The series endpoint's category filter works (unlike events).
+        # Try with the user-facing category first, fall back to client-side filter.
+        series_map: dict[str, str] = {}
+        try:
+            resp = await self._client.get("/series", limit=500, category=category)
+            resp.raise_for_status()
+            data = resp.json()
+            for s in data.get("series", []):
+                ticker = s.get("ticker", "")
+                cat = s.get("category", "")
+                freq = s.get("frequency", "")
+                if ticker and cat and target_cat in cat.lower():
+                    series_map[ticker] = cat
+        except Exception:
+            logger.debug("Series category query failed for '%s', falling back to unscoped fetch", category)
+            try:
+                resp = await self._client.get("/series", limit=500)
+                resp.raise_for_status()
+                data = resp.json()
+                for s in data.get("series", []):
+                    ticker = s.get("ticker", "")
+                    cat = s.get("category", "")
+                    if ticker and cat and target_cat in cat.lower():
+                        series_map[ticker] = cat
+            except Exception:
+                logger.warning("Failed to fetch any series data")
+                return []
+
+        if not series_map:
+            logger.debug("No series matched category '%s'", category)
+            return []
+
+        series_items = list(series_map.items())
+        logger.debug("Found %d series matching '%s', fetching markets (max %d)", len(series_items), category, max_series)
+
+        semaphore = asyncio.Semaphore(5)
+        all_markets: list[Market] = []
+
+        async def _fetch_for_series(st: str, scat: str) -> list[Market]:
+            async with semaphore:
+                await asyncio.sleep(0.1)
+                try:
+                    result = await self.list_markets(series_ticker=st, limit=50)
+                    for m in result.markets:
+                        m.series_ticker = st
+                        if m.category is None:
+                            m.category = scat
+                        if m.market_category is None:
+                            m.market_category = _map_category(scat)
+                    return result.markets
+                except Exception:
+                    return []
+
+        tasks = [_fetch_for_series(st, scat) for st, scat in series_items[:max_series]]
+        results = await asyncio.gather(*tasks)
+        for ml in results:
+            all_markets.extend(ml)
+
+        logger.debug("Series discovery: %d markets from %d series", len(all_markets), len(series_items[:max_series]))
+        return all_markets
 
     async def _get_event_category_map(self) -> dict[str, str]:
         """Return cached event category map, refreshing if stale."""
