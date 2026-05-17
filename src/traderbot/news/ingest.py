@@ -180,8 +180,8 @@ def _store_datapoints(
                 collection=_DATA_COLLECTION,
             )
             stored += 1
-        except Exception:
-            logger.warning("Failed to store data point %s, skipping", doc_id)
+        except Exception as exc:
+            logger.warning("Failed to store data point %s: %s", doc_id, exc)
             continue
     return stored
 

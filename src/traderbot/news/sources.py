@@ -941,7 +941,8 @@ class NewsAggregator:
                     return points
 
                 except Exception:
-                    logger.warning("Open-Meteo hist error for %s", city_label)
+                    import traceback
+                    logger.warning("Open-Meteo hist error for %s:\n%s", city_label, traceback.format_exc())
                     return []
 
         all_points: list[DataPoint] = []
@@ -949,12 +950,12 @@ class NewsAggregator:
             asyncio.ensure_future(_fetch_city_historical(ticker, label, lat, lon))
             for ticker, (label, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
         ]
-        for coro in asyncio.as_completed(tasks):
-            try:
-                result = await coro
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in gathered:
+            if isinstance(result, list):
                 all_points.extend(result)
-            except Exception:
-                pass
+            elif isinstance(result, BaseException):
+                logger.warning("Open-Meteo backfill gather exception: %s", result)
 
         return all_points
 
@@ -1045,12 +1046,12 @@ class NewsAggregator:
             asyncio.ensure_future(_fetch_series_range(sid, info))
             for sid, info in filtered_series.items()
         ]
-        for coro in asyncio.as_completed(tasks):
-            try:
-                result = await coro
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in gathered:
+            if isinstance(result, list):
                 all_points.extend(result)
-            except Exception:
-                pass
+            elif isinstance(result, BaseException):
+                logger.warning("FRED backfill gather exception: %s", result)
 
         return all_points
 
