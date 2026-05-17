@@ -26,7 +26,7 @@ The profile system enables multi-agent deployment where each OpenClaw agent runs
 
 ## TradingProfile Model
 
-Every profile is a `TradingProfile` stored in the `.env` file under `traderbot.profiles.<name>`.
+Every profile is a `TradingProfile` persisted by `ProfileRegistry` (encrypted file at `~/.traderbot/profiles.enc`).
 
 ```python
 class TradingProfile(BaseModel):
@@ -43,13 +43,15 @@ class TradingProfile(BaseModel):
     max_open_positions: Annotated[int, Field(gt=0)]
     min_liquidity_threshold: Annotated[int, Field(gt=0)]
     min_edge_pct: Annotated[float, Field(gt=0)]
+    initial_balance_cents: int | None = None           # Paper trading starting balance (defaults to $100)
 ```
 
 ### Computed Properties
 
 ```python
-profile.base_dir      # ".traderbot-paper" or ".traderbot-live"
-profile.env_file      # ".env.paper" or ".env.live"
+profile.paper_mode    # True if mode == "paper" (computed_field)
+profile.base_dir      # "~/.traderbot/{mode}-{name}" — per-agent isolation
+profile.env_file      # ".env.paper" or ".env.live"  — profile-scoped env vars
 ```
 
 ### HARD_LIMITS Ceiling
@@ -77,7 +79,7 @@ An empty `enabled_categories` list means all categories are permitted. If a list
 
 ## Profile Registry
 
-`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in a `.env`-based configuration by default, with automatic fallback to an AES-256 encrypted file when needed (e.g., headless Linux).
+`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in an AES-256 encrypted file at `~/.traderbot/profiles.enc`.
 
 ```python
 registry = ProfileRegistry()

@@ -825,8 +825,16 @@ class NewsAggregator:
                 logger.warning("Open-Meteo unexpected error for %s, skipping", city_label)
                 return None
 
+        sem = asyncio.Semaphore(3)  # Open-Meteo free tier rate-limits burst requests
+
+        async def _rate_limited_fetch(
+            ticker: str, label: str, lat: float, lon: float,
+        ) -> DataPoint | None:
+            async with sem:
+                return await _fetch_city(ticker, label, lat, lon)
+
         tasks = [
-            asyncio.ensure_future(_fetch_city(ticker, label, lat, lon))
+            asyncio.ensure_future(_rate_limited_fetch(ticker, label, lat, lon))
             for ticker, (label, lat, lon) in self._KALSHI_WEATHER_CITIES.items()
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)

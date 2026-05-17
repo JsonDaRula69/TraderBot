@@ -58,7 +58,10 @@ class VectorStore(BaseModel):
         if chromadb is None:
             raise ImportError(_CHROMADB_MISSING_MSG)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
-        self._client = chromadb.PersistentClient(path=str(self.persist_dir))
+        self._client = chromadb.PersistentClient(
+            path=str(self.persist_dir),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
+        )
         return self._client
 
     def get_collection(self, name: str) -> Collection:

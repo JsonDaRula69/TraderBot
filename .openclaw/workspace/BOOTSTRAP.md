@@ -63,7 +63,8 @@ Read `AGENTS.md` and `SOUL.md`. These define hard limits, the decision sequence,
 source .env 2>/dev/null || true
 traderbot --help
 traderbot scan --json
-traderbot news --json
+traderbot news-summary --json  # accumulated news from ChromaDB
+traderbot news-context economics --json  # pre-trade sentiment context
 ```
 
 **Verification:** Run `traderbot --version` and confirm it returns a version number. If it fails, alert the user.

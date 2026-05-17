@@ -34,10 +34,19 @@ Get market details, orderbook, indicators, and edge estimate.
 ### traderbot trade
 
 ```bash
-traderbot trade TICKER --direction yes|no --quantity N --price CENTS [--json]
+traderbot trade TICKER --direction yes|no --quantity N --price CENTS \
+    --estimated-prob 0.75 --confidence 0.8 [--json]
 ```
 
 Place a trade through the risk pipeline. Returns sized position in cents or rejection reason.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--direction` | — | Trade direction: `yes` or `no` |
+| `--quantity` | — | Number of contracts |
+| `--price` | — | Limit price in cents |
+| `--estimated-prob` | — | Your estimated probability (0.0–1.0) — required for Kelly sizing |
+| `--confidence` | — | Your confidence in the estimate (0.0–1.0) — adjusts position size |
 
 ### traderbot positions
 
@@ -110,6 +119,73 @@ traderbot learnings [--status STR] [--category STR] [--promote KEY] [--db PATH] 
 ```
 
 List learned patterns and trigger promotions.
+
+### traderbot signals
+
+```bash
+traderbot signals [--category STR] [--limit N] [--json]
+```
+
+Compute and display trading signals across open markets. Blends statistical indicators, market data, and news sentiment (when available) into a combined signal for each market.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--category` | None | Filter by market category (Economics, Politics, Weather, etc.) |
+| `--limit` | 10 | Max markets to scan |
+
+### traderbot sentiment
+
+```bash
+traderbot sentiment TICKER [--json]
+```
+
+Analyze market sentiment for a specific ticker from news and social media sources.
+
+### traderbot news-ingest
+
+```bash
+traderbot news-ingest [--limit N]
+```
+
+Fetch, classify, embed, and store news articles and data points into ChromaDB. Standalone data pipeline — no LLM required. Runs via systemd timer every 30 minutes on remote deployments.
+
+### traderbot news-context
+
+```bash
+traderbot news-context CATEGORY [--since ISO] [--json]
+```
+
+Get aggregated news context for a market category — overall sentiment score + top articles. Designed for pre-trade context gathering.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--since` | 48 hours ago | Filter articles published after this timestamp |
+| `--json` | — | JSON output for machine consumption |
+
+### traderbot news-summary
+
+```bash
+traderbot news-summary [--since ISO] [--category STR] [--query STR] [--limit N] [--signalsonly] [--json]
+```
+
+Query accumulated news from ChromaDB. Supports semantic search via `--query` (uses VoyageAI embeddings) and category filtering.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--since` | — | Filter by publication date (ISO 8601) |
+| `--category` | — | Filter by market category |
+| `--query` | — | Semantic search query string |
+| `--limit` | 30 | Max results |
+| `--signalsonly` | — | Show only high-impact signals (>0.7) |
+| `--json` | — | JSON output |
+
+### traderbot cache warm
+
+```bash
+traderbot cache warm [--json]
+```
+
+Pre-populate the event category cache independent of any agent session. Useful for speeding up subsequent market scans.
 
 ### traderbot profile create
 

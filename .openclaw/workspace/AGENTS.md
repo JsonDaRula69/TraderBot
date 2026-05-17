@@ -47,6 +47,18 @@ For semantic search across all accumulated history:
 traderbot news-summary --query "federal reserve rate cut impact" --limit 20 --json
 ```
 
+For pre-trade news context by category (aggregated sentiment + top articles):
+```
+traderbot news-context economics --json
+traderbot news-context politics --since 2026-05-14T00:00:00Z --json
+```
+
+For automated news sentiment integration into trading signals:
+```
+traderbot signals --category economics --json
+```
+This pulls news context automatically and blends it at 15% weight into the signal.
+
 Store the `--since` timestamp of your last summary in `SESSION-STATE.md` so you know where you left off next session.
 
 ## Memory

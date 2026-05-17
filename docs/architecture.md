@@ -29,12 +29,12 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Every 6 hours |
+| **Frequency** | Every 30 minutes |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous background work) |
 | **Responsibility** | Performance review → adapt parameters → log learnings |
 
 **Cycle:**
-1. Review all decisions since last heartbeat
+1. Review all decisions since last heartbeat (every 30 min automatically via cron)
 2. Compare expected vs. actual outcomes for closed markets
 3. Identify patterns (wins, losses, near-misses)
 4. Adjust strategy parameters via Bayesian updating (`simulation/adaptation`)
@@ -44,20 +44,25 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 
 The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy emotionally — it adjusts mathematical parameters (prior distributions, confidence thresholds) based on observed evidence.
 
-### News/Sentiment Loop
+### News Ingestion (Offline Pipeline)
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Event-driven (news webhook or polling) |
-| **OpenClaw mechanism** | `systemEvent` (surfaces to main session when actionable) |
-| **Responsibility** | Process news → classify events → update market outlook |
+| **Frequency** | Every 30 minutes (systemd timer) |
+| **Mechanism** | Standalone CLI command (`traderbot news-ingest`), no LLM required |
+| **Responsibility** | Fetch → classify → embed → store news and data points to ChromaDB |
 
-**Cycle:**
-1. Poll news sources for new articles/posts
-2. Classify each item by Kalshi market category
-3. Score sentiment (positive/negative/neutral + magnitude)
-4. Assess impact: "Does this materially change the probability of any tracked market?"
-5. If actionable → emit `systemEvent` to main session
+The news pipeline runs as a standalone systemd timer (`traderbot-news-ingest@.timer`) independent of any agent session. It:
+
+1. Fetches from 9 sources (NewsAPI, Reddit RSS, Open-Meteo, OpenWeatherMap, CoinGecko, TheSportsDB, FRED, Google Trends, Twitter/X stub)
+2. Parallelizes all HTTP calls via `asyncio.gather` for maximum throughput
+3. Classifies each item by Kalshi market category (keyword fast path → Voyage semantic slow path)
+4. Scores sentiment via VADER + TextBlob with optional Voyage rerank uplift
+5. Embeds articles with Voyage AI (`voyage-4-large`, 1024-dim) and stores to ChromaDB `news` collection
+6. Stores DataPoints (weather, economic, sports, crypto) to ChromaDB `data_points` collection
+7. Deduplicates by SHA-256 URL hash
+
+Agents query accumulated news via `traderbot news-context`, `traderbot news-summary`, or `traderbot signals --category` — they do not receive news inline during trading sessions.t` to main session
 6. If not → update internal sentiment state silently
 
 The News Loop is the only loop that uses `systemEvent` — because timely news sometimes requires human awareness (e.g., "The Fed just announced an emergency rate cut" is worth knowing about immediately).
