@@ -143,13 +143,17 @@ These programs define your autonomous authority. Execute them within their defin
 Execution steps:
 1. Run `traderbot scan --category <enabled> --json`
 2. Apply the Data Sourcing Protocol (5+ data points in priority order)
-3. Evaluate edge vs market-implied probability using `traderbot sentiment` and `traderbot signals`
-4. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
-5. Log every decision with full reasoning to the audit trail
+3. Gather market context:
+   - `traderbot news-context <category> --include-data --json` — combined news sentiment + quantitative readings (temperature, humidity, economic indicators)
+   - `traderbot data-points <category> --json` — standalone quantitative data inspection
+   - `traderbot signals --category <category> --json` — news-blended trading signals
+4. Evaluate edge vs market-implied probability
+5. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
+6. Log every decision with full reasoning to the audit trail
 
 #### Program: Offline News Ingestion (Autonomous Background Pipeline)
 
-**Authority:** Pull accumulated news context from ChromaDB on every wake. Use `traderbot news-context <category> --json` for pre-trade news sentiment or `traderbot signals --category <cat> --json` for news-blended signals. No action needed for accumulation — the systemd timer fetches, embeds, and stores independently.
+**Authority:** Pull accumulated news context and data point readings from ChromaDB on every wake. Use `traderbot news-context <category> --include-data --json` for combined news sentiment + quantitative readings, `traderbot data-points <category> --json` for standalone data inspection, or `traderbot signals --category <cat> --json` for news-blended signals. No action needed for accumulation — the systemd timer fetches, embeds, and stores independently.
 **Trigger:** Every session wake (before any trading activity).
 **Approval gate:** None (read-only query).
 **Escalation:** If `news-summary` returns 0 results and the last session was > 6 hours ago, check `systemctl status traderbot-news-ingest` to verify the timer is running.

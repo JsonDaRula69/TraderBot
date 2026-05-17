@@ -149,17 +149,33 @@ traderbot news-ingest [--limit N]
 
 Fetch, classify, embed, and store news articles and data points into ChromaDB. Standalone data pipeline — no LLM required. Runs via systemd timer every 30 minutes on remote deployments.
 
-### traderbot news-context
+### traderbot data-points
 
 ```bash
-traderbot news-context CATEGORY [--since ISO] [--json]
+traderbot data-points CATEGORY [--hours 48] [--limit 10] [--json]
 ```
 
-Get aggregated news context for a market category — overall sentiment score + top articles. Designed for pre-trade context gathering.
+Query structured data point readings for a market category. Returns quantitative data (temperature, humidity, economic indicators, crypto prices, sports scores) stored by the offline ingestion pipeline. Designed for pre-trade context on data-driven markets like weather.
 
 | Arg | Default | Description |
 |---|---|---|
-| `--since` | 48 hours ago | Filter articles published after this timestamp |
+| `--hours` | 48 | Look back window in hours |
+| `--limit` | 10 | Max data points to return |
+| `--json` | — | JSON output for machine consumption |
+
+### traderbot news-context
+
+```bash
+traderbot news-context CATEGORY [--hours 24] [--limit 10] [--include-data] [--json]
+```
+
+Get aggregated news context for a market category — overall sentiment score + top articles. Designed for pre-trade context gathering. Use `--include-data` to also fetch quantitative data point readings (temperature, weather, economic indicators) for the same category.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--hours` | 24 | Look back window in hours |
+| `--limit` | 10 | Max articles to return |
+| `--include-data` | — | Also fetch data point readings (weather, econ indicators, etc.) |
 | `--json` | — | JSON output for machine consumption |
 
 ### traderbot news-summary

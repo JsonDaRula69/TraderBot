@@ -524,11 +524,101 @@ def get_news_collection_stats(vector_store: VectorStore | None = None) -> dict[s
     return stats
 
 
+def get_data_points(
+    category: str,
+    since_hours: int = 48,
+    max_items: int = 20,
+    vector_store: VectorStore | None = None,
+) -> dict:
+    """Query ChromaDB for data point readings relevant to a market category.
+
+    Returns structured readings (weather, economics, crypto, etc.) stored
+    by the offline ingestion pipeline. Useful for temperature, humidity,
+    economic indicators, and other quantitative data.
+
+    Args:
+        category: Market category (e.g. 'weather', 'economics')
+        since_hours: Look back window in hours
+        max_items: Max data points to return
+        vector_store: Optional VectorStore instance
+
+    Returns a dict with keys: count, data_points (list of dicts with
+    source, title, timestamp, and data_* fields).
+    """
+    from datetime import timedelta
+
+    vs = vector_store or VectorStore()
+    cutoff = (datetime.now(tz=UTC) - timedelta(hours=since_hours)).timestamp()
+
+    try:
+        col = vs.get_collection(_DATA_COLLECTION)
+    except Exception:
+        return {"count": 0, "data_points": []}
+
+    try:
+        results = col.get(
+            where={"$and": [
+                {"category": {"$eq": category}},
+                {"timestamp_epoch": {"$gte": cutoff}},
+            ]},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+    except Exception:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+
+    if not results["ids"]:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+
+    if not results["ids"]:
+        return {"count": 0, "data_points": []}
+
+    points: list[dict] = []
+    for i, doc_id in enumerate(results["ids"]):
+        meta = results["metadatas"][i]
+        doc = results["documents"][i]
+
+        # Collect all data_* and meta_* fields into structured dicts
+        data_fields: dict[str, str] = {}
+        meta_fields: dict[str, str] = {}
+        for key, value in meta.items():
+            if key.startswith("data_"):
+                data_fields[key[5:]] = str(value)
+            elif key.startswith("meta_"):
+                meta_fields[key[5:]] = str(value)
+
+        points.append({
+            "id": doc_id,
+            "title": (doc or "")[:120],
+            "source": meta.get("source", ""),
+            "timestamp": meta.get("timestamp", ""),
+            "data": data_fields,
+            "_meta": meta_fields,
+        })
+
+    points.sort(key=lambda p: p["timestamp"], reverse=True)
+    points = points[:max_items]
+
+    return {
+        "count": len(points),
+        "data_points": points,
+    }
+
+
 def get_news_context(
     category: str,
     since_hours: int = 24,
     max_articles: int = 10,
     vector_store: VectorStore | None = None,
+    include_data_points: bool = False,
 ) -> dict:
     """Query ChromaDB for news relevant to a market category.
 
@@ -543,6 +633,7 @@ def get_news_context(
 
     Returns a dict with keys: sentiment (aggregate), article_count,
     positive_count, negative_count, neutral_count, articles (list).
+    When include_data_points=True, also returns data_points with readings.
     Returns empty result on any error.
     """
     from datetime import timedelta
@@ -550,10 +641,20 @@ def get_news_context(
     vs = vector_store or VectorStore()
     cutoff = (datetime.now(tz=UTC) - timedelta(hours=since_hours)).timestamp()
 
+    # Optionally fetch data points for this category
+    data_points_result: dict | None = None
+    if include_data_points:
+        data_points_result = get_data_points(
+            category=category, since_hours=since_hours, max_items=20, vector_store=vs,
+        )
+
     try:
         col = vs.get_collection(_NEWS_COLLECTION)
     except Exception:
-        return {"sentiment": None, "article_count": 0, "articles": []}
+        base: dict = {"sentiment": None, "article_count": 0, "articles": []}
+        if data_points_result is not None:
+            base["data_points"] = data_points_result
+        return base
 
     try:
         results = col.get(
@@ -579,7 +680,10 @@ def get_news_context(
         )
 
     if not results["ids"]:
-        return {"sentiment": None, "article_count": 0, "articles": []}
+        empty: dict = {"sentiment": None, "article_count": 0, "articles": []}
+        if data_points_result is not None:
+            empty["data_points"] = data_points_result
+        return empty
 
     sentiment_scores: list[float] = []
     articles: list[dict] = []
@@ -610,7 +714,7 @@ def get_news_context(
     negative = sum(1 for s in sentiment_scores if s < -0.1)
     neutral = len(sentiment_scores) - positive - negative
 
-    return {
+    result: dict = {
         "sentiment": round(avg_sentiment, 4) if avg_sentiment is not None else None,
         "article_count": len(sentiment_scores),
         "positive_count": positive,
@@ -618,3 +722,6 @@ def get_news_context(
         "neutral_count": neutral,
         "articles": articles,
     }
+    if data_points_result is not None:
+        result["data_points"] = data_points_result
+    return result

@@ -1375,17 +1375,21 @@ def news_context(
     hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 24,
     limit: Annotated[int, typer.Option("--limit", "-l", help="Max articles to return")] = 10,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    include_data: Annotated[bool, typer.Option("--include-data", help="Also include data point readings (weather, economic indicators, etc.)")] = False,
 ) -> None:
     """Get news context for a market category — aggregated sentiment + top articles.
 
     Queries ChromaDB for news in the given category, computes aggregate
     sentiment, and returns structured data. Use this before trading to
     understand the news landscape for a market category.
+
+    Use --include-data to also fetch quantitative readings (temperature,
+    humidity, economic indicators, crypto prices) for the same category.
     """
     from traderbot.news.ingest import get_news_context
 
     console = Console()
-    ctx = get_news_context(category=category, since_hours=hours, max_articles=limit)
+    ctx = get_news_context(category=category, since_hours=hours, max_articles=limit, include_data_points=include_data)
 
     if json_output:
         json_lib.dump(ctx, sys.stdout, default=str)
@@ -1393,22 +1397,70 @@ def news_context(
 
     if ctx["article_count"] == 0:
         console.print(f"[yellow]No news articles found for '{category}' in the last {hours}h.[/yellow]")
+    else:
+        console.print(f"[bold]News Context:[/bold] {category} — last {hours}h")
+        console.print(f"  Articles: {ctx['article_count']}")
+        console.print(f"  Sentiment: [bold]{ctx['sentiment']}[/bold] "
+                      f"(+{ctx['positive_count']}/-{ctx['negative_count']}/{ctx['neutral_count']})")
+        console.print()
+
+        table = Table(title="Top Articles")
+        table.add_column("Source", style="cyan")
+        table.add_column("Sentiment", justify="right")
+        table.add_column("Title", style="white")
+        for a in ctx["articles"]:
+            sent_str = f"{a['sentiment_score']:.2f}" if a["sentiment_score"] is not None else "—"
+            table.add_row(a["source"], sent_str, a["title"][:80])
+        console.print(table)
+
+    # Show data points when included
+    data_pts = ctx.get("data_points")
+    if data_pts and data_pts.get("count", 0) > 0:
+        console.print()
+        console.print(f"[bold]Data Points:[/bold] {data_pts['count']} readings")
+        for dp in data_pts["data_points"][:5]:
+            title = dp.get("title", "")[:80]
+            data_str = "; ".join(f"{k}={v}" for k, v in dp.get("data", {}).items())
+            console.print(f"  [cyan]{dp['source']}[/cyan] {title} — {data_str}")
+
+
+@app.command()
+def data_points(
+    category: Annotated[str, typer.Argument(help="Market category (weather, economics, politics, ...)")],
+    hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 48,
+    limit: Annotated[int, typer.Option("--limit", "-l", help="Max data points to return")] = 10,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Query data point readings for a market category.
+
+    Returns structured quantitative data (weather readings, economic
+    indicators, crypto prices, sports scores) stored by the offline
+    ingestion pipeline. Useful for pre-trade context on weather,
+    economics, and other data-driven markets.
+    """
+    from traderbot.news.ingest import get_data_points
+
+    console = Console()
+    ctx = get_data_points(category=category, since_hours=hours, max_items=limit)
+
+    if json_output:
+        import json as _json
+        _json.dump(ctx, sys.stdout, default=str)
         return
 
-    console.print(f"[bold]News Context:[/bold] {category} — last {hours}h")
-    console.print(f"  Articles: {ctx['article_count']}")
-    console.print(f"  Sentiment: [bold]{ctx['sentiment']}[/bold] "
-                  f"(+{ctx['positive_count']}/-{ctx['negative_count']}/{ctx['neutral_count']})")
+    if ctx["count"] == 0:
+        console.print(f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]")
+        return
+
+    console.print(f"[bold]Data Points:[/bold] {category} — last {hours}h")
+    console.print(f"  Readings: {ctx['count']}")
     console.print()
 
-    table = Table(title="Top Articles")
-    table.add_column("Source", style="cyan")
-    table.add_column("Sentiment", justify="right")
-    table.add_column("Title", style="white")
-    for a in ctx["articles"]:
-        sent_str = f"{a['sentiment_score']:.2f}" if a["sentiment_score"] is not None else "—"
-        table.add_row(a["source"], sent_str, a["title"][:80])
-    console.print(table)
+    for dp in ctx["data_points"]:
+        console.print(f"[cyan]{dp['source']}[/cyan] — {dp['title']}")
+        data_str = "; ".join(f"{k}={v}" for k, v in dp.get("data", {}).items())
+        if data_str:
+            console.print(f"  Data: {data_str}")
 
 
 @app.command()
