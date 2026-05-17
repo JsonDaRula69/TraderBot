@@ -321,11 +321,13 @@ def backfill_data(
     from datetime import timedelta, datetime, UTC
 
     from traderbot.news.sources import DataSourcesConfig, NewsAggregator
+    import os as _os
     from traderbot.auth import get_credential
 
     _fred_cred = get_credential("fred", "api_key")
     fred_key = _fred_cred.get_secret_value() if _fred_cred else None
-    ds_config = DataSourcesConfig(fred_key=fred_key)
+    newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
+    ds_config = DataSourcesConfig(fred_key=fred_key, newsapi_key=newsapi_key)
     vs = vector_store or VectorStore()
     vs.init_collections()
 
