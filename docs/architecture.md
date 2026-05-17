@@ -10,7 +10,7 @@ The agent operates via three independent loops, each with a distinct responsibil
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Every 5 minutes (24/7) — Kalshi prediction markets never close |
+| **Frequency** | Continuous during market hours |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous, no human attention needed) |
 | **Responsibility** | Analyze markets → generate signals → risk-check → execute |
 
@@ -28,13 +28,13 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 ### Heartbeat Loop
 
 | Attribute | Value |
-|---|---|---|
+|---|---|
 | **Frequency** | Every 30 minutes |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous background work) |
 | **Responsibility** | Performance review → adapt parameters → log learnings |
 
 **Cycle:**
-1. Review all decisions since last heartbeat
+1. Review all decisions since last heartbeat (every 30 min automatically via cron)
 2. Compare expected vs. actual outcomes for closed markets
 3. Identify patterns (wins, losses, near-misses)
 4. Adjust strategy parameters via Bayesian updating (`simulation/adaptation`)
@@ -44,20 +44,25 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 
 The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy emotionally — it adjusts mathematical parameters (prior distributions, confidence thresholds) based on observed evidence.
 
-### News/Sentiment Loop
+### News Ingestion (Offline Pipeline)
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Event-driven (news webhook or polling) |
-| **OpenClaw mechanism** | `systemEvent` (surfaces to main session when actionable) |
-| **Responsibility** | Process news → classify events → update market outlook |
+| **Frequency** | Every 30 minutes (systemd timer) |
+| **Mechanism** | Standalone CLI command (`traderbot news-ingest`), no LLM required |
+| **Responsibility** | Fetch → classify → embed → store news and data points to ChromaDB |
 
-**Cycle:**
-1. Poll news sources for new articles/posts
-2. Classify each item by Kalshi market category
-3. Score sentiment (positive/negative/neutral + magnitude)
-4. Assess impact: "Does this materially change the probability of any tracked market?"
-5. If actionable → emit `systemEvent` to main session
+The news pipeline runs as a standalone systemd timer (`traderbot-news-ingest@.timer`) independent of any agent session. It:
+
+1. Fetches from 9 sources (NewsAPI, Reddit RSS, Open-Meteo, OpenWeatherMap, CoinGecko, TheSportsDB, FRED, Google Trends, Twitter/X stub)
+2. Parallelizes all HTTP calls via `asyncio.gather` for maximum throughput
+3. Classifies each item by Kalshi market category (keyword fast path → Voyage semantic slow path)
+4. Scores sentiment via VADER + TextBlob with optional Voyage rerank uplift
+5. Embeds articles with Voyage AI (`voyage-4-large`, 1024-dim) and stores to ChromaDB `news` collection
+6. Stores DataPoints (weather, economic, sports, crypto) to ChromaDB `data_points` collection
+7. Deduplicates by SHA-256 URL hash
+
+Agents query accumulated news via `traderbot news-context`, `traderbot news-summary`, or `traderbot signals --category` — they do not receive news inline during trading sessions.t` to main session
 6. If not → update internal sentiment state silently
 
 The News Loop is the only loop that uses `systemEvent` — because timely news sometimes requires human awareness (e.g., "The Fed just announced an emergency rate cut" is worth knowing about immediately).
@@ -73,40 +78,32 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
-│  traderbot scan | analyze | trade | positions | audit |       │
-│  backtest | paper | compare | performance | news |            │
-│  sentiment | signals | heartbeat | halt | resume | bootstrap  │
-│  learnings | cron setup | profile | auth                       │
+│  traderbot scan | analyze | trade | positions | backtest |    │
+│  paper | compare | performance | news | sentiment |          │
+│  heartbeat | learnings | bootstrap | auth                     │
 └──────┬───────┬───────────┬───────────┬───────────┬───────────┘
        │       │           │           │           │
        ▼       ▼           ▼           ▼           ▼
 ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-    │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
-    │        │ │        │ │        │ │        │ │        │
-    │ client │ │indic.  │ │limits  │ │engine  │ │sources │
-    │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
-    │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
-    │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-    │ events │ │registry│ │agent   │ │profiles│ │embed.  │
-    │ history│ │        │ │limits  │ │data_ldr│ │models  │
-    │ ws     │ │        │ │        │ │settle  │ │cache   │
-    │ exchange│ │        │ │        │ │strateg.│ │paths   │
-    │ signing│ │        │ │        │ │adapter │ │        │
-    │ config │ │        │ │        │ │state   │ │        │
-    │ cache  │ │        │ │        │ │        │ │        │
-    │ provider│ │        │ │        │ │        │ │        │
-    │ rate_lim│ │        │ │        │ │        │ │        │
-    │ _norm. │ │        │ │        │ │        │ │        │
-    └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
+   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
+   │        │ │        │ │        │ │        │ │        │
+   │ client │ │indic.  │ │limits  │ │engine  │ │sources │
+   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
+   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
+   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
+   │ history│ │        │ │        │ │profiles│ │embed.  │
+   │ ws     │ │        │ │        │ │data_ldr│ │vectors │
+   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
        │                      │
        ▼                      ▼
    ┌────────┐            ┌────────┐
-    │ Kalshi │            │  db    │
-    │   API  │            │positions│
-    │        │            │decisions│
-    └────────┘            │learnings│
-                          │ vectors │
-                          └────────┘
+   │ Kalshi │            │  db    │
+   │   API  │            │positions│
+   │        │            │decisions│
+   └────────┘            │learnings│
+                         │ chroma  │
+                         │ vectors │
+                         └────────┘
 ```
 
 ## Toolkit vs. Agent Boundary
@@ -157,7 +154,7 @@ The semantic layer provides search-optimized index capabilities. It is NOT the a
 - Persistent vector store with metadata filtering (ticker, category, date range)
 - TTL policy: embeddings auto-expire after configurable window (default 90 days)
 - Async support: embedding generation and querying run without blocking the hot path
-- Collections: `decisions`, `news`, `market_patterns`, `news_signals`, `market_conditions`
+- Collections: `decisions`, `heartbeats`, `news_signals`, `chart_embeddings`
 
 ### Architecture Constraint
 
@@ -190,15 +187,16 @@ Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
    → db/positions updates on fill
 ```
 
-### Bootstrap Flow (Setup Wizard)
+### Bootstrap Flow
 
 ```
-Agent → "traderbot bootstrap"
-   → Checks Python version (3.12.x required for chromadb compatibility)
-   → Creates default config directory (~/.traderbot/)
-   → Launches interactive credential setup for all services
-   → Writes credentials to .env file
-   → Reports completion status
+Agent → "traderbot bootstrap --from 2026-01-01 --to 2026-03-01 --profile Moderate"
+   → simulation/data_loader fetches historical data (cached in SQLite)
+   → simulation/engine replays events through StrategyProfile
+   → Warm-up period: first N data points skipped for indicator stability
+   → Calibration parameters fit per-horizon (daily, weekly, monthly)
+   → Report: fit quality, recommended parameters, data sufficiency warnings
+   → IF data < 30 days → WARNING logged, partial results returned (never crashes)
 ```
 
 ### Analysis Flow

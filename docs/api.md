@@ -20,8 +20,8 @@ List open markets from Kalshi.
 
 | Arg | Default | Description |
 |---|---|---|
-| `--limit` | 500 | Max markets to return |
-| `--category` | None | Filter by market category (uses profile categories if set) |
+| `--limit` | 20 | Max markets to return |
+| `--category` | None | Filter by market category |
 
 ### traderbot analyze
 
@@ -31,61 +31,22 @@ traderbot analyze TICKER [--json]
 
 Get market details, orderbook, indicators, and edge estimate.
 
-### traderbot signals
-
-```bash
-traderbot signals [--category STR] [--min-edge FLOAT] [--json]
-```
-
-Scan open markets for active trading signals. Returns markets where the estimated edge exceeds the minimum threshold.
-
-| Arg | Default | Description |
-|---|---|---|
-| `--category` | None | Filter by market category |
-| `--min-edge` | 0.03 | Minimum edge threshold |
-| `--json` | false | JSON output |
-
-### traderbot bootstrap
-
-```bash
-traderbot bootstrap [--json]
-```
-
-One-time setup wizard. Checks Python version, creates config directory, and launches interactive credential setup.
-
-### traderbot news
-
-```bash
-traderbot news [--category STR] [--limit N] [--json]
-```
-
-Fetch news from all active sources (NewsAPI, Reddit, specialized APIs).
-
-### traderbot sentiment
-
-```bash
-traderbot sentiment TICKER [--json]
-```
-
-Aggregate sentiment analysis for a market ticker from all news sources.
-
-### traderbot resume
-
-```bash
-traderbot resume [--json]
-```
-
-Clear circuit breaker FULL_STOP state. Only works if the breaker is in FULL_STOP.
-
 ### traderbot trade
 
 ```bash
-traderbot trade TICKER --direction yes|no --quantity N --price CENTS [--estimated-prob FLOAT] [--confidence FLOAT] [--json]
+traderbot trade TICKER --direction yes|no --quantity N --price CENTS \
+    --estimated-prob 0.75 --confidence 0.8 [--json]
 ```
 
 Place a trade through the risk pipeline. Returns sized position in cents or rejection reason.
 
-Use `--estimated-prob` and `--confidence` to override market-implied probability. Without these, Kelly sees ~0 edge and rejects all trades.
+| Arg | Default | Description |
+|---|---|---|
+| `--direction` | — | Trade direction: `yes` or `no` |
+| `--quantity` | — | Number of contracts |
+| `--price` | — | Limit price in cents |
+| `--estimated-prob` | — | Your estimated probability (0.0–1.0) — required for Kelly sizing |
+| `--confidence` | — | Your confidence in the estimate (0.0–1.0) — adjusts position size |
 
 ### traderbot positions
 
@@ -158,6 +119,89 @@ traderbot learnings [--status STR] [--category STR] [--promote KEY] [--db PATH] 
 ```
 
 List learned patterns and trigger promotions.
+
+### traderbot signals
+
+```bash
+traderbot signals [--category STR] [--limit N] [--json]
+```
+
+Compute and display trading signals across open markets. Blends statistical indicators, market data, and news sentiment (when available) into a combined signal for each market.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--category` | None | Filter by market category (Economics, Politics, Weather, etc.) |
+| `--limit` | 10 | Max markets to scan |
+
+### traderbot sentiment
+
+```bash
+traderbot sentiment TICKER [--json]
+```
+
+Analyze market sentiment for a specific ticker from news and social media sources.
+
+### traderbot news-ingest
+
+```bash
+traderbot news-ingest [--limit N]
+```
+
+Fetch, classify, embed, and store news articles and data points into ChromaDB. Standalone data pipeline — no LLM required. Runs via systemd timer every 30 minutes on remote deployments.
+
+### traderbot data-points
+
+```bash
+traderbot data-points CATEGORY [--hours 48] [--limit 10] [--json]
+```
+
+Query structured data point readings for a market category. Returns quantitative data (temperature, humidity, economic indicators, crypto prices, sports scores) stored by the offline ingestion pipeline. Designed for pre-trade context on data-driven markets like weather.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--hours` | 48 | Look back window in hours |
+| `--limit` | 10 | Max data points to return |
+| `--json` | — | JSON output for machine consumption |
+
+### traderbot news-context
+
+```bash
+traderbot news-context CATEGORY [--hours 24] [--limit 10] [--include-data] [--json]
+```
+
+Get aggregated news context for a market category — overall sentiment score + top articles. Designed for pre-trade context gathering. Use `--include-data` to also fetch quantitative data point readings (temperature, weather, economic indicators) for the same category.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--hours` | 24 | Look back window in hours |
+| `--limit` | 10 | Max articles to return |
+| `--include-data` | — | Also fetch data point readings (weather, econ indicators, etc.) |
+| `--json` | — | JSON output for machine consumption |
+
+### traderbot news-summary
+
+```bash
+traderbot news-summary [--since ISO] [--category STR] [--query STR] [--limit N] [--signalsonly] [--json]
+```
+
+Query accumulated news from ChromaDB. Supports semantic search via `--query` (uses VoyageAI embeddings) and category filtering.
+
+| Arg | Default | Description |
+|---|---|---|
+| `--since` | — | Filter by publication date (ISO 8601) |
+| `--category` | — | Filter by market category |
+| `--query` | — | Semantic search query string |
+| `--limit` | 30 | Max results |
+| `--signalsonly` | — | Show only high-impact signals (>0.7) |
+| `--json` | — | JSON output |
+
+### traderbot cache warm
+
+```bash
+traderbot cache warm [--json]
+```
+
+Pre-populate the event category cache independent of any agent session. Useful for speeding up subsequent market scans.
 
 ### traderbot profile create
 
@@ -280,22 +324,6 @@ traderbot auth rotate SERVICE
 
 Rotate credentials for a service.
 
-### traderbot cron setup
-
-```bash
-traderbot cron setup [--json]
-```
-
-Register cron loops with OpenClaw Gateway. Registers decision loop (every 5 min), heartbeat loop (every 30 min), and news loop (event-driven).
-
-### traderbot update
-
-```bash
-traderbot update [--json]
-```
-
-Check for updates on GitHub.
-
 ### traderbot auth check
 
 ```bash
@@ -303,11 +331,3 @@ traderbot auth check
 ```
 
 Verify all required credentials are configured.
-
-### traderbot cron setup
-
-```bash
-traderbot cron setup
-```
-
-Register the three-loop cron system with OpenClaw Gateway (decision loop every 5 minutes, heartbeat loop every 30 minutes, news loop event-driven).

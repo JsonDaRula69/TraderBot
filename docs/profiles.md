@@ -26,7 +26,7 @@ The profile system enables multi-agent deployment where each OpenClaw agent runs
 
 ## TradingProfile Model
 
-Every profile is a `TradingProfile` stored in the `.env` file under `traderbot.profiles.<name>`.
+Every profile is a `TradingProfile` persisted by `ProfileRegistry` (encrypted file at `~/.traderbot/profiles.enc`).
 
 ```python
 class TradingProfile(BaseModel):
@@ -43,20 +43,16 @@ class TradingProfile(BaseModel):
     max_open_positions: Annotated[int, Field(gt=0)]
     min_liquidity_threshold: Annotated[int, Field(gt=0)]
     min_edge_pct: Annotated[float, Field(gt=0)]
+    initial_balance_cents: int | None = None           # Paper trading starting balance (defaults to $100)
 ```
 
 ### Computed Properties
 
 ```python
-profile.base_dir      # "~/.traderbot/{mode}-{name}" (e.g., "~/.traderbot/paper-weather-agent")
-profile.env_file      # ".env.{mode}" (e.g., ".env.paper") 
-profile.paper_mode    # bool — True if mode == "paper"
+profile.paper_mode    # True if mode == "paper" (computed_field)
+profile.base_dir      # "~/.traderbot/{mode}-{name}" — per-agent isolation
+profile.env_file      # ".env.paper" or ".env.live"  — profile-scoped env vars
 ```
-
-Each profile gets an isolated data directory at `~/.traderbot/{mode}-{name}/` containing:
-- `db/` — SQLite database (decisions, positions, learnings)
-- `chroma/` — ChromaDB vector store
-- `audit/` — Audit trail logs
 
 ### HARD_LIMITS Ceiling
 
@@ -83,7 +79,7 @@ An empty `enabled_categories` list means all categories are permitted. If a list
 
 ## Profile Registry
 
-`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in a `.env`-based configuration by default, with automatic fallback to an AES-256 encrypted file when needed (e.g., headless Linux).
+`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in an AES-256 encrypted file at `~/.traderbot/profiles.enc`.
 
 ```python
 registry = ProfileRegistry()
@@ -173,32 +169,31 @@ API keys (`KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`) are stored once in `~/.tra
 
 ### Credential Resolution Chain
 
-When resolving Kalshi API credentials, `resolve_kalshi_credentials()` uses a multi-step fallback chain:
+When resolving API credentials:
 
-1. **Profile keyring** (`ProfileAuthStore`) — per-profile credential store
-2. **Profile-scoped env vars** — `KALSHI_API_KEY_PROFILE_{NAME}` and `KALSHI_PRIVATE_KEY_PEM_PROFILE_{NAME}` in `.env`
-3. **Global AuthManager** — shared system keyring (macOS Keychain), then global `.env`
-4. **Raise `ValueError`** — explicitly fail if no credentials found
+1. `.env` file (`~/.traderbot/.env` with mode 0600)
+2. Environment variable fallback
 
-Other API keys (NewsAPI, Voyage AI, etc.) are global-only — shared via `resolve_newsapi_key()` and similar helpers.
+The resolution chain in `resolve_kalshi_credentials()` reads from `.env` first, then falls back to `KALSHI_API_KEY` / `KALSHI_PRIVATE_KEY_PEM` environment variables.
 
 ## Data Isolation
 
-Each profile has isolated data directories, ensuring multiple agents do not share state:
+Each profile has isolated data directories:
 
 | Path | Purpose |
 |---|---|
-| `~/.traderbot/{mode}-{name}/` | Profile root (e.g., `~/.traderbot/paper-weather-agent`) |
+| `~/.traderbot-paper/` | Paper trading data |
+| `~/.traderbot-live/` | Live trading data |
 
 ### Isolated Paths
 
 ```python
-get_profile_db_path(profile, "decisions.db")     # ~/.traderbot/{mode}-{name}/db/decisions.db
-get_profile_chroma_path(profile)                  # ~/.traderbot/{mode}-{name}/chroma
-get_profile_audit_path(profile)                  # ~/.traderbot/{mode}-{name}/audit
+get_profile_db_path(profile, "decisions.db")  # ~/.traderbot-paper/db/decisions.db
+get_profile_chroma_path(profile)                 # ~/.traderbot-paper/chroma
+get_profile_audit_path(profile)                 # ~/.traderbot-paper/audit
 ```
 
-Directories are created on demand via `ensure_profile_dirs(profile)`. This isolates SQLite, ChromaDB, and audit logs per-agent.
+Directories are created on demand via `ensure_profile_dirs(profile)`.
 
 ## Runtime Resolution
 

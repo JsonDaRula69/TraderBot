@@ -19,11 +19,15 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 ### Market Analysis
 
 | Command | Purpose |
-|---|---|
+|---|---|---|
 | `traderbot scan --json` | List open markets (`--category`, `--limit`, default 500) |
 | `traderbot analyze TICKER --json` | Orderbook + implied probability |
 | `traderbot signals --json` | Active trading signals (`--category`, `--limit`) |
-| `traderbot news --json` | Fetch news (`--category`, `--limit`, `--source`) |
+| `traderbot news --json` | Fetch live news (`--category`, `--limit`, `--source`) |
+| `traderbot news-context CATEGORY --json` | Pre-trade news context by category (aggregated sentiment + articles, add `--include-data` for quantitative readings) |
+| `traderbot data-points CATEGORY --json` | Query quantitative data points (weather, econ, crypto, sports) for a category |
+| `traderbot news-summary --json` | Query accumulated news from ChromaDB (`--since`, `--category`, `--query`, `--signalsonly`) |
+| `traderbot news-ingest` | Fetch, classify, embed news into ChromaDB (runs via systemd timer) |
 | `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
 
 ### Trading & Positions

@@ -8,7 +8,7 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 |---|---|
 | **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
 | **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
-| **Rate limit** | Tiered: Basic=20 rps, Advanced=30, Premier=100, Paragon=200, Prime=400 (configurable via `KALSHI_RATE_LIMIT_RPS`) |
+| **Rate limit** | Default 20 rps (configurable via `KALSHI_RATE_LIMIT_RPS` env var) |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
 
 ## Authentication

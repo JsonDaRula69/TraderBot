@@ -15,7 +15,7 @@ tasks:
   prompt: "Review `.learnings/LEARNINGS.md` for entries with Recurrence-Count >= 3. Promote to PENDING_REVIEW status if not already. Never auto-commit to AGENTS.md."
 - name: news-scan
   interval: 2h
-  prompt: "Run `traderbot news --json` to check for high-impact news. If any impact score > 0.7, surface alert to main session."
+  prompt: "Run `traderbot news-summary --signalsonly --json` to check for high-impact news signals. If any impact score > 0.7, surface alert to main session. Also run `traderbot news-context <your_active_category> --json` for pre-trade sentiment context."
 - name: position-health
   interval: 1h
   prompt: "Run `traderbot positions --json` to check open positions. Flag any with drawdown > 5%."

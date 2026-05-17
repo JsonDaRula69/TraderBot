@@ -24,7 +24,7 @@ description: Autonomous prediction market investment toolkit for Kalshi
 metadata:
   openclaw:
     requires:
-      env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY"]
+      env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY_PEM"]
       bins: ["python3"]
     primaryEnv: KALSHI_API_KEY
 ---
@@ -38,7 +38,7 @@ metadata:
 | **Trading** | `trade`, `positions`, `cancel` | "Buy Yes on BTC touch", "Show my positions" |
 | **Simulation** | `backtest`, `paper`, `compare`, `performance` | "Test this strategy", "How did we do last week?" |
 | **Self-Improvement** | `heartbeat`, `learnings`, `audit` | Periodic (cron), "Review our performance", "What have we learned?" |
-| **News/Sentiment** | `news`, `sentiment` | "What's the latest news?", "Check BTC sentiment" |
+| **News/Sentiment** | `news`, `sentiment`, `news-ingest`, `news-context`, `news-summary` | "What's the latest news?", "Check BTC sentiment", "Get pre-trade news context" |
 
 ## Three-Loop Cron Architecture
 

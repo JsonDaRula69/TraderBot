@@ -5,7 +5,7 @@ No LLM required. Runs as a pure data pipeline.
 import hashlib
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 from traderbot.db.vectors import VectorStore
 from traderbot.news.classifier import NewsClassifier
@@ -94,12 +94,13 @@ def _build_metadata(
     sentiment: object | None,
     impact: object | None,
     category_str: str,
-) -> dict[str, str]:
+) -> dict[str, str | float]:
     """Build ChromaDB metadata dict from a news item and its enrichments."""
-    meta: dict[str, str] = {
+    meta: dict[str, str | float] = {
         "source": str(item.source.value) if hasattr(item.source, "value") else str(item.source),
         "category": category_str,
         "published": item.published_at.isoformat() if item.published_at else "",
+        "published_epoch": item.published_at.timestamp() if item.published_at else 0.0,
         "title": item.title[:200] if item.title else "",
         "url_hash": _url_hash(item.url) if item.url else "",
     }
@@ -128,11 +129,12 @@ def _build_metadata(
     return meta
 
 
-def _build_datapoint_metadata(dp: DataPoint) -> dict[str, str]:
-    meta: dict[str, str] = {
+def _build_datapoint_metadata(dp: DataPoint) -> dict[str, str | float]:
+    meta: dict[str, str | float] = {
         "source": str(dp.source.value) if hasattr(dp.source, "value") else str(dp.source),
         "category": dp.category.value if dp.category else "",
         "timestamp": dp.timestamp.isoformat() if dp.timestamp else "",
+        "timestamp_epoch": dp.timestamp.timestamp() if dp.timestamp else 0.0,
         "ticker_refs": ",".join(dp.ticker_refs) if dp.ticker_refs else "",
     }
     for key, value in dp.data.items():
@@ -154,17 +156,27 @@ def _store_datapoints(
         return 0
 
     texts: list[str] = []
-    metadatas: list[dict[str, str]] = []
+    metadatas: list[dict[str, str | float]] = []
     for dp in dp_items:
         texts.append(dp.title or f"{dp.source.value}: {dp.timestamp.isoformat()}")
         metadatas.append(_build_datapoint_metadata(dp))
 
     embeddings: list[list[float]] | None = None
-    if use_voyage_storage and voyage is not None:
+    if use_voyage_storage:
+        if voyage is None:
+            logger.error("Cannot store data_points — collection needs Voyage embeddings but no VoyageClient provided")
+            return 0
         try:
             embeddings = voyage.embed_batch(texts)
         except Exception as exc:
             logger.warning("Voyage batch embed failed for data_points: %s", exc)
+        if embeddings is None:
+            logger.error(
+                "Cannot store data_points — Voyage unavailable and collection is %d-dim. "
+                "The embedding source is configured at install and does not change.",
+                _collection_dim(vs, _DATA_COLLECTION),
+            )
+            return 0
 
     stored = 0
     for i, dp in enumerate(dp_items):
@@ -178,8 +190,8 @@ def _store_datapoints(
                 collection=_DATA_COLLECTION,
             )
             stored += 1
-        except Exception:
-            logger.warning("Failed to store data point %s, skipping", doc_id)
+        except Exception as exc:
+            logger.warning("Failed to store data point %s: %s", doc_id, exc)
             continue
     return stored
 
@@ -232,6 +244,182 @@ def _collection_dim(vs: VectorStore, name: str) -> int:
         return 0
     except Exception:
         return 0
+
+
+def _store_newsapi_backfill(
+    items: list[NewsItem],
+    vs: VectorStore,
+    voyage: VoyageClient | None = None,
+) -> int:
+    """Store NewsAPI backfill items to the news collection with Voyage embeddings."""
+    if not items:
+        return 0
+
+    news_dim = _collection_dim(vs, _NEWS_COLLECTION)
+    use_voyage = news_dim == 0 or news_dim == 1024
+
+    texts = [f"{item.title}: {item.body[:200]}" for item in items]
+
+    embeddings: list[list[float]] | None = None
+    if use_voyage:
+        if voyage is None:
+            logger.error("Cannot store NewsAPI backfill — collection needs Voyage but no client provided")
+            return 0
+        try:
+            embeddings = voyage.embed_batch(texts)
+        except Exception as exc:
+            logger.warning("Voyage embed failed for NewsAPI backfill: %s", exc)
+        if embeddings is None:
+            logger.error("Voyage unavailable — cannot store NewsAPI backfill to %d-dim collection", news_dim)
+            return 0
+
+    stored = 0
+    for i, item in enumerate(items):
+        doc_id = hashlib.sha256((item.url or item.title).encode()).hexdigest()
+        category_str = item.category.value if hasattr(item.category, "value") else str(item.category)
+        meta: dict[str, str | float] = {
+            "source": item.source.value if hasattr(item.source, "value") else str(item.source),
+            "category": category_str,
+            "published": item.published_at.isoformat() if item.published_at else "",
+            "published_epoch": str(int(item.published_at.timestamp())) if item.published_at else "",
+            "data_freshness": item.data_freshness,
+            "content_truncated": str(item.content_truncated),
+            "sentiment_label": "neutral",
+            "sentiment_score": "0.0",
+            "impact_magnitude": "0.0",
+            "impact_confidence": "0.0",
+        }
+        try:
+            vs.add_document(
+                doc_id=doc_id,
+                text=texts[i],
+                metadata=meta,
+                embedding=embeddings[i] if embeddings else None,
+                collection=_NEWS_COLLECTION,
+            )
+            stored += 1
+        except Exception as exc:
+            logger.warning("Failed to store NewsAPI backfill item %s: %s", doc_id[:12], exc)
+            continue
+    return stored
+
+
+def backfill_data(
+    months: int = 6,
+    vector_store: VectorStore | None = None,
+) -> dict[str, int]:
+    """One-time historical backfill of data point sources.
+
+    Fetches historical weather (Open-Meteo) and economic (FRED) data
+    from the last N months and stores to ChromaDB data_points collection.
+    Runs as a standalone kickstart — not part of the regular pipeline.
+
+    Returns a dict with source names and item counts.
+    """
+    import asyncio
+    import os as _os
+    from datetime import timedelta, datetime, UTC
+
+    from traderbot.news.sources import DataSourcesConfig, NewsAggregator
+    import os as _os
+    from traderbot.auth import get_credential
+
+    _fred_cred = get_credential("fred", "api_key")
+    fred_key = _fred_cred.get_secret_value() if _fred_cred else None
+    newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
+    ds_config = DataSourcesConfig(fred_key=fred_key, newsapi_key=newsapi_key)
+    vs = vector_store or VectorStore()
+    vs.init_collections()
+
+    now = datetime.now(tz=UTC)
+
+    async def _run_all() -> dict[str, int]:
+        from traderbot.news.embeddings import VoyageClient
+        aggregator = NewsAggregator(config=ds_config)
+        voyage = VoyageClient()
+
+        # Check collection dimensionality
+        dp_dim = _collection_dim(vs, _DATA_COLLECTION)
+        use_voyage_dp = dp_dim == 0 or dp_dim == 1024
+        if not use_voyage_dp:
+            logger.warning("data_points collection at %d-dim — backfill embeddings may be rejected", dp_dim)
+
+        counts: dict[str, int] = {"open_meteo": 0, "fred": 0, "coingecko": 0, "thesportsdb": 0, "newsapi": 0}
+
+        # Open-Meteo: chunk past_days=92 (max allowed) and remainder
+        remaining_days = int(months * 30.44)
+        chunks: list[int] = []
+        while remaining_days > 0:
+            chunk = min(remaining_days, 92)
+            chunks.append(chunk)
+            remaining_days -= chunk
+
+        open_meteo_total = 0
+        for i, past_days in enumerate(chunks):
+            logger.info("Open-Meteo backfill chunk %d/%d: past_days=%d", i + 1, len(chunks), past_days)
+            try:
+                points = await aggregator._backfill_open_meteo(past_days=past_days)
+                if points:
+                    stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                    open_meteo_total += stored
+                    logger.info("Open-Meteo chunk stored %d/%d data points", stored, len(points))
+            except Exception as exc:
+                logger.error("Open-Meteo backfill chunk %d failed: %s", i + 1, exc)
+
+        counts["open_meteo"] = open_meteo_total
+
+        # FRED: single query per series with observation_start
+        start_date = (now - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+        logger.info("FRED backfill: observation_start=%s", start_date)
+        try:
+            points = await aggregator._backfill_fred(observation_start=start_date)
+            if points:
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                counts["fred"] = stored
+                logger.info("FRED backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("FRED backfill failed: %s", exc)
+
+        # CoinGecko: historical crypto prices
+        from_timestamp = int((now - timedelta(days=int(months * 30.44))).timestamp())
+        logger.info("CoinGecko backfill: from_timestamp=%s", from_timestamp)
+        try:
+            points = await aggregator._backfill_coingecko(from_timestamp=from_timestamp)
+            if points:
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                counts["coingecko"] = stored
+                logger.info("CoinGecko backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("CoinGecko backfill failed: %s", exc)
+
+        # TheSportsDB: historical sports events
+        start_date = (now - timedelta(days=int(months * 30.44))).strftime("%Y-%m-%d")
+        logger.info("TheSportsDB backfill: start_date=%s", start_date)
+        try:
+            points = await aggregator._backfill_thesportsdb(start_date=start_date)
+            if points:
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                counts["thesportsdb"] = stored
+                logger.info("TheSportsDB backfill stored %d/%d data points", stored, len(points))
+        except Exception as exc:
+            logger.error("TheSportsDB backfill failed: %s", exc)
+
+        # NewsAPI: historical news (limited to 30 days on free tier)
+        from_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+        to_date = now.strftime("%Y-%m-%d")
+        logger.info("NewsAPI backfill: from=%s to=%s", from_date, to_date)
+        try:
+            items = await aggregator._backfill_newsapi(from_date=from_date, to_date=to_date)
+            if items:
+                stored = _store_newsapi_backfill(items, vs, voyage=voyage)
+                counts["newsapi"] = stored
+                logger.info("NewsAPI backfill stored %d/%d news items", stored, len(items))
+        except Exception as exc:
+            logger.error("NewsAPI backfill failed: %s", exc)
+
+        return counts
+
+    return asyncio.run(_run_all())
 
 
 def ingest_news(
@@ -439,19 +627,18 @@ def get_news_summary(
         return []
 
     # Build metadata filter
-    where_clause: dict[str, dict[str, str]] | None = None
-    filters: dict[str, str] = {}
+    where_clause: dict[str, dict[str, str | float] | list[dict]] | None = None
+    conditions: list[dict[str, dict[str, str | float]]] = []
     if category:
-        filters["category"] = category
+        conditions.append({"category": {"$eq": category}})
     if source:
-        filters["source"] = source
+        conditions.append({"source": {"$eq": source}})
     if since:
-        filters["published"] = since.isoformat()
-    if filters:
-        conditions: list[dict[str, dict[str, str]]] = []
-        for field, val in filters.items():
-            conditions.append({field: {"$eq": val}})
-        where_clause = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+        conditions.append({"published_epoch": {"$gte": since.timestamp()}})
+    if len(conditions) == 1:
+        where_clause = conditions[0]
+    elif len(conditions) > 1:
+        where_clause = {"$and": conditions}
 
     col_dim = _collection_dim(vs, collection_name)
 
@@ -521,3 +708,206 @@ def get_news_collection_stats(vector_store: VectorStore | None = None) -> dict[s
         except Exception:
             stats[name] = 0
     return stats
+
+
+def get_data_points(
+    category: str,
+    since_hours: int = 48,
+    max_items: int = 20,
+    vector_store: VectorStore | None = None,
+) -> dict:
+    """Query ChromaDB for data point readings relevant to a market category.
+
+    Returns structured readings (weather, economics, crypto, etc.) stored
+    by the offline ingestion pipeline. Useful for temperature, humidity,
+    economic indicators, and other quantitative data.
+
+    Args:
+        category: Market category (e.g. 'weather', 'economics')
+        since_hours: Look back window in hours
+        max_items: Max data points to return
+        vector_store: Optional VectorStore instance
+
+    Returns a dict with keys: count, data_points (list of dicts with
+    source, title, timestamp, and data_* fields).
+    """
+    from datetime import timedelta
+
+    vs = vector_store or VectorStore()
+    cutoff = (datetime.now(tz=UTC) - timedelta(hours=since_hours)).timestamp()
+
+    try:
+        col = vs.get_collection(_DATA_COLLECTION)
+    except Exception:
+        return {"count": 0, "data_points": []}
+
+    try:
+        results = col.get(
+            where={"$and": [
+                {"category": {"$eq": category}},
+                {"timestamp_epoch": {"$gte": cutoff}},
+            ]},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+    except Exception:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+
+    if not results["ids"]:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_items * 2,
+        )
+
+    if not results["ids"]:
+        return {"count": 0, "data_points": []}
+
+    points: list[dict] = []
+    for i, doc_id in enumerate(results["ids"]):
+        meta = results["metadatas"][i]
+        doc = results["documents"][i]
+
+        # Collect all data_* and meta_* fields into structured dicts
+        data_fields: dict[str, str] = {}
+        meta_fields: dict[str, str] = {}
+        for key, value in meta.items():
+            if key.startswith("data_"):
+                data_fields[key[5:]] = str(value)
+            elif key.startswith("meta_"):
+                meta_fields[key[5:]] = str(value)
+
+        points.append({
+            "id": doc_id,
+            "title": (doc or "")[:120],
+            "source": meta.get("source", ""),
+            "timestamp": meta.get("timestamp", ""),
+            "data": data_fields,
+            "_meta": meta_fields,
+        })
+
+    points.sort(key=lambda p: p["timestamp"], reverse=True)
+    points = points[:max_items]
+
+    return {
+        "count": len(points),
+        "data_points": points,
+    }
+
+
+def get_news_context(
+    category: str,
+    since_hours: int = 24,
+    max_articles: int = 10,
+    vector_store: VectorStore | None = None,
+    include_data_points: bool = False,
+) -> dict:
+    """Query ChromaDB for news relevant to a market category.
+
+    Returns aggregate sentiment, article count, and top articles
+    for the given category within the time window.
+
+    Args:
+        category: News/market category (e.g. 'economics', 'weather')
+        since_hours: Look back window in hours
+        max_articles: Max articles to include in the returned list
+        vector_store: Optional VectorStore instance
+
+    Returns a dict with keys: sentiment (aggregate), article_count,
+    positive_count, negative_count, neutral_count, articles (list).
+    When include_data_points=True, also returns data_points with readings.
+    Returns empty result on any error.
+    """
+    from datetime import timedelta
+
+    vs = vector_store or VectorStore()
+    cutoff = (datetime.now(tz=UTC) - timedelta(hours=since_hours)).timestamp()
+
+    # Optionally fetch data points for this category
+    data_points_result: dict | None = None
+    if include_data_points:
+        data_points_result = get_data_points(
+            category=category, since_hours=since_hours, max_items=20, vector_store=vs,
+        )
+
+    try:
+        col = vs.get_collection(_NEWS_COLLECTION)
+    except Exception:
+        base: dict = {"sentiment": None, "article_count": 0, "articles": []}
+        if data_points_result is not None:
+            base["data_points"] = data_points_result
+        return base
+
+    try:
+        results = col.get(
+            where={"$and": [
+                {"category": {"$eq": category}},
+                {"published_epoch": {"$gte": cutoff}},
+            ]},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
+    except Exception:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
+
+    if not results["ids"]:
+        results = col.get(
+            where={"category": {"$eq": category}},
+            include=["metadatas", "documents"],
+            limit=max_articles * 3,
+        )
+
+    if not results["ids"]:
+        empty: dict = {"sentiment": None, "article_count": 0, "articles": []}
+        if data_points_result is not None:
+            empty["data_points"] = data_points_result
+        return empty
+
+    sentiment_scores: list[float] = []
+    articles: list[dict] = []
+    for i, doc_id in enumerate(results["ids"]):
+        meta = results["metadatas"][i]
+        doc = results["documents"][i]
+        score_str = meta.get("sentiment_score")
+        score: float | None = None
+        if score_str:
+            try:
+                score = float(score_str)
+                sentiment_scores.append(score)
+            except (ValueError, TypeError):
+                pass
+        articles.append({
+            "id": doc_id,
+            "title": meta.get("title", "")[:120],
+            "source": meta.get("source", ""),
+            "published": meta.get("published", ""),
+            "sentiment_score": score,
+        })
+
+    articles.sort(key=lambda a: a["published"], reverse=True)
+    articles = articles[:max_articles]
+
+    avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else None
+    positive = sum(1 for s in sentiment_scores if s > 0.1)
+    negative = sum(1 for s in sentiment_scores if s < -0.1)
+    neutral = len(sentiment_scores) - positive - negative
+
+    result: dict = {
+        "sentiment": round(avg_sentiment, 4) if avg_sentiment is not None else None,
+        "article_count": len(sentiment_scores),
+        "positive_count": positive,
+        "negative_count": negative,
+        "neutral_count": neutral,
+        "articles": articles,
+    }
+    if data_points_result is not None:
+        result["data_points"] = data_points_result
+    return result

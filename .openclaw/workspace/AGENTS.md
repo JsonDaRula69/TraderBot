@@ -47,6 +47,18 @@ For semantic search across all accumulated history:
 traderbot news-summary --query "federal reserve rate cut impact" --limit 20 --json
 ```
 
+For pre-trade news context by category (aggregated sentiment + top articles):
+```
+traderbot news-context economics --json
+traderbot news-context politics --since 2026-05-14T00:00:00Z --json
+```
+
+For automated news sentiment integration into trading signals:
+```
+traderbot signals --category economics --json
+```
+This pulls news context automatically and blends it at 15% weight into the signal.
+
 Store the `--since` timestamp of your last summary in `SESSION-STATE.md` so you know where you left off next session.
 
 ## Memory
@@ -100,8 +112,8 @@ The complete `HARD_LIMITS` values (immutable, defined in `src/traderbot/risk/lim
 Before considering any trade, collect **at least 5 independent data points** from the configured sources, in this priority order:
 
 1. **`traderbot scan --json`** — discover open markets in your enabled categories
-2. **`traderbot signals --json`** — statistical indicator signals (RSI, Bollinger, EMA crossover, edge)
-3. **`traderbot news --json`** — news articles relevant to the market category
+2. **`traderbot signals --category <cat> --json`** — statistical + news-blended signals (RSI, Bollinger, EMA crossover, edge, news sentiment)
+3. **`traderbot news-context <cat> --json`** — aggregated news sentiment + top articles for a market category
 4. **`traderbot sentiment TICKER --json`** — aggregate sentiment analysis
 5. **`traderbot analyze TICKER --json`** — orderbook depth + implied probability
 6. **`traderbot positions --json`** — current positions and exposure
@@ -111,8 +123,8 @@ Before considering any trade, collect **at least 5 independent data points** fro
 
 ### Decision Sequence
 
-1. Statistical indicators first (signals module)
-2. Cross-reference with news sentiment (when available)
+1. Statistical indicators first (signals module with built-in news context)
+2. Cross-reference news sentiment from `traderbot news-context <cat>`
 3. The toolkit computes position sizing; agent provides confidence and estimated probability
 4. **Run `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8`** — always provide `--estimated-prob` and `--confidence`. Without these, Kelly sizing defaults to market-implied probability (~0 edge) and rejects all trades
 5. Log decision with full reasoning to audit trail
@@ -131,13 +143,17 @@ These programs define your autonomous authority. Execute them within their defin
 Execution steps:
 1. Run `traderbot scan --category <enabled> --json`
 2. Apply the Data Sourcing Protocol (5+ data points in priority order)
-3. Evaluate edge vs market-implied probability using `traderbot sentiment` and `traderbot signals`
-4. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
-5. Log every decision with full reasoning to the audit trail
+3. Gather market context:
+   - `traderbot news-context <category> --include-data --json` — combined news sentiment + quantitative readings (temperature, humidity, economic indicators)
+   - `traderbot data-points <category> --json` — standalone quantitative data inspection
+   - `traderbot signals --category <category> --json` — news-blended trading signals
+4. Evaluate edge vs market-implied probability
+5. If edge > min_edge_pct (3%), submit trade via `traderbot trade ...`
+6. Log every decision with full reasoning to the audit trail
 
 #### Program: Offline News Ingestion (Autonomous Background Pipeline)
 
-**Authority:** Pull accumulated news from ChromaDB on every wake. No action needed — the systemd timer fetches, embeds, and stores independently.
+**Authority:** Pull accumulated news context and data point readings from ChromaDB on every wake. Use `traderbot news-context <category> --include-data --json` for combined news sentiment + quantitative readings, `traderbot data-points <category> --json` for standalone data inspection, or `traderbot signals --category <cat> --json` for news-blended signals. No action needed for accumulation — the systemd timer fetches, embeds, and stores independently.
 **Trigger:** Every session wake (before any trading activity).
 **Approval gate:** None (read-only query).
 **Escalation:** If `news-summary` returns 0 results and the last session was > 6 hours ago, check `systemctl status traderbot-news-ingest` to verify the timer is running.
