@@ -102,33 +102,47 @@ def _get_strategy(name: str):
 def scan(
     limit: Annotated[int, typer.Option("--limit", help="Max markets to return")] = 500,
     category: Annotated[str | None, typer.Option("--category", help="Filter by category")] = None,
+    continuous: Annotated[
+        bool, typer.Option("--continuous", help="Continuous polling mode for agent service (re-scans every 5min)")
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """List open markets from Kalshi."""
+    """List open markets from Kalshi. Use --continuous for agent service polling."""
     from traderbot.kalshi.markets import MarketService
 
     console = Console()
-    try:
-        from traderbot.kalshi.client import KalshiClient
 
-        client = KalshiClient()
-        service = MarketService(client)
-        if category is not None:
-            result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
-        else:
-            result = asyncio.run(service.list_markets(limit=limit))
-        markets = result.markets
-    except Exception:
-        if json_output:
-            json_lib.dump([], sys.stdout)
-        else:
-            console.print("Scanning markets... (requires API connection)")
-        return
+    def _scan_once() -> list[dict[str, object]]:
+        try:
+            from traderbot.kalshi.client import KalshiClient
+
+            client = KalshiClient()
+            service = MarketService(client)
+            if category is not None:
+                result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+            else:
+                result = asyncio.run(service.list_markets(limit=limit))
+            return [m.model_dump(mode="json") for m in result.markets]
+        except Exception:
+            return []
+
+    if continuous:
+        import time
+        while True:
+            markets = _scan_once()
+            if json_output:
+                json_lib.dump(markets, sys.stdout, default=str)
+                sys.stdout.flush()
+            else:
+                console.print(f"[{datetime.now(UTC).isoformat()}] Scan complete: {len(markets)} markets")
+            time.sleep(300)  # 5-minute polling interval to match decision loop cadence
+
+    markets = _scan_once()
 
     if json_output:
-        json_lib.dump([m.model_dump(mode="json") for m in markets], sys.stdout, default=str)
+        json_lib.dump(markets, sys.stdout, default=str)
         return
 
     table = Table(title="Open Markets")

@@ -36,7 +36,6 @@ After confirming the CLI is available, run the following checks in order to esta
   - Last heartbeat timestamp
 
 ### 6. Heartbeat Data
-- Run `traderbot cron list --json` to verify all loops are registered
 - Read `HEARTBEAT_DATA.md` (if exists) to get the latest 7-step review output
 - Note any open alerts or required actions
 
