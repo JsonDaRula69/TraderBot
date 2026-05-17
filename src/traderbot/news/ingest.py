@@ -258,7 +258,7 @@ def _store_newsapi_backfill(
     news_dim = _collection_dim(vs, _NEWS_COLLECTION)
     use_voyage = news_dim == 0 or news_dim == 1024
 
-    texts = [f"{item.title}: {item.summary}" for item in items]
+    texts = [f"{item.title}: {item.body[:200]}" for item in items]
 
     embeddings: list[list[float]] | None = None
     if use_voyage:
@@ -280,10 +280,10 @@ def _store_newsapi_backfill(
         meta: dict[str, str | float] = {
             "source": item.source.value if hasattr(item.source, "value") else str(item.source),
             "category": category_str,
-            "published": item.published.isoformat() if item.published else "",
-            "published_epoch": str(int(item.published.timestamp())) if item.published else "",
-            "author": item.author or "",
-            "source_name": item.source_name or "",
+            "published": item.published_at.isoformat() if item.published_at else "",
+            "published_epoch": str(int(item.published_at.timestamp())) if item.published_at else "",
+            "data_freshness": item.data_freshness,
+            "content_truncated": str(item.content_truncated),
             "sentiment_label": "neutral",
             "sentiment_score": "0.0",
             "impact_magnitude": "0.0",

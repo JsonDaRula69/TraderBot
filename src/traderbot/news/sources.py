@@ -1804,7 +1804,7 @@ class NewsAggregator:
                         try:
                             title = art.get("title") or ""
                             description = art.get("description") or ""
-                            url = art.get("url", "")
+                            url = art.get("url", "") or ""
                             published = art.get("publishedAt", "")
                             content = art.get("content") or description
                             source_name = art.get("source", {}).get("name", "newsapi")
@@ -1813,13 +1813,13 @@ class NewsAggregator:
                                 id=hashlib.sha256(url.encode()).hexdigest(),
                                 source=NewsSource.NEWSAPI,
                                 title=title,
-                                summary=description,
+                                body=content[:5000] if content else title,
                                 url=url,
-                                content=content[:2000] if content else "",
-                                published=timestamp,
-                                author=art.get("author"),
+                                published_at=timestamp,
                                 category=news_cat,
-                                source_name=source_name,
+                                ticker_refs=[],
+                                data_freshness="unknown",
+                                content_truncated=len(content or "") > 5000,
                             ))
                         except Exception:
                             continue
