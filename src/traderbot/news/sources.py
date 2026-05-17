@@ -909,11 +909,15 @@ class NewsAggregator:
 
                     points: list[DataPoint] = []
                     for i, day_str in enumerate(times):
-                        high = round(highs[i]) if i < len(highs) else 0
-                        low = round(lows[i]) if i < len(lows) else 0
-                        precip_mm = float(precip[i]) if i < len(precip) else 0.0
-                        wcode = int(codes[i]) if i < len(codes) else 0
-                        desc = wmo_codes.get(wcode, "Unknown")
+                        high_v = highs[i] if i < len(highs) else None
+                        low_v = lows[i] if i < len(lows) else None
+                        precip_v = precip[i] if i < len(precip) else None
+                        wcode = codes[i] if i < len(codes) else None
+                        high = round(high_v) if high_v is not None else 0
+                        low = round(low_v) if low_v is not None else 0
+                        precip_mm = float(precip_v) if precip_v is not None else 0.0
+                        wcode_int = int(wcode) if wcode is not None else 0
+                        desc = wmo_codes.get(wcode_int, "Unknown")
 
                         from datetime import datetime, UTC
                         try:
