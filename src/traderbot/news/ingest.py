@@ -264,7 +264,16 @@ def backfill_data(
     now = datetime.now(tz=UTC)
 
     async def _run_all() -> dict[str, int]:
+        from traderbot.news.embeddings import VoyageClient
         aggregator = NewsAggregator(config=ds_config)
+        voyage = VoyageClient()
+
+        # Check collection dimensionality
+        dp_dim = _collection_dim(vs, _DATA_COLLECTION)
+        use_voyage_dp = dp_dim == 0 or dp_dim == 1024
+        if not use_voyage_dp:
+            logger.warning("data_points collection at %d-dim — backfill embeddings may be rejected", dp_dim)
+
         counts: dict[str, int] = {"open_meteo": 0, "fred": 0}
 
         # Open-Meteo: chunk past_days=92 (max allowed) and remainder
@@ -281,7 +290,7 @@ def backfill_data(
             try:
                 points = await aggregator._backfill_open_meteo(past_days=past_days)
                 if points:
-                    stored = _store_datapoints(points, vs)
+                    stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
                     open_meteo_total += stored
                     logger.info("Open-Meteo chunk stored %d/%d data points", stored, len(points))
             except Exception as exc:
@@ -295,7 +304,7 @@ def backfill_data(
         try:
             points = await aggregator._backfill_fred(observation_start=start_date)
             if points:
-                stored = _store_datapoints(points, vs)
+                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
                 counts["fred"] = stored
                 logger.info("FRED backfill stored %d/%d data points", stored, len(points))
         except Exception as exc:
