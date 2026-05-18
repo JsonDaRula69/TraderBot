@@ -198,8 +198,44 @@ check_openclaw() {
     return 1
 }
 
+check_docker() {
+    if command -v docker &>/dev/null; then
+        # Verify Docker daemon is running
+        if docker info &>/dev/null; then
+            return 0
+        else
+            echo "Warning: Docker is installed but the daemon is not running." >&2
+            echo "  Start Docker Desktop or the Docker service to enable sandboxing." >&2
+            return 1
+        fi
+    fi
+    return 1
+}
+
 install_dependencies_debian() {
     local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev unzip curl git file python3-pip jq)
+
+    # Install Docker if not present (required for OpenClaw agent sandboxing)
+    if ! command -v docker &>/dev/null; then
+        echo "Installing Docker..."
+        if command -v apt &>/dev/null; then
+            # Add Docker's official GPG key and repository
+            sudo apt-get update
+            sudo apt-get install -y ca-certificates curl
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            local arch="$(dpkg --print-architecture)"
+            local codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+            echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${codename} stable" |                 sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            sudo usermod -aG docker "$USER" 2>/dev/null || true
+            echo "Docker installed. You may need to log out and back in for group changes to take effect."
+        fi
+    else
+        echo "Docker already installed."
+    fi
     if command -v apt &>/dev/null; then
         echo "Installing dependencies with apt..."
         sudo apt update
@@ -245,6 +281,16 @@ install_dependencies_macos() {
             echo "Error: Homebrew installation failed." >&2
             exit 1
         fi
+    fi
+
+    # Install Docker Desktop if not present (required for OpenClaw agent sandboxing)
+    if ! command -v docker &>/dev/null; then
+        echo "Installing Docker Desktop via Homebrew..."
+        brew install --cask docker
+        echo "Docker Desktop installed. You may need to launch it from Applications."
+        echo "  Open Docker Desktop and wait for it to start before running TraderBot."
+    else
+        echo "Docker already installed."
     fi
 
     echo "Installing python@3.12, git, jq via Homebrew..."
@@ -1243,6 +1289,13 @@ main() {
         echo "│    3. Re-run this installer                             │" >&2
         echo "└─────────────────────────────────────────────────────────┘" >&2
         exit 1
+    fi
+
+    if ! check_docker; then
+        echo "" >&2
+        echo "  Note: Docker is not running. OpenClaw agent sandboxing will be disabled." >&2
+        echo "  Install and start Docker to enable agent sandboxing." >&2
+        echo "" >&2
     fi
 
     echo "Installing dependencies..."
