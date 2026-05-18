@@ -170,12 +170,15 @@ def enable_session_memory_hook() -> bool:
         logger.info("Enabled session-memory hook via CLI")
         return True
 
-    # Fallback: add to openclaw.json
+    # Fallback: add to openclaw.json under hooks.internal.entries
     config = _read_openclaw_config()
     hooks = config.setdefault("hooks", {})
-    entries = hooks.setdefault("entries", {})
+    internal = hooks.setdefault("internal", {"enabled": True})
+    entries = internal.setdefault("entries", {})
     if "session-memory" not in entries:
         entries["session-memory"] = {"enabled": True}
+        # Remove stale top-level entries if present from old code
+        hooks.pop("entries", None)
         _write_openclaw_config(config)
         logger.info("Enabled session-memory hook via config")
     return True
@@ -200,20 +203,17 @@ def ensure_agent_bootstrap_hook() -> bool:
         handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
         logger.info("Created %s", handler)
 
-    # Register in openclaw.json
+    # Register in openclaw.json under hooks.internal.entries
     config = _read_openclaw_config()
     hooks = config.setdefault("hooks", {})
-
-    # Add as extra hook directory
-    extra_dirs = hooks.setdefault("extraHookDirs", [])
-    hook_dir_str = str(hook_dir)
-    if hook_dir_str not in extra_dirs:
-        extra_dirs.append(hook_dir_str)
-
-    # Also add as a named entry
-    entries = hooks.setdefault("entries", {})
+    internal = hooks.setdefault("internal", {"enabled": True})
+    entries = internal.setdefault("entries", {})
     if "traderbot-bootstrap" not in entries:
         entries["traderbot-bootstrap"] = {"enabled": True}
+
+    # Remove stale top-level keys from old code if present
+    hooks.pop("entries", None)
+    hooks.pop("extraHookDirs", None)
 
     _write_openclaw_config(config)
 
@@ -225,28 +225,34 @@ def ensure_agent_bootstrap_hook() -> bool:
 
 
 def configure_agent_sandbox(agent_id: str) -> bool:
-    """Add or update an agent entry in ``openclaw.json`` with sandbox and
-    workspace access settings.
+    """Add or update an agent entry in ``openclaw.json`` with sandbox settings.
 
-    Enables sandboxing and ``workspaceAccess: "rw"`` for the given agent ID.
-    The sandbox prevents the agent from reading/writing files outside its
-    workspace via absolute paths.  Idempotent.
+    Sets sandbox mode to ``"non-main"`` for the given agent ID, which restricts
+    the agent to its workspace directory.  The OpenClaw sandbox schema requires
+    ``{ "mode": "off" | "non-main" | "all" }``, not a boolean or directories list.
+    Idempotent — safe to call on every ``profile assign``.
     """
     config = _read_openclaw_config()
     agents = config.setdefault("agents", {})
     agent_list = agents.setdefault("list", [])
 
+    sandbox_config = {"mode": "non-main"}
+
     for entry in agent_list:
         if entry.get("id") == agent_id:
-            # Add sandbox config if not already set
-            entry["sandbox"] = entry.get("sandbox", True)
-            entry.setdefault("workspaceAccess", "rw")
+            # Fix legacy sandbox formats: boolean -> proper object, remove invalid keys
+            if isinstance(entry.get("sandbox"), bool) or isinstance(entry.get("sandbox"), dict) and "directories" in entry.get("sandbox", {}):
+                entry["sandbox"] = sandbox_config
+            # Remove invalid workspaceAccess key (not in OpenClaw schema)
+            entry.pop("workspaceAccess", None)
+            # Ensure sandbox is set
+            if "sandbox" not in entry:
+                entry["sandbox"] = sandbox_config
             break
     else:
         agent_list.append({
             "id": agent_id,
-            "sandbox": True,
-            "workspaceAccess": "rw",
+            "sandbox": sandbox_config,
         })
 
     _write_openclaw_config(config)
