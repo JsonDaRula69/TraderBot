@@ -2381,6 +2381,9 @@ def profile_create(
     max_open_positions: Annotated[int | None, typer.Option(help="Max open positions")] = None,
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
+    initial_balance_cents: Annotated[
+        int | None, typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)")
+    ] = None,
 ) -> None:
     """Create a new trading profile. Interactive if no name given; uses flags if name provided."""
     from traderbot.kalshi.models import MarketCategory
@@ -2397,7 +2400,7 @@ def profile_create(
 
     has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier,
                                               max_position_pct, max_daily_loss_pct, max_drawdown_pct,
-                                              max_open_positions, min_liquidity, min_edge_pct])
+                                              max_open_positions, min_liquidity, min_edge_pct, initial_balance_cents])
 
     if name is None:
         console.print("[dim]Use: traderbot profile create <name> [options][/dim]")
@@ -2545,6 +2548,16 @@ def _interactive_profile_create(console: Console, registry: "ProfileRegistry") -
     me = typer.prompt(f"  Min edge %", default=f"{HARD_LIMITS['min_edge_pct']:.0%}")
     min_edge = _parse_pct(me)
 
+    # Paper trading balance
+    if profile_mode == "paper":
+        console.print("\n[bold]Paper trading initial balance[/bold]")
+        console.print("[dim]  This is the starting balance for simulated trading (in cents).[/dim]")
+        console.print("[dim]  $100 = 10000 cents, $1000 = 100000 cents[/dim]")
+        ib = typer.prompt("  Initial balance (cents)", default="10000")
+        initial_balance = int(ib) if ib.isdigit() else 10_000
+    else:
+        initial_balance = None
+
     profile_data = {
         "name": profile_name,
         "mode": profile_mode,
@@ -2558,6 +2571,9 @@ def _interactive_profile_create(console: Console, registry: "ProfileRegistry") -
         "min_liquidity_threshold": min_liq or int(HARD_LIMITS["min_liquidity_threshold"]),
         "min_edge_pct": min_edge or HARD_LIMITS["min_edge_pct"],
     }
+
+    if initial_balance is not None:
+        profile_data["initial_balance_cents"] = initial_balance
 
     try:
         profile = TradingProfile(**profile_data)
@@ -2903,6 +2919,19 @@ def _interactive_assign(console: Console, registry: "ProfileRegistry", overwrite
 
     overwrite = ws_choice == 2
 
+    # Paper trading balance prompt
+    profile = registry.get_profile(profile_name)
+    if profile and profile.mode == "paper" and profile.initial_balance_cents is None:
+        console.print(f"\n[bold]Paper trading initial balance[/bold]")
+        console.print("[dim]  This profile has no initial balance set. Without it, paper trading cannot start.[/dim]")
+        console.print("[dim]  $100 = 10000 cents, $1000 = 100000 cents[/dim]")
+        ib = typer.prompt("  Initial balance (cents)", default="10000")
+        initial_balance = int(ib) if ib.isdigit() else 10_000
+        from traderbot.profiles.registry import ProfileRegistry as PR2
+        reg2 = PR2()
+        reg2.update_profile(profile_name, {"initial_balance_cents": initial_balance})
+        console.print(f"[green]✓[/green] Set initial balance to ${initial_balance / 100:,.2f}")
+
     _do_assign(profile_name, agent_id, overwrite=overwrite, force=True, console=console)
 
 
@@ -2999,6 +3028,9 @@ def profile_update(
     max_open_positions: Annotated[int | None, typer.Option(help="Max open positions")] = None,
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
+    initial_balance_cents: Annotated[
+        int | None, typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)")
+    ] = None,
 ) -> None:
     """Update specific fields of an existing profile.
 
