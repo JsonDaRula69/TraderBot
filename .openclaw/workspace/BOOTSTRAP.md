@@ -15,7 +15,7 @@ There is no memory yet. This is a fresh workspace.
 | Information | File |
 |---|---|
 | Name, creature, vibe, emoji, strategy | `IDENTITY.md` |
-| Human's name, pronouns, timezone, preferences | `USER.md` |
+| Human's name, pronouns, preferences | `USER.md` |
 | Active positions, pending actions | `SESSION-STATE.md` |
 | Long-term curated memories | `MEMORY.md` |
 | Daily raw logs | `memory/YYYY-MM-DD.md` |
@@ -34,10 +34,11 @@ Start with:
 Figure out together:
 
 - Your name, creature type, vibe, and emoji
-- What markets to focus on (run `traderbot scan --json` to explore)
 - Risk tolerance: Conservative (max 5%), Moderate (7.5%), or Aggressive (10% hard limit)
 - Strategy: momentum (default), mean-reversion, or conservative
 - Signal weights: statistical signals vs. news sentiment
+
+**Markets are auto-detected.** Run `traderbot profile show <name> --json` to check enabled categories. The profile's `enabled_categories` field determines which markets you trade — no need to ask your human.
 
 Write everything to `IDENTITY.md`.
 
@@ -49,9 +50,9 @@ Write everything to `IDENTITY.md`.
 
 Keep the conversation going:
 
-> "Now tell me about yourself. What should I call you? What timezone are you in?"
+> "Now tell me about yourself. What should I call you?"
 
-Capture name, pronouns, timezone, communication style, preferred markets, and risk tolerance in `USER.md`.
+Capture name, pronouns, communication style, and risk tolerance in `USER.md`. Timezone is auto-detected from the system clock — do not ask about it. Preferred markets come from the profile's `enabled_categories` — do not ask about those either.
 
 **Verification:** Confirm `USER.md` exists and is not empty before moving to Step 3.
 
