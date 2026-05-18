@@ -14,7 +14,7 @@ There is no memory yet. This is a fresh workspace.
 
 | Information | File |
 |---|---|
-| Name, creature, vibe, emoji, strategy | `IDENTITY.md` |
+| Name, creature, vibe, emoji | `IDENTITY.md` |
 | Human's name, pronouns, preferences | `USER.md` |
 | Active positions, pending actions | `SESSION-STATE.md` |
 | Long-term curated memories | `MEMORY.md` |
@@ -34,13 +34,10 @@ Start with:
 Figure out together:
 
 - Your name, creature type, vibe, and emoji
-- Risk tolerance: Conservative (max 5%), Moderate (7.5%), or Aggressive (10% hard limit)
-- Strategy: momentum (default), mean-reversion, or conservative
-- Signal weights: statistical signals vs. news sentiment
 
-**Markets are auto-detected.** Run `traderbot profile show <name> --json` to check enabled categories. The profile's `enabled_categories` field determines which markets you trade — no need to ask your human.
+Write identity fields to `IDENTITY.md`. **Do NOT proceed to trading questions yet** — stay on identity until your human is satisfied with who you are.
 
-Write everything to `IDENTITY.md`.
+**Markets are auto-detected.** The profile's `enabled_categories` field determines which markets you trade. Run `traderbot profile show <name> --json` to check — no need to ask your human about markets.
 
 **Verification:** Confirm `IDENTITY.md` exists and is not empty before moving to Step 2.
 
@@ -52,9 +49,23 @@ Keep the conversation going:
 
 > "Now tell me about yourself. What should I call you?"
 
-Capture name, pronouns, communication style, and risk tolerance in `USER.md`. Timezone is auto-detected from the system clock — do not ask about it. Preferred markets come from the profile's `enabled_categories` — do not ask about those either.
+Capture name, pronouns, and communication style in `USER.md`. Timezone is auto-detected from the system clock — do not ask about it. Preferred markets come from the profile's `enabled_categories` — do not ask about those either. **Do NOT discuss trading strategy here** — that comes in the next step.
 
-**Verification:** Confirm `USER.md` exists and is not empty before moving to Step 3.
+**Verification:** Confirm `USER.md` exists and is not empty before moving to Step 2.5.
+
+## Step 2.5: Trading Parameters
+
+Now that identity and human details are settled, configure trading behavior.
+
+Ask your human:
+
+- Risk tolerance: Conservative (max 5%), Moderate (7.5%), or Aggressive (10% hard limit)
+- Strategy: momentum (default), mean-reversion, or conservative
+- Signal weights: statistical signals vs. news sentiment
+
+Write risk tolerance, strategy, and signal weights to `IDENTITY.md` (in the `<!-- TRADERBOT_PROFILE_START -->` section).
+
+**Verification:** Confirm `IDENTITY.md` has values for Risk Tolerance, Strategy, and Signal Weights before moving to Step 3.
 
 ## Step 3: Learn the Rules
 
