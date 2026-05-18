@@ -365,17 +365,18 @@ def _ensure_sandbox_image() -> bool:
 def configure_agent_sandbox(agent_id: str) -> bool:
     """Add or update an agent entry in ``openclaw.json`` with sandbox settings.
 
-    Sets sandbox mode to ``"non-main"`` for the given agent ID, which restricts
-    the agent to its workspace via Docker sandboxing.  The OpenClaw sandbox
-    schema requires ``{ "mode": "off" | "non-main" | "all" }``, not a boolean.
-    Docker must be installed and running for ``"non-main"`` to work.  The
-    TraderBot installer installs Docker as a dependency.  Idempotent.
+    Sets sandbox mode to ``"off"`` for the given agent ID.  The OpenClaw sandbox
+    schema supports ``{ "mode": "off" | "non-main" | "all" }``.
+    Defaults to ``"off"`` because TraderBot cron loops (decision, heartbeat,
+    news) require host-side access to the traderbot CLI, network, and database.
+    Use ``"non-main"`` or ``"all"`` only when Docker is available and no cron
+    loops run as a non-main agent.  Idempotent.
     """
     config = _read_openclaw_config()
     agents = config.setdefault("agents", {})
     agent_list = agents.setdefault("list", [])
 
-    sandbox_config = {"mode": "non-main", "workspaceAccess": "rw"}
+    sandbox_config = {"mode": "off", "workspaceAccess": "rw"}
 
     for entry in agent_list:
         if entry.get("id") == agent_id:
