@@ -287,6 +287,81 @@ def ensure_agent_bootstrap_hook() -> bool:
     return True
 
 
+
+_SANDBOX_DOCKERFILE = r"""FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,id=openclaw-sandbox-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+  apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    python3 \
+    ripgrep
+
+RUN useradd --create-home --shell /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+CMD ["sleep", "infinity"]
+"""
+
+_SANDBOX_IMAGE = "openclaw-sandbox:bookworm-slim"
+
+
+def _ensure_sandbox_image() -> bool:
+    """Build the OpenClaw sandbox Docker image if it does not exist.
+
+    The image ``openclaw-sandbox:bookworm-slim`` is required for agent sandboxing
+    (mode ``"non-main"`` or ``"all"``).  This function writes the Dockerfile to
+    a temp directory and runs ``docker build`` if the image is missing.
+    Requires Docker to be installed and the daemon running.
+    Returns ``True`` if the image exists or was built, ``False`` on failure.
+    """
+    import tempfile
+
+    # Check if image already exists
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", _SANDBOX_IMAGE],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            logger.info("Sandbox image %s already exists", _SANDBOX_IMAGE)
+            return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # Docker not available ¯\_(ツ)_/¯
+        pass
+
+    # Build the image
+    logger.info("Building sandbox image %s ...", _SANDBOX_IMAGE)
+    with tempfile.TemporaryDirectory(prefix="openclaw-sandbox-") as tmpdir:
+        dockerfile = Path(tmpdir) / "Dockerfile"
+        dockerfile.write_text(_SANDBOX_DOCKERFILE)
+        try:
+            result = subprocess.run(
+                ["docker", "build", "-t", _SANDBOX_IMAGE, "-f", str(dockerfile), tmpdir],
+                capture_output=True, text=True, timeout=300,
+            )
+            if result.returncode == 0:
+                logger.info("Sandbox image %s built successfully", _SANDBOX_IMAGE)
+                return True
+            else:
+                logger.error("Failed to build sandbox image: %s", result.stderr[:500])
+                return False
+        except FileNotFoundError:
+            logger.warning("Docker not found  sandbox image not built")
+            return False
+        except subprocess.TimeoutExpired:
+            logger.error("Docker build timed out")
+            return False
+
+
 def configure_agent_sandbox(agent_id: str) -> bool:
     """Add or update an agent entry in ``openclaw.json`` with sandbox settings.
 
@@ -320,6 +395,11 @@ def configure_agent_sandbox(agent_id: str) -> bool:
         })
 
     _write_openclaw_config(config)
+
+    # Build sandbox image if Docker is available and image is missing
+    if sandbox_config.get("mode") != "off":
+        _ensure_sandbox_image()
+
     logger.info("Sandbox configured for agent '%s'", agent_id)
     return True
 
