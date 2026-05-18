@@ -154,6 +154,69 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
     return False
 
 
+
+def _validate_config_against_schema(config: dict) -> list[str]:
+    """Validate config dict against OpenClaw JSON schema before writing.
+
+    Returns a list of validation error strings. Empty list means valid.
+    Checks the most critical schema constraints that TraderBot writes:
+    - agents.list entries must not have top-level workspaceAccess
+    - agents.list[].sandbox must be an object with valid mode
+    - hooks must not have top-level entries or extraHookDirs
+    """
+    errors: list[str] = []
+
+    agents_list = config.get("agents", {}).get("list", [])
+    for i, entry in enumerate(agents_list):
+        agent_id = entry.get("id", f"<index {i}>")
+
+        # Check: sandbox must be object with valid mode, not boolean
+        sandbox = entry.get("sandbox")
+        if sandbox is not None:
+            if isinstance(sandbox, bool):
+                errors.append(
+                    f"agents.list[{i}] ({agent_id}): sandbox={sandbox} is boolean, "
+                    f"expected object {{'mode': 'off'|'non-main'|'all'}}"
+                )
+            elif isinstance(sandbox, dict):
+                mode = sandbox.get("mode")
+                valid_modes = {"off", "non-main", "all"}
+                if mode not in valid_modes:
+                    errors.append(
+                        f"agents.list[{i}] ({agent_id}): sandbox.mode='{mode}' "
+                        f"is invalid, expected one of {valid_modes}"
+                    )
+                # Check: workspaceAccess inside sandbox must be valid
+                wa = sandbox.get("workspaceAccess")
+                if wa is not None and wa not in {"none", "ro", "rw"}:
+                    errors.append(
+                        f"agents.list[{i}] ({agent_id}): sandbox.workspaceAccess='{wa}' "
+                        f"is invalid, expected 'none'|'ro'|'rw'"
+                    )
+                # Check: no 'directories' key (was from old buggy schema)
+                if "directories" in sandbox:
+                    errors.append(
+                        f"agents.list[{i}] ({agent_id}): sandbox contains unrecognized "
+                        f"key 'directories' — use 'mode' and 'workspaceAccess' instead"
+                    )
+
+        # Check: workspaceAccess must NOT be at agent top level
+        if "workspaceAccess" in entry:
+            errors.append(
+                f"agents.list[{i}] ({agent_id}): 'workspaceAccess' is not a valid "
+                f"top-level agent key — it belongs inside sandbox"
+            )
+
+    # Check: hooks must not have top-level entries or extraHookDirs
+    hooks = config.get("hooks", {})
+    if "entries" in hooks:
+        errors.append("hooks.entries is invalid — use hooks.internal.entries instead")
+    if "extraHookDirs" in hooks:
+        errors.append("hooks.extraHookDirs is invalid — use hooks.internal.load.extraDirs instead")
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Public API — called during profile assign
 # ---------------------------------------------------------------------------
@@ -236,7 +299,7 @@ def configure_agent_sandbox(agent_id: str) -> bool:
     agents = config.setdefault("agents", {})
     agent_list = agents.setdefault("list", [])
 
-    sandbox_config = {"mode": "non-main"}
+    sandbox_config = {"mode": "non-main", "workspaceAccess": "rw"}
 
     for entry in agent_list:
         if entry.get("id") == agent_id:
