@@ -3043,7 +3043,7 @@ def profile_update(
     console = Console()
     registry = ProfileRegistry()
 
-    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier, max_position_pct, max_daily_loss_pct, max_drawdown_pct, max_open_positions, min_liquidity, min_edge_pct])
+    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier, max_position_pct, max_daily_loss_pct, max_drawdown_pct, max_open_positions, min_liquidity, min_edge_pct, initial_balance_cents])
 
     if name is None:
         profiles = registry.list_profiles()
@@ -3067,7 +3067,8 @@ def profile_update(
     _apply_profile_update(name, mode, description, categories, risk_multiplier,
                           max_position_pct, max_daily_loss_pct, max_drawdown_pct,
                           max_open_positions, min_liquidity, min_edge_pct,
-                          console, registry)
+                          initial_balance_cents=initial_balance_cents,
+                          console=console, registry=registry)
 
 
 def _interactive_profile_select(profiles: list[str], console: Console) -> str | None:
@@ -3313,8 +3314,9 @@ def _apply_profile_update(
     max_open_positions: int | None,
     min_liquidity: int | None,
     min_edge_pct: float | None,
-    console: Console,
-    registry: "ProfileRegistry",
+    initial_balance_cents: int | None = None,
+    console: Console = None,
+    registry: "ProfileRegistry" = None,
 ) -> None:
     from traderbot.kalshi.models import MarketCategory
 
@@ -3375,6 +3377,9 @@ def _apply_profile_update(
 
     if min_edge_pct is not None:
         update_kwargs["min_edge_pct"] = min_edge_pct
+
+    if initial_balance_cents is not None:
+        update_kwargs["initial_balance_cents"] = initial_balance_cents
 
     if not update_kwargs:
         console.print("[yellow]Warning:[/yellow] No fields to update")
