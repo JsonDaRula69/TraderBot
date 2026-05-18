@@ -226,6 +226,7 @@ def run_simulation(
                 "timestep": timestep,
                 "decision": decision["decision"],
                 "estimated_prob": decision["estimated_prob"],
+                "confidence": decision.get("confidence", 0.1),
                 "edge_estimate": decision["edge_estimate"],
                 "position_size_cents": decision["position_size_cents"],
             })

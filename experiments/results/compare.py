@@ -215,8 +215,8 @@ def compute_recommendation(results: dict[str, dict[str, Any]]) -> str:
     for rank, (name, _) in enumerate(brier_vals, 1):
         ranks[name]["brier_rank"] = rank
 
-    # Edge realization rate: higher is better
-    edge_vals = [(name, results[name].get("edge_realization_rate", -1.0)) for name in names]
+    # Edge realization rate: higher is better (None treated as -inf)
+    edge_vals = [(name, results[name].get("edge_realization_rate") or float("-inf")) for name in names]
     edge_vals.sort(key=lambda x: x[1], reverse=True)
     for rank, (name, _) in enumerate(edge_vals, 1):
         ranks[name]["edge_rank"] = rank
@@ -238,8 +238,8 @@ def compute_recommendation(results: dict[str, dict[str, Any]]) -> str:
     for rank, (name, _) in enumerate(pnl_vals, 1):
         ranks[name]["pnl_rank"] = rank
 
-    # Confidence correlation: more negative is better
-    conf_vals = [(name, results[name].get("confidence_correlation", 1.0)) for name in names]
+    # Confidence correlation: more negative is better (None treated as worst)
+    conf_vals = [(name, results[name].get("confidence_correlation") or 1.0) for name in names]
     conf_vals.sort(key=lambda x: x[1])
     for rank, (name, _) in enumerate(conf_vals, 1):
         ranks[name]["conf_rank"] = rank

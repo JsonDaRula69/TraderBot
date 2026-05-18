@@ -22,14 +22,29 @@ from typing import Any  # noqa: E402
 
 
 def load_jsonl(path: str) -> list[dict[str, Any]]:
-    """Parse JSONL file into list of decision dicts."""
-    decisions: list[dict[str, Any]] = []
+    """Parse JSONL file into list of flat decision dicts.
+    
+    The harness outputs per-market objects with nested decisions arrays.
+    This flattens them into per-decision records with ticker/settlement context.
+    """
+    flat: list[dict[str, Any]] = []
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if line:
-                decisions.append(json.loads(line))
-    return decisions
+            if not line:
+                continue
+            market = json.loads(line)
+            ticker = market.get("ticker", "")
+            settlement = market.get("settlement", {})
+            methodology = market.get("methodology", "")
+            for d in market.get("decisions", []):
+                flat.append({
+                    "ticker": ticker,
+                    "methodology": methodology,
+                    "settlement": settlement,
+                    **d,
+                })
+    return flat
 
 
 def load_settlements(db_path: str, tickers: set[str]) -> dict[str, int]:
