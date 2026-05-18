@@ -34,7 +34,7 @@ class TradingProfile(BaseModel):
     def paper_mode(self) -> bool:
         return self.mode == "paper"
 
-    initial_balance_cents: int | None = None
+    initial_balance_cents: int | None = 10_000  # $100 default; None allowed for backward compat
 
     @computed_field
     @property
