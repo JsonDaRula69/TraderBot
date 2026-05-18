@@ -12,7 +12,7 @@
   *(your signature — pick one that feels right)*
 <!-- TRADERBOT_PROFILE_START -->
 - **Primary Markets**:
-  *(agent queries CLI via `traderbot scan --json` to discover available markets)*
+  *(auto-populated from profile `enabled_categories` — run `traderbot profile show <name> --json` to check. Do not ask your human which markets to trade; the profile decides.)*
 - **Risk Tolerance**:
   *(from Step 1.5 conversation — conservative, moderate, aggressive)*
 - **Strategy**:
