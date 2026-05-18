@@ -291,9 +291,10 @@ def configure_agent_sandbox(agent_id: str) -> bool:
     """Add or update an agent entry in ``openclaw.json`` with sandbox settings.
 
     Sets sandbox mode to ``"non-main"`` for the given agent ID, which restricts
-    the agent to its workspace directory.  The OpenClaw sandbox schema requires
-    ``{ "mode": "off" | "non-main" | "all" }``, not a boolean or directories list.
-    Idempotent — safe to call on every ``profile assign``.
+    the agent to its workspace via Docker sandboxing.  The OpenClaw sandbox
+    schema requires ``{ "mode": "off" | "non-main" | "all" }``, not a boolean.
+    Docker must be installed and running for ``"non-main"`` to work.  The
+    TraderBot installer installs Docker as a dependency.  Idempotent.
     """
     config = _read_openclaw_config()
     agents = config.setdefault("agents", {})
