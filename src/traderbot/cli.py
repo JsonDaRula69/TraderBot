@@ -3530,7 +3530,7 @@ def _install_news_ingest_timer(
     if not _systemd_available():
         return result
 
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
     service_template = repo_root / "install" / "services" / "traderbot-news-ingest@.service"
     timer_template = repo_root / "install" / "services" / "traderbot-news-ingest@.timer"
 
