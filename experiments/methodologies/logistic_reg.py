@@ -156,7 +156,11 @@ class LogisticRegMethodology(MethodologyInterface):
             coef_arr = model.coef_.tolist()
             intercept = float(model.intercept_)
 
-        prob = float(proba[1]) if proba[1] >= proba[0] else float(proba[0])
+        # proba[1] = P(class=1) = P(market resolves YES)
+        # For "above": YES = temp > threshold, so proba[1] is P(above)
+        # For "below": YES = temp < threshold, so proba[1] is P(below)
+        # In both cases, proba[1] gives the probability the market resolves YES
+        prob = float(proba[1])
         confidence = float(abs(proba[1] - proba[0]))
         confidence = max(confidence, 0.1)
 

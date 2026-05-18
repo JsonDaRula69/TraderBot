@@ -192,7 +192,7 @@ class LLMSynthesisMethodology(MethodologyInterface):
         prompt = _PROMPT_TEMPLATE.format(
             question=question,
             timestep=timestep,
-            forecast_date=forecast.get("date", "unknown"),
+            forecast_date=forecast.get("forecast_date", "unknown"),
             temp_max_f=forecast.get("temp_max_f", "N/A"),
             temp_min_f=forecast.get("temp_min_f", "N/A"),
             humidity_max_pct=forecast.get("humidity_max_pct", "N/A"),

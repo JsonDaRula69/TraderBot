@@ -25,11 +25,11 @@ def get_market_prices(db: sqlite3.Connection, ticker: str, timestep: int) -> dic
     return dict(row) if row else None
 
 
-def get_calibration_bins(db: sqlite3.Connection, bin_label: str) -> dict | None:
-    """Fetch calibration bin data by bin label."""
+def get_calibration_bins(db: sqlite3.Connection, bin_label: str, methodology: str = "bin_cal") -> dict | None:
+    """Fetch calibration bin data by methodology and bin label."""
     row = db.execute(
-        "SELECT bin_label, bin_lower, bin_upper, count, actual_rate FROM calibration_bins WHERE bin_label = ?",
-        (bin_label,),
+        "SELECT methodology, bin_label, bin_lower, bin_upper, count, actual_rate FROM calibration_bins WHERE methodology = ? AND bin_label = ?",
+        (methodology, bin_label),
     ).fetchone()
     return dict(row) if row else None
 

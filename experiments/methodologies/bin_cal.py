@@ -69,7 +69,7 @@ class BinCalMethodology(MethodologyInterface):
 
         bin_label = _assign_bin_label(delta)
 
-        cal_row = get_calibration_bins(self.conn, bin_label)
+        cal_row = get_calibration_bins(self.conn, bin_label, methodology=self.NAME)
 
         # Insufficient data — uniform prior fallback
         if cal_row is None or cal_row.get("count", 0) < _MIN_SAMPLES:
