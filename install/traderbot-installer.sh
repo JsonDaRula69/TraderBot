@@ -191,6 +191,55 @@ find_compatible_python() {
     return 1
 }
 
+build_sandbox_image() {
+    # Build the OpenClaw sandbox Docker image if Docker is available and image missing
+    if ! command -v docker &>/dev/null; then
+        echo "  Docker not available — skipping sandbox image build."
+        return 0
+    fi
+
+    if docker image inspect openclaw-sandbox:bookworm-slim &>/dev/null; then
+        echo "  Sandbox image openclaw-sandbox:bookworm-slim already exists."
+        return 0
+    fi
+
+    echo "Building OpenClaw sandbox Docker image..."
+    local tmpdir
+    tmpdir="$(mktemp -d openclaw-sandbox.XXXXXX)"
+
+    cat > "${tmpdir}/Dockerfile" << 'DOCKERFILE'
+FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,id=openclaw-sandbox-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+  apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    python3 \
+    ripgrep
+
+RUN useradd --create-home --shell /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+CMD ["sleep", "infinity"]
+DOCKERFILE
+
+    if docker build -t openclaw-sandbox:bookworm-slim "${tmpdir}" 2>&1; then
+        echo "  Sandbox image built successfully."
+    else
+        echo "  Warning: Failed to build sandbox image. Agent sandboxing may not work." >&2
+        echo "  You can build it manually with: docker build -t openclaw-sandbox:bookworm-slim <dir>" >&2
+    fi
+    rm -rf "${tmpdir}"
+}
+
 check_openclaw() {
     if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
         return 0
@@ -1310,6 +1359,9 @@ main() {
             echo "Warning: Linux distro not fully supported. Manual dependency installation may be required."
             ;;
     esac
+
+    echo "Building OpenClaw sandbox image..."
+    build_sandbox_image
 
     echo "Installing TraderBot..."
     install_traderbot
