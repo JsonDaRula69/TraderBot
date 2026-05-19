@@ -22,6 +22,10 @@ from traderbot.profiles.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
 
+_SUDO = shutil.which("sudo") or "/usr/bin/sudo"
+_SYSTEMCTL = shutil.which("systemctl") or "/usr/bin/systemctl"
+_LAUNCHCTL = shutil.which("launchctl") or "/bin/launchctl"
+
 
 def _mask_token(token: str) -> str:
     """Mask a token, showing only the last 4 characters."""
@@ -371,6 +375,9 @@ def trade(
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
+    no_confirm: Annotated[
+        bool, typer.Option("--no-confirm", help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.")
+    ] = False,
 ) -> None:
     """Place a trade through risk checks.
 
@@ -396,6 +403,20 @@ def trade(
     console = Console()
 
     profile = get_current_profile()
+
+    confirm_trades = os.environ.get("TRADERBOT_CONFIRM_TRADES", "true").lower() != "false"
+    if confirm_trades and not no_confirm:
+        summary = (
+            f"\n  Ticker:     {ticker}\n"
+            f"  Direction:  {direction}\n"
+            f"  Quantity:   {quantity}\n"
+            f"  Price:      ¢{price}\n"
+        )
+        console.print(f"[bold]Trade Confirmation Required[/bold]{summary}")
+        response = input("Execute trade? [y/N] ").strip().lower()
+        if response not in ("y", "yes"):
+            console.print("[yellow]Trade cancelled.[/yellow]")
+            raise SystemExit(0)
 
     resolved_prob = estimated_prob
     resolved_confidence = confidence if confidence is not None else 0.5
@@ -3631,11 +3652,11 @@ def _install_news_ingest_timer(
     tmp_tmr.write_text(tmr_content)
 
     try:
-        subprocess.run(["sudo", "cp", str(tmp_svc), f"/etc/systemd/system/traderbot-news-ingest@{user}.service"], check=True, capture_output=True)
-        subprocess.run(["sudo", "cp", str(tmp_tmr), f"/etc/systemd/system/traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
-        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True, capture_output=True)
-        subprocess.run(["sudo", "systemctl", "enable", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
-        subprocess.run(["sudo", "systemctl", "start", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run([_SUDO, "cp", str(tmp_svc), f"/etc/systemd/system/traderbot-news-ingest@{user}.service"], check=True, capture_output=True)
+        subprocess.run([_SUDO, "cp", str(tmp_tmr), f"/etc/systemd/system/traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], check=True, capture_output=True)
+        subprocess.run([_SUDO, _SYSTEMCTL, "enable", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run([_SUDO, _SYSTEMCTL, "start", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
         result["registered"] = True
     except subprocess.CalledProcessError as exc:
         result["error"] = str(exc.stderr.decode() if exc.stderr else exc)
@@ -3652,7 +3673,7 @@ def _systemd_available() -> bool:
     """Check if systemd is available on this system."""
     import subprocess
     try:
-        subprocess.run(["systemctl", "--version"], capture_output=True, timeout=5)
+        subprocess.run([_SYSTEMCTL, "--version"], capture_output=True, timeout=5)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -3671,22 +3692,22 @@ def _remove_news_ingest_timer(
 
     try:
         subprocess.run(
-            ["sudo", "systemctl", "stop", f"traderbot-news-ingest@{agent_user}.timer"],
+            [_SUDO, _SYSTEMCTL, "stop", f"traderbot-news-ingest@{agent_user}.timer"],
             capture_output=True, timeout=15,
         )
         subprocess.run(
-            ["sudo", "systemctl", "disable", f"traderbot-news-ingest@{agent_user}.timer"],
+            [_SUDO, _SYSTEMCTL, "disable", f"traderbot-news-ingest@{agent_user}.timer"],
             capture_output=True, timeout=15,
         )
         subprocess.run(
-            ["sudo", "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.service"],
+            [_SUDO, "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.service"],
             check=True, capture_output=True,
         )
         subprocess.run(
-            ["sudo", "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.timer"],
+            [_SUDO, "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.timer"],
             check=True, capture_output=True,
         )
-        subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, timeout=15)
+        subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True, timeout=15)
     except Exception:
         pass
 
@@ -3917,8 +3938,8 @@ def uninstall(
             if daemon_dir.exists():
                 for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
                     label = plist.stem
-                    subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(plist)], capture_output=True)
+                    subprocess.run([_SUDO, _LAUNCHCTL, "bootout", f"system/{label}"], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(plist)], capture_output=True)
                     if result.returncode == 0:
                         removed_services.append(str(plist))
         elif platform.system() == "Linux":
@@ -3926,24 +3947,24 @@ def uninstall(
             if service_dir.exists():
                 for svc in service_dir.glob("traderbot-agent@*.service"):
                     unit = svc.name
-                    subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
-                    subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "stop", unit], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         removed_services.append(str(svc))
                 for svc in list(service_dir.glob("traderbot-news-ingest@*.service")):
                     unit = svc.name
                     timer_unit = unit.replace(".service", ".timer")
-                    subprocess.run(["sudo", "systemctl", "stop", timer_unit], capture_output=True)
-                    subprocess.run(["sudo", "systemctl", "disable", timer_unit], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "stop", timer_unit], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "disable", timer_unit], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         removed_services.append(str(svc))
                     timer_path = service_dir / timer_unit
                     if timer_path.exists():
-                        subprocess.run(["sudo", "rm", "-f", str(timer_path)], capture_output=True)
+                        subprocess.run([_SUDO, "rm", "-f", str(timer_path)], capture_output=True)
                         removed_services.append(str(timer_path))
-                subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
+                subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
         removed.extend(removed_services)
     else:
         console.print("[bold]Step 1: Removing system services[/bold]")
@@ -3952,8 +3973,8 @@ def uninstall(
             if daemon_dir.exists():
                 for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
                     label = plist.stem
-                    subprocess.run(["sudo", "launchctl", "bootout", f"system/{label}"], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(plist)], capture_output=True)
+                    subprocess.run([_SUDO, _LAUNCHCTL, "bootout", f"system/{label}"], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(plist)], capture_output=True)
                     if result.returncode == 0:
                         console.print(f"  Removed: {plist}")
                         removed.append(str(plist))
@@ -3964,9 +3985,9 @@ def uninstall(
             if service_dir.exists():
                 for svc in service_dir.glob("traderbot-agent@*.service"):
                     unit = svc.name
-                    subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True)
-                    subprocess.run(["sudo", "systemctl", "disable", unit], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "stop", unit], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         console.print(f"  Removed: {svc}")
                         removed.append(str(svc))
@@ -3975,9 +3996,9 @@ def uninstall(
                 for svc in service_dir.glob("traderbot-news-ingest@*.service"):
                     unit = svc.name
                     timer_unit = unit.replace(".service", ".timer")
-                    subprocess.run(["sudo", "systemctl", "stop", timer_unit], capture_output=True)
-                    subprocess.run(["sudo", "systemctl", "disable", timer_unit], capture_output=True)
-                    result = subprocess.run(["sudo", "rm", "-f", str(svc)], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "stop", timer_unit], capture_output=True)
+                    subprocess.run([_SUDO, _SYSTEMCTL, "disable", timer_unit], capture_output=True)
+                    result = subprocess.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     if result.returncode == 0:
                         console.print(f"  Removed: {svc}")
                         removed.append(str(svc))
@@ -3985,9 +4006,9 @@ def uninstall(
                         console.print(f"  [yellow]Could not remove: {svc}[/yellow]")
                     timer_path = service_dir / timer_unit
                     if timer_path.exists():
-                        subprocess.run(["sudo", "rm", "-f", str(timer_path)], capture_output=True)
+                        subprocess.run([_SUDO, "rm", "-f", str(timer_path)], capture_output=True)
                         console.print(f"  Removed: {timer_path}")
-                subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True)
+                subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
 
     # Step 2: Prompt about data removal
     if not remove_data:
@@ -4073,7 +4094,7 @@ def uninstall(
                     bin_path.unlink()
                     removed.append(str(bin_path))
                 else:
-                    subprocess.run(["sudo", "rm", "-f", str(bin_path)], capture_output=True)
+                    subprocess.run([_SUDO, "rm", "-f", str(bin_path)], capture_output=True)
                     print(f"  Removed: {bin_path}")
                     removed.append(str(bin_path))
             except OSError:

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import enum
+import hashlib
+import hmac
 import json
+import logging
+import os
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
@@ -12,6 +16,8 @@ from traderbot.paths import get_data_dir
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class BreakerLevel(enum.IntEnum):
@@ -40,6 +46,7 @@ class CircuitBreakerState(BaseModel):
 class CircuitBreaker:
     def __init__(self, state_file: Path | None = None) -> None:
         self._state_file = state_file or get_data_dir() / "circuit_breaker_state.json"
+        self._secret_file = self._state_file.parent / ".breaker_secret"
         self._state = CircuitBreakerState()
         self._load_state()
 
@@ -101,12 +108,60 @@ class CircuitBreaker:
 
     def _persist_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
-        self._state_file.write_text(self._state.model_dump_json() + "\n")
+        payload = self._state.model_dump_json() + "\n"
+        secret = self._get_or_create_secret()
+        signature = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
+        signed = {"payload": payload, "signature": signature}
+        self._state_file.write_text(json.dumps(signed) + "\n")
         self._state_file.chmod(0o600)
 
     def _load_state(self) -> None:
-        if self._state_file.exists():
-            data = json.loads(self._state_file.read_text())
-            if isinstance(data.get("level"), int):
-                data["level"] = BreakerLevel(data["level"])
-            self._state = CircuitBreakerState.model_validate(data)
+        if not self._state_file.exists():
+            return
+        try:
+            raw = json.loads(self._state_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Circuit breaker state file corrupt — defaulting to FULL_STOP (fail-secure)")
+            self._state = CircuitBreakerState(
+                level=BreakerLevel.FULL_STOP,
+                reason="State file corrupt — manual clearance required",
+                can_trade=False,
+                position_size_multiplier=0.0,
+            )
+            return
+        if "payload" not in raw or "signature" not in raw:
+            logger.warning("Circuit breaker state unsigned — defaulting to FULL_STOP (fail-secure)")
+            self._state = CircuitBreakerState(
+                level=BreakerLevel.FULL_STOP,
+                reason="State file unsigned — manual clearance required",
+                can_trade=False,
+                position_size_multiplier=0.0,
+            )
+            return
+        payload = raw["payload"]
+        signature = raw["signature"]
+        secret = self._get_or_create_secret()
+        expected = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            logger.warning("Circuit breaker HMAC verification failed — defaulting to FULL_STOP (fail-secure)")
+            self._state = CircuitBreakerState(
+                level=BreakerLevel.FULL_STOP,
+                reason="HMAC verification failed — manual clearance required",
+                can_trade=False,
+                position_size_multiplier=0.0,
+            )
+            return
+        data = json.loads(payload)
+        if isinstance(data.get("level"), int):
+            data["level"] = BreakerLevel(data["level"])
+        self._state = CircuitBreakerState.model_validate(data)
+
+    def _get_or_create_secret(self) -> bytes:
+        """Load or generate the HMAC signing key for state file integrity."""
+        if self._secret_file.exists():
+            return self._secret_file.read_bytes().strip()
+        secret = os.urandom(32)
+        self._secret_file.parent.mkdir(parents=True, exist_ok=True)
+        self._secret_file.write_bytes(secret)
+        self._secret_file.chmod(0o600)
+        return secret

@@ -143,9 +143,12 @@ class TestClearFullStop:
 
 
 class TestStatePersistence:
-    def test_writes_json_to_file(self, cb: CircuitBreaker, state_file: Path) -> None:
+    def test_writes_signed_json_to_file(self, cb: CircuitBreaker, state_file: Path) -> None:
         cb.check(daily_loss_pct=0.01, drawdown_pct=0.02)
-        data = json.loads(state_file.read_text())
+        raw = json.loads(state_file.read_text())
+        assert "payload" in raw
+        assert "signature" in raw
+        data = json.loads(raw["payload"])
         assert data["level"] == 1
         assert data["daily_loss_pct"] == 0.01
         assert data["drawdown_pct"] == 0.02
@@ -163,6 +166,44 @@ class TestStatePersistence:
         cb = CircuitBreaker(state_file=state_file)
         cb.check(daily_loss_pct=0.0, drawdown_pct=0.0)
         assert state_file.exists()
+
+    def test_tampered_state_defaults_to_full_stop(self, state_file: Path) -> None:
+        cb1 = CircuitBreaker(state_file=state_file)
+        cb1.check(daily_loss_pct=0.005, drawdown_pct=0.01)
+        raw = json.loads(state_file.read_text())
+        data = json.loads(raw["payload"])
+        data["level"] = 0
+        raw["payload"] = json.dumps(data)
+        state_file.write_text(json.dumps(raw))
+        cb2 = CircuitBreaker(state_file=state_file)
+        assert cb2.get_state().level == BreakerLevel.FULL_STOP
+
+    def test_unsigned_state_defaults_to_full_stop(self, state_file: Path) -> None:
+        plain = json.dumps({
+            "level": 0,
+            "daily_loss_pct": 0.0,
+            "drawdown_pct": 0.0,
+            "position_size_multiplier": 1.0,
+            "can_trade": True,
+            "reason": "",
+        })
+        state_file.write_text(plain)
+        cb = CircuitBreaker(state_file=state_file)
+        assert cb.get_state().level == BreakerLevel.FULL_STOP
+
+    def test_corrupt_state_defaults_to_full_stop(self, state_file: Path) -> None:
+        state_file.write_text("NOT JSON")
+        cb = CircuitBreaker(state_file=state_file)
+        assert cb.get_state().level == BreakerLevel.FULL_STOP
+
+    def test_secret_file_created_with_restricted_permissions(self, state_file: Path) -> None:
+        cb = CircuitBreaker(state_file=state_file)
+        cb.check(daily_loss_pct=0.0, drawdown_pct=0.0)
+        secret_file = state_file.parent / ".breaker_secret"
+        assert secret_file.exists()
+        import stat
+        mode = stat.S_IMODE(secret_file.stat().st_mode)
+        assert mode & 0o077 == 0
 
 
 class TestAutoRecovery:
@@ -196,61 +237,49 @@ class TestExactThresholds:
     """Verify circuit breaker triggers at EXACT threshold values from limits.py."""
 
     def test_slow_at_exactly_1pct_daily_loss(self, cb: CircuitBreaker) -> None:
-        """Circuit breaker SLOW triggers at exactly 1% daily loss."""
         state = cb.check(daily_loss_pct=0.01, drawdown_pct=0.0)
         assert state.level == BreakerLevel.SLOW
         assert state.can_trade is True
         assert state.position_size_multiplier == 0.5
 
     def test_below_1pct_daily_loss_is_normal(self, cb: CircuitBreaker) -> None:
-        """0.99% daily loss does NOT trigger SLOW — must be at or above exactly 1%."""
         state = cb.check(daily_loss_pct=0.0099, drawdown_pct=0.0)
         assert state.level == BreakerLevel.NORMAL
         assert state.can_trade is True
         assert state.position_size_multiplier == 1.0
 
     def test_halt_at_exactly_2pct_daily_loss(self, cb: CircuitBreaker) -> None:
-        """Circuit breaker HALT triggers at exactly 2% daily loss."""
         state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.0)
         assert state.level == BreakerLevel.HALT
         assert state.can_trade is False
         assert state.position_size_multiplier == 0.0
 
     def test_below_2pct_daily_loss_is_slow(self, cb: CircuitBreaker) -> None:
-        """1.99% daily loss triggers SLOW, not HALT."""
         state = cb.check(daily_loss_pct=0.0199, drawdown_pct=0.0)
         assert state.level == BreakerLevel.SLOW
         assert state.can_trade is True
 
     def test_full_stop_at_exactly_10pct_drawdown(self, cb: CircuitBreaker) -> None:
-        """Circuit breaker FULL_STOP triggers at exactly 10% drawdown."""
         state = cb.check(daily_loss_pct=0.0, drawdown_pct=0.10)
         assert state.level == BreakerLevel.FULL_STOP
         assert state.can_trade is False
         assert state.position_size_multiplier == 0.0
 
     def test_below_10pct_drawdown_is_not_full_stop(self, cb: CircuitBreaker) -> None:
-        """9.99% drawdown does NOT trigger FULL_STOP."""
         state = cb.check(daily_loss_pct=0.0, drawdown_pct=0.0999)
         assert state.level != BreakerLevel.FULL_STOP
 
     def test_thresholds_match_hard_limits(self) -> None:
-        """Verify circuit breaker thresholds match HARD_LIMITS in limits.py."""
         from traderbot.risk.circuit_breaker import FULL_STOP_THRESHOLD, HALT_THRESHOLD, SLOW_THRESHOLD
         from traderbot.risk.limits import HARD_LIMITS
 
-        # SLOW_THRESHOLD = 1% matches daily_loss_pct guard
         assert SLOW_THRESHOLD == 0.01
-        # HALT_THRESHOLD = 2% matches max_daily_loss_pct
         assert HALT_THRESHOLD == HARD_LIMITS["max_daily_loss_pct"]
-        # FULL_STOP_THRESHOLD = 10% matches max_drawdown_pct
         assert FULL_STOP_THRESHOLD == HARD_LIMITS["max_drawdown_pct"]
 
 
 class TestBreakerChecksIncludeUnrealizedLosses:
     def test_breaker_checks_include_unrealized_losses(self, cb: CircuitBreaker) -> None:
-        """daily_loss_pct passed to breaker must include unrealized losses."""
-        # 1% realized + 1% unrealized = 2% total → HALT
         state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.0)
         assert state.level == BreakerLevel.HALT
         assert state.can_trade is False

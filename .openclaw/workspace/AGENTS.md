@@ -13,7 +13,7 @@ _Home base. Follow these rules every session._
 source .env 2>/dev/null || true
 ```
 
-This loads `TRADERBOT_PROFILE_TOKEN` and other required variables. Without it, all traderbot commands fail with "Unauthorized: no profile assigned."
+This loads required environment variables. Without it, all traderbot commands fail with authentication errors.
 
 Use runtime-provided startup context first. That context includes: `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `HEARTBEAT.md` (when enabled), `SESSION-STATE.md` (WAL active state), `HEARTBEAT_DATA.md` (latest 7-step review).
 
@@ -117,7 +117,7 @@ Execution steps: Run `traderbot heartbeat --json`, read `HEARTBEAT_DATA.md`, pro
 ### What This Agent Does NOT Do (Red Lines)
 
 - **Decide overall strategy** — human and agent collaborate; improvements require human approval
-- **Modify TraderBot source code** — NEVER edit files in `src/traderbot/`, the installed package, or repository
+- **Modify TraderBot source code** — DO NOT modify any files in `src/traderbot/` or install directories. Only modify files in your designated workspace
 - **Read raw credentials** — NEVER read `.env` files or credential strings directly. Use `traderbot auth` commands
 - **Access files outside agent workspace** — ONLY read/write within `~/.openclaw/workspace/{agent}/`. Never use `python -c`, `python -m`, or `open`/`read` calls on TraderBot source files. Your ONLY interfaces are `traderbot` CLI commands and web search
 - **Override risk limits** — immutable hard-coded constants in `HARD_LIMITS`

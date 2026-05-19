@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import html
 import logging
 import os
 import random
+import re
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -59,6 +61,22 @@ class NewsAPIError(Exception):
     """Raised when the NewsAPI returns an error response."""
 
 
+def _sanitize_content(text: str) -> str:
+    if not isinstance(text, str):
+        text = str(text)
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]*>", "", text)
+    text = " ".join(text.split())
+    return text[:4000]
+
+
+def _sanitize_url(url: str) -> str:
+    if not isinstance(url, str):
+        return ""
+    url = url.strip()
+    if url.startswith("https://") or url.startswith("http://"):
+        return url
+    return ""
 class NewsAPIAuthError(Exception):
     """Raised when NewsAPI returns 401 — permanent auth failure, no retry."""
 
@@ -401,10 +419,10 @@ class NewsAggregator:
                         items.append(
                             NewsItem(
                                 id=f"newsapi-{hashlib.md5((article.get('url') or '').encode()).hexdigest()[:8]}-{idx}",
-                                title=article.get("title", "") or "",
-                                body=article.get("description", "") or "",
+                                title=_sanitize_content(article.get("title", "") or ""),
+                                body=_sanitize_content(article.get("description", "") or ""),
                                 source=NewsSource.NEWSAPI,
-                                url=article.get("url", "") or "",
+                                url=_sanitize_url(article.get("url", "")),
                                 published_at=published_at,
                                 ticker_refs=[],
                                 category=None,
@@ -549,10 +567,10 @@ class NewsAggregator:
                         items.append(
                             NewsItem(
                                 id=f"newsapi-everything-{idx}-{hashlib.md5(query.encode()).hexdigest()[:8]}",
-                                title=article.get("title", "") or "",
-                                body=article.get("description", "") or "",
+                                title=_sanitize_content(article.get("title", "") or ""),
+                                body=_sanitize_content(article.get("description", "") or ""),
                                 source=NewsSource.NEWSAPI,
-                                url=article.get("url", "") or "",
+                                url=_sanitize_url(article.get("url", "")),
                                 published_at=published_at,
                                 ticker_refs=[],
                                 category=None,
@@ -1253,10 +1271,10 @@ class NewsAggregator:
                         sub_items.append(
                             NewsItem(
                                 id=f"reddit-{sub}-{entry_hash}",
-                                title=entry.get("title", "") or "",
-                                body=entry.get("summary", "") or "",
+                                title=_sanitize_content(entry.get("title", "") or ""),
+                                body=_sanitize_content(entry.get("summary", "") or ""),
                                 source=NewsSource.REDDIT,
-                                url=entry_link,
+                                url=_sanitize_url(entry_link),
                                 published_at=published_at,
                                 ticker_refs=[],
                                 category=single_category,
@@ -1810,11 +1828,11 @@ class NewsAggregator:
                             source_name = art.get("source", {}).get("name", "newsapi")
                             timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")) if published else datetime.now(tz=UTC)
                             items.append(NewsItem(
-                                id=hashlib.sha256(url.encode()).hexdigest(),
+                                id=hashlib.sha256(_sanitize_url(url).encode()).hexdigest(),
                                 source=NewsSource.NEWSAPI,
-                                title=title,
-                                body=content[:5000] if content else title,
-                                url=url,
+                                title=_sanitize_content(title),
+                                body=_sanitize_content(content[:5000] if content else title),
+                                url=_sanitize_url(url),
                                 published_at=timestamp,
                                 category=news_cat,
                                 ticker_refs=[],

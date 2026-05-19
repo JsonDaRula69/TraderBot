@@ -133,7 +133,7 @@ class KalshiClient:
 
         self._config = config
         self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
-        self._client = httpx.AsyncClient(base_url=self._config.base_url)
+        self._client = httpx.AsyncClient(base_url=self._config.base_url, verify=True)
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
         return auth_headers(

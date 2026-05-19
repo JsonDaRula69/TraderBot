@@ -1,17 +1,28 @@
-"""Token generation, resolution, and revocation for agent-profile binding."""
+"""Token generation, resolution, revocation, and rotation for agent-profile binding."""
 
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import logging
 import os
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from traderbot.paths import get_data_dir
 
+TOKEN_TTL_DAYS = 30
+
 logger = logging.getLogger(__name__)
+
+
+def _get_keys_dir() -> Path:
+    keys_dir = get_data_dir() / "keys"
+    keys_dir.mkdir(parents=True, exist_ok=True)
+    keys_dir.chmod(0o700)
+    return keys_dir
 
 
 class TokenAlreadyAssignedError(ValueError):
@@ -28,8 +39,9 @@ _TOKENS_FILE = get_data_dir() / "tokens.enc"
 
 
 def _derive_or_create_key() -> bytes:
-    key_file = get_data_dir() / ".token_key"
+    key_file = _get_keys_dir() / "token.key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
+    key_file.parent.chmod(0o700)
     if key_file.exists():
         key_file.chmod(0o600)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
@@ -77,7 +89,13 @@ def generate_token() -> str:
     return secrets.token_urlsafe(9)[:12]
 
 
-def assign_token(profile_name: str, agent_id: str, token: str, force: bool = False) -> None:
+def assign_token(
+    profile_name: str,
+    agent_id: str,
+    token: str,
+    force: bool = False,
+    ttl_days: int = TOKEN_TTL_DAYS,
+) -> None:
     existing_token = get_profile_token(profile_name)
     if existing_token is not None and not force:
         raise TokenAlreadyAssignedError(profile_name)
@@ -85,11 +103,13 @@ def assign_token(profile_name: str, agent_id: str, token: str, force: bool = Fal
     if existing_token is not None and force:
         revoke_token(existing_token)
 
+    now = datetime.now(UTC)
     data = {
         "token": token,
         "profile": profile_name,
         "agent": agent_id,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
     }
     tokens = _load_tokens_file()
     tokens.append(data)
@@ -99,8 +119,19 @@ def assign_token(profile_name: str, agent_id: str, token: str, force: bool = Fal
 
 def resolve_token(token: str) -> tuple[str, str] | None:
     tokens = _load_tokens_file()
+    now = datetime.now(UTC)
     for entry in tokens:
-        if entry["token"] == token:
+        if hmac.compare_digest(entry["token"], token):
+            expires_str = entry.get("expires_at")
+            if expires_str is not None:
+                expires = datetime.fromisoformat(expires_str)
+                if expires < now:
+                    logger.warning(
+                        "Token for profile '%s' has expired (expired %s)",
+                        entry["profile"],
+                        expires.isoformat(),
+                    )
+                    return None
             return (entry["profile"], entry["agent"])
     return None
 
@@ -122,3 +153,43 @@ def get_profile_token(profile_name: str) -> str | None:
         if assignment["profile"] == profile_name:
             return assignment["token"]
     return None
+
+
+def rotate_token(profile_name: str, ttl_days: int = TOKEN_TTL_DAYS) -> tuple[str, str] | None:
+    """Replace a profile's token with a new one, invalidating the old token.
+
+    Returns:
+        Tuple of (new_token, agent_id) if the profile had a token, None otherwise.
+    """
+    tokens = _load_tokens_file()
+    old_token: str | None = None
+    agent_id: str = "unknown"
+
+    for entry in tokens:
+        if entry["profile"] == profile_name:
+            old_token = entry["token"]
+            agent_id = entry.get("agent", "unknown")
+            break
+
+    if old_token is None:
+        return None
+
+    tokens = [t for t in tokens if t["token"] != old_token]
+
+    new_token = generate_token()
+    now = datetime.now(UTC)
+    tokens.append({
+        "token": new_token,
+        "profile": profile_name,
+        "agent": agent_id,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
+    })
+    _save_tokens_file(tokens)
+    logger.info(
+        "Rotated token for profile '%s': %s -> %s",
+        profile_name,
+        _mask_token(old_token),
+        _mask_token(new_token),
+    )
+    return new_token, agent_id
