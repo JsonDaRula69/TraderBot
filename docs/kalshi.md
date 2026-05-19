@@ -28,13 +28,15 @@ Our `kalshi/signing.py` implements `auth_headers()` which generates the three re
 ### Market Data (public, no auth required)
 
 | Endpoint | Description | Key Parameters |
-|---|---|---|
-| `GET /markets` | List all markets | `limit`, `cursor`, `event_ticker`, `series_ticker`, `min_close_ts`, `max_close_ts` |
+|---|---|---|---|
+| `GET /markets` | List all markets | `limit`, `cursor`, `event_ticker`, `series_ticker`, `status`, `min_close_ts`, `max_close_ts` |
 | `GET /markets/{ticker}` | Single market detail | — |
 | `GET /markets/{ticker}/orderbook` | Current order book | `depth` |
 | `GET /markets/trades` | Recent trades | `ticker` (required), `limit`, `cursor` |
-| `GET /events` | List events (groups of markets) | `limit`, `cursor`, `state` |
+| `GET /events` | List events (groups of markets) | `limit`, `cursor`, `with_nested_markets` |
 | `GET /events/{event_ticker}` | Single event detail | — |
+| `GET /series` | List series by category | `category` (case-sensitive, title-case) |
+| `GET /series/{series_ticker}` | Single series detail | — |
 
 ### Trading (auth required)
 
@@ -65,31 +67,22 @@ WebSocket auth is sent as HTTP headers during the handshake (same RSA-PSS signin
 
 Kalshi partitions data into **live** and **historical** tiers. Live endpoints return current/recent data; historical endpoints serve older settled data. This partitioning keeps the live API fast.
 
-### Determining the Cutoff
-
-Before querying historical data, call the cutoff endpoint:
-
-```
-GET /historical/cutoff
-```
-
-Returns timestamps for each data type (market_settled_ts, trade_cutoff_ts, order_cutoff_ts). Data older than these timestamps must be fetched from historical endpoints.
-
 ### Historical Endpoints
 
 | Endpoint | Description | Key Parameters |
 |---|---|---|
-| `GET /historical/cutoff` | Cutoff timestamps | — |
-| `GET /historical/markets` | Settled markets before cutoff | `min_settled_ts`, `max_settled_ts`, `event_ticker` |
+| `GET /historical/markets` | Settled markets | `min_settled_ts`, `max_settled_ts`, `event_ticker` |
 | `GET /historical/markets/{ticker}` | Single historical market | — |
-| `GET /historical/trades` | Trades filled before cutoff | `min_ts`, `max_ts`, `ticker`, `limit` (max 1000) |
-| `GET /historical/orders` | Canceled/executed orders before cutoff | `min_ts`, `max_ts`, `ticker` |
+| `GET /historical/trades` | Historical trades | `min_ts`, `max_ts`, `ticker`, `limit` (max 1000) |
+| `GET /historical/orders` | Canceled/executed orders | `min_ts`, `max_ts`, `ticker` |
+
+> Note: The `/historical/cutoff` endpoint and `CutoffTimestamps` model were removed in v0.10.166. Historical queries now fetch directly without a cutoff check.
 
 ### Backtesting Data Strategy
 
 Kalshi does **not** provide pre-aggregated candlestick/OHLCV data. To reconstruct price series:
 
-1. Fetch resolved markets via `GET /historical/markets` — includes settlement outcome
+1. Fetch resolved markets via `GET /historical/markets` with time range — includes settlement outcome
 2. Fetch trade history via `GET /historical/trades` with time range filters
 3. Paginate through trades (1000 per page) to build complete trade timeline
 4. Aggregate trades into candles at desired resolution (1min, 5min, 1hr, etc.)
@@ -111,21 +104,23 @@ Our `kalshi/client.py` implements direct HTTP calls with:
 from traderbot.kalshi import KalshiClient
 
 client = KalshiClient()  # reads env vars automatically
-markets = await client.list_markets(state="open")
+markets = await client.list_markets(status="active")
 orderbook = await client.get_orderbook("KXBTCD-26MAR31-T55000")
-result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", side="bid", price_dollars="0.55", count=10)
+result = await client.place_order(ticker="KXBTCD-26MAR31-T55000", side="bid", price="0.55", count="10")
 ```
 
 ## Market Data Model
 
 Key Pydantic models in `kalshi/models.py`:
 
-- **Market**: ticker, question, outcome prices, volume, open_interest, close_time, status
-- **OrderBook**: yes/no bids and asks with depth
+- **Market** (V2): ticker, title, status, close_time (ISO datetime), last_price_cents, yes_bid_cents, yes_ask_cents, no_bid_cents, no_ask_cents, volume_fp, open_interest_fp
+- **MarketV2**: Raw V2 API response model before normalization
+- **OrderBook**: yes/no bids and asks with depth (nested under `orderbook_fp`)
 - **Trade**: timestamp, price, quantity, side
 - **Order**: id, ticker, side, price, quantity, status, created_time
 - **Position**: ticker, quantity, avg_price, settlement_result
 - **Fill**: order_id, ticker, side, price, quantity, timestamp
+- **OrderRequest**: ticker, side (OrderSideV2), count (string), price (string), client_order_id, time_in_force
 
 ## Constraints
 

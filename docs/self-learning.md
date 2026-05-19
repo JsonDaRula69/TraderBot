@@ -39,7 +39,7 @@ These are not the strategy itself — they're tuning knobs that adjust how the s
 
 ### Update Cycle
 
-The adaptation engine runs during the Heartbeat Loop (every 6 hours):
+The adaptation engine runs during the Heartbeat Loop (every 30 minutes):
 
 1. Collect all decisions made since last heartbeat
 2. For closed markets: compare predicted outcome vs. actual
@@ -169,7 +169,7 @@ Errors are logged immediately when they occur. Unlike learnings (which require p
 **Status**: pending
 ### Error
 ```
-kalshi_python_async.ApiException: 429 Too Many Requests
+httpx.HTTPStatusError: 429 Too Many Requests
 ```
 ### Context
 - Endpoint: GET /historical/trades
@@ -274,7 +274,7 @@ During the heartbeat cycle, group closed-market decisions by semantic similarity
 
 - **Embedding model**: `voyage-4-large` (general-purpose, same model as decision search)
 - **Why not finance-specific**: Clusters span multiple market categories; a general-purpose model avoids category-specific bias
-- **Timing**: Runs every 6 hours during heartbeat, not on every decision
+- **Timing**: Runs every 30 minutes during heartbeat, not on every decision
 - **What is clustered**: Decision outcome sequences grouped by market condition similarity
 
 ### Clustering Flow

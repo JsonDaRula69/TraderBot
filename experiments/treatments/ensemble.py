@@ -1,11 +1,23 @@
-"""EnsembleTreatment — combines bin_cal, logistic_reg, and llm_synthesis via weighted average."""
+"""EnsembleTreatment — combines bin_cal, logistic_reg, and llm_synthesis via weighted average.
+
+Non-deterministic treatment: formats prompts for the V3 harness LLM.
+bin_cal and logistic_reg sub-methodologies can use V2 deterministic computation
+when a V2 DB path is provided; otherwise they fall back to heuristic estimates.
+"""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from experiments.v3.treatment_interface import TreatmentContext, TreatmentInterface
 
-from .bin_cal import BinCalTreatment, compute_delta as bin_cal_delta, estimate_bin_probability
-from .logistic_reg import LogisticRegTreatment, compute_delta as logistic_delta, simple_logistic_probability
+from .bin_cal import BinCalTreatment, estimate_bin_probability
+from .bin_cal import compute_delta as bin_cal_delta
+from .logistic_reg import LogisticRegTreatment, simple_logistic_probability
+from .logistic_reg import compute_delta as logistic_delta
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _DEFAULT_WEIGHTS = {
     "bin_cal": 0.3,
@@ -29,7 +41,8 @@ class EnsembleTreatment(TreatmentInterface):
     _weights: dict[str, float]
     _bin_cal: BinCalTreatment
     _logistic_reg: LogisticRegTreatment
-    _llm_synthesis: "_LLMSynthesisOnly"
+    _llm_synthesis: _LLMSynthesisOnly
+    _v2_db_path: str | Path | None
 
     def __init__(
         self,
@@ -37,11 +50,13 @@ class EnsembleTreatment(TreatmentInterface):
         bin_cal_data: dict | None = None,
         logistic_weights: dict[str, float] | None = None,
         logistic_intercept: float = 0.0,
+        v2_db_path: str | Path | None = None,
     ) -> None:
         self._weights = weights if weights is not None else _DEFAULT_WEIGHTS.copy()
-        self._bin_cal = BinCalTreatment(calibration_data=bin_cal_data)
-        self._logistic_reg = LogisticRegTreatment(weights=logistic_weights, intercept=logistic_intercept)
+        self._bin_cal = BinCalTreatment(calibration_data=bin_cal_data, v2_db_path=v2_db_path)
+        self._logistic_reg = LogisticRegTreatment(weights=logistic_weights, intercept=logistic_intercept, v2_db_path=v2_db_path)
         self._llm_synthesis = _LLMSynthesisOnly()
+        self._v2_db_path = v2_db_path
 
     @property
     def name(self) -> str:

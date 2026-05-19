@@ -2706,16 +2706,52 @@ def profile_delete(
 
 
 def _resolve_agent_path(agent_id: str) -> Path | None:
-    """Resolve agent workspace path using OpenClaw multi-agent layout.
+    """Resolve agent path from openclaw.json config, then fall back to filesystem heuristics.
 
-    Search order:
-    1. ~/.openclaw/workspace-<agentId>/ (OpenClaw per-agent workspace)
-    2. ~/.openclaw/workspace/<agentId>/ (subdirectory layout)
-    3. ~/.openclaw/agents/<agentId>/ (agent state directory)
-    4. .openclaw/workspace/<agentId>/ (project-local, legacy)
+    Source of truth is always openclaw.json ``agents.list``.  This handles every
+    combination OpenClaw supports: explicit workspace, inherited default workspace,
+    agentDir-only configs, and default-flagged agents.
     """
     from pathlib import Path
+    import json as _json
 
+    # 1. Read openclaw.json — authoritative agent definitions
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    if config_path.exists():
+        try:
+            config = _json.loads(config_path.read_text())
+            section = config.get("agents", {})
+            defaults_ws = section.get("defaults", {}).get("workspace", "")
+
+            for entry in section.get("list", []):
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("id") != agent_id:
+                    continue
+
+                ws = entry.get("workspace") or defaults_ws
+                if ws:
+                    p = Path(ws).expanduser()
+                    if p.is_dir() and ((p / "IDENTITY.md").exists() or (p / "TOOLS.md").exists()):
+                        return p
+
+                ad = entry.get("agentDir", "")
+                if ad:
+                    p = Path(ad).expanduser()
+                    if p.is_dir() and ((p / "IDENTITY.md").exists() or (p / "TOOLS.md").exists()):
+                        return p
+
+                # Return existing dir even without markers — propagate_workspace_files creates them
+                if ws:
+                    p = Path(ws).expanduser()
+                    if p.is_dir():
+                        return p
+
+                break
+        except (_json.JSONDecodeError, OSError):
+            pass
+
+    # 2. Fallback: filesystem heuristics for agents not in config
     candidates = [
         Path.home() / ".openclaw" / f"workspace-{agent_id}",
         Path.home() / ".openclaw" / "workspace" / agent_id,
@@ -2724,7 +2760,7 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
     ]
     for candidate in candidates:
         if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
-                return candidate
+            return candidate
     return None
 
 
@@ -2814,16 +2850,14 @@ def _do_assign(
                 # Configure OpenClaw features for this agent
                 try:
                     from traderbot.profiles.openclaw_config import (
-                        configure_agent_sandbox,
                         enable_session_memory_hook,
                         ensure_agent_bootstrap_hook,
                     )
 
-                    configure_agent_sandbox(agent_id)
                     enable_session_memory_hook()
                     ensure_agent_bootstrap_hook()
                     console.print(
-                        "[green]✓[/green] OpenClaw features configured (hooks, sandbox)"
+                        "[green]✓[/green] OpenClaw features configured (hooks)"
                     )
 
                     # Install news ingestion timer

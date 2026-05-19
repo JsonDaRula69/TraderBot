@@ -1,16 +1,37 @@
-"""LLMSynthesisTreatment — uses the LLM itself to estimate probability from raw market data."""
+"""LLMSynthesisTreatment — uses the LLM itself to estimate probability from raw market data.
+
+Non-deterministic treatment: formats a V2-style prompt for the V3 harness LLM.
+The harness sends the prompt to its LLM client; no internal LLM call is made.
+"""
 
 from experiments.v3.treatment_interface import TreatmentContext, TreatmentInterface
 
+_PROMPT_TEMPLATE = """\
+You are a weather market analyst. Estimate the probability that the following prediction market resolves YES.
+
+Market: {question}
+Forecast (timestep {timestep}/10, {forecast_date}):
+- High temp: {temp_max_f}°F
+- Low temp: {temp_min_f}°F
+- Humidity: {humidity_max_pct}%
+- Wind: {wind_speed_max_kmh} km/h
+- Precipitation: {precip_mm}mm
+- Weather code: {weather_code}
+
+Threshold: {strike_value}°F ({direction})
+Current market: YES={yes_price}, NO={no_price}
+{prior_decisions_summary}
+
+Respond ONLY with a JSON object:
+{{"estimated_prob": float, "confidence": float, "reasoning": string}}"""
+
 
 class LLMSynthesisTreatment(TreatmentInterface):
-    """Asks the LLM to directly estimate probability from market data.
+    """Formats V2-style synthesis prompt for the V3 harness LLM.
 
-    This is the V2-style "let the LLM reason about the data" approach.
-    The prompt presents the market data, forecast, and accuracy information,
-    then asks the LLM to estimate probability and make a decision.
-    Unlike the other treatments, there is no pre-computed statistical
-    estimate — the LLM provides both the reasoning and the probability.
+    Non-deterministic — the harness sends the prompt through its LLM client.
+    Uses V2's rich prompt template with humidity, wind, precipitation, and
+    weather code data alongside temperature and market prices.
     """
 
     @property
@@ -18,22 +39,37 @@ class LLMSynthesisTreatment(TreatmentInterface):
         return "llm_synthesis"
 
     def format_prompt(self, ctx: TreatmentContext) -> str:
-        sections: list[str] = []
+        direction = self._get_direction(ctx.market.strike_type)
+        question = self._build_question(ctx.market)
+        prior = self._format_prior(ctx.prior.decisions)
+
+        prompt = _PROMPT_TEMPLATE.format(
+            question=question,
+            timestep=ctx.timestep + 1,
+            forecast_date=ctx.market.resolution_date,
+            temp_max_f=ctx.forecast.forecast_temp_f or "N/A",
+            temp_min_f=getattr(ctx.forecast, "forecast_min_temp_f", None) or "N/A",
+            humidity_max_pct=getattr(ctx.forecast, "humidity_max_pct", None) or "N/A",
+            wind_speed_max_kmh=getattr(ctx.forecast, "wind_speed_max_kmh", None) or "N/A",
+            precip_mm=getattr(ctx.forecast, "precip_mm", None) or "N/A",
+            weather_code=getattr(ctx.forecast, "weather_code", None) or "N/A",
+            strike_value=ctx.market.threshold,
+            direction=direction,
+            yes_price=ctx.prices.yes_price,
+            no_price=ctx.prices.no_price,
+            prior_decisions_summary=prior,
+        )
 
         if ctx.system_context:
-            sections.append(
+            prompt = (
                 "=== PRODUCTION AGENT SYSTEM CONTEXT ===\n"
-                "The following files define the production trading agent's capabilities, "
-                "constraints, and decision framework. Use them as context for your decision.\n\n"
-                f"{ctx.system_context}\n"
-                "=== END PRODUCTION AGENT SYSTEM CONTEXT ==="
+                "The following defines the production trading agent's decision framework.\n\n"
+                f"{ctx.system_context}\n\n"
+                "=== END SYSTEM CONTEXT ===\n\n"
+                + prompt
             )
 
-        sections.append(self._build_market_section(ctx))
-        sections.append(self._build_synthesis_instruction(ctx))
-        sections.append(self._build_decision_instruction())
-
-        return "\n\n".join(sections)
+        return prompt
 
     def validate_response(self, response: dict) -> bool:
         decision = response.get("decision")
@@ -47,67 +83,25 @@ class LLMSynthesisTreatment(TreatmentInterface):
         confidence = response.get("confidence")
         return isinstance(confidence, (int, float))
 
-    def _build_market_section(self, ctx: TreatmentContext) -> str:
-        lines = [
-            "=== MARKET DATA ===",
-            f"Market: {ctx.market.ticker} — {ctx.market.city}",
-            f"Strike: {ctx.market.strike_type} {ctx.market.threshold}",
-            f"Resolution: {ctx.market.resolution_date}",
-            "",
-            f"YES price: {ctx.prices.yes_price:.2f}  |  NO price: {ctx.prices.no_price:.2f}",
-            f"Implied probability: {ctx.prices.implied_prob:.2f}",
-            f"Trade count: {ctx.prices.trade_count}  |  Open interest: {ctx.prices.open_interest}",
-            "",
-            "Forecast:",
-            f"  Temperature: {ctx.forecast.forecast_temp_f}°F",
-            f"  Source: {ctx.forecast.source}",
-            f"  Days before resolution: {ctx.forecast.days_before}",
-            "",
-            "Forecast accuracy:",
-            f"  City: {ctx.accuracy.city}",
-            f"  Lead time: {ctx.accuracy.lead_time} days",
-            f"  MAE: {ctx.accuracy.mae:.1f}°F",
-            f"  Bias: {ctx.accuracy.bias:+.1f}°F",
-            f"  Sample count: {ctx.accuracy.sample_count}",
-        ]
-        if ctx.accuracy.low_confidence:
-            lines.append("  ⚠ LOW CONFIDENCE — small sample size")
+    def _get_direction(self, strike_type: str) -> str:
+        return strike_type
+
+    def _build_question(self, m) -> str:
+        if m.strike_type == "greater":
+            return f"Will the high temperature in {m.city} on {m.resolution_date} be above {m.threshold}°F?"
+        elif m.strike_type == "less":
+            return f"Will the high temperature in {m.city} on {m.resolution_date} be below {m.threshold}°F?"
+        else:
+            between_high = int(m.ceiling_strike) if m.ceiling_strike else int(m.threshold) + 1
+            return f"Will the high temperature in {m.city} on {m.resolution_date} be between {int(m.threshold)}°F and {between_high}°F?"
+
+    def _format_prior(self, decisions: list) -> str:
+        if not decisions:
+            return "No prior decisions for this market."
+        lines = ["Prior decisions:"]
+        for d in decisions:
+            ts = d.get("timestep", "?")
+            dec = d.get("decision", "?")
+            prob = d.get("estimated_prob", 0.0)
+            lines.append(f"- timestep {ts}: {dec} (prob={float(prob):.2f})")
         return "\n".join(lines)
-
-    def _build_synthesis_instruction(self, ctx: TreatmentContext) -> str:
-        lines = [
-            "=== PROBABILITY ESTIMATION TASK ===",
-            "You are a weather market analyst. Estimate the probability that this prediction "
-            "market resolves YES based on the market data above.",
-            "",
-            f"Consider the forecast temperature ({ctx.forecast.forecast_temp_f}°F) relative "
-            f"to the {ctx.market.strike_type} threshold ({ctx.market.threshold}°F).",
-            f"Factor in the forecast accuracy: MAE of {ctx.accuracy.mae:.1f}°F "
-            f"with {'a' if ctx.accuracy.bias >= 0 else ''} bias of {ctx.accuracy.bias:+.1f}°F.",
-            f"The market currently implies a {ctx.prices.implied_prob:.0%} probability.",
-            "",
-            "Reason step by step about whether the forecast temperature will exceed (for 'greater' "
-            "strike types) or fall below (for 'less' strike types) the threshold. Consider the "
-            "forecast accuracy — the actual temperature has historically been off by the MAE — "
-            "and whether the forecast bias suggests systematic over- or under-prediction.",
-        ]
-
-        if ctx.accuracy.low_confidence:
-            lines.append(
-                "⚠ The accuracy data has LOW CONFIDENCE. Weight your estimate accordingly."
-            )
-
-        lines.extend([
-            "",
-            "Provide your estimated_prob (0.0 to 1.0) and confidence (0.0 to 1.0) in your response.",
-        ])
-
-        return "\n".join(lines)
-
-    def _build_decision_instruction(self) -> str:
-        return (
-            "=== DECISION ===\n"
-            "Based on your probability estimation above, make a trading decision.\n\n"
-            'Respond ONLY with a JSON object: {"decision": "buy_yes"|"buy_no"|"skip", '
-            '"estimated_prob": float, "confidence": float, "reasoning": string}'
-        )

@@ -191,55 +191,6 @@ find_compatible_python() {
     return 1
 }
 
-build_sandbox_image() {
-    # Build the OpenClaw sandbox Docker image if Docker is available and image missing
-    if ! command -v docker &>/dev/null; then
-        echo "  Docker not available — skipping sandbox image build."
-        return 0
-    fi
-
-    if docker image inspect openclaw-sandbox:bookworm-slim &>/dev/null; then
-        echo "  Sandbox image openclaw-sandbox:bookworm-slim already exists."
-        return 0
-    fi
-
-    echo "Building OpenClaw sandbox Docker image..."
-    local tmpdir
-    tmpdir="$(mktemp -d openclaw-sandbox.XXXXXX)"
-
-    cat > "${tmpdir}/Dockerfile" << 'DOCKERFILE'
-FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,id=openclaw-sandbox-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
-  apt-get update \
-  && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    curl \
-    git \
-    jq \
-    python3 \
-    ripgrep
-
-RUN useradd --create-home --shell /bin/bash sandbox
-USER sandbox
-WORKDIR /home/sandbox
-
-CMD ["sleep", "infinity"]
-DOCKERFILE
-
-    if docker build -t openclaw-sandbox:bookworm-slim "${tmpdir}" 2>&1; then
-        echo "  Sandbox image built successfully."
-    else
-        echo "  Warning: Failed to build sandbox image. Agent sandboxing may not work." >&2
-        echo "  You can build it manually with: docker build -t openclaw-sandbox:bookworm-slim <dir>" >&2
-    fi
-    rm -rf "${tmpdir}"
-}
-
 check_openclaw() {
     if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
         return 0
@@ -254,7 +205,7 @@ check_docker() {
             return 0
         else
             echo "Warning: Docker is installed but the daemon is not running." >&2
-            echo "  Start Docker Desktop or the Docker service to enable sandboxing." >&2
+            echo "  Start Docker Desktop or the Docker service." >&2
             return 1
         fi
     fi
@@ -264,7 +215,7 @@ check_docker() {
 install_dependencies_debian() {
     local pkgs=(build-essential g++ python3-dev python3-venv python3.12 python3.12-venv python3.12-dev unzip curl git file python3-pip jq)
 
-    # Install Docker if not present (required for OpenClaw agent sandboxing)
+    # Install Docker if not present (optional)
     if ! command -v docker &>/dev/null; then
         echo "Installing Docker..."
         if command -v apt &>/dev/null; then
@@ -332,7 +283,7 @@ install_dependencies_macos() {
         fi
     fi
 
-    # Install Docker Desktop if not present (required for OpenClaw agent sandboxing)
+    # Install Docker Desktop if not present (optional)
     if ! command -v docker &>/dev/null; then
         echo "Installing Docker Desktop via Homebrew..."
         brew install --cask docker
@@ -1246,7 +1197,7 @@ for key, value in new.items():
     else:
         existing[key] = value
 
-# Preserve any sub-keys of agents that weren't in the template (e.g., hooks, sandbox)
+# Preserve any sub-keys of agents that weren't in the template (e.g., hooks)
 if 'agents' in existing and isinstance(existing['agents'], dict) and 'list' in existing['agents']:
     for entry in existing['agents']['list']:
         # __PROFILE_NAME__ placeholder was already expanded by profile assign
@@ -1340,13 +1291,6 @@ main() {
         exit 1
     fi
 
-    if ! check_docker; then
-        echo "" >&2
-        echo "  Note: Docker is not running. OpenClaw agent sandboxing will be disabled." >&2
-        echo "  Install and start Docker to enable agent sandboxing." >&2
-        echo "" >&2
-    fi
-
     echo "Installing dependencies..."
     case "$OS_TYPE" in
         macos)
@@ -1359,9 +1303,6 @@ main() {
             echo "Warning: Linux distro not fully supported. Manual dependency installation may be required."
             ;;
     esac
-
-    echo "Building OpenClaw sandbox image..."
-    build_sandbox_image
 
     echo "Installing TraderBot..."
     install_traderbot

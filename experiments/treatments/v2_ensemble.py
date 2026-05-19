@@ -1,7 +1,8 @@
-"""V2 LLM Synthesis treatment wrapper — delegates to V2 LLMSynthesisMethodology.
+"""V2 Ensemble treatment wrapper — delegates to V2 EnsembleMethodology.
 
 Translates V3 TreatmentContext into a V2-style forecast dict, calls the V2
-LLMSynthesisMethodology.estimate(), and converts MethodologyResult to TreatmentResponse.
+EnsembleMethodology.estimate() (which internally runs bin_cal, logistic_reg,
+and llm_synthesis), and converts MethodologyResult to TreatmentResponse.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from experiments.v2.methodologies.llm_synthesis import LLMSynthesisMethodology
+from experiments.v2.methodologies.ensemble import EnsembleMethodology
 
 if TYPE_CHECKING:
     from experiments.v2.methodologies.base import MethodologyResult
@@ -61,27 +62,33 @@ def _result_to_response(
     else:
         decision = "skip"
 
+    # Flatten sub-methodology reasoning for readability
     reasoning = "; ".join(f"{k}={v}" for k, v in result.reasoning.items())
 
     return TreatmentResponse(
         decision=decision,
         estimated_prob=result.estimated_prob,
         confidence=result.confidence,
-        reasoning=f"[llm_synthesis] {reasoning}",
+        reasoning=f"[ensemble] {reasoning}",
     )
 
 
-class V2LlmSynthesisTreatment(TreatmentInterface):
-    """Wraps V2 LLMSynthesisMethodology as a V3 TreatmentInterface plug-in."""
+class V2EnsembleTreatment(TreatmentInterface):
+    """Wraps V2 EnsembleMethodology as a V3 TreatmentInterface plug-in."""
 
-    _methodology: LLMSynthesisMethodology
+    _methodology: EnsembleMethodology
 
-    def __init__(self, db_path: Path = _DB_PATH, ollama_url: str = "http://localhost:11434") -> None:
-        self._methodology = LLMSynthesisMethodology(db_path, ollama_url)
+    def __init__(
+        self,
+        db_path: Path = _DB_PATH,
+        weights: dict | None = None,
+        ollama_url: str = "http://localhost:11434",
+    ) -> None:
+        self._methodology = EnsembleMethodology(db_path, weights=weights, ollama_url=ollama_url)
 
     @property
     def name(self) -> str:
-        return "v2_llm_synthesis"
+        return "v2_ensemble"
 
     def format_prompt(self, ctx: TreatmentContext) -> str:
         forecast = _context_to_forecast(ctx)
@@ -93,7 +100,7 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
             prior_decisions=prior,
         )
         return (
-            f"LLM Synthesis estimate for {ctx.market.ticker}:\n"
+            f"Ensemble estimate for {ctx.market.ticker}:\n"
             f"  estimated_prob={result.estimated_prob:.4f}\n"
             f"  confidence={result.confidence:.4f}\n"
             f"  reasoning: {result.reasoning}\n"
@@ -102,11 +109,11 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
         )
 
     def validate_response(self, response: str | dict) -> bool:
-        """Always valid — the V2 methodology handles LLM parsing internally."""
+        """Always valid — result is computed from sub-methodologies."""
         return True
 
-    def run(self, ctx: TreatmentContext) -> TreatmentResponse:
-        """Execute V2 LLMSynthesisMethodology.estimate and return TreatmentResponse."""
+    def direct_decide(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Non-LLM direct decision via V2 EnsembleMethodology.estimate."""
         forecast = _context_to_forecast(ctx)
         prior = _context_to_prior_decisions(ctx)
         result = self._methodology.estimate(
@@ -116,3 +123,11 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
             prior_decisions=prior,
         )
         return _result_to_response(result, ctx.prices.yes_price)
+
+    def run(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Alias for direct_decide — backward compatibility."""
+        return self.direct_decide(ctx)
+
+    def compute_decision(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Alias for direct_decide — harness compatibility."""
+        return self.direct_decide(ctx)

@@ -13,7 +13,7 @@ Multi-agent deployment introduces new attack surfaces that do not exist in singl
 | **Profile hijacking** | Agent attempts to modify its own profile | Profile stored in `.env` file agent cannot modify at runtime |
 | **Risk limit override** | Agent attempts to set aggressive risk parameters | HARD_LIMITS ceiling enforcement at profile creation + at runtime |
 | **Credential theft** | Agent reads another profile's API keys | Shared `.env` file; all profiles share the same API keys |
-| **Data isolation breach** | Agent reads another agent's SQLite/ChromaDB | Separate base directories per profile mode |
+| **Data isolation breach** | Agent reads another agent's SQLite/ChromaDB | Separate base directories per profile (`~/.traderbot/{mode}-{name}/`) |
 | **Token re-use** | Revoked token still resolves | `revoke_token()` removes token from registry; resolution fails immediately |
 | **Category filter bypass** | Agent attempts to trade disabled market categories | Category check in `evaluate_trade()` before any sizing |
 
@@ -110,12 +110,12 @@ The agent receives a token via TOOLS.md injection. It cannot change the token va
 
 ### Layer 5: Data Isolation
 
-Profile data directories are separate:
+Each profile has isolated data directories under `~/.traderbot/{mode}-{name}/`:
 
-- Paper mode: `~/.traderbot-paper/`
-- Live mode: `~/.traderbot-live/`
+- Paper agent: `~/.traderbot/paper-weather-agent/`
+- Live agent: `~/.traderbot/live-portfolio/`
 
-An agent running with a paper profile token cannot access the live profile's SQLite database or ChromaDB vectors. The isolation is at the filesystem level (enforced by the OS).
+An agent running with one profile token cannot access another profile's SQLite database or ChromaDB vectors (different base directories). The isolation is at the filesystem level (enforced by the OS and file permissions).
 
 ## What Agents Cannot Do
 
@@ -126,7 +126,7 @@ These restrictions are enforced by the system and cannot be bypassed by the agen
 3. **Cannot read another profile's credentials** — Keyring namespace isolation prevents cross-profile credential access
 4. **Cannot use revoked tokens** — `revoke_token()` removes the token entry immediately
 5. **Cannot bypass category filtering** — Category check is in the risk gate before sizing
-6. **Cannot access another profile's data** — Separate SQLite and ChromaDB directories per mode
+6. **Cannot access another profile's data** — Separate SQLite and ChromaDB directories per profile (`~/.traderbot/{mode}-{name}/`)
 7. **Cannot self-assign a token** — Token generation requires CLI invocation by a human
 8. **Cannot increase position size beyond profile limits** — Sized position is capped by the effective limit
 

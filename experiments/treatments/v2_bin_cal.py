@@ -1,7 +1,7 @@
-"""V2 LLM Synthesis treatment wrapper — delegates to V2 LLMSynthesisMethodology.
+"""V2 BinCal treatment wrapper — delegates to V2 BinCalMethodology via TreatmentInterface.
 
 Translates V3 TreatmentContext into a V2-style forecast dict, calls the V2
-LLMSynthesisMethodology.estimate(), and converts MethodologyResult to TreatmentResponse.
+BinCalMethodology.estimate(), and converts MethodologyResult to TreatmentResponse.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from experiments.v2.methodologies.llm_synthesis import LLMSynthesisMethodology
+from experiments.v2.methodologies.bin_cal import BinCalMethodology
 
 if TYPE_CHECKING:
     from experiments.v2.methodologies.base import MethodologyResult
@@ -21,6 +21,7 @@ from experiments.v3.treatment_interface import (
 
 _DB_PATH = Path("experiments/v2/v2_experiment_data.db")
 
+# Decision threshold: edge vs market price required to act
 _EDGE_THRESHOLD = 0.05
 
 
@@ -67,21 +68,21 @@ def _result_to_response(
         decision=decision,
         estimated_prob=result.estimated_prob,
         confidence=result.confidence,
-        reasoning=f"[llm_synthesis] {reasoning}",
+        reasoning=f"[bincal] {reasoning}",
     )
 
 
-class V2LlmSynthesisTreatment(TreatmentInterface):
-    """Wraps V2 LLMSynthesisMethodology as a V3 TreatmentInterface plug-in."""
+class V2BinCalTreatment(TreatmentInterface):
+    """Wraps V2 BinCalMethodology as a V3 TreatmentInterface plug-in."""
 
-    _methodology: LLMSynthesisMethodology
+    _methodology: BinCalMethodology
 
-    def __init__(self, db_path: Path = _DB_PATH, ollama_url: str = "http://localhost:11434") -> None:
-        self._methodology = LLMSynthesisMethodology(db_path, ollama_url)
+    def __init__(self, db_path: Path = _DB_PATH) -> None:
+        self._methodology = BinCalMethodology(db_path)
 
     @property
     def name(self) -> str:
-        return "v2_llm_synthesis"
+        return "v2_bin_cal"
 
     def format_prompt(self, ctx: TreatmentContext) -> str:
         forecast = _context_to_forecast(ctx)
@@ -93,7 +94,7 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
             prior_decisions=prior,
         )
         return (
-            f"LLM Synthesis estimate for {ctx.market.ticker}:\n"
+            f"BinCal estimate for {ctx.market.ticker}:\n"
             f"  estimated_prob={result.estimated_prob:.4f}\n"
             f"  confidence={result.confidence:.4f}\n"
             f"  reasoning: {result.reasoning}\n"
@@ -102,11 +103,11 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
         )
 
     def validate_response(self, response: str | dict) -> bool:
-        """Always valid — the V2 methodology handles LLM parsing internally."""
+        """Always valid — result is computed deterministically from V2 methodology."""
         return True
 
-    def run(self, ctx: TreatmentContext) -> TreatmentResponse:
-        """Execute V2 LLMSynthesisMethodology.estimate and return TreatmentResponse."""
+    def direct_decide(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Non-LLM direct decision: call V2 BinCalMethodology.estimate and convert to TreatmentResponse."""
         forecast = _context_to_forecast(ctx)
         prior = _context_to_prior_decisions(ctx)
         result = self._methodology.estimate(
@@ -116,3 +117,11 @@ class V2LlmSynthesisTreatment(TreatmentInterface):
             prior_decisions=prior,
         )
         return _result_to_response(result, ctx.prices.yes_price)
+
+    def run(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Alias for direct_decide — backward compatibility."""
+        return self.direct_decide(ctx)
+
+    def compute_decision(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Alias for direct_decide — harness compatibility."""
+        return self.direct_decide(ctx)

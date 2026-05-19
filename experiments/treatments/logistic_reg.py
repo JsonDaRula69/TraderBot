@@ -1,8 +1,18 @@
-"""LogisticRegTreatment — uses logistic regression on forecast features to estimate probability."""
+"""LogisticRegTreatment — uses logistic regression on forecast features to estimate probability.
+
+Supports deterministic mode via compute_decision() which wraps V2
+LogisticRegMethodology.estimate() directly, bypassing the LLM entirely.
+"""
 
 from __future__ import annotations
 
-from experiments.v3.treatment_interface import TreatmentContext, TreatmentInterface
+from pathlib import Path
+
+from experiments.v3.treatment_interface import (
+    TreatmentContext,
+    TreatmentInterface,
+    TreatmentResponse,
+)
 
 
 def compute_delta(ctx: TreatmentContext) -> float:
@@ -92,14 +102,17 @@ class LogisticRegTreatment(TreatmentInterface):
 
     _weights: dict[str, float] | None
     _intercept: float
+    _v2_db_path: Path | None
 
     def __init__(
         self,
         weights: dict[str, float] | None = None,
         intercept: float = 0.0,
+        v2_db_path: str | Path | None = None,
     ) -> None:
         self._weights = weights
         self._intercept = intercept
+        self._v2_db_path = Path(v2_db_path) if v2_db_path else None
 
     @property
     def name(self) -> str:
@@ -134,6 +147,83 @@ class LogisticRegTreatment(TreatmentInterface):
 
         confidence = response.get("confidence")
         return isinstance(confidence, (int, float))
+
+    def compute_decision(self, ctx: TreatmentContext) -> TreatmentResponse:
+        """Compute deterministic decision via V2 LogisticRegMethodology without LLM."""
+        from experiments.v2.methodologies.logistic_reg import LogisticRegMethodology
+
+        db_path = self._v2_db_path or Path("experiments/v2/v2_experiment_data.db")
+        try:
+            v2 = LogisticRegMethodology(db_path)
+            forecast_dict = self._ctx_to_v2_forecast(ctx)
+            ticker_override = self._ctx_to_v2_ticker(ctx)
+            result = v2.estimate(
+                ticker=ticker_override,
+                forecast=forecast_dict,
+                timestep=ctx.timestep,
+                prior_decisions=ctx.prior.decisions,
+            )
+            decision = self._prob_to_decision(result.estimated_prob, ctx.prices.implied_prob)
+            return TreatmentResponse(
+                decision=decision,
+                estimated_prob=result.estimated_prob,
+                confidence=result.confidence,
+                reasoning=str(result.reasoning),
+            )
+        except Exception:
+            return TreatmentResponse(
+                decision=self._prob_to_decision(0.5, ctx.prices.implied_prob),
+                estimated_prob=0.5,
+                confidence=0.1,
+                reasoning="V2 logistic_reg fallback: DB unavailable, uniform prior",
+            )
+
+    def _ctx_to_v2_forecast(self, ctx: TreatmentContext) -> dict:
+        return {
+            "temp_max_f": ctx.forecast.forecast_temp_f,
+            "temp_min_f": getattr(ctx.forecast, "forecast_min_temp_f", 0.0) or 0.0,
+            "humidity_max_pct": getattr(ctx.forecast, "humidity_max_pct", 0.0) or 0.0,
+            "wind_speed_max_kmh": getattr(ctx.forecast, "wind_speed_max_kmh", 0.0) or 0.0,
+            "precip_mm": getattr(ctx.forecast, "precip_mm", 0.0) or 0.0,
+            "weather_code": getattr(ctx.forecast, "weather_code", 0) or 0,
+            "forecast_date": ctx.market.resolution_date,
+        }
+
+    def _ctx_to_v2_ticker(self, ctx: TreatmentContext) -> str:
+        import calendar as _cal
+
+        st = ctx.market.strike_type
+        ticker = ctx.market.ticker
+
+        if st == "greater" and "HIGH" not in ticker.upper():
+            ticker = ticker.replace("LOW", "HIGH")
+        elif st == "less" and "LOW" not in ticker.upper():
+            ticker = ticker.replace("HIGH", "LOW")
+
+        date_str = ctx.market.resolution_date
+        try:
+            y, m, d = date_str.split("-")
+            month_abbr = _cal.month_abbr[int(m)].upper()
+            date_seg = f"{int(d):02d}{month_abbr}{str(y)[2:]}"
+        except (ValueError, IndexError):
+            date_seg = "01JAN25"
+
+        threshold = ctx.market.threshold
+        if threshold == int(threshold) and threshold < 100:
+            band_val = str(int(threshold))
+        else:
+            band_val = str(threshold)
+
+        return f"{ticker}-{date_seg}-B{band_val}"
+
+    def _prob_to_decision(self, prob: float, implied_prob: float) -> str:
+        edge = prob - implied_prob
+        if edge > 0.05:
+            return "buy_yes"
+        elif edge < -0.05:
+            return "buy_no"
+        return "skip"
+
 
     def _build_market_section(self, ctx: TreatmentContext) -> str:
         lines = [

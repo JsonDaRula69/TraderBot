@@ -30,7 +30,7 @@ No single market can consume more than 5% of total portfolio value. This prevent
 
 ### Daily Loss Circuit Breaker
 
-If the portfolio loses more than 2% in a single day, trading halts until the next market open. This prevents tilt — the tendency to chase losses with increasingly risky bets.
+If the portfolio loses more than 2% in a single day, trading halts. This prevents tilt — the tendency to chase losses with increasingly risky bets. Trading resumes automatically when the daily loss drops below the threshold on the next `check()` call.
 
 **Check**: `today_realized_loss + today_unrealized_loss <= portfolio_value * 0.02`
 
@@ -95,12 +95,12 @@ The toolkit caps confidence-scaled positions at the per-market limit regardless 
 Three-tier system with increasing severity:
 
 | Level | Trigger | Action | Recovery |
-|---|---|---|---|
-| **Level 1: Slow** | Daily loss > 1% | Reduce position sizes by 50% | Automatic at next market open |
-| **Level 2: Halt** | Daily loss > 2% | No new trades; existing positions held | Automatic at next market open |
-| **Level 3: Full Stop** | Drawdown > 10% | All trading halted; notify human | **Manual only** — human must clear flag |
+|---|---|---|---|---|
+| **Level 1: Slow** | Daily loss > 1% | Reduce position sizes by 50% | Automatic on next `check()` — resets when loss drops below threshold |
+| **Level 2: Halt** | Daily loss > 2% | No new trades; existing positions held | Automatic on next `check()` — resets when loss drops below threshold |
+| **Level 3: Full Stop** | Drawdown > 10% | All trading halted; `position_size_multiplier=0.0` | **Manual only** — `traderbot resume` or manual `FULL_STOP` flag clear |
 
-The circuit breaker state persists in `SESSION-STATE.md`. On restart, the agent reads the state and respects any active breaker.
+The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). On restart, the agent reads the persisted state and respects any active breaker level.
 
 ## Audit Trail
 

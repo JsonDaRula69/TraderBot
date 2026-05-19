@@ -89,9 +89,9 @@ See [docs/deployment.md](docs/deployment.md) for full deployment instructions in
 TraderBot runs three autonomous loops via OpenClaw:
 
 | Loop | Frequency | Purpose |
-|---|---|---|
-| **Decision Loop** | Continuous (market hours) | Analyze → signal → risk-check → execute |
-| **Heartbeat Loop** | Every 6 hours | Performance review → adapt parameters → log learnings |
+|---|---|---|---|
+| **Decision Loop** | Every 5 minutes (24/7) | Analyze → signal → risk-check → execute |
+| **Heartbeat Loop** | Every 30 minutes | Performance review → adapt parameters → log learnings |
 | **News/Sentiment Loop** | Event-driven | Process news → classify → update market outlook |
 
 See [docs/architecture.md](docs/architecture.md) for the full system design.
@@ -112,22 +112,42 @@ traderbot/
 │   │   ├── tokens.py        # Token generation/resolution
 │   │   ├── config.py        # Profile-aware credential resolution
 │   │   ├── isolation.py     # Per-profile data isolation
-│   │   └── runtime.py       # Runtime context resolution
+│   │   ├── runtime.py       # Runtime context resolution
+│   │   ├── auth.py          # Credential management & AuthManager
+│   │   ├── discovery.py     # OpenClaw agent discovery
+│   │   ├── injection.py     # Token/agent file injection
+│   │   └── injection_strategies.py  # File merge strategies
 │   ├── db/                  # State persistence (SQLite)
-│   └── cli.py               # CLI entry point
+│   ├── cli.py               # CLI entry point (Typer)
+│   ├── cron_loops.py        # Three-loop cron models
+│   ├── paths.py             # Data directory resolution
+│   ├── wal.py               # Write-ahead log protocol
+│   ├── heartbeat.py         # Self-review cycle logic
+│   ├── learning.py          # Learning log manager
+│   ├── auth.py              # AuthManager
+│   └── updater.py           # Version management
 ├── install/
 │   ├── traderbot-installer.sh  # OS detection, deps, config flow
-│   └── services/              # Systemd templates
+│   └── services/              # Systemd/launchd templates
 ├── skills/traderbot/
 │   └── SKILL.md             # OpenClaw skill definition
-├── .openclaw/workspace/     # Agent workspace files
-│   ├── AGENTS.md
+├── .openclaw/workspace/     # Agent workspace file templates
+│   ├── AGENTS.md            # Agent operating rules
+│   ├── SOUL.md              # Persona & behavioral principles
+│   ├── IDENTITY.md          # Agent identity
+│   ├── BOOT.md              # Startup checklist
+│   ├── BOOTSTRAP.md         # One-time identity ritual
 │   ├── TOOLS.md             # Agent CLI reference
-│   ├── HEARTBEAT.md
-│   └── .learnings/
+│   ├── HEARTBEAT.md         # Heartbeat instructions
+│   ├── HEARTBEAT_DATA.md    # Heartbeat output data
+│   ├── SESSION-STATE.md     # WAL protocol target
+│   ├── USER.md              # Human profile
+│   ├── MEMORY.md            # Cross-session memory
+│   └── .learnings/          # Self-improvement logs
 ├── docs/                    # Full documentation
 ├── tests/
 ├── AGENTS.md                # AI-assisted development conventions
+├── ROADMAP_PROGRESS.md      # Phase progress tracking
 └── pyproject.toml
 ```
 
@@ -158,14 +178,21 @@ traderbot/
 | `traderbot signals` | Active trading signals |
 | `traderbot news` | Fetch news from all active sources |
 | `traderbot sentiment TICKER` | Aggregate sentiment analysis |
-| `traderbot paper` | Paper trade (no real money) |
 | `traderbot trade` | Place a real order (human-only) |
 | `traderbot positions` | View open positions |
+| `traderbot audit` | Show decision history with filters |
 | `traderbot performance` | P&L and metrics |
+| `traderbot paper` | Paper trade (no real money) |
+| `traderbot backtest` | Run backtests against historical data |
+| `traderbot compare` | Compare strategy performance across profiles |
+| `traderbot bootstrap` | One-time setup wizard |
 | `traderbot heartbeat` | Self-review: performance, adaptation, risk state |
-| `traderbot profile` | Profile management (create, list, assign tokens) |
-| `traderbot auth check` | Verify credential configuration |
+| `traderbot halt` | Check/set circuit breaker status |
 | `traderbot resume` | Clear circuit breaker halt state |
+| `traderbot learnings` | List learned patterns and trigger promotions |
+| `traderbot cron setup` | Register cron loops with OpenClaw |
+| `traderbot profile` | Profile management (create, list, assign, auth) |
+| `traderbot auth` | Credential management (check, login, set-key) |
 
 Full reference in [TOOLS.md](.openclaw/workspace/TOOLS.md) and [docs/api.md](docs/api.md).
 

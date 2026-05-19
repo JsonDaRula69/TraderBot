@@ -10,7 +10,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.08.21
+- **Current version**: v0.11.55
 
 ## Versioning Scheme
 
@@ -103,6 +103,18 @@ Profiles cannot exceed `HARD_LIMITS` ceilings. `AgentRiskLimits` enforces this a
 ### Credential Isolation
 
 All profiles share the same `.env` file for API credentials. There is no per-profile credential isolation. The `KALSHI_API_KEY` and `KALSHI_PRIVATE_KEY_PEM` values are shared across all agents.
+
+## API Verification Protocol
+
+Before making any code changes that involve OpenClaw, Kalshi, or any other external API/service:
+
+1. **Verify your assumptions first** — do not assume you know the correct function names, parameters, or behavior
+2. Use the **context7 MCP** to find first-party documentation for the API or library
+3. Use the **grep_app tool** to find real-world usage examples in open-source code
+4. **Do NOT spawn a librarian subagent** for this — that is for deep/broad research across multiple sources. For targeted API verification, use context7 + grep_app directly
+5. Only proceed with implementation once you've confirmed the correct API surface
+
+This prevents recurring issues from implementing against assumed APIs that don't match reality.
 
 ## Decision Records
 
