@@ -196,6 +196,10 @@ class TestStatePersistence:
         cb = CircuitBreaker(state_file=state_file)
         assert cb.get_state().level == BreakerLevel.FULL_STOP
 
+    @pytest.mark.skipif(
+        "sys.platform == 'win32'",
+        reason="Unix file permissions not applicable on Windows",
+    )
     def test_secret_file_created_with_restricted_permissions(self, state_file: Path) -> None:
         cb = CircuitBreaker(state_file=state_file)
         cb.check(daily_loss_pct=0.0, drawdown_pct=0.0)

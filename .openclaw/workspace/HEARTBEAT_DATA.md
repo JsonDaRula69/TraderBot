@@ -3,7 +3,7 @@
 > 7-step self-review output. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: 2026-05-16T21:12:12.340513+00:00
+## Last Heartbeat: 2026-05-19T23:16:21.702057+00:00
 
 ### Performance
 - Win rate: 0% (0 trades)
@@ -18,8 +18,8 @@
 - No promotions this cycle
 
 ### Circuit Breaker
-- Level: NORMAL
-- Can trade: True
+- Level: FULL_STOP
+- Can trade: False
 - Daily loss: 0.00%
 - Drawdown: 0.00%
 
@@ -29,5 +29,5 @@
 - Freshness: no_decisions_yet
 
 ### Alerts
-- None
+- ⚠️ Circuit breaker: FULL_STOP — State file unsigned — manual clearance required
 

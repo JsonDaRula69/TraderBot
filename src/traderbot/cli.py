@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 _SUDO = shutil.which("sudo") or "/usr/bin/sudo"
 _SYSTEMCTL = shutil.which("systemctl") or "/usr/bin/systemctl"
 _LAUNCHCTL = shutil.which("launchctl") or "/bin/launchctl"
+_SC = shutil.which("sc.exe") or shutil.which("sc")
+_SCHTASKS = shutil.which("schtasks.exe") or shutil.which("schtasks")
 
 
 def _mask_token(token: str) -> str:
@@ -3617,6 +3619,8 @@ def _install_news_ingest_timer(
         "registered": False,
     }
 
+    if sys.platform == "win32":
+        return _install_news_ingest_timer_windows(agent_user, interval_minutes, console, result)
     if sys.platform != "linux":
         return result
     if not _systemd_available():
@@ -3669,6 +3673,36 @@ def _install_news_ingest_timer(
     return result
 
 
+def _install_news_ingest_timer_windows(
+    agent_user: str,
+    interval_minutes: int,
+    console: object | None,
+    result: dict[str, str | bool],
+) -> dict[str, str | bool]:
+    import getpass as _gp
+
+    from traderbot.windows_service import (
+        install_news_ingest_task,
+        schtasks_available,
+    )
+
+    if not schtasks_available():
+        result["error"] = "schtasks.exe not available"
+        return result
+
+    user = agent_user or _gp.getuser()
+    try:
+        success = install_news_ingest_task(user=user, interval_minutes=interval_minutes)
+        if success:
+            result["registered"] = True
+        else:
+            result["error"] = "schtasks create returned non-zero"
+    except Exception as exc:
+        result["error"] = str(exc)
+
+    return result
+
+
 def _systemd_available() -> bool:
     """Check if systemd is available on this system."""
     import subprocess
@@ -3685,6 +3719,13 @@ def _remove_news_ingest_timer(
 ) -> None:
     import subprocess
 
+    if sys.platform == "win32":
+        from traderbot.windows_service import uninstall_news_ingest_task
+        try:
+            uninstall_news_ingest_task(agent_user)
+        except Exception:
+            pass
+        return
     if sys.platform != "linux":
         return
     if not _systemd_available():
@@ -3965,6 +4006,20 @@ def uninstall(
                         subprocess.run([_SUDO, "rm", "-f", str(timer_path)], capture_output=True)
                         removed_services.append(str(timer_path))
                 subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
+        elif sys.platform == "win32":
+            from traderbot.windows_service import (
+                list_agent_services,
+                list_news_tasks,
+                uninstall_agent_service,
+                uninstall_news_ingest_task,
+            )
+            for svc_name in list_agent_services():
+                agent_name = svc_name.replace("TraderBotAgent-", "", 1)
+                uninstall_agent_service(agent_name)
+                removed_services.append(svc_name)
+            for task_name in list_news_tasks():
+                uninstall_news_ingest_task(task_name)
+                removed_services.append(task_name)
         removed.extend(removed_services)
     else:
         console.print("[bold]Step 1: Removing system services[/bold]")
@@ -4009,6 +4064,28 @@ def uninstall(
                         subprocess.run([_SUDO, "rm", "-f", str(timer_path)], capture_output=True)
                         console.print(f"  Removed: {timer_path}")
                 subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
+        elif sys.platform == "win32":
+            from traderbot.windows_service import (
+                list_agent_services,
+                list_news_tasks,
+                uninstall_agent_service,
+                uninstall_news_ingest_task,
+            )
+            for svc_name in list_agent_services():
+                agent_name = svc_name.replace("TraderBotAgent-", "", 1)
+                success = uninstall_agent_service(agent_name)
+                if success:
+                    console.print(f"  Removed: {svc_name}")
+                    removed.append(svc_name)
+                else:
+                    console.print(f"  [yellow]Could not remove: {svc_name}[/yellow]")
+            for task_name in list_news_tasks():
+                success = uninstall_news_ingest_task(task_name)
+                if success:
+                    console.print(f"  Removed: {task_name}")
+                    removed.append(task_name)
+                else:
+                    console.print(f"  [yellow]Could not remove: {task_name}[/yellow]")
 
     # Step 2: Prompt about data removal
     if not remove_data:

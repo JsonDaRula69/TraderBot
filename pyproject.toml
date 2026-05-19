@@ -23,6 +23,7 @@ dependencies = [
     "voyageai>=0.2,<1.0",
     "packaging>=24.0",
     "cryptography>=42.0",
+    "portalocker>=2.8",
 ]
 
 [project.optional-dependencies]

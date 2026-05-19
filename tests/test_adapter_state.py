@@ -70,10 +70,11 @@ class TestResolveStatePath:
         explicit = tmp_path / "custom.json"
         assert resolve_state_path(explicit) == explicit
 
-    def test_profile_base_dir(self) -> None:
-        result = resolve_state_path(profile_base_dir="/tmp/tb")
+    def test_profile_base_dir(self, tmp_path: Path) -> None:
+        base = str(tmp_path)
+        result = resolve_state_path(profile_base_dir=base)
         assert str(result).endswith("adaptation_state.json")
-        assert "/tmp/tb" in str(result)
+        assert base in str(result)
 
     def test_default_path(self) -> None:
         result = resolve_state_path()
