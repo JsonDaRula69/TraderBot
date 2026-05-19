@@ -13,7 +13,7 @@ _Home base. Follow these rules every session._
 source .env 2>/dev/null || true
 ```
 
-This loads `TRADERBOT_PROFILE_TOKEN` and other required variables. Without it, all traderbot commands fail with "Unauthorized: no profile assigned."
+This loads required environment variables. Without it, all traderbot commands fail with authentication errors.
 
 Use runtime-provided startup context first. That context includes: `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `HEARTBEAT.md` (when enabled), `SESSION-STATE.md` (WAL active state), `HEARTBEAT_DATA.md` (latest 7-step review).
 
