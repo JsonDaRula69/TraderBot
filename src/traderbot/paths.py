@@ -45,6 +45,9 @@ def ensure_data_dir() -> Path:
     """Create data directory if it doesn't exist and return it."""
     path = get_data_dir()
     path.mkdir(parents=True, exist_ok=True)
+    # Ensure restrictive permissions: owner read/write/execute only
+    if path.stat().st_mode & 0o777 != 0o700:
+        path.chmod(0o700)
     return path
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import logging
 import os
@@ -100,7 +101,7 @@ def assign_token(profile_name: str, agent_id: str, token: str, force: bool = Fal
 def resolve_token(token: str) -> tuple[str, str] | None:
     tokens = _load_tokens_file()
     for entry in tokens:
-        if entry["token"] == token:
+        if hmac.compare_digest(entry["token"], token):
             return (entry["profile"], entry["agent"])
     return None
 
