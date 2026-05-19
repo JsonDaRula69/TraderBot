@@ -2814,16 +2814,14 @@ def _do_assign(
                 # Configure OpenClaw features for this agent
                 try:
                     from traderbot.profiles.openclaw_config import (
-                        configure_agent_sandbox,
                         enable_session_memory_hook,
                         ensure_agent_bootstrap_hook,
                     )
 
-                    configure_agent_sandbox(agent_id)
                     enable_session_memory_hook()
                     ensure_agent_bootstrap_hook()
                     console.print(
-                        "[green]✓[/green] OpenClaw features configured (hooks, sandbox)"
+                        "[green]✓[/green] OpenClaw features configured (hooks)"
                     )
 
                     # Install news ingestion timer

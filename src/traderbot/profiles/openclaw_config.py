@@ -1,6 +1,6 @@
 """OpenClaw configuration management for agent profile pairing.
 
-Handles hooks enablement, sandbox configuration, and bootstrap hook creation
+Handles hooks enablement and bootstrap hook creation
 during the ``traderbot profile assign`` flow. All functions are idempotent.
 """
 
@@ -155,256 +155,6 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
 
 
 
-def _validate_config_against_schema(config: dict) -> list[str]:
-    """Validate config dict against OpenClaw JSON schema before writing.
-
-    Returns a list of validation error strings. Empty list means valid.
-    Checks the most critical schema constraints that TraderBot writes:
-    - agents.list entries must not have top-level workspaceAccess
-    - agents.list[].sandbox must be an object with valid mode
-    - hooks must not have top-level entries or extraHookDirs
-    """
-    errors: list[str] = []
-
-    agents_list = config.get("agents", {}).get("list", [])
-    for i, entry in enumerate(agents_list):
-        agent_id = entry.get("id", f"<index {i}>")
-
-        # Check: sandbox must be object with valid mode, not boolean
-        sandbox = entry.get("sandbox")
-        if sandbox is not None:
-            if isinstance(sandbox, bool):
-                errors.append(
-                    f"agents.list[{i}] ({agent_id}): sandbox={sandbox} is boolean, "
-                    f"expected object {{'mode': 'off'|'non-main'|'all'}}"
-                )
-            elif isinstance(sandbox, dict):
-                mode = sandbox.get("mode")
-                valid_modes = {"off", "non-main", "all"}
-                if mode not in valid_modes:
-                    errors.append(
-                        f"agents.list[{i}] ({agent_id}): sandbox.mode='{mode}' "
-                        f"is invalid, expected one of {valid_modes}"
-                    )
-                # Check: workspaceAccess inside sandbox must be valid
-                wa = sandbox.get("workspaceAccess")
-                if wa is not None and wa not in {"none", "ro", "rw"}:
-                    errors.append(
-                        f"agents.list[{i}] ({agent_id}): sandbox.workspaceAccess='{wa}' "
-                        f"is invalid, expected 'none'|'ro'|'rw'"
-                    )
-                # Check: no 'directories' key (was from old buggy schema)
-                if "directories" in sandbox:
-                    errors.append(
-                        f"agents.list[{i}] ({agent_id}): sandbox contains unrecognized "
-                        f"key 'directories' — use 'mode' and 'workspaceAccess' instead"
-                    )
-
-        # Check: workspaceAccess must NOT be at agent top level
-        if "workspaceAccess" in entry:
-            errors.append(
-                f"agents.list[{i}] ({agent_id}): 'workspaceAccess' is not a valid "
-                f"top-level agent key — it belongs inside sandbox"
-            )
-
-    # Check: hooks must not have top-level entries or extraHookDirs
-    hooks = config.get("hooks", {})
-    if "entries" in hooks:
-        errors.append("hooks.entries is invalid — use hooks.internal.entries instead")
-    if "extraHookDirs" in hooks:
-        errors.append("hooks.extraHookDirs is invalid — use hooks.internal.load.extraDirs instead")
-
-    return errors
-
-
-# ---------------------------------------------------------------------------
-# Public API — called during profile assign
-# ---------------------------------------------------------------------------
-
-def enable_session_memory_hook() -> bool:
-    """Enable the built-in ``session-memory`` hook.
-
-    Uses the ``openclaw`` CLI if available; falls back to writing the
-    hook entry directly into ``openclaw.json``.  Idempotent — safe to
-    call on every ``profile assign``.
-    """
-    # Fast path: try CLI
-    if _openclaw_cli("hooks", "enable", "session-memory"):
-        logger.info("Enabled session-memory hook via CLI")
-        return True
-
-    # Fallback: add to openclaw.json under hooks.internal.entries
-    config = _read_openclaw_config()
-    hooks = config.setdefault("hooks", {})
-    internal = hooks.setdefault("internal", {"enabled": True})
-    entries = internal.setdefault("entries", {})
-    if "session-memory" not in entries:
-        entries["session-memory"] = {"enabled": True}
-        # Remove stale top-level entries if present from old code
-        hooks.pop("entries", None)
-        _write_openclaw_config(config)
-        logger.info("Enabled session-memory hook via config")
-    return True
-
-
-def ensure_agent_bootstrap_hook() -> bool:
-    """Create and enable the ``agent:bootstrap`` hook for pre-session validation.
-
-    Deploys ``HOOK.md`` and ``handler.ts`` to ``~/.openclaw/hooks/traderbot-bootstrap/``
-    and registers the hook in ``openclaw.json``.  Idempotent.
-    """
-    hook_dir = _HOOKS_DIR / BOOTSTRAP_HOOK_DIRNAME
-    hook_dir.mkdir(parents=True, exist_ok=True)
-
-    hook_md = hook_dir / "HOOK.md"
-    if not hook_md.exists():
-        hook_md.write_text(BOOTSTRAP_HOOK_MD_CONTENT)
-        logger.info("Created %s", hook_md)
-
-    handler = hook_dir / "handler.ts"
-    if not handler.exists():
-        handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
-        logger.info("Created %s", handler)
-
-    # Register in openclaw.json under hooks.internal.entries
-    config = _read_openclaw_config()
-    hooks = config.setdefault("hooks", {})
-    internal = hooks.setdefault("internal", {"enabled": True})
-    entries = internal.setdefault("entries", {})
-    if "traderbot-bootstrap" not in entries:
-        entries["traderbot-bootstrap"] = {"enabled": True}
-
-    # Remove stale top-level keys from old code if present
-    hooks.pop("entries", None)
-    hooks.pop("extraHookDirs", None)
-
-    _write_openclaw_config(config)
-
-    # Try CLI enable (best-effort)
-    _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
-
-    logger.info("Bootstrap hook deployed and registered")
-    return True
-
-
-
-_SANDBOX_DOCKERFILE = r"""FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,id=openclaw-sandbox-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
-  apt-get update \
-  && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    curl \
-    git \
-    jq \
-    python3 \
-    ripgrep
-
-RUN useradd --create-home --shell /bin/bash sandbox
-USER sandbox
-WORKDIR /home/sandbox
-
-CMD ["sleep", "infinity"]
-"""
-
-_SANDBOX_IMAGE = "openclaw-sandbox:bookworm-slim"
-
-
-def _ensure_sandbox_image() -> bool:
-    """Build the OpenClaw sandbox Docker image if it does not exist.
-
-    The image ``openclaw-sandbox:bookworm-slim`` is required for agent sandboxing
-    (mode ``"non-main"`` or ``"all"``).  This function writes the Dockerfile to
-    a temp directory and runs ``docker build`` if the image is missing.
-    Requires Docker to be installed and the daemon running.
-    Returns ``True`` if the image exists or was built, ``False`` on failure.
-    """
-    import tempfile
-
-    # Check if image already exists
-    try:
-        result = subprocess.run(
-            ["docker", "image", "inspect", _SANDBOX_IMAGE],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode == 0:
-            logger.info("Sandbox image %s already exists", _SANDBOX_IMAGE)
-            return True
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        # Docker not available ¯\_(ツ)_/¯
-        pass
-
-    # Build the image
-    logger.info("Building sandbox image %s ...", _SANDBOX_IMAGE)
-    with tempfile.TemporaryDirectory(prefix="openclaw-sandbox-") as tmpdir:
-        dockerfile = Path(tmpdir) / "Dockerfile"
-        dockerfile.write_text(_SANDBOX_DOCKERFILE)
-        try:
-            result = subprocess.run(
-                ["docker", "build", "-t", _SANDBOX_IMAGE, "-f", str(dockerfile), tmpdir],
-                capture_output=True, text=True, timeout=300,
-            )
-            if result.returncode == 0:
-                logger.info("Sandbox image %s built successfully", _SANDBOX_IMAGE)
-                return True
-            else:
-                logger.error("Failed to build sandbox image: %s", result.stderr[:500])
-                return False
-        except FileNotFoundError:
-            logger.warning("Docker not found  sandbox image not built")
-            return False
-        except subprocess.TimeoutExpired:
-            logger.error("Docker build timed out")
-            return False
-
-
-def configure_agent_sandbox(agent_id: str) -> bool:
-    """Add or update an agent entry in ``openclaw.json`` with sandbox settings.
-
-    Sets sandbox mode to ``"off"`` for the given agent ID.  The OpenClaw sandbox
-    schema supports ``{ "mode": "off" | "non-main" | "all" }``.
-    Defaults to ``"off"`` because TraderBot cron loops (decision, heartbeat,
-    news) require host-side access to the traderbot CLI, network, and database.
-    Use ``"non-main"`` or ``"all"`` only when Docker is available and no cron
-    loops run as a non-main agent.  Idempotent.
-    """
-    config = _read_openclaw_config()
-    agents = config.setdefault("agents", {})
-    agent_list = agents.setdefault("list", [])
-
-    sandbox_config = {"mode": "off", "workspaceAccess": "rw"}
-
-    for entry in agent_list:
-        if entry.get("id") == agent_id:
-            # Fix legacy sandbox formats: boolean -> proper object, remove invalid keys
-            if isinstance(entry.get("sandbox"), bool) or isinstance(entry.get("sandbox"), dict) and "directories" in entry.get("sandbox", {}):
-                entry["sandbox"] = sandbox_config
-            # Remove invalid workspaceAccess key (not in OpenClaw schema)
-            entry.pop("workspaceAccess", None)
-            # Ensure sandbox is set
-            if "sandbox" not in entry:
-                entry["sandbox"] = sandbox_config
-            break
-    else:
-        agent_list.append({
-            "id": agent_id,
-            "sandbox": sandbox_config,
-        })
-
-    _write_openclaw_config(config)
-
-    # Build sandbox image if Docker is available and image is missing
-    if sandbox_config.get("mode") != "off":
-        _ensure_sandbox_image()
-
-    logger.info("Sandbox configured for agent '%s'", agent_id)
-    return True
-
-
 def get_openclaw_version() -> str | None:
     """Return installed OpenClaw version string, or ``None``."""
     try:
@@ -416,4 +166,15 @@ def get_openclaw_version() -> str | None:
             return result.stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    return None
+    return None    return Nonedef get_openclaw_version() -> str | None:
+    """Return installed OpenClaw version string, or ``None``."""
+    try:
+        result = subprocess.run(
+            ["openclaw", "--version"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None    return None
