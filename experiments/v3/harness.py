@@ -142,8 +142,27 @@ class Harness:
                 continue
 
             for treatment in ordered:
-                prompt = treatment.format_prompt(ctx)
-                response = self.llm.call(prompt)
+                if hasattr(treatment, "direct_decide"):
+                    result = treatment.direct_decide(ctx)
+                    response = LLMResponse(
+                        decision=result.decision,
+                        estimated_prob=result.estimated_prob,
+                        confidence=result.confidence,
+                        reasoning=result.reasoning,
+                        raw_response="[direct]",
+                    )
+                elif hasattr(treatment, "compute_decision"):
+                    result = treatment.compute_decision(ctx)
+                    response = LLMResponse(
+                        decision=result.decision,
+                        estimated_prob=result.estimated_prob,
+                        confidence=result.confidence,
+                        reasoning=result.reasoning,
+                        raw_response="[deterministic]",
+                    )
+                else:
+                    prompt = treatment.format_prompt(ctx)
+                    response = self.llm.call(prompt)
 
                 if not treatment.validate_response({"decision": response.decision,
                                                      "estimated_prob": response.estimated_prob,

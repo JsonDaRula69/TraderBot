@@ -51,6 +51,7 @@ class TreatmentContext:
     prices: PriceData
     technical: TechnicalData
     prior: PriorDecisions
+    system_context: str = ""  # OpenClaw workspace files (AGENTS.md, SOUL.md, TOOLS.md, etc.)
 ```
 
 ### Field descriptions
@@ -63,6 +64,7 @@ class TreatmentContext:
 | `prices` | `PriceData` | YES/NO midprice history (cents), current spread, last trade | Kalshi market data snapshots |
 | `technical` | `TechnicalData` | RSI, Bollinger bands, EMA crossover computed over `prices.history` | `traderbot.analysis.indicators` |
 | `prior` | `PriorDecisions` | Decisions made by this treatment on earlier timesteps of the same market | In-memory during the experiment run |
+| `system_context` | `str` | OpenClaw workspace files defining agent identity/rules/tools | Harness loads from `~/.openclaw/workspace/` |
 
 ### Sub-dataclass details
 
