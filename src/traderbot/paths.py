@@ -63,6 +63,7 @@ def list_all_data_paths() -> list[Path]:
         base / "update_config.json",
         base / ".update_check_cache.json",
         base / "circuit_breaker_state.json",
+        base / ".breaker_secret",
         base / "traderbot.db",  # legacy global DB
         base / "audit",
         base / "chromadb",
