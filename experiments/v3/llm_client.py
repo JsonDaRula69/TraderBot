@@ -37,14 +37,11 @@ class TokenBucket:
 
 class LLMClient:
     def __init__(self, model: str = "glm-5.1:cloud", timeout: float = 120.0):
-        api_key = os.getenv("OLLAMA_API_KEY")
-        if not api_key:
-            raise RuntimeError("OLLAMA_API_KEY environment variable not set")
         self.model = model
         self.timeout = timeout
         self.rate_limiter = TokenBucket(rate=10)
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.api_key = api_key
+        self.api_key = os.getenv("OLLAMA_API_KEY")  # optional — Ollama cloud handles auth internally
 
     def call(self, prompt: str) -> LLMResponse:
         max_retries = 3
