@@ -1,12 +1,12 @@
 {
-  "active_plan": "/Users/djtchill/Desktop/TraderBot/.sisyphus/plans/prod-data-local-sim.md",
-  "started_at": "2026-05-13T19:55:23.833Z",
+  "active_plan": "/Users/djtchill/Documents/Projects/Traderbot/experiments/.sisyphus/plans/v3-experiment.md",
+  "started_at": "2026-05-19T02:02:23.295Z",
   "session_ids": [
-    "ses_1dd177cd6ffe8XQGbBsgTolUIw"
+    "ses_1c2b7971dffeY8JuGiXMqRGl8y"
   ],
   "session_origins": {
-    "ses_1dd177cd6ffe8XQGbBsgTolUIw": "direct"
+    "ses_1c2b7971dffeY8JuGiXMqRGl8y": "direct"
   },
-  "plan_name": "prod-data-local-sim",
+  "plan_name": "v3-experiment",
   "agent": "atlas"
 }
