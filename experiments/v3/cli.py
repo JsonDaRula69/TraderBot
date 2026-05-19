@@ -25,8 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--control",
-        required=True,
-        help="Module path for the control treatment (e.g. experiments.treatments.control).",
+        required=False,
+        default=None,
+        help="Module path for the control treatment (e.g. experiments.treatments.control). Required for full runs.",
     )
     parser.add_argument(
         "--treatments",
@@ -161,6 +162,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"{summary['price_coverage']} with prices."
         )
         sys.exit(0)
+
+    if not args.control:
+        parser.error("--control is required for experiment runs")
 
     treatments = [_load_treatment(args.control)]
     if args.treatments:
