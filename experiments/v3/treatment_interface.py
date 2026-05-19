@@ -66,6 +66,7 @@ class TreatmentContext:
     prior: PriorDecisions
     timestep: int
     remaining: int
+    system_context: str = ""
 
 
 @dataclass(frozen=True)

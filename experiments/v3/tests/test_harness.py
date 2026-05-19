@@ -1,7 +1,8 @@
 import sqlite3
+from pathlib import Path
 
 from experiments.v3.db_schema import create_tables
-from experiments.v3.harness import Harness
+from experiments.v3.harness import Harness, _load_openclaw_context
 from experiments.v3.llm_client import LLMResponse
 from experiments.v3.treatment_interface import (
     AccuracyData,
@@ -117,10 +118,10 @@ def _seed_db(conn: sqlite3.Connection, tickers: list[str] | None = None):
 
 
 def _make_harness(conn: sqlite3.Connection, llm: MockLLMClient | None = None,
-                  seed: int = 42) -> Harness:
+                   seed: int = 42, workspace_dir: str | None = "/nonexistent") -> Harness:
     if llm is None:
         llm = MockLLMClient()
-    return Harness(conn=conn, llm_client=llm, seed=seed)
+    return Harness(conn=conn, llm_client=llm, seed=seed, workspace_dir=workspace_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -303,3 +304,88 @@ class TestBuyYesDecision:
         assert abs(row[1] - 0.72) < 1e-6
         assert abs(row[2] - 0.85) < 1e-6
         assert row[3] == "upside"
+
+
+# ---------------------------------------------------------------------------
+# Test 7: OpenClaw workspace context loading
+# ---------------------------------------------------------------------------
+
+
+class TestLoadOpenclawContext:
+
+    def test_loads_files_from_workspace_dir(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("# Agents\nBe helpful.")
+        (tmp_path / "SOUL.md").write_text("# Soul\nBe data-driven.")
+        (tmp_path / "TOOLS.md").write_text("# Tools\ntraderbot scan --json")
+        (tmp_path / "BOOTSTRAP.md").write_text("# Bootstrap\nInitialize.")
+
+        result = _load_openclaw_context(tmp_path)
+        assert "AGENTS.md" in result
+        assert "Be helpful" in result
+        assert "SOUL.md" in result
+        assert "Be data-driven" in result
+        assert "TOOLS.md" in result
+        assert "traderbot scan" in result
+        assert "BOOTSTRAP.md" in result
+
+    def test_skips_missing_files(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("# Agents only")
+
+        result = _load_openclaw_context(tmp_path)
+        assert "AGENTS.md" in result
+        assert "SOUL.md" not in result
+
+    def test_skips_empty_files(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("   ")
+        (tmp_path / "SOUL.md").write_text("# Soul\nContent here")
+
+        result = _load_openclaw_context(tmp_path)
+        assert "AGENTS.md" not in result
+        assert "SOUL.md" in result
+
+    def test_returns_empty_string_for_missing_dir(self):
+        result = _load_openclaw_context(Path("/nonexistent_openclaw_test_dir"))
+        assert result == ""
+
+    def test_defaults_to_home_openclaw_workspace(self):
+        result = _load_openclaw_context(None)
+        assert isinstance(result, str)
+
+    def test_includes_all_expected_filenames(self, tmp_path):
+        for fname in ["AGENTS.md", "SOUL.md", "TOOLS.md", "BOOTSTRAP.md",
+                       "HEARTBEAT.md", "IDENTITY.md", "USER.md", "SESSION-STATE.md"]:
+            (tmp_path / fname).write_text(f"# {fname}\ncontent")
+
+        result = _load_openclaw_context(tmp_path)
+        for fname in ["AGENTS.md", "SOUL.md", "TOOLS.md", "BOOTSTRAP.md",
+                       "HEARTBEAT.md", "IDENTITY.md", "USER.md", "SESSION-STATE.md"]:
+            assert fname in result
+
+
+class TestHarnessInjectsSystemContext:
+
+    def test_harness_stores_system_context(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("# Test Agent\nBe disciplined.")
+        conn = sqlite3.connect(":memory:")
+        create_tables(conn)
+        _seed_db(conn, tickers=["KXNYHI"])
+        harness = Harness(conn, MockLLMClient(), seed=42, workspace_dir=str(tmp_path))
+        assert "AGENTS.md" in harness.system_context
+        assert "Test Agent" in harness.system_context
+
+    def test_harness_empty_context_for_missing_dir(self):
+        conn = sqlite3.connect(":memory:")
+        create_tables(conn)
+        harness = Harness(conn, MockLLMClient(), seed=42, workspace_dir="/nonexistent_path_xyz")
+        assert harness.system_context == ""
+
+    def test_build_treatment_context_includes_system_context(self, tmp_path):
+        (tmp_path / "SOUL.md").write_text("# Soul\nData-driven trading.")
+        conn = sqlite3.connect(":memory:")
+        create_tables(conn)
+        _seed_db(conn, tickers=["KXNYHI"])
+        harness = Harness(conn, MockLLMClient(), seed=42, workspace_dir=str(tmp_path))
+
+        ctx = harness._build_treatment_context("KXNYHI", 0)
+        assert "SOUL.md" in ctx.system_context
+        assert "Data-driven trading" in ctx.system_context

@@ -40,7 +40,7 @@ class V2LlmSynthesisTreatment(interface.TreatmentInterface):
         question = self._build_question(ctx.market)
         prior = self._format_prior(ctx.prior.decisions)
 
-        return _PROMPT_TEMPLATE.format(
+        prompt = _PROMPT_TEMPLATE.format(
             question=question,
             timestep=ctx.timestep + 1,
             forecast_date=ctx.market.resolution_date,
@@ -56,6 +56,17 @@ class V2LlmSynthesisTreatment(interface.TreatmentInterface):
             no_price=ctx.prices.no_price,
             prior_decisions_summary=prior,
         )
+
+        if ctx.system_context:
+            prompt = (
+                "=== PRODUCTION AGENT SYSTEM CONTEXT ===\n"
+                "The following defines the production trading agent's decision framework.\n\n"
+                f"{ctx.system_context}\n\n"
+                "=== END SYSTEM CONTEXT ===\n\n"
+                + prompt
+            )
+
+        return prompt
 
     def validate_response(self, response_str: str | dict) -> bool:
         try:

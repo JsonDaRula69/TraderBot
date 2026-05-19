@@ -15,10 +15,11 @@ class TestArgparseParsing:
         with pytest.raises(SystemExit):
             parser.parse_args([])
 
-    def test_required_control(self):
+    def test_control_optional_for_dry_run(self):
         parser = build_parser()
-        with pytest.raises(SystemExit):
-            parser.parse_args(["--db", "/tmp/db.sqlite"])
+        args = parser.parse_args(["--db", "/tmp/db.sqlite", "--dry-run"])
+        assert args.control is None
+        assert args.dry_run is True
 
     def test_defaults(self):
         parser = build_parser()

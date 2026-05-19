@@ -92,6 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Max markets to fetch when populating (default: 50).",
     )
+    parser.add_argument(
+        "--workspace",
+        type=str,
+        default=None,
+        help="Path to OpenClaw workspace directory (default: ~/.openclaw/workspace).",
+    )
     return parser
 
 
@@ -196,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     from experiments.v3.llm_client import LLMClient
 
     llm_client = LLMClient(model=args.model)
-    harness = Harness(conn, llm_client, seed=args.seed)
+    harness = Harness(conn, llm_client, seed=args.seed, workspace_dir=args.workspace)
 
     treatment_names = [t.name for t in treatments]
     run_id = f"v3_{'_'.join(treatment_names)}_seed{args.seed}"

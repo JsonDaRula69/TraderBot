@@ -3,6 +3,7 @@ import json
 import logging
 import random
 import sqlite3
+from pathlib import Path
 
 from experiments.v3.db_schema import create_tables
 from experiments.v3.llm_client import LLMClient, LLMResponse
@@ -23,13 +24,65 @@ logger = logging.getLogger(__name__)
 NUM_TIMESTEPS = 5
 POSITION_SIZE_CENTS = 100
 
+def _load_openclaw_context(
+    workspace_dir: str | Path | None = None,
+    file_list: list[str] | None = None,
+) -> str:
+    """Read OpenClaw workspace files and format them as a system context string.
+
+    Args:
+        workspace_dir: Path to the OpenClaw workspace. Defaults to
+            ~/.openclaw/workspace.
+        file_list: List of filenames to include. Defaults to a curated list
+            of production agent context files.
+
+    Returns:
+        Formatted string containing all found workspace files, or empty
+        string if the directory doesn't exist.
+    """
+    if file_list is None:
+        file_list = [
+            "AGENTS.md",
+            "SOUL.md",
+            "TOOLS.md",
+            "BOOTSTRAP.md",
+            "HEARTBEAT.md",
+            "IDENTITY.md",
+            "USER.md",
+            "SESSION-STATE.md",
+        ]
+
+    if workspace_dir is None:
+        workspace_dir = Path.home() / ".openclaw" / "workspace"
+    else:
+        workspace_dir = Path(workspace_dir)
+
+    if not workspace_dir.is_dir():
+        logger.warning("OpenClaw workspace not found at %s, skipping context", workspace_dir)
+        return ""
+
+    sections: list[str] = []
+    for filename in file_list:
+        filepath = workspace_dir / filename
+        if filepath.is_file():
+            content = filepath.read_text(encoding="utf-8").strip()
+            if content:
+                sections.append(f"=== {filename} ===\n{content}")
+
+    if not sections:
+        logger.warning("No OpenClaw workspace files found in %s", workspace_dir)
+        return ""
+
+    return "\n\n".join(sections)
+
 
 class Harness:
-    def __init__(self, conn: sqlite3.Connection, llm_client: LLMClient, seed: int = 42):
+    def __init__(self, conn: sqlite3.Connection, llm_client: LLMClient, seed: int = 42, workspace_dir: str | Path | None = None, openclaw_files: list[str] | None = None):
         self.conn = conn
         self.llm = llm_client
         self.rng = random.Random(seed)
         self.seed = seed
+        self.system_context = _load_openclaw_context(workspace_dir, openclaw_files)
 
     def run(
         self,
@@ -216,6 +269,7 @@ class Harness:
             prior=prior,
             timestep=timestep,
             remaining=NUM_TIMESTEPS - timestep,
+            system_context=self.system_context,
         )
 
     def _store_decision(

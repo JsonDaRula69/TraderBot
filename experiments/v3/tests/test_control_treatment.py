@@ -1,6 +1,4 @@
-"""Tests for ControlTreatment — production-mirroring control that calls generate_signal()."""
-
-from unittest.mock import MagicMock, patch
+"""Tests for ControlTreatment — production-mirroring control with OpenClaw workspace context."""
 
 from experiments.treatments.control import ControlTreatment
 from experiments.v3.treatment_interface import (
@@ -13,13 +11,8 @@ from experiments.v3.treatment_interface import (
     TreatmentContext,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 def _make_context(**overrides) -> TreatmentContext:
-    """Build a TreatmentContext with sensible defaults for testing."""
     defaults = dict(
         market=MarketData(
             ticker="KXNYHI",
@@ -64,27 +57,6 @@ def _make_context(**overrides) -> TreatmentContext:
     return TreatmentContext(**defaults)
 
 
-def _mock_signal():
-    """Return a CombinedSignal-like object matching production output shape."""
-    mock = MagicMock()
-    mock.ticker = "KXNYHI"
-    mock.direction = "yes"
-    mock.confidence = 0.7
-    mock.estimated_prob = 0.65
-    mock.edge_cents = 5
-    mock.sources = [
-        MagicMock(name="indicators", weight=0.3, direction="yes", strength=0.55),
-        MagicMock(name="odds", weight=0.5, direction="yes", strength=0.45),
-        MagicMock(name="momentum", weight=0.2, direction="yes", strength=0.4),
-    ]
-    return mock
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
 class TestControlTreatmentName:
     def test_name_returns_control(self):
         t = ControlTreatment()
@@ -92,128 +64,89 @@ class TestControlTreatmentName:
 
 
 class TestControlTreatmentFormatPrompt:
-    """format_prompt calls generate_signal and includes production-style data."""
-
     def test_prompt_contains_ticker(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
+        prompt = t.format_prompt(ctx)
         assert "KXNYHI" in prompt
 
     def test_prompt_contains_signal_direction(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
+        prompt = t.format_prompt(ctx)
         assert "yes" in prompt.lower() or "no" in prompt.lower()
 
     def test_prompt_contains_technical_indicators(self):
-        """Control prompt includes RSI, Bollinger, EMA data."""
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        # Technical indicators from ctx.technicals should appear
+        prompt = t.format_prompt(ctx)
         assert str(int(ctx.technicals.rsi)) in prompt
         assert "RSI" in prompt or "rsi" in prompt.lower()
 
     def test_prompt_contains_market_details(self):
-        """Control prompt includes market city, strike, threshold."""
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
+        prompt = t.format_prompt(ctx)
         assert "New York" in prompt
         assert "90" in prompt
 
     def test_prompt_contains_prices_and_implied_prob(self):
-        """Control prompt includes YES/NO prices and implied probability."""
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "0.65" in prompt  # yes_price as decimal
-        assert "0.35" in prompt  # no_price
+        prompt = t.format_prompt(ctx)
+        assert "0.65" in prompt
+        assert "0.35" in prompt
         assert "implied" in prompt.lower() or "probability" in prompt.lower()
 
     def test_prompt_contains_confidence(self):
-        """Control prompt includes signal confidence from generate_signal."""
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "0.7" in prompt or "70" in prompt
+        prompt = t.format_prompt(ctx)
+        assert "0.7" in prompt or "0.70" in prompt
 
-    def test_prompt_excludes_forecast_temp(self):
-        """Control prompt does NOT include forecast_temp_f."""
+    def test_prompt_contains_forecast_data(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "forecast_temp" not in prompt.lower()
+        prompt = t.format_prompt(ctx)
+        assert "88.5" in prompt
+        assert "NWS" in prompt
+        assert "Forecast" in prompt
 
-    def test_prompt_excludes_accuracy_data(self):
-        """Control prompt does NOT include mae or bias."""
+    def test_prompt_contains_accuracy_data(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "mae" not in prompt.lower()
-        assert "bias" not in prompt.lower()
+        prompt = t.format_prompt(ctx)
+        assert "2.5" in prompt
+        assert "MAE" in prompt
 
-    def test_prompt_excludes_bayesian(self):
-        """Control prompt does NOT include Bayesian probability."""
+    def test_prompt_contains_decision_instruction(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "bayesian" not in prompt.lower()
+        prompt = t.format_prompt(ctx)
+        assert "decision" in prompt.lower()
+        assert "buy_yes" in prompt
+        assert "estimated_prob" in prompt
 
-    def test_prompt_contains_ema(self):
-        """Control prompt includes EMA5 and EMA20 from technicals."""
+    def test_prompt_without_system_context(self):
         t = ControlTreatment()
         ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        # EMA values from technicals context
-        assert "EMA" in prompt or "ema" in prompt.lower()
+        prompt = t.format_prompt(ctx)
+        assert "PRODUCTION AGENT SYSTEM CONTEXT" not in prompt
 
-    def test_prompt_contains_bollinger(self):
-        """Control prompt includes Bollinger position from technicals."""
+    def test_prompt_with_system_context(self):
         t = ControlTreatment()
-        ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", return_value=_mock_signal()):
-            prompt = t.format_prompt(ctx)
-        assert "bollinger" in prompt.lower() or "bb" in prompt.lower()
+        ctx = _make_context(system_context="You are a trading agent. Risk discipline: 5% max.")
+        prompt = t.format_prompt(ctx)
+        assert "PRODUCTION AGENT SYSTEM CONTEXT" in prompt
+        assert "You are a trading agent" in prompt
+        assert "END PRODUCTION AGENT SYSTEM CONTEXT" in prompt
 
-
-class TestControlTreatmentFallbackPrompt:
-    """When generate_signal fails (e.g. ImportError), fallback prompt with market data."""
-
-    def test_fallback_prompt_on_import_error(self):
+    def test_prompt_system_context_includes_traderbot_tools(self):
         t = ControlTreatment()
-        ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", side_effect=ImportError("no module")):
-            prompt = t.format_prompt(ctx)
-        # Should still contain market data
-        assert "KXNYHI" in prompt
-        assert "New York" in prompt
-
-    def test_fallback_prompt_on_runtime_error(self):
-        t = ControlTreatment()
-        ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", side_effect=RuntimeError("broken")):
-            prompt = t.format_prompt(ctx)
-        assert "KXNYHI" in prompt
-        assert "0.65" in prompt  # yes_price still shown
-
-    def test_fallback_prompt_still_excludes_forecast(self):
-        t = ControlTreatment()
-        ctx = _make_context()
-        with patch("experiments.treatments.control.generate_signal", side_effect=ImportError("no module")):
-            prompt = t.format_prompt(ctx)
-        assert "forecast_temp" not in prompt.lower()
+        workspace_content = "traderbot scan --json\ntraderbot analyze TICKER --json"
+        ctx = _make_context(system_context=workspace_content)
+        prompt = t.format_prompt(ctx)
+        assert "traderbot scan" in prompt
 
 
 class TestControlTreatmentValidateResponse:
@@ -264,5 +197,43 @@ class TestControlTreatmentValidateResponse:
 
     def test_prob_boundary_one(self):
         t = ControlTreatment()
-        resp = {"decision": "skip", "estimated_prob": 1.0, "confidence": 0.3}
+        resp = {"decision": "buy_yes", "estimated_prob": 1.0, "confidence": 0.3}
         assert t.validate_response(resp) is True
+
+
+class TestControlTreatmentPriorDecisions:
+    def test_prompt_shows_prior_decisions(self):
+        t = ControlTreatment()
+        ctx = _make_context(
+            prior=PriorDecisions(decisions=[
+                {"timestep": 0, "decision": "buy_yes", "estimated_prob": 0.65, "confidence": 0.7},
+            ])
+        )
+        prompt = t.format_prompt(ctx)
+        assert "Prior decisions" in prompt
+        assert "buy_yes" in prompt
+
+    def test_prompt_shows_no_prior_message(self):
+        t = ControlTreatment()
+        ctx = _make_context(prior=PriorDecisions(decisions=[]))
+        prompt = t.format_prompt(ctx)
+        assert "No prior decisions" in prompt
+
+
+class TestControlTreatmentAccuracyLowConfidence:
+    def test_low_confidence_flag_appears(self):
+        t = ControlTreatment()
+        ctx = _make_context(
+            accuracy=AccuracyData(
+                city="New York", lead_time=3, mae=5.0, bias=1.0,
+                sample_count=10, low_confidence=True,
+            )
+        )
+        prompt = t.format_prompt(ctx)
+        assert "LOW CONFIDENCE" in prompt
+
+    def test_normal_accuracy_no_warning(self):
+        t = ControlTreatment()
+        ctx = _make_context()
+        prompt = t.format_prompt(ctx)
+        assert "LOW CONFIDENCE" not in prompt

@@ -2,10 +2,14 @@
   "active_plan": "/Users/djtchill/Documents/Projects/Traderbot/experiments/.sisyphus/plans/v3-experiment.md",
   "started_at": "2026-05-19T02:02:23.295Z",
   "session_ids": [
-    "ses_1c2b7971dffeY8JuGiXMqRGl8y"
+    "ses_1c2b7971dffeY8JuGiXMqRGl8y",
+    "ses_1bfcb5542ffe5yghoJ10JzITCe",
+    "ses_1bfbb0710ffe4hRlbQpa4RTetw"
   ],
   "session_origins": {
-    "ses_1c2b7971dffeY8JuGiXMqRGl8y": "direct"
+    "ses_1c2b7971dffeY8JuGiXMqRGl8y": "direct",
+    "ses_1bfcb5542ffe5yghoJ10JzITCe": "appended",
+    "ses_1bfbb0710ffe4hRlbQpa4RTetw": "appended"
   },
   "plan_name": "v3-experiment",
   "agent": "atlas",

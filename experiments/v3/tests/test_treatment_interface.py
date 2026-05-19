@@ -205,6 +205,14 @@ class TestTreatmentContext:
         assert ctx.timestep == 1
         assert ctx.remaining == 9
 
+    def test_system_context_defaults_to_empty(self):
+        ctx = _make_context()
+        assert ctx.system_context == ""
+
+    def test_system_context_can_be_set(self):
+        ctx = _make_context(system_context="Agent context here")
+        assert ctx.system_context == "Agent context here"
+
     def test_frozen(self):
         ctx = _make_context()
         with pytest.raises(AttributeError):
@@ -239,9 +247,8 @@ class TestTreatmentResponse:
 # ---------------------------------------------------------------------------
 
 
-def _make_context() -> TreatmentContext:
-    """Build a minimal TreatmentContext for tests."""
-    return TreatmentContext(
+def _make_context(**overrides) -> TreatmentContext:
+    defaults = dict(
         market=MarketData(
             ticker="KXNYHI",
             city="New York",
@@ -262,3 +269,5 @@ def _make_context() -> TreatmentContext:
         timestep=1,
         remaining=9,
     )
+    defaults.update(overrides)
+    return TreatmentContext(**defaults)

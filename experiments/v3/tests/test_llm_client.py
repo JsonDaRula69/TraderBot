@@ -72,10 +72,11 @@ class TestTokenBucket:
 
 
 class TestLLMClientApiKey:
-    def test_raises_when_env_var_unset(self, monkeypatch):
+    def test_allows_missing_api_key(self, monkeypatch):
+        """OLLAMA_API_KEY is optional — local Ollama handles auth internally."""
         monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
-        with pytest.raises(RuntimeError, match="OLLAMA_API_KEY"):
-            LLMClient()
+        client = LLMClient()
+        assert client.api_key is None or client.api_key == ""
 
     def test_constructs_when_env_var_set(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "test-key-123")

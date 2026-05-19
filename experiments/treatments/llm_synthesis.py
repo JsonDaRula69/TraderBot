@@ -1,12 +1,21 @@
-"""ControlTreatment — production-mirroring control with OpenClaw workspace context."""
+"""LLMSynthesisTreatment — uses the LLM itself to estimate probability from raw market data."""
 
 from experiments.v3.treatment_interface import TreatmentContext, TreatmentInterface
 
 
-class ControlTreatment(TreatmentInterface):
+class LLMSynthesisTreatment(TreatmentInterface):
+    """Asks the LLM to directly estimate probability from market data.
+
+    This is the V2-style "let the LLM reason about the data" approach.
+    The prompt presents the market data, forecast, and accuracy information,
+    then asks the LLM to estimate probability and make a decision.
+    Unlike the other treatments, there is no pre-computed statistical
+    estimate — the LLM provides both the reasoning and the probability.
+    """
+
     @property
     def name(self) -> str:
-        return "control"
+        return "llm_synthesis"
 
     def format_prompt(self, ctx: TreatmentContext) -> str:
         sections: list[str] = []
@@ -21,6 +30,7 @@ class ControlTreatment(TreatmentInterface):
             )
 
         sections.append(self._build_market_section(ctx))
+        sections.append(self._build_synthesis_instruction(ctx))
         sections.append(self._build_decision_instruction())
 
         return "\n\n".join(sections)
@@ -62,40 +72,42 @@ class ControlTreatment(TreatmentInterface):
         ]
         if ctx.accuracy.low_confidence:
             lines.append("  ⚠ LOW CONFIDENCE — small sample size")
+        return "\n".join(lines)
 
-        lines += [
+    def _build_synthesis_instruction(self, ctx: TreatmentContext) -> str:
+        lines = [
+            "=== PROBABILITY ESTIMATION TASK ===",
+            "You are a weather market analyst. Estimate the probability that this prediction "
+            "market resolves YES based on the market data above.",
             "",
-            "Technical indicators:",
-            f"  RSI(14): {ctx.technicals.rsi:.1f}",
-            f"  Bollinger position: {ctx.technicals.bollinger_position:.2f}",
-            f"  EMA(5): {ctx.technicals.ema5:.1f}",
-            f"  EMA(20): {ctx.technicals.ema20:.1f}",
-            f"  Signal direction: {ctx.technicals.signal_direction}",
-            f"  Signal confidence: {ctx.technicals.signal_confidence:.2f}",
+            f"Consider the forecast temperature ({ctx.forecast.forecast_temp_f}°F) relative "
+            f"to the {ctx.market.strike_type} threshold ({ctx.market.threshold}°F).",
+            f"Factor in the forecast accuracy: MAE of {ctx.accuracy.mae:.1f}°F "
+            f"with {'a' if ctx.accuracy.bias >= 0 else ''} bias of {ctx.accuracy.bias:+.1f}°F.",
+            f"The market currently implies a {ctx.prices.implied_prob:.0%} probability.",
+            "",
+            "Reason step by step about whether the forecast temperature will exceed (for 'greater' "
+            "strike types) or fall below (for 'less' strike types) the threshold. Consider the "
+            "forecast accuracy — the actual temperature has historically been off by the MAE — "
+            "and whether the forecast bias suggests systematic over- or under-prediction.",
         ]
 
-        if ctx.prior.decisions:
-            lines += [
-                "",
-                "Prior decisions on this market:",
-            ]
-            for d in ctx.prior.decisions:
-                ts = d.get("timestep", "?")
-                dec = d.get("decision", "?")
-                prob = d.get("estimated_prob", 0.0)
-                lines.append(f"  Timestep {ts}: {dec} (est. prob={float(prob):.2f})")
-        else:
-            lines += ["", "No prior decisions for this market."]
+        if ctx.accuracy.low_confidence:
+            lines.append(
+                "⚠ The accuracy data has LOW CONFIDENCE. Weight your estimate accordingly."
+            )
+
+        lines.extend([
+            "",
+            "Provide your estimated_prob (0.0 to 1.0) and confidence (0.0 to 1.0) in your response.",
+        ])
 
         return "\n".join(lines)
 
     def _build_decision_instruction(self) -> str:
         return (
             "=== DECISION ===\n"
-            "Based on the production agent context and market data above, make a trading decision.\n\n"
-            "Respond ONLY with a JSON object:\n"
-            '{"decision": "buy_yes"|"buy_no"|"skip", '
-            '"estimated_prob": 0.0-1.0, '
-            '"confidence": 0.0-1.0, '
-            '"reasoning": "brief explanation"}'
+            "Based on your probability estimation above, make a trading decision.\n\n"
+            'Respond ONLY with a JSON object: {"decision": "buy_yes"|"buy_no"|"skip", '
+            '"estimated_prob": float, "confidence": float, "reasoning": string}'
         )
