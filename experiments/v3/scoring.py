@@ -127,11 +127,12 @@ def score_run(conn: sqlite3.Connection, run_id: str) -> dict:
     )
     best_pnl = best_model[1]["total_pnl"]
 
-    for ticker, t_decisions in by_ticker.items():
-        per_market[ticker] = {
-            "settlement": t_decisions[0]["settlement"],
-            "decision_count": len(t_decisions),
-        }
+    if by_treatment:
+        for ticker, t_decisions in by_ticker.items():
+            per_market[ticker] = {
+                "settlement": t_decisions[0]["settlement"],
+                "decision_count": len(t_decisions),
+            }
 
     return {
         "treatments": treatment_metrics,

@@ -1,0 +1,37 @@
+V3 QA — Scenario 10: Statistics (Task 11)
+============================================
+
+Test file: experiments/v3/tests/test_statistics.py
+Result: 24/24 PASSED
+
+Paired T-Test (paired_t_test):
+  - Verifies against scipy.stats.ttest_rel
+  - treatment P&L=[+10,+5,-3,+8,+2], control=[+2,-1,-5,+1,-3]
+    → delta=[8,6,2,7,5], n=5
+  - t-statistic ≈ 5.83, p-value ≈ 0.004
+  - Output keys: t_statistic, p_value, mean_delta, n
+
+Cohen's d:
+  - Paired: d = mean_delta / sd_delta (ddof=1)
+  - Identical data → 0.0
+  - Zero SD → 0.0 (guards against division by zero)
+
+Confidence Interval (confidence_interval):
+  - 95% CI via scipy.stats.t.interval
+  - Mean contained within CI
+  - CI mean matches sample mean
+  - Output: lower, upper, mean, n
+  - Single value → (0.0, 0.0), n=0
+  - Empty list → (0.0, 0.0), n=0
+  - Custom confidence level supported
+
+Compare Treatments (compare_treatments):
+  - Control mean P&L present
+  - All treatment keys present with: mean_pnl, t_statistic, p_value, cohens_d, ci_95
+  - Metric t-tests included when metrics dict provided
+  - No control data → returns error dict
+  - Empty control → returns error dict
+  - Output is JSON-serializable
+  - CI 95 nested structure correct
+
+VERDICT: PASS

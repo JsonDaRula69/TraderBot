@@ -166,3 +166,92 @@ Key changes:
 - V3 redesign document exists but implementation has not started
 - The cold_start_fix.md V1 approach (hardcode weather_prob.py) was rejected in favor of the experiment approach
 - The methodology experiment plan (bin_cal, logistic_reg, llm_synthesis, ensemble) was superseded by the treatment-based design
+
+---
+
+## Phase 4: V3 — Treatment-Agnostic Test Environment
+
+**Date**: 2026-05-18 (commit `tbd`, session `ses_1c5b2b2a0ffe...`)
+
+**Document**: `experiments/v3/README.md`
+
+### What V3 Is
+
+V3 is a treatment-agnostic experiment lab. The harness assembles the full context for every market, hands it to a treatment, records the LLM decision, and scores the results. The lab never knows which treatments are loaded and never contains treatment-specific logic. A treatment is a plug-in module that implements `TreatmentInterface`.
+
+### Key Improvements Over V2
+
+| Area | V2 | V3 |
+|------|-----|-----|
+| Architecture | Treatment prompts hardcoded inside `treatment_harness.py` (647 lines, `if/elif` blocks) | `TreatmentInterface` ABC; treatments live in `experiments/treatments/` |
+| Extensibility | Adding a treatment required editing the harness | Add a file + one-line registry entry |
+| Control | Bare market price only | Mirrors production `traderbot analyze` + `traderbot signals` (RSI, Bollinger, EMA, signal direction, confidence) |
+| Probability | Sigmoid(delta) heuristic | `scipy.stats.norm.cdf` with city-specific error distributions |
+| Forecast data | Synthetic (actual temp + Gaussian noise) | Real archived forecasts from Open-Meteo Previous Runs |
+| Accuracy data | None | Per-city, per-lead-time MAE and bias computed from Kalshi settlements |
+| Experiment design | No formal pairing | Within-subjects: every treatment sees the exact same markets and timesteps |
+| Scoring | Brier score, binary accuracy | P&L, delta profit, paired t-tests, Cohen's d, confidence intervals |
+
+### Folder Reorganization
+
+```
+experiments/
+├── v3/               Testing lab (treatment-agnostic)
+│   ├── harness.py
+│   ├── scoring.py
+│   ├── statistics.py
+│   ├── market_selector.py
+│   ├── treatment_interface.py
+│   ├── db_schema.py
+│   ├── cli.py
+│   └── data_sources/
+│       ├── kalshi_fetcher.py
+│       ├── openmeto_fetcher.py
+│       └── accuracy_calculator.py
+└── treatments/       Plug-in treatments
+    ├── control.py
+    └── ...
+```
+
+### TreatmentInterface Plug-In Architecture
+
+Every treatment inherits from `TreatmentInterface` and implements three members:
+
+- `name` — unique identifier used by CLI and reporting
+- `format_prompt(ctx)` — receives the full `TreatmentContext` and returns a prompt string
+- `validate_response(response)` — parses and guards against malformed LLM output
+
+The harness only calls these methods. It never branches on treatment names, never knows what fields are included in the prompt, and never modifies scoring based on which treatment is running. This is the boundary rule: `v3/` code never imports from `treatments/`.
+
+### Production-Mirroring Control
+
+The control treatment (`ControlTreatment`) replicates what a real TraderBot agent receives today:
+
+- Market details and orderbook
+- Implied probability from mid-price
+- RSI, Bollinger bands, EMA crossover
+- Signal direction and confidence from `generate_signal()`
+
+The control does not receive weather forecasts, forecast accuracy, or city-specific bias. This establishes a realistic baseline: any treatment that outperforms the control does so because the extra information is genuinely useful to the agent, not because the control is artificially weak.
+
+### Within-Subjects Design
+
+Every treatment is evaluated on the same stratified market pool. Markets are selected from a `2x3x2` grid (difficulty x strike_type x lead_time_bucket) to ensure coverage. Because the same market appears for every treatment, we compute **delta profit** (treatment P&L minus control P&L) per market and run paired t-tests. This removes between-market variance and isolates the effect of the treatment itself.
+
+Statistical outputs include:
+- Paired t-test (mean delta profit vs zero)
+- Cohen's d (standardized effect size)
+- 95% confidence interval for mean delta profit
+
+A treatment is considered promising when it shows positive mean delta profit, p < 0.05, and a narrow confidence interval.
+
+### Implementation Status
+
+- [x] `TreatmentInterface` ABC and `TreatmentContext` dataclass
+- [x] Control treatment with production-mirroring logic
+- [x] Harness, scoring, statistics, and CLI
+- [x] Market selector with stratified 2x3x2 grid
+- [x] Kalshi fetcher, Open-Meteo fetcher, and accuracy calculator
+- [x] SQLite schema for markets, forecasts, prices, settlements, decisions
+- [ ] Full end-to-end run with all four treatments (in progress)
+

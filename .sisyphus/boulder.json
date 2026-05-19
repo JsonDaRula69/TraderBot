@@ -63,6 +63,24 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "updated_at": "2026-05-19T03:32:58.011Z"
+    },
+    "todo:14": {
+      "task_key": "todo:14",
+      "task_label": "14",
+      "task_title": "Documentation and README",
+      "session_id": "ses_1c1b3b81bffelNoVMUPgOxBslU",
+      "agent": "Sisyphus-Junior",
+      "category": "writing",
+      "updated_at": "2026-05-19T03:39:17.328Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_1c1ae1a95ffen2ME2y1E2USXQO",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-19T03:47:39.704Z"
     }
   }
 }
