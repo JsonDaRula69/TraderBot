@@ -228,7 +228,7 @@ Wave FINAL (Verification):
 
 ### Phase 0: Foundation and Spec
 
-- [ ] 0a. Folder Reorganization — Archive V2, Create V3 Structure
+- [x] 0a. Folder Reorganization — Archive V2, Create V3 Structure
 
   > **STATUS**: PARTIALLY COMPLETE — Folder reorganization executed. Directories created and files moved. Remaining: write `docs/scope_boundaries.md` (delegated to Task 0b scope expansion).
 
@@ -293,7 +293,7 @@ Wave FINAL (Verification):
   - Files: All moved/created files
   - Note: Directory reorganization already executed. Commit the current state.
 
-- [ ] 0b. Treatment Spec/Instruction Sheet + Scope Boundaries Document
+- [x] 0b. Treatment Spec/Instruction Sheet + Scope Boundaries Document
 
   **What to do**:
   - Create `experiments/docs/treatment_spec.md`
@@ -366,7 +366,7 @@ Wave FINAL (Verification):
   - Message: `docs(v3): add treatment spec and scope boundaries documents`
   - Files: `experiments/docs/treatment_spec.md`, `experiments/docs/scope_boundaries.md`
 
-- [ ] 0c. DB Schema and Migration Module
+- [x] 0c. DB Schema and Migration Module
 
   **What to do**:
   - Create `experiments/v3/db_schema.py`
@@ -430,7 +430,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add DB schema and migration module`
   - Files: `experiments/v3/__init__.py`, `experiments/v3/db_schema.py`, `experiments/v3/tests/test_db_schema.py`
 
-- [ ] 0d. TreatmentInterface ABC + TreatmentContext Dataclasses
+- [x] 0d. TreatmentInterface ABC + TreatmentContext Dataclasses
 
   **What to do**:
   - Create `experiments/v3/treatment_interface.py`
@@ -503,7 +503,7 @@ Wave FINAL (Verification):
 
 ### Wave 1: Data Pipeline and Core Modules
 
-- [ ] 1. Kalshi Data Fetcher
+- [x] 1. Kalshi Data Fetcher
 
   **What to do**:
   - Create `experiments/v3/data_sources/kalshi_fetcher.py`
@@ -580,7 +580,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add Kalshi data fetcher`
   - Files: `experiments/v3/data_sources/kalshi_fetcher.py`, `experiments/v3/tests/test_kalshi_fetcher.py`
 
-- [ ] 2. Open-Meteo Forecast Fetcher
+- [x] 2. Open-Meteo Forecast Fetcher
 
   **What to do**:
   - Create `experiments/v3/data_sources/openmeto_fetcher.py`
@@ -637,7 +637,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add Open-Meteo forecast fetcher`
   - Files: `experiments/v3/data_sources/openmeto_fetcher.py`, `experiments/v3/tests/test_openmeto_fetcher.py`
 
-- [ ] 3. Forecast Accuracy Calculator
+- [x] 3. Forecast Accuracy Calculator
 
   **What to do**:
   - Create `experiments/v3/data_sources/accuracy_calculator.py`
@@ -697,7 +697,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add forecast accuracy calculator`
   - Files: `experiments/v3/data_sources/accuracy_calculator.py`, `experiments/v3/tests/test_accuracy_calculator.py`
 
-- [ ] 4. Ticker Parser for All Strike Types
+- [x] 4. Ticker Parser for All Strike Types
 
   **What to do**:
   - Create `experiments/v3/ticker_parser.py`
@@ -753,7 +753,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add ticker parser for all strike types`
   - Files: `experiments/v3/ticker_parser.py`, `experiments/v3/tests/test_ticker_parser_v3.py`
 
-- [ ] 5. Bayesian Probability Computation Module
+- [x] 5. Bayesian Probability Computation Module
 
   **What to do**:
   - Create `experiments/v3/probability.py`
@@ -831,7 +831,7 @@ Wave FINAL (Verification):
 
 ### Wave 2: Core Engine — Harness and Scoring
 
-- [ ] 6. LLM Client with Rate Limiting and Retry
+- [x] 6. LLM Client with Rate Limiting and Retry
 
   **What to do**:
   - Create `experiments/v3/llm_client.py`
@@ -901,7 +901,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add LLM client with rate limiting and retry`
   - Files: `experiments/v3/llm_client.py`, `experiments/v3/tests/test_llm_client.py`
 
-- [ ] 7. Stratified Market Selector
+- [x] 7. Stratified Market Selector
 
   **What to do**:
   - Create `experiments/v3/market_selector.py`
@@ -961,7 +961,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add stratified market selector`
   - Files: `experiments/v3/market_selector.py`, `experiments/v3/tests/test_market_selector.py`
 
-- [ ] 8. Production-Mirroring Control Treatment
+- [x] 8. Production-Mirroring Control Treatment
 
   **What to do**:
   - Create `experiments/treatments/control.py`
@@ -1040,7 +1040,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add production-mirroring control treatment`
   - Files: `experiments/treatments/control.py`, `experiments/treatments/__init__.py`, `experiments/v3/tests/test_control_treatment.py`
 
-- [ ] 9. Within-Subjects Experiment Harness
+- [x] 9. Within-Subjects Experiment Harness
 
   **What to do**:
   - Create `experiments/v3/harness.py`
@@ -1118,7 +1118,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add within-subjects experiment harness`
   - Files: `experiments/v3/harness.py`, `experiments/v3/tests/test_harness.py`
 
-- [ ] 10. P&L and Scoring Engine
+- [x] 10. P&L and Scoring Engine
 
   **What to do**:
   - Create `experiments/v3/scoring.py`
@@ -1192,7 +1192,7 @@ Wave FINAL (Verification):
 
 ### Wave 3: Integration — CLI, Statistics, Tests, Docs
 
-- [ ] 11. Statistical Analysis Module
+- [x] 11. Statistical Analysis Module
 
   **What to do**:
   - Create `experiments/v3/statistics.py`
@@ -1248,7 +1248,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add statistical analysis module`
   - Files: `experiments/v3/statistics.py`, `experiments/v3/tests/test_statistics.py`
 
-- [ ] 12. CLI Runner
+- [x] 12. CLI Runner
 
   **What to do**:
   - Create `experiments/v3/cli.py`
@@ -1309,7 +1309,7 @@ Wave FINAL (Verification):
   - Message: `feat(v3): add CLI runner`
   - Files: `experiments/v3/cli.py`, `experiments/v3/tests/test_cli.py`
 
-- [ ] 13. End-to-End Integration Test
+- [x] 13. End-to-End Integration Test
 
   **What to do**:
   - Create `experiments/v3/tests/test_integration.py`
