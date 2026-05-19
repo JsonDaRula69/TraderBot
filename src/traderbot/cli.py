@@ -375,6 +375,9 @@ def trade(
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
+    no_confirm: Annotated[
+        bool, typer.Option("--no-confirm", help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.")
+    ] = False,
 ) -> None:
     """Place a trade through risk checks.
 
@@ -400,6 +403,20 @@ def trade(
     console = Console()
 
     profile = get_current_profile()
+
+    confirm_trades = os.environ.get("TRADERBOT_CONFIRM_TRADES", "true").lower() != "false"
+    if confirm_trades and not no_confirm:
+        summary = (
+            f"\n  Ticker:     {ticker}\n"
+            f"  Direction:  {direction}\n"
+            f"  Quantity:   {quantity}\n"
+            f"  Price:      ¢{price}\n"
+        )
+        console.print(f"[bold]Trade Confirmation Required[/bold]{summary}")
+        response = input("Execute trade? [y/N] ").strip().lower()
+        if response not in ("y", "yes"):
+            console.print("[yellow]Trade cancelled.[/yellow]")
+            raise SystemExit(0)
 
     resolved_prob = estimated_prob
     resolved_confidence = confidence if confidence is not None else 0.5
