@@ -74,6 +74,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Connect to DB, count markets, check coverage, and print summary.",
     )
+    parser.add_argument(
+        "--populate-db",
+        action="store_true",
+        help="Fetch real data from Kalshi + Open-Meteo and populate the database.",
+    )
+    parser.add_argument(
+        "--event-prefix",
+        type=str,
+        default="KXHIGH",
+        help="Kalshi event prefix to fetch (default: KXHIGH).",
+    )
+    parser.add_argument(
+        "--max-markets",
+        type=int,
+        default=50,
+        help="Max markets to fetch when populating (default: 50).",
+    )
     return parser
 
 
@@ -127,6 +144,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(), format="%(message)s")
+
+    if args.populate_db:
+        from experiments.v3.data_sources.populate_db import populate_db
+        populate_db(args.db, args.event_prefix, args.max_markets)
+        return
 
     if args.verify_data:
         conn = sqlite3.connect(args.db)
