@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from traderbot.fileops import set_dir_owner_only, set_file_owner_only
 from traderbot.paths import get_data_dir
 from traderbot.profiles.models import TradingProfile
 
@@ -21,20 +22,20 @@ _PROFILES_FILE = get_data_dir() / "profiles.enc"
 def _get_keys_dir() -> Path:
     keys_dir = get_data_dir() / "keys"
     keys_dir.mkdir(parents=True, exist_ok=True)
-    keys_dir.chmod(0o700)
+    set_dir_owner_only(keys_dir)
     return keys_dir
 
 
 def _derive_or_create_key() -> bytes:
     key_file = _get_keys_dir() / "profile.key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
-    key_file.parent.chmod(0o700)
+    set_dir_owner_only(key_file.parent)
     if key_file.exists():
-        key_file.chmod(0o600)
+        set_file_owner_only(key_file)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
     key = os.urandom(32)
     key_file.write_text(base64.urlsafe_b64encode(key).decode())
-    key_file.chmod(0o600)
+    set_file_owner_only(key_file)
     return key
 
 
@@ -82,7 +83,7 @@ class ProfileRegistry:
         plaintext = json.dumps(data, indent=2)
         encrypted = _encrypt_data(plaintext, key)
         _PROFILES_FILE.write_bytes(encrypted)
-        _PROFILES_FILE.chmod(0o600)
+        set_file_owner_only(_PROFILES_FILE)
 
     def create_profile(self, profile: TradingProfile) -> None:
         if self.profile_exists(profile.name):

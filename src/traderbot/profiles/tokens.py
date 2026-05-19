@@ -9,9 +9,13 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
 
+from traderbot.fileops import set_dir_owner_only, set_file_owner_only
 from traderbot.paths import get_data_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 TOKEN_TTL_DAYS = 30
 
@@ -21,7 +25,7 @@ logger = logging.getLogger(__name__)
 def _get_keys_dir() -> Path:
     keys_dir = get_data_dir() / "keys"
     keys_dir.mkdir(parents=True, exist_ok=True)
-    keys_dir.chmod(0o700)
+    set_dir_owner_only(keys_dir)
     return keys_dir
 
 
@@ -41,13 +45,13 @@ _TOKENS_FILE = get_data_dir() / "tokens.enc"
 def _derive_or_create_key() -> bytes:
     key_file = _get_keys_dir() / "token.key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
-    key_file.parent.chmod(0o700)
+    set_dir_owner_only(key_file.parent)
     if key_file.exists():
-        key_file.chmod(0o600)
+        set_file_owner_only(key_file)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
     key = os.urandom(32)
     key_file.write_text(base64.urlsafe_b64encode(key).decode())
-    key_file.chmod(0o600)
+    set_file_owner_only(key_file)
     return key
 
 
@@ -81,7 +85,7 @@ def _save_tokens_file(tokens: list[dict]) -> None:
     key = _derive_or_create_key()
     encrypted = _encrypt_data(json.dumps(tokens), key)
     _TOKENS_FILE.write_bytes(encrypted)
-    _TOKENS_FILE.chmod(0o600)
+    set_file_owner_only(_TOKENS_FILE)
 
 
 def generate_token() -> str:

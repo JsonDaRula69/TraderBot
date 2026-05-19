@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import fcntl
 import logging
 import re
 import uuid
@@ -12,8 +10,17 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
+import portalocker.exceptions
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.fileops import (
+    LOCK_EXCLUSIVE,
+    LOCK_NON_BLOCKING,
+    LOCK_SHARED,
+    lock_file,
+    set_file_owner_only,
+    unlock_file,
+)
 from traderbot.paths import get_workspace_dir
 
 logger = logging.getLogger(__name__)
@@ -162,9 +169,9 @@ def _read_file_locked(path: Path) -> str:
     if not path.exists():
         return ""
     with open(path) as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        lock_file(f, LOCK_SHARED)
         content = f.read()
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        unlock_file(f)
         return content
 
 
@@ -228,13 +235,13 @@ def write_intent(
         path.write_text(
             "# Session State\n\n## Pending Actions\n\n(none)\n\n## Completed Actions\n\n(none)\n"
         )
-        path.chmod(0o600)
-    fd = open(path, "r+")  # noqa: SIM115 - fcntl.flock requires manual fd
+        set_file_owner_only(path)
+    fd = open(path, "r+")  # noqa: SIM115 - portalocker.lock requires manual fd
     fd_closed = False
     try:
         try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as err:
+            lock_file(fd, LOCK_EXCLUSIVE | LOCK_NON_BLOCKING)
+        except (OSError, portalocker.exceptions.AlreadyLocked) as err:
             fd.close()
             fd_closed = True
             logger.error("Concurrent WAL writer detected — rejecting write for %s", entry.intent_id)
@@ -285,7 +292,7 @@ def write_intent(
         fd.flush()
     finally:
         if not fd_closed:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            unlock_file(fd)
             fd.close()
 
     logger.info(
@@ -308,12 +315,12 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         logger.warning("SESSION-STATE.md not found at %s", path)
         return False
 
-    fd = open(path, "r+")  # noqa: SIM115 - fcntl.flock requires manual fd
+    fd = open(path, "r+")  # noqa: SIM115 - portalocker.lock requires manual fd
     fd_closed = False
     try:
         try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as err:
+            lock_file(fd, LOCK_EXCLUSIVE | LOCK_NON_BLOCKING)
+        except (OSError, portalocker.exceptions.AlreadyLocked) as err:
             fd.close()
             fd_closed = True
             logger.error("Concurrent WAL writer during status update for %s", intent_id)
@@ -341,7 +348,7 @@ def update_status(session_state_path: Path, intent_id: str, status: WalStatus) -
         fd.flush()
     finally:
         if not fd_closed:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            unlock_file(fd)
             fd.close()
 
     logger.info("WAL entry %s status updated to %s", intent_id, status.value)
