@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 from pathlib import Path
 from typing import Any
 
@@ -60,9 +61,12 @@ class KalshiWebSocket:
             "/trade-api/ws/v2",
         )
         headers["Content-Type"] = "application/json"
+        ssl_context = ssl.create_default_context()
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
         self._ws = await websockets.connect(
             self._config.base_url,
             additional_headers=headers,
+            ssl=ssl_context,
         )
 
     async def subscribe(
