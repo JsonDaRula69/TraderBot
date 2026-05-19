@@ -9,13 +9,20 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from traderbot.paths import get_data_dir
 
 TOKEN_TTL_DAYS = 30
-"""Default token time-to-live in days."""
 
 logger = logging.getLogger(__name__)
+
+
+def _get_keys_dir() -> Path:
+    keys_dir = get_data_dir() / "keys"
+    keys_dir.mkdir(parents=True, exist_ok=True)
+    keys_dir.chmod(0o700)
+    return keys_dir
 
 
 class TokenAlreadyAssignedError(ValueError):
@@ -32,8 +39,9 @@ _TOKENS_FILE = get_data_dir() / "tokens.enc"
 
 
 def _derive_or_create_key() -> bytes:
-    key_file = get_data_dir() / ".token_key"
+    key_file = _get_keys_dir() / "token.key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
+    key_file.parent.chmod(0o700)
     if key_file.exists():
         key_file.chmod(0o600)
         return base64.urlsafe_b64decode(key_file.read_text().strip())

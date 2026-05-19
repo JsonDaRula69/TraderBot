@@ -58,7 +58,9 @@ def list_all_data_paths() -> list[Path]:
     paths: list[Path] = [
         base / ".env",
         base / ".profile_key",
+        base / ".token_key",
         base / "profiles.enc",
+        base / "tokens.enc",
         base / "profiles.json",  # legacy
         base / "update_config.json",
         base / ".update_check_cache.json",
@@ -67,6 +69,7 @@ def list_all_data_paths() -> list[Path]:
         base / "traderbot.db",  # legacy global DB
         base / "audit",
         base / "chromadb",
+        base / "keys",
         base / "logs",
     ]
     # Per-profile directories: {mode}-{name}/db, chroma, audit
