@@ -1,6 +1,6 @@
 """OpenClaw configuration management for agent profile pairing.
 
-Handles hooks enablement, sandbox configuration, and bootstrap hook creation
+Handles hooks enablement and bootstrap hook creation
 during the ``traderbot profile assign`` flow. All functions are idempotent.
 """
 
@@ -221,36 +221,6 @@ def ensure_agent_bootstrap_hook() -> bool:
     _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
 
     logger.info("Bootstrap hook deployed and registered")
-    return True
-
-
-def configure_agent_sandbox(agent_id: str) -> bool:
-    """Add or update an agent entry in ``openclaw.json`` with sandbox and
-    workspace access settings.
-
-    Enables sandboxing and ``workspaceAccess: "rw"`` for the given agent ID.
-    The sandbox prevents the agent from reading/writing files outside its
-    workspace via absolute paths.  Idempotent.
-    """
-    config = _read_openclaw_config()
-    agents = config.setdefault("agents", {})
-    agent_list = agents.setdefault("list", [])
-
-    for entry in agent_list:
-        if entry.get("id") == agent_id:
-            # Add sandbox config if not already set
-            entry["sandbox"] = entry.get("sandbox", True)
-            entry.setdefault("workspaceAccess", "rw")
-            break
-    else:
-        agent_list.append({
-            "id": agent_id,
-            "sandbox": True,
-            "workspaceAccess": "rw",
-        })
-
-    _write_openclaw_config(config)
-    logger.info("Sandbox configured for agent '%s'", agent_id)
     return True
 
 

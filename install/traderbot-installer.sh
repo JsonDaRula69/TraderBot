@@ -1151,7 +1151,7 @@ for key, value in new.items():
     else:
         existing[key] = value
 
-# Preserve any sub-keys of agents that weren't in the template (e.g., hooks, sandbox)
+# Preserve any sub-keys of agents that weren't in the template (e.g., hooks)
 if 'agents' in existing and isinstance(existing['agents'], dict) and 'list' in existing['agents']:
     for entry in existing['agents']['list']:
         # __PROFILE_NAME__ placeholder was already expanded by profile assign
