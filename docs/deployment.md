@@ -1,10 +1,17 @@
 # Deployment
 
-This guide covers installing TraderBot on Ubuntu (Debian-based Linux), setting up profiles, assigning agents, and configuring persistence.
+This guide covers installing TraderBot on Ubuntu (Debian-based Linux), Windows, and macOS, setting up profiles, assigning agents, and configuring persistence.
 
 ## Installer
 
-`install/traderbot-installer.sh` handles the full installation flow on both platforms.
+Two installer scripts are provided:
+
+| Script | Platform | Shell |
+|--------|----------|-------|
+| `install/traderbot-installer.sh` | Linux, macOS | Bash |
+| `install/Install-TraderBot.ps1` | Windows | PowerShell |
+
+### Linux/macOS
 
 ```bash
 bash install/traderbot-installer.sh              # Interactive install
@@ -12,10 +19,18 @@ bash install/traderbot-installer.sh --uninstall  # Remove services
 bash install/traderbot-installer.sh --update      # Pull latest and restart
 ```
 
-The installer runs three phases:
+### Windows
 
-1. **OS detection** — detects Ubuntu/Debian or unsupported
-2. **Dependency installation** — platform-specific package setup
+```powershell
+.\install\Install-TraderBot.ps1                 # Interactive install
+.\install\Install-TraderBot.ps1 -Uninstall       # Remove scheduled tasks
+.\install\Install-TraderBot.ps1 -Update           # Pull latest and restart
+```
+
+The installers run four phases:
+
+1. **OS detection** — detects the platform and version
+2. **Dependency installation** — platform-specific package setup (Python 3.12, git, uv)
 3. **TraderBot install** — downloads from GitHub, installs via pip/uv
 4. **Interactive config** — profile creation, API keys, agent assignment
 
@@ -135,27 +150,132 @@ launchctl list | grep traderbot
 tail -f ~/Library/Logs/traderbot-molty.log
 ```
 
+## Windows Installation
+
+### Prerequisites
+
+- **Windows 10/11** or Windows Server 2019+
+- **PowerShell 5.1+** (pre-installed on Windows 10+)
+- **Administrator privileges** (for Task Scheduler registration)
+- **OpenClaw** installed (recommended; installer will warn if missing)
+
+### 1. Run the installer
+
+Open PowerShell as Administrator and run:
+
+```powershell
+.\install\Install-TraderBot.ps1
+```
+
+If you see an execution policy error, first allow script execution:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+The installer will:
+- Detect Windows version
+- Install Python 3.12 via winget (or python.org fallback)
+- Install git via winget (or direct download)
+- Install uv (Python package manager)
+- Clone and install TraderBot
+- Launch interactive config for profiles, API keys, and agent assignment
+
+### 2. Create a profile
+
+Same as Ubuntu — handled interactively by the installer or run manually:
+
+```powershell
+traderbot profile create paper-aggressive --mode paper `
+    --categories Economics,Politics `
+    --risk-multiplier 0.8 `
+    --max-daily-loss-pct 1.5
+```
+
+### 3. Assign an agent
+
+The installer prompts for agent name and profile token during Phase 4.
+To assign manually:
+
+```powershell
+traderbot profile discover-agents
+# Returns: [{"agent_id": "molty", "name": "Molty the Trader", ...}]
+
+traderbot profile assign molty paper-aggressive
+# Token: xK9mQ2pL7nR4
+```
+
+### 4. Enable persistence
+
+The installer registers three Windows Task Scheduler tasks:
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `TraderBot-agent-{name}` | Hourly | Main agent scan loop |
+| `TraderBot-heartbeat-{name}` | Every 15 min | Agent heartbeat/health check |
+| `TraderBot-news-ingest` | Hourly | News content ingestion (shared) |
+
+Tasks run in the background and survive reboots via Task Scheduler settings
+(`AllowStartIfOnBatteries`, `StartWhenAvailable`, restart on failure).
+
+```powershell
+# View all scheduled tasks
+Get-ScheduledTask -TaskPath "\TraderBot\"
+
+# Check task status
+Get-ScheduledTaskInfo -TaskName "TraderBot-agent-molty" -TaskPath "\TraderBot\"
+
+# View task history in Event Viewer or Task Scheduler GUI:
+taskschd.msc  → navigate to \TraderBot\
+```
+
+### Installation Paths
+
+| Directory | Purpose |
+|-----------|---------|
+| `%USERPROFILE%\traderbot\` | Git repo + venv |
+| `%USERPROFILE%\.traderbot\` | .env credentials, profiles DB |
+| `%USERPROFILE%\.local\bin\` | traderbot.exe symlink |
+| `%USERPROFILE%\Library\Logs\` | Agent log files |
+
 ## Uninstall
+
+### Linux/macOS
 
 ```bash
 bash install/traderbot-installer.sh --uninstall
 ```
 
+### Windows
+
+```powershell
+.\install\Install-TraderBot.ps1 -Uninstall
+```
+
 This:
-- Stops all running TraderBot services
-- Removes systemd unit files (Linux) or launchd plist files (macOS)
-- Preserves data at `~/.traderbot/` (all profiles and data)
+- Stops and removes all TraderBot scheduled tasks
+- Preserves data at `%USERPROFILE%\.traderbot\` (all profiles and data)
+- To remove completely, delete `%USERPROFILE%\traderbot\` and `%USERPROFILE%\.traderbot\` manually
 
 ## Update
+
+### Linux/macOS
 
 ```bash
 bash install/traderbot-installer.sh --update
 ```
 
+### Windows
+
+```powershell
+.\install\Install-TraderBot.ps1 -Update
+```
+
 This:
-- Stops all services
+- Stops all scheduled tasks
 - Pulls latest from GitHub
-- Restarts services
+- Re-installs dependencies
+- Restarts scheduled tasks
 
 ## Profile Creation Flow
 
@@ -214,6 +334,21 @@ A plist template runs one agent per plist. The installer generates instance-spec
 ```
 
 Each plist has `RunAtLoad=true` and `KeepAlive=true` for automatic start and restart on failure.
+
+### Windows (Task Scheduler)
+
+Tasks run under `\TraderBot\` in the Task Scheduler hierarchy. The installer registers per-agent tasks with hourly scan triggers, 15-minute heartbeats, and a shared news ingest task.
+
+```
+\TraderBot\
+├── TraderBot-agent-molty       (hourly scan loop)
+├── TraderBot-heartbeat-molty   (every 15 min)
+├── TraderBot-agent-alice       (hourly scan loop)
+├── TraderBot-heartbeat-alice   (every 15 min)
+└── TraderBot-news-ingest       (hourly, shared)
+```
+
+Each task runs `traderbot scan --continuous` from the venv, with the profile token stored in `%USERPROFILE%\.traderbot\.env`. Tasks are configured to survive reboots (`StartWhenAvailable`), run on battery, and retry on failure (up to 5 retries, 10-minute intervals).
 
 ## Data Isolation
 
