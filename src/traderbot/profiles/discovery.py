@@ -40,7 +40,7 @@ def discover_agents(workspace_dir: str = ".openclaw/workspace") -> list[dict[str
 
 
 def _discover_from_config() -> list[dict[str, str]]:
-    """Parse openclaw.json for agent definitions."""
+    """Parse openclaw.json for agent definitions — the authoritative source."""
     config_path = _get_openclaw_config()
     if not config_path.exists():
         return []
@@ -65,16 +65,33 @@ def _discover_from_config() -> list[dict[str, str]]:
         if not agent_id:
             continue
 
-        workspace = agent_conf.get("workspace") or default_workspace
-        if not workspace:
-            continue
-
-        workspace = str(Path(workspace).expanduser())
-        if not Path(workspace).exists():
-            continue
-
         name = agent_conf.get("name", agent_id)
-        results.append({"agent_id": agent_id, "name": name, "path": workspace})
+
+        # Determine the most relevant path for this agent
+        workspace = agent_conf.get("workspace") or default_workspace
+        agent_dir = agent_conf.get("agentDir", "")
+
+        # Prefer existing workspace, then existing agentDir, then workspace path
+        path_found: str | None = None
+
+        if workspace:
+            p = Path(workspace).expanduser()
+            if p.exists() and p.is_dir():
+                path_found = str(p)
+            elif not agent_dir:
+                # Workspace doesn't exist yet, but it's the configured path — include it anyway
+                path_found = str(p)
+
+        if path_found is None and agent_dir:
+            p = Path(agent_dir).expanduser()
+            if p.exists() and p.is_dir():
+                path_found = str(p)
+
+        if path_found is None and workspace:
+            path_found = str(Path(workspace).expanduser())
+
+        if path_found:
+            results.append({"agent_id": agent_id, "name": name, "path": path_found})
 
     return results
 
