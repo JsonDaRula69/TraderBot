@@ -100,6 +100,7 @@ async def fetch_settled_markets(
     history_svc: HistoryService,
     event_prefix: str = "KXHIGH",
 ) -> list[dict]:
+    """Legacy: paginates all settled markets. Too slow for old KXHIGH markets."""
     all_markets: list[dict] = []
     cursor = None
     while True:
@@ -116,6 +117,69 @@ async def fetch_settled_markets(
         cursor = resp.cursor
         if not cursor:
             break
+    return all_markets
+
+
+async def fetch_kxhigh_markets(
+    client: KalshiClient,
+    series_prefixes: list[str] | None = None,
+    max_per_series: int = 100,
+) -> list[dict]:
+    """Fetch KXHIGH markets via per-series API queries instead of global pagination."""
+    if series_prefixes is None:
+        series_prefixes = list(_KXHIGH_CITY_MAP.keys())
+
+    all_markets: list[dict] = []
+    seen_tickers: set[str] = set()
+
+    for prefix in series_prefixes:
+        try:
+            resp = await client.get(
+                "/markets",
+                params={"series_ticker": prefix, "status": "settled", "limit": max_per_series},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            markets = data.get("markets", [])
+
+            for m in markets:
+                ticker = m.get("ticker", "")
+                if ticker and ticker not in seen_tickers:
+                    seen_tickers.add(ticker)
+                    all_markets.append({
+                        "ticker": ticker,
+                        "settlement": m.get("settlement_result"),
+                        "city": _city_from_ticker(ticker),
+                        "strike_type": _strike_type_from_ticker(ticker),
+                        "threshold": _threshold_from_ticker(ticker),
+                    })
+
+            # Also try finalized markets for this series
+            resp2 = await client.get(
+                "/markets",
+                params={"series_ticker": prefix, "status": "finalized", "limit": max_per_series},
+            )
+            resp2.raise_for_status()
+            data2 = resp2.json()
+            markets2 = data2.get("markets", [])
+
+            for m in markets2:
+                ticker = m.get("ticker", "")
+                if ticker and ticker not in seen_tickers:
+                    seen_tickers.add(ticker)
+                    all_markets.append({
+                        "ticker": ticker,
+                        "settlement": m.get("settlement_result"),
+                        "city": _city_from_ticker(ticker),
+                        "strike_type": _strike_type_from_ticker(ticker),
+                        "threshold": _threshold_from_ticker(ticker),
+                    })
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to fetch series %s: %s", prefix, e)
+            continue
+
     return all_markets
 
 
