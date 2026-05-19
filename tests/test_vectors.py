@@ -52,21 +52,21 @@ class TestVectorStoreInit:
         store = VectorStore()
         assert store.persist_dir == DEFAULT_PERSIST_DIR
 
-    def test_custom_persist_dir(self) -> None:
-        custom = Path("/tmp/custom_chromadb")
+    def test_custom_persist_dir(self, tmp_path: Path) -> None:
+        custom = tmp_path / "custom_chromadb"
         store = VectorStore(persist_dir=custom)
         assert store.persist_dir == custom
 
-    def test_chromadb_missing_raises(self) -> None:
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+    def test_chromadb_missing_raises(self, tmp_path: Path) -> None:
+        store = VectorStore(persist_dir=tmp_path)
         with patch("traderbot.db.vectors.chromadb", None), pytest.raises(ImportError, match="chromadb is not installed"):
             _ = store.client
 
 
 class TestGetCollection:
-    def test_get_collection_creates_new(self) -> None:
+    def test_get_collection_creates_new(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {}
 
@@ -79,7 +79,7 @@ class TestGetCollection:
 
     def test_get_collection_caches(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {}
 
@@ -90,7 +90,7 @@ class TestGetCollection:
 
     def test_init_collections_creates_all_defaults(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {}
 
@@ -102,7 +102,7 @@ class TestGetCollection:
 class TestAddDocument:
     def test_add_document_without_embedding(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
 
         store.add_document("doc1", "test text", {"source": "test"}, collection="decisions")
@@ -116,7 +116,7 @@ class TestAddDocument:
 
     def test_add_document_with_embedding(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
 
         emb = _fake_embedding()
@@ -132,7 +132,7 @@ class TestAddDocument:
 
     def test_add_document_uses_upsert(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
 
         store.add_document("doc1", "original", {"v": "1"})
@@ -143,7 +143,7 @@ class TestAddDocument:
 
     def test_add_document_different_collections(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
 
         store.add_document("d1", "decision text", {"type": "trade"}, collection="decisions")
@@ -165,7 +165,7 @@ class TestSearch:
             "distances": [[0.1, 0.5]],
         }
         mock_client = _make_mock_client({"decisions": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"decisions": col}
 
@@ -184,7 +184,7 @@ class TestSearch:
             "distances": [[0.2]],
         }
         mock_client = _make_mock_client({"decisions": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"decisions": col}
 
@@ -209,7 +209,7 @@ class TestSearch:
             "distances": [[]],
         }
         mock_client = _make_mock_client({"decisions": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"decisions": col}
 
@@ -225,7 +225,7 @@ class TestSearch:
             "distances": [[0.33]],
         }
         mock_client = _make_mock_client({"news": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"news": col}
 
@@ -243,7 +243,7 @@ class TestDeleteDocument:
     def test_delete_document(self) -> None:
         col = _make_mock_collection()
         mock_client = _make_mock_client({"decisions": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"decisions": col}
 
@@ -254,7 +254,7 @@ class TestDeleteDocument:
     def test_delete_from_different_collection(self) -> None:
         col = _make_mock_collection()
         mock_client = _make_mock_client({"news": col})
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {"news": col}
 
@@ -264,7 +264,7 @@ class TestDeleteDocument:
 
 class TestChromadbOptional:
     def test_operations_require_chromadb(self) -> None:
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = None
         store._collections = {}
 
@@ -282,7 +282,7 @@ class TestChromadbOptional:
                 store.delete_document("id")
 
     def test_helpful_error_message(self) -> None:
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = None
         store._collections = {}
 
@@ -296,7 +296,7 @@ class TestEmbeddingDimension:
 
     def test_collection_metadata_includes_dimension(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {}
 
@@ -312,7 +312,7 @@ class TestDefaultCollections:
 
     def test_init_collections_creates_six(self) -> None:
         mock_client = _make_mock_client()
-        store = VectorStore(persist_dir=Path("/tmp/test"))
+        store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
         store._collections = {}
 

@@ -447,11 +447,11 @@ class TestSystemHealth:
 
 
 class TestHeartbeatCycle:
-    def test_full_cycle_empty_db(self):
+    def test_full_cycle_empty_db(self, tmp_path):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        hb_path = Path("/tmp/test_heartbeat_empty.md")
+        hb_path = tmp_path / "test_heartbeat_empty.md"
         result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path, dry_run=True))
         assert "performance_review" in result.steps_completed
         assert "decision_review" in result.steps_completed

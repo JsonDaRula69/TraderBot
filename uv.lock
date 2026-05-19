@@ -1195,6 +1195,18 @@ wheels = [
 ]
 
 [[package]]
+name = "portalocker"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/77/65b857a69ed876e1951e88aaba60f5ce6120c33703f7cb61a3c894b8c1b6/portalocker-3.2.0.tar.gz", hash = "sha256:1f3002956a54a8c3730586c5c77bf18fae4149e07eaf1c29fc3faf4d5a3f89ac", size = 95644, upload-time = "2025-06-14T13:20:40.03Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl", hash = "sha256:3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968", size = 22424, upload-time = "2025-06-14T13:20:38.083Z" },
+]
+
+[[package]]
 name = "posthog"
 version = "7.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1428,6 +1440,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/65/a242fd8fbe98c11bd51f0b57d4752905396a99c42c91c3213c3f44e741c8/pytrends-4.9.2.tar.gz", hash = "sha256:691c6e36b1aeaa4754f3692bdbad0dff446e528ffb052eee2e7f139aaa2c6989", size = 247162, upload-time = "2023-04-13T23:17:21.313Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/68/ba/7a24a3723c790000faf880505ff1cc46f4d29f46dd353037938a070c4d23/pytrends-4.9.2-py3-none-any.whl", hash = "sha256:d7d0ee956be2f6e3e9fc09376c4615efb9347039d6d1f46e6f4326a5b7a14f67", size = 15352, upload-time = "2023-04-13T23:17:18.88Z" },
+]
+
+[[package]]
+name = "pywin32"
+version = "311"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/ab/01ea1943d4eba0f850c3c61e78e8dd59757ff815ff3ccd0a84de5f541f42/pywin32-311-cp312-cp312-win32.whl", hash = "sha256:750ec6e621af2b948540032557b10a2d43b0cee2ae9758c54154d711cc852d31", size = 8706543, upload-time = "2025-07-14T20:13:20.765Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/a8/a0e8d07d4d051ec7502cd58b291ec98dcc0c3fff027caad0470b72cfcc2f/pywin32-311-cp312-cp312-win_amd64.whl", hash = "sha256:b8c095edad5c211ff31c05223658e71bf7116daa0ecf3ad85f3201ea3190d067", size = 9495040, upload-time = "2025-07-14T20:13:22.543Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/3a/2ae996277b4b50f17d61f0603efd8253cb2d79cc7ae159468007b586396d/pywin32-311-cp312-cp312-win_arm64.whl", hash = "sha256:e286f46a9a39c4a18b319c28f59b61de793654af2f395c102b4f819e584b5852", size = 8710102, upload-time = "2025-07-14T20:13:24.682Z" },
 ]
 
 [[package]]
@@ -1669,6 +1691,7 @@ dependencies = [
     { name = "feedparser" },
     { name = "httpx" },
     { name = "packaging" },
+    { name = "portalocker" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "rich" },
@@ -1697,6 +1720,7 @@ requires-dist = [
     { name = "feedparser", specifier = ">=6.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "packaging", specifier = ">=24.0" },
+    { name = "portalocker", specifier = ">=2.8" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },

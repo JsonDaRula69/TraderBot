@@ -894,7 +894,7 @@ class TestCronSetup:
         with patch("traderbot.cli.shutil.which", return_value=None):
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent"])
             assert result.exit_code == 1
-            assert "openclaw" in result.output.lower()
+            assert "/usr/bin/openclaw" in result.output.lower()
 
     def test_cron_setup_channel_without_to_errors(self):
         result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--dry-run"])
@@ -1005,7 +1005,7 @@ class TestCronSetup:
         with patch("traderbot.cli.shutil.which", return_value=None):
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent"])
             assert result.exit_code == 1
-            assert "openclaw" in result.output.lower()
+            assert "/usr/bin/openclaw" in result.output.lower()
 
 
 class TestHalt:

@@ -409,7 +409,7 @@ class TestReconcile:
 
 class TestConcurrentWrite:
     def test_concurrent_write_detected(self, session_state_path: Path):
-        import fcntl
+        import portalocker
 
         acquired = threading.Event()
         proceed = threading.Event()
@@ -417,12 +417,14 @@ class TestConcurrentWrite:
 
         def holding_writer():
             try:
-                fd = open(session_state_path, "r+")
-                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock = portalocker.Lock(
+                    session_state_path, mode="r+",
+                    flags=portalocker.LockFlags.EXCLUSIVE | portalocker.LockFlags.NON_BLOCKING,
+                )
+                lock.acquire()
                 acquired.set()
                 proceed.wait(timeout=3)
-                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                fd.close()
+                lock.release()
             except Exception:
                 acquired.set()
 

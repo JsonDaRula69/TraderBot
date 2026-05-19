@@ -411,15 +411,18 @@ class TestWALLifecycle:
 
     def test_wal_concurrent_write_rejected(self, tmp_path: Path) -> None:
         """Concurrent write attempt is rejected with ConcurrentWriteError."""
-        import fcntl
+        import portalocker
 
         session_file = tmp_path / "SESSION-STATE.md"
         session_file.parent.mkdir(parents=True, exist_ok=True)
         session_file.write_text("## Pending Actions\n\n(none)\n")
 
         # Hold an exclusive lock
-        fd = open(session_file, "r+")
-        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock = portalocker.Lock(
+            session_file, mode="r+",
+            flags=portalocker.LockFlags.EXCLUSIVE | portalocker.LockFlags.NON_BLOCKING,
+        )
+        lock.acquire()
 
         try:
             with pytest.raises(ConcurrentWriteError):
@@ -429,8 +432,7 @@ class TestWALLifecycle:
                     quantity=5, price_cents=50, reason="Should be rejected",
                 )
         finally:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-            fd.close()
+            lock.release()
 
     def test_wal_entry_round_trip(self, tmp_path: Path) -> None:
         """Write an entry, read it back, verify all fields survive the round trip."""
