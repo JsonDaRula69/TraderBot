@@ -396,6 +396,16 @@ def trade(
     console = Console()
 
     profile = get_current_profile()
+    
+    # Security: warn if trading without a profile
+    if profile is None:
+        from rich.console import Console as RiskConsole
+        risk_console = RiskConsole(stderr=True)
+        risk_console.print(
+            "[bold red]⚠️  WARNING:[/bold red] No trading profile active (TRADERBOT_PROFILE_TOKEN not set). "
+            "Trading without a profile bypasses category filters and loses audit identity. "
+            "Set TRADERBOT_PROFILE_TOKEN or pass --profile for full protection."
+        )
 
     resolved_prob = estimated_prob
     resolved_confidence = confidence if confidence is not None else 0.5
