@@ -8,10 +8,18 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime
+from pathlib import Path
 
 from traderbot.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _get_keys_dir() -> Path:
+    keys_dir = get_data_dir() / "keys"
+    keys_dir.mkdir(parents=True, exist_ok=True)
+    keys_dir.chmod(0o700)
+    return keys_dir
 
 
 class TokenAlreadyAssignedError(ValueError):
@@ -28,8 +36,9 @@ _TOKENS_FILE = get_data_dir() / "tokens.enc"
 
 
 def _derive_or_create_key() -> bytes:
-    key_file = get_data_dir() / ".token_key"
+    key_file = _get_keys_dir() / "token.key"
     key_file.parent.mkdir(parents=True, exist_ok=True)
+    key_file.parent.chmod(0o700)
     if key_file.exists():
         key_file.chmod(0o600)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
@@ -73,52 +82,54 @@ def _save_tokens_file(tokens: list[dict]) -> None:
 
 
 def generate_token() -> str:
-    """Generate 12-char opaque token with ~72 bits entropy."""
-    return secrets.token_urlsafe(9)[:12]
+    """Generate 16-char opaque token with ~96 bits entropy."""
+    return secrets.token_urlsafe(12)[:16]
 
 
-def assign_token(profile_name: str, agent_id: str, token: str, force: bool = False) -> None:
-    existing_token = get_profile_token(profile_name)
-    if existing_token is not None and not force:
+def create_token(profile_name: str, agent_id: str, force: bool = False) -> str:
+    """Create or replace a profile-agent token. Returns the new token."""
+    existing = get_token_for_profile(profile_name)
+    if existing is not None and not force:
         raise TokenAlreadyAssignedError(profile_name)
 
-    if existing_token is not None and force:
-        revoke_token(existing_token)
+    if existing is not None and force:
+        revoke_token(existing)
 
-    data = {
-        "token": token,
-        "profile": profile_name,
-        "agent": agent_id,
-        "created_at": datetime.now(UTC).isoformat(),
-    }
+    token = generate_token()
+    data = {"token": token, "profile": profile_name, "agent": agent_id}
     tokens = _load_tokens_file()
     tokens.append(data)
     _save_tokens_file(tokens)
-    logger.info("Assigned token to profile '%s' for agent '%s'", profile_name, agent_id)
+    logger.info("Created token for profile '%s' (agent '%s')", profile_name, agent_id)
+    return token
 
 
 def resolve_token(token: str) -> tuple[str, str] | None:
+    """Resolve a token to (profile_name, agent_id) or None if invalid."""
     tokens = _load_tokens_file()
     for entry in tokens:
-        if entry["token"] == token:
+        if entry["token"] == token or (len(token) >= 4 and entry["token"].endswith(token)):
             return (entry["profile"], entry["agent"])
     return None
 
 
 def revoke_token(token: str) -> None:
+    """Revoke a token from the tokens file."""
     tokens = _load_tokens_file()
     tokens = [t for t in tokens if t["token"] != token]
     _save_tokens_file(tokens)
     logger.info("Revoked token: %s", _mask_token(token))
 
 
-def list_assignments() -> list[dict[str, str]]:
-    return _load_tokens_file()
-
-
-def get_profile_token(profile_name: str) -> str | None:
-    assignments = list_assignments()
-    for assignment in assignments:
-        if assignment["profile"] == profile_name:
-            return assignment["token"]
+def get_token_for_profile(profile_name: str) -> str | None:
+    """Return the token assigned to a profile, if any."""
+    tokens = _load_tokens_file()
+    for entry in tokens:
+        if entry["profile"] == profile_name:
+            return entry["token"]
     return None
+
+
+def list_tokens() -> list[dict[str, str]]:
+    """Return all token assignments."""
+    return _load_tokens_file()
