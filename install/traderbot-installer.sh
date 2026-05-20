@@ -72,50 +72,6 @@ _validate_prefix() {
     return 0
 }
 
-_write_heartbeat_to_config() {
-    local agent_id="$1"
-    local interval="$2"
-    local config_path="$3"
-
-    if command -v jq &>/dev/null; then
-        local tmp_file
-        tmp_file="$(mktemp)"
-        jq --arg agent "$agent_id" --arg every "$interval" '
-            (.agents.list // []) as $list |
-            if any($list[]; .id == $agent) then
-                .agents.list = [.agents.list[] | if .id == $agent then .heartbeat = {"every": $every, "lightContext": true, "isolatedSession": true} else . end]
-            else
-                .agents.list = ($list + [{"id": $agent, "heartbeat": {"every": $every, "lightContext": true, "isolatedSession": true}}])
-            end
-        ' "$config_path" > "$tmp_file" && mv "$tmp_file" "$config_path"
-        echo "  ✓ heartbeat config written to $config_path"
-    elif command -v python3 &>/dev/null; then
-        python3 -c "
-import json
-agent_id = '$agent_id'
-interval = '$interval'
-config_path = '$config_path'
-with open(config_path) as f:
-    config = json.load(f)
-agents = config.setdefault('agents', {})
-agent_list = agents.setdefault('list', [])
-found = False
-for entry in agent_list:
-    if entry.get('id') == agent_id:
-        entry['heartbeat'] = {'every': interval, 'lightContext': True, 'isolatedSession': True}
-        found = True
-        break
-if not found:
-    agent_list.append({'id': agent_id, 'heartbeat': {'every': interval, 'lightContext': True, 'isolatedSession': True}})
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-print('  ✓ heartbeat config written')
-"
-    else
-        echo "  Warning: Neither jq nor python3 available. Cannot write heartbeat config." >&2
-    fi
-}
-
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -1065,74 +1021,6 @@ interactive_config_flow() {
         install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE"
     fi
 
-    if [[ -n "$agent_name" ]]; then
-        echo
-        echo "=== Cron Loop Registration ==="
-        echo "Registering decision, heartbeat, and news loops with OpenClaw for agent $agent_name..."
-
-        if command -v openclaw &>/dev/null; then
-            local DECISION_MSG="AUTONOMOUS: Run traderbot decision loop. Read SESSION-STATE.md for tracked markets. Execute analysis, risk-check, and trades within guard rails. Log all decisions."
-            local HEARTBEAT_MSG="HEARTBEAT: Run traderbot self-improvement cycle. Check circuit breaker, review recent decisions, update Bayesian parameters, promote learnings. Write HEARTBEAT_DATA.md."
-            local NEWS_MSG="ALERT: High-impact event detected (impact). Run traderbot sentiment impact for analysis."
-            local cron_ok=true
-
-            if openclaw cron add \
-                --name decision_loop \
-                --cron "*/5 * * * *" \
-                --session isolated \
-                --message "$DECISION_MSG" \
-                --agent "$agent_name" \
-                --announce 2>&1; then
-                echo "  ✓ decision_loop registered"
-            else
-                echo "  ✗ decision_loop failed" >&2
-                cron_ok=false
-            fi
-
-            if openclaw cron add \
-                --name heartbeat_loop \
-                --every "30m" \
-                --session isolated \
-                --message "$HEARTBEAT_MSG" \
-                --agent "$agent_name" \
-                --announce 2>&1; then
-                echo "  ✓ heartbeat_loop registered"
-            else
-                echo "  ✗ heartbeat_loop failed" >&2
-                cron_ok=false
-            fi
-
-            if openclaw cron add \
-                --name news_loop \
-                --event impact \
-                --session main \
-                --message "$NEWS_MSG" \
-                --agent "$agent_name" \
-                --announce 2>&1; then
-                echo "  ✓ news_loop registered"
-            else
-                echo "  ✗ news_loop failed" >&2
-                cron_ok=false
-            fi
-
-            local oc_config="${HOME}/.openclaw/openclaw.json"
-            if [[ -f "$oc_config" ]]; then
-                _write_heartbeat_to_config "$agent_name" "30m" "$oc_config"
-            fi
-
-            if [[ "$cron_ok" != "true" ]]; then
-                echo "Warning: Some cron loops failed to register." >&2
-                echo "Register manually with: openclaw cron add --agent $agent_name --name <loop_name>" >&2
-            fi
-        else
-            echo "Warning: openclaw not found. Cron loop registration skipped." >&2
-            echo "Install OpenClaw and register loops manually:" >&2
-            echo "  openclaw cron add --name decision_loop --cron '*/5 * * * *' --session isolated --agent $agent_name --announce" >&2
-            echo "  openclaw cron add --name heartbeat_loop --every 30m --session isolated --agent $agent_name --announce" >&2
-            echo "  openclaw cron add --name news_loop --event impact --session main --agent $agent_name --announce" >&2
-        fi
-    fi
-
     echo
     echo "=== Verification ==="
     local tb_bin=""
@@ -1187,13 +1075,6 @@ for key, value in new.items():
         for entry in value.get('list', []):
             if entry.get('id') not in existing_ids:
                 agent_list.append(entry)
-        # Merge secrets if present
-        if 'secrets' in value:
-            existing_secret_ids = {s.get('id') for s in existing.get('secrets', [])}
-            secrets = existing.setdefault('secrets', [])
-            for s in value.get('secrets', []):
-                if s.get('id') not in existing_secret_ids:
-                    secrets.append(s)
     else:
         existing[key] = value
 
@@ -1279,7 +1160,7 @@ main() {
         echo "│  OpenClaw Gateway Required                             │" >&2
         echo "│                                                         │" >&2
         echo "│  TraderBot agents run as OpenClaw agents. The gateway  │" >&2
-        echo "│  manages scheduling (cron), heartbeats, and sessions.  │" >&2
+        echo "│  The gateway manages agent sessions.                  │" >&2
         echo "│                                                         │" >&2
         echo "│  Install: https://github.com/openclaw/openclaw         │" >&2
         echo "│                                                         │" >&2
