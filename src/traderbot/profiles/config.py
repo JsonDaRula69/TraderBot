@@ -233,15 +233,39 @@ def _check_env_permissions(env_path: Path) -> None:
 
 
 def _env_file_get_value(env_path: Path, key: str) -> str | None:
-    """Read a specific key from a .env file (without loading into os.environ)."""
+    """Read a specific key from a .env file (without loading into os.environ).
+
+    Supports multi-line values enclosed in double quotes (standard .env format
+    for PEM keys and other credentials that span multiple lines).
+    """
     if not env_path.exists():
         return None
-    _check_env_permissions(env_path)
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("#") or "=" not in line:
+
+    lines = env_path.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            i += 1
             continue
-        k, _, v = line.partition("=")
-        if k.strip() == key:
-            return v.strip().strip("'\"")
+        k, _, v = stripped.partition("=")
+        if k.strip() != key:
+            i += 1
+            continue
+        v = v.strip()
+        if v.startswith('"') and not v.endswith('"'):
+            # Multi-line value: accumulate until closing quote
+            parts = [v[1:]]
+            i += 1
+            while i < len(lines):
+                parts.append(lines[i])
+                if lines[i].rstrip().endswith('"'):
+                    break
+                i += 1
+            value = "\n".join(parts)
+            if value.endswith('"'):
+                value = value[:-1]
+            return value
+        return v.strip().strip("'\"")
     return None
