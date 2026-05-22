@@ -73,37 +73,6 @@ This file defines conventions for AI-assisted development of this project. All A
 - `src/traderbot/db/` — persistence layer
 - `src/traderbot/profiles/` — multi-agent profile system
 
-## Profile-Aware Trading
-
-Multi-agent deployment uses profiles to isolate agent configurations. When `TRADERBOT_PROFILE_TOKEN` is set in the environment, the CLI resolves it to a `TradingProfile` and applies profile-specific risk limits and category filters.
-
-### Profile Token Resolution
-
-The token is resolved at CLI startup:
-
-```python
-profile = get_current_profile()  # Reads TRADERBOT_PROFILE_TOKEN env var
-```
-
-If the token is valid, the profile's risk parameters are used for `evaluate_trade()`. If no token is set, `HARD_LIMITS` apply as defaults.
-
-### Profile Constraints
-
-When a profile is active:
-
-- **Category filtering**: Markets not in `enabled_categories` are rejected before any sizing
-- **Position ceiling**: `AgentRiskLimits.max_position_per_market_pct` enforces `min(profile_limit, HARD_LIMITS)`
-- **Risk multiplier**: `profile.risk_multiplier` scales final position size downward
-- **Data isolation**: DB, ChromaDB, and audit paths use `profile.base_dir`
-
-### What Profiles Cannot Do
-
-Profiles cannot exceed `HARD_LIMITS` ceilings. `AgentRiskLimits` enforces this at runtime. An agent running with a permissive profile cannot exceed hard limits.
-
-### Credential Isolation
-
-All profiles share the same `.env` file for API credentials. There is no per-profile credential isolation. The `KALSHI_API_KEY` and `KALSHI_PRIVATE_KEY_PEM` values are shared across all agents.
-
 ## API Verification Protocol
 
 Before making any code changes that involve OpenClaw, Kalshi, or any other external API/service:
