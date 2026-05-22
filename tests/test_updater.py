@@ -10,18 +10,15 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-from packaging.version import Version
 
 from traderbot.updater import (
-    CACHE_FILE,
-    GITHUB_API_URL,
+    _read_cache,
+    _write_cache,
     apply_update,
     check_for_updates,
     compare_versions,
     fetch_latest_version,
     get_current_version,
-    _read_cache,
-    _write_cache,
 )
 
 
@@ -283,7 +280,6 @@ class TestApplyUpdate:
 
     def test_success_returns_true(self) -> None:
         """apply_update returns True on successful update."""
-        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = ""
@@ -306,7 +302,6 @@ class TestApplyUpdate:
 
     def test_uncommitted_changes_returns_false(self) -> None:
         """apply_update returns False when there are uncommitted changes."""
-        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = "M src/traderbot/cli.py\n"
@@ -317,7 +312,6 @@ class TestApplyUpdate:
 
     def test_untracked_only_does_not_block(self) -> None:
         """apply_update proceeds when only untracked files exist (?? prefix)."""
-        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = "?? newfile.py\n"

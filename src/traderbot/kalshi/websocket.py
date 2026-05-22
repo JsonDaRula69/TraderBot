@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import ssl
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ import websockets
 from pydantic import SecretStr  # noqa: TC002 — needed at runtime for BaseSettings field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
 
 VALID_CHANNELS: frozenset[str] = frozenset({
@@ -53,7 +53,7 @@ class KalshiWebSocket:
         self._message_id = 0
 
     async def connect(self) -> None:
-        """Connect to the Kalshi WebSocket with RSA-PSS auth headers."""
+        """Connect to the Kalshi WebSocket with RSA-PSS auth and TLS cert pinning."""
         headers = auth_headers(
             self._config.api_key.get_secret_value(),
             self._config.resolve_private_key(),
@@ -61,12 +61,10 @@ class KalshiWebSocket:
             "/trade-api/ws/v2",
         )
         headers["Content-Type"] = "application/json"
-        ssl_context = ssl.create_default_context()
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
         self._ws = await websockets.connect(
             self._config.base_url,
             additional_headers=headers,
-            ssl=ssl_context,
+            ssl=create_pinned_ssl_context(),
         )
 
     async def subscribe(
