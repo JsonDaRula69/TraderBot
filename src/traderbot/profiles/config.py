@@ -1,15 +1,16 @@
-"""Credential resolution via .env file and environment variables."""
+"""Credential resolution via OS keyring with .env and environment variable fallback."""
 
 from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from traderbot.auth import AuthManager
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,14 @@ logger = logging.getLogger(__name__)
 def resolve_kalshi_credentials(
     profile: TradingProfile | None,
 ) -> tuple[str, str]:
-    """Resolve Kalshi credentials using env fallback chain.
+    """Resolve Kalshi credentials using keyring-first fallback chain.
 
     Resolution order:
-    1. Profile-scoped env vars (KALSHI_API_KEY_PROFILE_{NAME}, etc.)
-    2. Global AuthManager credentials (.env then env vars)
-    3. raise ValueError
+    1. Profile keyring (traderbot.profiles.{name}.kalshi)
+    2. Profile env vars (KALSHI_API_KEY_PROFILE_{NAME}, etc.)
+    3. Global keyring (traderbot.kalshi)
+    4. Global env vars / .env
+    5. raise ValueError
     """
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
@@ -32,33 +35,6 @@ def resolve_kalshi_credentials(
         if profile_creds is not None:
             logger.info("Using Kalshi credentials from profile '%s'", profile.name)
             return profile_creds
-
-        profile_prefix = profile.name.upper().replace("-", "_").replace(" ", "_")
-        profile_api_key = os.environ.get(f"KALSHI_API_KEY_PROFILE_{profile_prefix}")
-        profile_pem = os.environ.get(f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}")
-        if not profile_pem:
-            profile_path = os.environ.get(f"KALSHI_PRIVATE_KEY_PATH_PROFILE_{profile_prefix}")
-            if profile_path:
-                p = Path(profile_path)
-                if p.is_file():
-                    profile_pem = p.read_text()
-
-        if not profile_api_key or not profile_pem:
-            from traderbot.paths import get_data_dir
-            env_path = get_data_dir() / ".env"
-            if env_path.exists():
-                profile_api_key = profile_api_key or _env_file_get_value(env_path, f"KALSHI_API_KEY_PROFILE_{profile_prefix}")
-                profile_pem = profile_pem or _env_file_get_value(env_path, f"KALSHI_PRIVATE_KEY_PEM_PROFILE_{profile_prefix}")
-                if not profile_pem:
-                    profile_path = _env_file_get_value(env_path, f"KALSHI_PRIVATE_KEY_PATH_PROFILE_{profile_prefix}")
-                    if profile_path:
-                        p = Path(profile_path)
-                        if p.is_file():
-                            profile_pem = p.read_text()
-
-        if profile_api_key and profile_pem:
-            logger.info("Using Kalshi credentials from profile '%s' .env", profile.name)
-            return (profile_api_key, profile_pem)
 
     global_auth = AuthManager()
     key_result = global_auth.get_credential("kalshi", "api_key")
@@ -76,22 +52,15 @@ def resolve_kalshi_credentials(
 
     raise ValueError(
         "No Kalshi credentials configured. "
-        "Set KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PEM in .env or environment."
+        "Store via 'traderbot auth set-kalshi' (keyring) or "
+        "set KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PEM in .env or environment."
     )
 
 
 def resolve_newsapi_key(
     profile: TradingProfile | None,
 ) -> str | None:
-    """Resolve NewsAPI key using env fallback chain.
-
-    Resolution order:
-    1. Profile-scoped env vars
-    2. Global AuthManager credentials (.env then env vars)
-    3. Global .env file
-    4. Environment variable
-    5. return None
-    """
+    """Resolve NewsAPI key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
         profile_auth = ProfileAuthStore(profile)
@@ -135,7 +104,7 @@ def resolve_newsapi_key(
 def resolve_openweather_key(
     profile: TradingProfile | None,
 ) -> str | None:
-    """Resolve OpenWeather API key using env fallback chain."""
+    """Resolve OpenWeather API key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
         profile_auth = ProfileAuthStore(profile)
@@ -177,7 +146,7 @@ def resolve_openweather_key(
 def resolve_fred_key(
     profile: TradingProfile | None,
 ) -> str | None:
-    """Resolve FRED API key using env fallback chain."""
+    """Resolve FRED API key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
         profile_auth = ProfileAuthStore(profile)
