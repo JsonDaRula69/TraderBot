@@ -41,6 +41,21 @@ def get_workspace_dir() -> Path:
     return Path.cwd() / ".openclaw" / "workspace"
 
 
+def get_agent_workspace_dir() -> Path:
+    """Return the sandbox-isolated agent workspace directory."""
+    return get_data_dir() / "agent_workspace"
+
+
+def get_master_key_path() -> Path:
+    """Return the master password file path (PBKDF2 salt + derived key)."""
+    return get_data_dir() / ".master_key"
+
+
+def get_source_root() -> Path:
+    """Return the source tree root (parent of src/traderbot)."""
+    return Path(__file__).resolve().parent.parent.parent
+
+
 def ensure_data_dir() -> Path:
     """Create data directory if it doesn't exist and return it."""
     path = get_data_dir()
@@ -66,11 +81,13 @@ def list_all_data_paths() -> list[Path]:
         base / ".update_check_cache.json",
         base / "circuit_breaker_state.json",
         base / ".breaker_secret",
+        base / ".master_key",
         base / "traderbot.db",  # legacy global DB
         base / "audit",
         base / "chromadb",
         base / "keys",
         base / "logs",
+        base / "agent_workspace",
     ]
     # Per-profile directories: {mode}-{name}/db, chroma, audit
     if base.exists():
