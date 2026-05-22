@@ -34,8 +34,16 @@ def _derive_or_create_key() -> bytes:
         set_file_owner_only(key_file)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
     key = os.urandom(32)
-    key_file.write_text(base64.urlsafe_b64encode(key).decode())
-    set_file_owner_only(key_file)
+    # Atomic creation with O_CREAT|O_EXCL to prevent race
+    try:
+        fd = os.open(str(key_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        set_file_owner_only(key_file)
+        return base64.urlsafe_b64decode(key_file.read_text().strip())
+    try:
+        os.write(fd, base64.urlsafe_b64encode(key))
+    finally:
+        os.close(fd)
     return key
 
 
