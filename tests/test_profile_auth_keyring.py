@@ -88,10 +88,11 @@ class TestProfileAuthStoreKeyringWrite:
 
     @patch("traderbot.profiles.auth._is_keyring_available", return_value=True)
     def test_delete_credentials_not_found(self, mock_avail: MagicMock) -> None:
-        import keyring as kr
+        import keyring as real_keyring
 
         mock_keyring = MagicMock()
-        mock_keyring.delete_password.side_effect = kr.errors.PasswordDeleteError()
+        mock_keyring.delete_password.side_effect = real_keyring.errors.PasswordDeleteError()
+        mock_keyring.errors = real_keyring.errors
         with patch.dict("sys.modules", {"keyring": mock_keyring}):
             result = self.store.delete_credentials("kalshi", "api_key")
         assert result is False
