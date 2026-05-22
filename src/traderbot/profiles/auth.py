@@ -152,11 +152,31 @@ def _env_file_get_value(env_path: os.PathLike, key: str) -> str | None:
     path = Path(env_path)
     if not path.exists():
         return None
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("#") or "=" not in line:
+
+    lines = path.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            i += 1
             continue
-        k, _, v = line.partition("=")
-        if k.strip() == key:
-            return v.strip().strip("'\"")
+        k, _, v = stripped.partition("=")
+        if k.strip() != key:
+            i += 1
+            continue
+        v = v.strip()
+        if v.startswith('"') and not v.endswith('"'):
+            parts = [v[1:]]
+            i += 1
+            while i < len(lines):
+                parts.append(lines[i])
+                if lines[i].rstrip().endswith('"'):
+                    break
+                i += 1
+            value = "\n".join(parts)
+            if value.endswith('"'):
+                value = value[:-1]
+            return value
+        return v.strip().strip("'\"")
     return None
