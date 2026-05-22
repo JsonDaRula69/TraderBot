@@ -10,15 +10,20 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from packaging.version import Version
 
 from traderbot.updater import (
-    _read_cache,
-    _write_cache,
+    SignatureVerificationError,
     apply_update,
     check_for_updates,
     compare_versions,
     fetch_latest_version,
     get_current_version,
+    verify_release_signature,
+    _fetch_release_signature,
+    _load_update_public_key,
+    _read_cache,
+    _write_cache,
 )
 
 
@@ -280,6 +285,7 @@ class TestApplyUpdate:
 
     def test_success_returns_true(self) -> None:
         """apply_update returns True on successful update."""
+        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = ""
@@ -302,6 +308,7 @@ class TestApplyUpdate:
 
     def test_uncommitted_changes_returns_false(self) -> None:
         """apply_update returns False when there are uncommitted changes."""
+        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = "M src/traderbot/cli.py\n"
@@ -312,6 +319,7 @@ class TestApplyUpdate:
 
     def test_untracked_only_does_not_block(self) -> None:
         """apply_update proceeds when only untracked files exist (?? prefix)."""
+        import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = "?? newfile.py\n"
@@ -319,3 +327,92 @@ class TestApplyUpdate:
         with patch("subprocess.run", return_value=mock_status):
             result = apply_update(restart=False)
         assert result is True
+
+
+class TestEd25519SignatureVerification:
+    """Tests for Ed25519 release signature verification."""
+
+    VALID_PUBKEY_B64 = "XDtUjYC34oF2gcjNJEiBzKW0mQBAqOUh0pxOu29xttk="
+    VALID_SIG_B64 = (
+        "4FfjysmveWxlbt+cBgxUxeCSb3PktpCGq0snWkf8OGfq"
+        "+fZcB3biXvoMFNSI6ODU2aJX5qmvDXBkyNYFGZsAAw=="
+    )
+    VALID_TAG = "v0.12.40"
+
+    def test_valid_signature_returns_true(self) -> None:
+        with patch.dict("os.environ", {"TRADERBOT_UPDATE_PUBKEY_B64": self.VALID_PUBKEY_B64}):
+            result = verify_release_signature(self.VALID_TAG, self.VALID_SIG_B64)
+        assert result is True
+
+    def test_invalid_signature_returns_false(self) -> None:
+        fake_sig = "A" * 86 + "=="
+        with patch.dict("os.environ", {"TRADERBOT_UPDATE_PUBKEY_B64": self.VALID_PUBKEY_B64}):
+            result = verify_release_signature(self.VALID_TAG, fake_sig)
+        assert result is False
+
+    def test_no_key_configured_returns_false(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            result = verify_release_signature("v0.12.40", self.VALID_SIG_B64)
+        assert result is False
+
+    def test_bad_base64_returns_false(self) -> None:
+        with patch.dict("os.environ", {"TRADERBOT_UPDATE_PUBKEY_B64": self.VALID_PUBKEY_B64}):
+            result = verify_release_signature("v0.12.40", "!!!not base64!!!")
+        assert result is False
+
+    def test_load_public_key_from_env(self) -> None:
+        with patch.dict("os.environ", {"TRADERBOT_UPDATE_PUBKEY_B64": self.VALID_PUBKEY_B64}):
+            key = _load_update_public_key()
+        assert key is not None
+
+    def test_load_public_key_missing_raises(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("traderbot.updater.Path.exists", return_value=False):
+                with pytest.raises(SignatureVerificationError, match="No Ed25519"):
+                    _load_update_public_key()
+
+    def test_signature_verification_aborts_apply_update(self) -> None:
+        mock_latest = ("0.12.41", "https://example.com")
+        with patch("traderbot.updater.fetch_latest_version", return_value=mock_latest):
+            with patch("traderbot.updater._fetch_release_signature", return_value="badsig"):
+                with patch("traderbot.updater.verify_release_signature", return_value=False):
+                    with patch.dict("os.environ", {"TRADERBOT_UPDATE_PUBKEY_B64": self.VALID_PUBKEY_B64}):
+                        result = apply_update(restart=False, verify_signature=True)
+        assert result is False
+
+    def test_signature_verification_skipped_when_disabled(self) -> None:
+        mock_latest = ("0.12.41", "https://example.com")
+        with patch("traderbot.updater.fetch_latest_version", return_value=mock_latest):
+            with patch("traderbot.updater._fetch_release_signature") as mock_fetch:
+                with patch("traderbot.updater.verify_release_signature") as mock_verify:
+                    with patch("subprocess.run") as mock_run:
+                        mock_status = MagicMock()
+                        mock_status.stdout = ""
+                        mock_run.return_value = mock_status
+                        result = apply_update(restart=False, verify_signature=False)
+        assert result is True
+        mock_fetch.assert_not_called()
+        mock_verify.assert_not_called()
+
+    def test_fetch_release_signature_found(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"body": "Ed25519-Signature: abc123"}
+        with patch("traderbot.updater.httpx.get", return_value=mock_resp):
+            sig = _fetch_release_signature("v0.12.40")
+        assert sig == "abc123"
+
+    def test_fetch_release_signature_not_found(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"body": "No signature here\nJust text"}
+        with patch("traderbot.updater.httpx.get", return_value=mock_resp):
+            sig = _fetch_release_signature("v0.12.40")
+        assert sig is None
+
+    def test_fetch_release_signature_http_error(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        with patch("traderbot.updater.httpx.get", return_value=mock_resp):
+            sig = _fetch_release_signature("v0.12.40")
+        assert sig is None
