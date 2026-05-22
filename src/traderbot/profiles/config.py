@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from traderbot.auth import AuthManager
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from traderbot.auth import (
     AuthManager,
@@ -35,10 +35,10 @@ class TestKeyringHelpers:
             assert _is_keyring_available() is True
 
     def test_is_keyring_available_no_keyring(self) -> None:
-        with patch("traderbot.auth.keyring", side_effect=ImportError, create=True):
-            with patch.dict("sys.modules", {}, clear=False):
-                result = _is_keyring_available()
-                assert result is False
+        with patch("traderbot.auth.keyring", side_effect=ImportError, create=True), \
+             patch.dict("sys.modules", {}, clear=False):
+            result = _is_keyring_available()
+            assert result is False
 
 
 class TestAuthManagerKeyringRead:
@@ -96,7 +96,6 @@ class TestAuthManagerKeyringWrite:
         from unittest.mock import patch as upatch
 
         env_dir = Path(tempfile.mkdtemp())
-        env_path = env_dir / ".env"
         with upatch("traderbot.paths.ensure_data_dir", return_value=env_dir):
             result = self.mgr.set_credential("kalshi", "api_key", "test-val")
         assert result == "env"
@@ -191,5 +190,5 @@ class TestCredentialResult:
         assert r.source == "env"
 
     def test_invalid_source_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CredentialResult(service="kalshi", key="api_key", value=SecretStr("v"), source="file")

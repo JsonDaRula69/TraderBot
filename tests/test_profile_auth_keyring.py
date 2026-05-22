@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from traderbot.profiles.auth import ProfileAuthStore, _profile_keyring_service
 
 
