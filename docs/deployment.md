@@ -36,12 +36,14 @@ The installers run four phases:
 
 ### Prerequisites
 
-The installer checks for OpenClaw before proceeding:
+**Optional: OpenClaw Integration**
+
+If you plan to use TraderBot with OpenClaw AI agents, ensure OpenClaw is installed:
 
 - `~/.openclaw/` directory must exist
 - `openclaw` binary must be in PATH
 
-If OpenClaw is not found, the installer exits with code 1 and instructions.
+If OpenClaw is not found, the installer will prompt whether to continue with standalone mode. TraderBot works fully without OpenClaw — the agent assignment step is skipped, and you use TraderBot via CLI only.
 
 ## Ubuntu Installation
 
@@ -74,7 +76,7 @@ traderbot profile discover-agents
 
 traderbot profile assign molty paper-aggressive
 # Token: xK9mQ2pL7nR4
-# Token injected into molty/TOOLS.md
+# Token passed to agent via secure launcher (not written to any agent-readable files)
 ```
 
 ### 4. Set API credentials

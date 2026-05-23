@@ -12,17 +12,25 @@ This separation is deliberate: it eliminates emotional bias from the execution l
 
 ## Prerequisites
 
-- **OpenClaw** — TraderBot is designed to be operated by OpenClaw AI agents. [Install OpenClaw first](https://github.com/openclaw/openclaw#installation).
+- **OpenClaw** (optional) — TraderBot can be operated by OpenClaw AI agents or used standalone. [Install OpenClaw](https://github.com/openclaw/openclaw#installation) if using agent integration.
 - **Python 3.12** — required (chroma-hnswlib has no wheels for 3.13+)
 - **Kalshi API credentials** — sign up at [kalshi.com](https://kalshi.com) and generate an API key + RSA key pair
 
 ## One-Liner Install
 
+### Linux / macOS
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh
 ```
 
-The installer auto-detects your OS (Ubuntu/Debian or macOS), installs dependencies, clones the repo, and runs the interactive config wizard — covering API keys, profile creation, and OpenClaw agent assignment.
+### Windows (PowerShell)
+
+```powershell
+.\install\Install-TraderBot.ps1
+```
+
+The installer auto-detects your OS (Ubuntu/Debian, macOS, or Windows), installs dependencies, clones the repo, and runs the interactive config wizard — covering API keys, profile creation, and OpenClaw agent assignment.
 
 ### Installer Options
 
@@ -49,22 +57,36 @@ pip install -e .
 
 ## Quick Start
 
-```bash
-# 1. Configure your Kalshi credentials
-#    Create ~/.traderbot/.env with:
-export KALSHI_API_KEY=your_key_id
-export KALSHI_PRIVATE_KEY_PEM="$(cat /path/to/private_key.pem)"
+### Credential Setup (Recommended: OS Keyring)
 
+```bash
+# 1. Store Kalshi credentials securely in your OS keyring
+#    (macOS Keychain, Windows Credential Locker, or Linux Secret Service)
+traderbot auth set-kalshi
+# Prompts for KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PEM
+
+# Fallback: create ~/.traderbot/.env manually (not recommended for production)
+# export KALSHI_API_KEY=your_key_id
+# export KALSHI_PRIVATE_KEY_PEM="$(cat /path/to/private_key.pem)"
+```
+
+### Market Analysis
+
+```bash
 # 2. Scan available markets
 traderbot scan
 
 # 3. Deep analysis on a specific market
 traderbot analyze KXBTCD-26MAR31-T55000
 
-# 4. Paper trade a strategy
+# 4. Paper trade a strategy (no authentication required)
 traderbot paper momentum
 
-# 5. Run a heartbeat (self-review cycle)
+# 5. Place a live trade (requires master password)
+traderbot auth setup-master-password  # One-time setup
+traderbot trade KXBTCD-26MAR31-T55000 --direction yes --quantity 10 --confirm
+
+# 6. Run a heartbeat (self-review cycle)
 traderbot heartbeat
 ```
 

@@ -131,50 +131,22 @@ Agents are bound to profiles via opaque tokens. The flow:
 
 A profile can have only one active token. Attempting to assign a second token to a profile that already has one raises `ValueError`.
 
-### Token Injection
+### Token Assignment
 
-`inject_token(agent_path, token)` writes the token into the agent's `TOOLS.md`:
-
-```markdown
-## Environment Variables
-
-The following environment variables are available:
-- `TRADERBOT_PROFILE_TOKEN=xK9mQ2pL7nR4`: Your assigned profile token (do not modify)
-```
-
-If a token already exists, it is replaced. New sections are created if `## Environment Variables` does not exist. Write is atomic via temp file.
-
-### Agent Path Resolution
-
-The `_resolve_agent_path(agent_id)` function resolves agent paths in OpenClaw's multi-agent layout. Search order:
-
-1. **Per-agent workspace**: `~/.openclaw/workspace-<agentId>/TOOLS.md`
-2. **Subdirectory layout**: `~/.openclaw/workspace/<agentId>/TOOLS.md`
-3. **Agent state dir**: `~/.openclaw/agents/<agentId>/TOOLS.md`
-
-The first match wins. If none of these exist, `inject_token()` receives the raw path passed by the caller (from `discover_agents()`).
-
-## Shared Credential Storage
-
-All profiles share the same `.env` file for API credentials. There is no per-profile credential isolation.
+`assign_token(profile_name, agent_id)` generates a token and assigns it to the agent via the secure launcher:
 
 ```python
-from traderbot.profiles import get_current_profile
+from traderbot.profiles import assign_token
 
-profile = get_current_profile()  # Reads TRADERBOT_PROFILE_TOKEN env var
-# API keys always come from ~/.traderbot/.env
+assign_token("paper-aggressive", "molty")
+# Token generated and passed to agent via secure launcher context
 ```
 
-API keys (`KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`) are stored once in `~/.traderbot/.env` and shared by all agents regardless of profile.
+Token assignments are one-to-one: a profile can have only one active token. The secure launcher injects the token into the agent's environment at startup without writing it to any agent-readable files.
 
-### Credential Resolution Chain
+### One-to-One Binding
 
-When resolving API credentials:
-
-1. `.env` file (`~/.traderbot/.env` with mode 0600)
-2. Environment variable fallback
-
-The resolution chain in `resolve_kalshi_credentials()` reads from `.env` first, then falls back to `KALSHI_API_KEY` / `KALSHI_PRIVATE_KEY_PEM` environment variables.
+A profile can have only one active token. Attempting to assign a second token to a profile that already has one raises `ValueError`.
 
 ## Data Isolation
 

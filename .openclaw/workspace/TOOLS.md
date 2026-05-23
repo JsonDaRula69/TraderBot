@@ -32,7 +32,8 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 
 | Command | Purpose |
 |---|---|
-| `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --json` | Place trade with your probability estimate through risk checks. **Always provide `--estimated-prob` and `--confidence`** — without these, Kelly sizing defaults to market-implied probability and rejects all trades. |
+| `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --confirm --json` | Place trade with your probability estimate through risk checks. **Requires `--confirm` flag and master password**. **Always provide `--estimated-prob` and `--confidence`** — without these, Kelly sizing defaults to market-implied probability and rejects all trades. |
+| `traderbot paper TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --confirm --json` | Paper trade (no real money). **Requires `--confirm` flag and master password** for live-like execution. |
 | `traderbot positions --json` | List current positions from DB |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
 
@@ -41,7 +42,6 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | Command | Purpose |
 |---|---|
 | `traderbot backtest --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Historical backtest |
-| `traderbot paper --strategy momentum --json` | Paper trading with real market data |
 | `traderbot performance --json` | P&L and win rate (`--from`, `--to`) |
 
 ### Self-Improvement
