@@ -1,0 +1,24 @@
+V3 QA — Scenario 2: TreatmentInterface (Task 0d)
+==================================================
+
+Test file: experiments/v3/tests/test_treatment_interface.py
+Result: 21/21 PASSED
+
+ABC Contract Enforcement:
+  - Cannot instantiate TreatmentInterface directly
+  - Concrete subclass instantiates, format_prompt returns string, validate_response works
+  - Missing abstract method prevents instantiation (enforced by ABC)
+
+Dataclasses (all frozen):
+  - MarketData: 3 required + 3 optional fields
+  - ForecastData: forecast_temp_f, source, days_before, timestep
+  - AccuracyData: mae, bias, sample_count, low_confidence defaults to False
+  - PriceData: yes_price, no_price, trade_count, open_interest, implied_prob
+  - TechnicalData: rsi, bollinger_position, ema5, ema20, signal_direction, signal_confidence
+  - PriorDecisions: wraps list[dict], handles empty decisions
+  - TreatmentContext: holds all 6 sub-dataclasses + timestep + remaining
+  - TreatmentResponse: decision, estimated_prob, confidence, reasoning
+
+All frozen — cannot be mutated post-creation.
+
+VERDICT: PASS

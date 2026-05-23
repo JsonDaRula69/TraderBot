@@ -1,0 +1,28 @@
+V3 QA — Scenario 11: CLI (Task 12)
+=====================================
+
+Test file: experiments/v3/tests/test_cli.py
+Result: 8/8 PASSED
+
+Argparse:
+  - --db required (missing → error)
+  - --control required (missing → error)
+  - Defaults: --markets=2, --replicates=3, --seed=42, --model=glm-5.1:cloud
+  - All args parse correctly: --db, --control, --treatments, --markets,
+    --replicates, --seed, --model, --output, --dry-run, --verify-data
+  - --help shows all flags
+
+Dry-Run Mode:
+  - Loads control treatment, validates it has name property
+  - Outputs market preview without LLM calls
+  - Verifies no LLM client instantiated
+
+Verify-Data Mode:
+  - Counts markets in DB
+  - Reports market count (e.g., "0 markets in database")
+  - Empty DB → reports 0 markets (no crash)
+
+EDGE CASE: Empty :memory: DB → verify-data reports 0 markets
+EDGE CASE: Missing required args → argparse error messages
+
+VERDICT: PASS

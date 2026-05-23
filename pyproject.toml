@@ -24,6 +24,7 @@ dependencies = [
     "packaging>=24.0",
     "cryptography>=42.0",
     "portalocker>=2.8",
+    "keyring>=25.0",
 ]
 
 [project.optional-dependencies]

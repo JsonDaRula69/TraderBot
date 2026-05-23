@@ -2377,6 +2377,65 @@ def auth_check_master_password(
         console.print("[red]Master password: not configured[/red]")
 
 
+@auth_app.command("set-kalshi")
+def auth_set_kalshi() -> None:
+    """Store Kalshi credentials in OS keyring (or .env fallback)."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
+    private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM", hide_input=True)
+
+    mgr = AuthManager()
+    api_source = mgr.set_credential("kalshi", "api_key", api_key)
+    pem_source = mgr.set_credential("kalshi", "private_key_pem", private_key_pem)
+
+    if api_source == "keyring" and pem_source == "keyring":
+        console.print("[green]Kalshi credentials stored in OS keyring.[/green]")
+    else:
+        console.print("[yellow]Keyring unavailable; credentials stored in .env file.[/yellow]")
+
+
+@auth_app.command("migrate")
+def auth_migrate(
+    service: Annotated[
+        str | None,
+        typer.Option("--service", "-s", help="Service to migrate (default: all)"),
+    ] = None,
+) -> None:
+    """Migrate credentials from .env to OS keyring."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    mgr = AuthManager()
+    result = mgr.migrate_to_keyring(service)
+
+    if result["migrated"] == 0 and result["skipped"] == 0:
+        console.print("[yellow]Keyring unavailable; migration skipped.[/yellow]")
+    elif result["migrated"] > 0:
+        console.print(f"[green]Migrated {result['migrated']} credential(s) to keyring.[/green]")
+        if result["skipped"] > 0:
+            console.print(f"[dim]Skipped {result['skipped']} (already in keyring or not found).[/dim]")
+    else:
+        console.print("[dim]No new credentials to migrate.[/dim]")
+
+
+@auth_app.command("delete-key")
+def auth_delete_key(
+    service: Annotated[str, typer.Argument(help="Service name")],
+    key: Annotated[str, typer.Argument(help="Key name (e.g., api_key)")],
+) -> None:
+    """Delete a credential from OS keyring."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    mgr = AuthManager()
+    if mgr.delete_credential(service, key):
+        console.print(f"[green]Deleted {service}.{key} from keyring.[/green]")
+    else:
+        console.print(f"[yellow]{service}.{key} not found in keyring or keyring unavailable.[/yellow]")
+
+
 @auth_app.command("clear-session")
 def auth_clear_session(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,

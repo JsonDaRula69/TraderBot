@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  bin-cal:
+    build:
+      context: ../..
+      dockerfile: experiments/docker/Dockerfile
+    container_name: experiment-bin-cal
+    command:
+      - python
+      - -m
+      - experiments.simulation.harness
+      - --db
+      - experiments/experiment_data.db
+      - --methodology
+      - bin_cal
+      - --output
+      - /app/results/results_bin_cal.jsonl
+    volumes:
+      - ./results:/app/results
+
+  logistic-reg:
+    build:
+      context: ../..
+      dockerfile: experiments/docker/Dockerfile
+    container_name: experiment-logistic-reg
+    command:
+      - python
+      - -m
+      - experiments.simulation.harness
+      - --db
+      - experiments/experiment_data.db
+      - --methodology
+      - logistic_reg
+      - --output
+      - /app/results/results_logistic_reg.jsonl
+    volumes:
+      - ./results:/app/results
+
+  llm-synthesis:
+    build:
+      context: ../..
+      dockerfile: experiments/docker/Dockerfile
+    container_name: experiment-llm-synthesis
+    command:
+      - python
+      - -m
+      - experiments.simulation.harness
+      - --db
+      - experiments/experiment_data.db
+      - --methodology
+      - llm_synthesis
+      - --output
+      - /app/results/results_llm_synthesis.jsonl
+    volumes:
+      - ./results:/app/results
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ensemble:
+    build:
+      context: ../..
+      dockerfile: experiments/docker/Dockerfile
+    container_name: experiment-ensemble
+    command:
+      - python
+      - -m
+      - experiments.simulation.harness
+      - --db
+      - experiments/experiment_data.db
+      - --methodology
+      - ensemble
+      - --output
+      - /app/results/results_ensemble.jsonl
+    volumes:
+      - ./results:/app/results

@@ -1,0 +1,29 @@
+V3 QA — Scenario 8: Harness (Task 9)
+=======================================
+
+Test file: experiments/v3/tests/test_harness.py
+Result: 7/7 PASSED
+
+Within-Subjects Design:
+  - Each market processed under ALL treatments (control + 2 experimental)
+  - Decision count: num_markets × num_treatments × num_replicates × num_timesteps
+  - Verified: 3 markets × 3 treatments × 2 reps × 5 timesteps = 90 decisions (minus 3 skipped from checkpoint)
+
+Treatment Order Randomization:
+  - Order differs across markets (randomized per market, deterministic per seed)
+  - Each order is a valid permutation of the treatment list
+
+Checkpoint Resume:
+  - Interrupted after 2 of 4 markets
+  - Resume skips already-completed (ticker, replicate) pairs
+  - Remaining markets processed without duplication
+  - Verdict stored correctly in treatment_decisions table
+
+Decision Storage:
+  - All columns stored: run_id, ticker, timestep, treatment_name, replicate,
+    decision, estimated_prob, confidence, reasoning, position_size_cents
+
+Buy-Yes Decision:
+  - Stored with correct buy_yes decision and reasoning
+
+VERDICT: PASS

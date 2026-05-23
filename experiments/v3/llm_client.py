@@ -77,33 +77,32 @@ class LLMClient:
                 raw = resp.json().get("response", "")
                 return self._parse_response(raw)
 
-            except (httpx.TimeoutException, httpx.ConnectError):
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
                 if attempt < max_retries - 1:
                     time.sleep(2**attempt)
                     continue
-                return self._fallback_response()
+                return self._fallback_response(str(e))
 
-        return self._fallback_response()
+        return self._fallback_response("max retries exceeded")
 
     def _parse_response(self, raw: str) -> LLMResponse:
         try:
-            data = json.loads(raw)
-            validated = LLMDecisionSchema.model_validate(data)
+            parsed = json.loads(raw)
             return LLMResponse(
-                decision=validated.decision,
-                estimated_prob=validated.estimated_prob,
-                confidence=validated.confidence,
-                reasoning=validated.reasoning,
+                decision=parsed.get("decision", "skip"),
+                estimated_prob=float(parsed.get("estimated_prob", 0.5)),
+                confidence=float(parsed.get("confidence", 0.3)),
+                reasoning=parsed.get("reasoning", "no reasoning provided"),
                 raw_response=raw,
             )
-        except (json.JSONDecodeError, ValueError, TypeError):
+        except (json.JSONDecodeError, ValueError):
             return self._fallback_response(raw)
 
-    def _fallback_response(self, raw: str = "") -> LLMResponse:
+    def _fallback_response(self, raw: str) -> LLMResponse:
         return LLMResponse(
             decision="skip",
             estimated_prob=0.5,
-            confidence=0.1,
-            reasoning="LLM unavailable or malformed response",
+            confidence=0.0,
+            reasoning="LLM call failed or returned invalid JSON",
             raw_response=raw,
         )
