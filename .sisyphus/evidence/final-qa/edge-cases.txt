@@ -1,0 +1,47 @@
+V3 QA — Edge Cases
+=====================
+
+EDGE CASES TESTED: 6
+
+1. EMPTY DB
+   - verify-data on :memory: DB with no tables → reports "0 markets"
+   - verify_schema returns False for missing tables
+   - No crash, clean handling
+   PASS
+
+2. INVALID TICKER
+   - "INVALID-TICKER" → ParseError("Malformed ticker format: INVALID-TICKER")
+   - "" (empty string) → ParseError("Ticker must be a non-empty string")
+   - PASS
+
+3. LLM TIMEOUT
+   - timeout=0.001s → httpx.TimeoutException → fallback response
+   - decision="skip", confidence=0.0, reasoning="LLM unavailable or malformed response"
+   - PASS
+
+4. MALFORMED JSON
+   - "this is not JSON at all" → parse failure → fallback response
+   - decision="skip", confidence=0.0
+   - PASS
+
+5. EMPTY DECISIONS
+   - skip_rate([]) → 0.0 (correct)
+   - weighted_brier([], "YES", 0.5) → 0.0 (correct)
+   - compute_pnl("skip", 0.5, None) → 0 (correct)
+   - score_run with 0 decisions → UnboundLocalError BUG
+     (by_ticker defined in for-loop scope, accessed outside)
+   - REPORTED: scoring.py line 130 bug
+
+6. SINGLE MARKET STRATUM
+   - markets_per_cell=2 but only 1 market available → returns 1
+   - Undersampled stratum handled: min(n, requested)
+   - PASS
+
+SUMMARY: 5/6 PASS, 1 BUG FOUND (score_run UnboundLocalError)
+
+BUG DETAILS:
+  File: experiments/v3/scoring.py
+  Lines 80-85: by_ticker defined inside for-loop scope
+  Line 130: accessed outside the loop
+  Trigger: empty decisions list (for-loop never runs)
+  Fix: Move by_ticker initialization outside the for-loop or guard line 130

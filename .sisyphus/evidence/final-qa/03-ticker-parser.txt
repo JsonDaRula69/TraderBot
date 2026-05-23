@@ -1,0 +1,32 @@
+V3 QA — Scenario 3: Ticker Parser (Task 4)
+=============================================
+
+Test file: experiments/v3/tests/test_ticker_parser_v3.py
+Result: 18/18 PASSED
+
+All 10 V3 Tickers Parsed:
+  1. AUS_26APR01_B90_5  → between, Austin, 90.5-91.5, Apr 1
+  2. TSEA_26MAY07_T66   → greater, Seattle, 66, May 7
+  3. TSEA_26MAY11_T75   → greater, Seattle, 75, May 11
+  4. NYC_26MAY08_T64    → greater, NYC, 64, May 8
+  5. NYC_26JUN01_B94_5  → between, NYC, 94.5-95.5, Jun 1
+  6. AUS_26APR16_B91_5  → between, Austin, 91.5-92.5, Apr 16
+  7. LVX_26MAY11_B82_5  → between, Las Vegas, 82.5-83.5, May 11
+  8. LVX_26JUN07_B97_5  → between, Las Vegas, 97.5-98.5, Jun 7
+  9. HOU_26APR06_B83_5  → between, Houston, 83.5-84.5, Apr 6
+  10. MIA_26MAY06_B84_5 → between, Miami, 84.5-85.5, May 6
+
+Geo fields: city, lat, lon, timezone verified for all.
+is_high_temp() correctly returns True for KXHIGH, False for KXLOW.
+
+Error Cases:
+  - Unknown city code → ParseError
+  - No strike prefix → ParseError
+  - Empty string → ParseError
+  - Non-string input → TypeError (handled)
+  - Malformed date → ParseError
+
+EDGE CASE: "INVALID-TICKER" → ParseError: Malformed ticker format
+EDGE CASE: "" (empty string) → ParseError: Ticker must be a non-empty string
+
+VERDICT: PASS

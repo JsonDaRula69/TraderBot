@@ -387,6 +387,9 @@ def trade(
     instead of relying on market-implied probability, which often yields ~0 edge
     and causes all trades to be rejected by the Kelly sizing formula.
     """
+    from traderbot.master_password import require_auth
+    require_auth()
+
     from traderbot.analysis.odds import implied_probability
     from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
@@ -1726,6 +1729,9 @@ def paper(
     strategy through risk checks, and tracks simulated positions and P&L.
     Press Ctrl+C to stop early and see final results.
     """
+    from traderbot.master_password import require_auth
+    require_auth()
+
     import asyncio
     import time
 
@@ -2305,6 +2311,237 @@ def auth_check(
         console.print(
             "[dim]Add KALSHI_API_KEY to your .env file in the data directory.[/dim]"
         )
+
+
+@auth_app.command("setup-master-password")
+def auth_setup_master_password() -> None:
+    """Create a new master password for trade/simulate command gating."""
+    from traderbot.master_password import is_setup, setup_master_password
+
+    if is_setup():
+        err_console.print("[red]Master password already configured.[/red]")
+        err_console.print("Use [bold]traderbot auth change-master-password[/bold] to change it.")
+        raise typer.Exit(code=1)
+
+    password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
+    try:
+        setup_master_password(password)
+        Console().print("[green]Master password created. Session authenticated for 30 minutes.[/green]")
+    except ValueError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+
+@auth_app.command("change-master-password")
+def auth_change_master_password() -> None:
+    """Change an existing master password (requires current password)."""
+    from traderbot.master_password import change_master_password, is_setup
+
+    if not is_setup():
+        err_console.print("[red]No master password configured.[/red]")
+        err_console.print("Run [bold]traderbot auth setup-master-password[/bold] first.")
+        raise typer.Exit(code=1)
+
+    old_password = typer.prompt("Current master password", hide_input=True)
+    new_password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
+    try:
+        change_master_password(old_password, new_password)
+        Console().print("[green]Master password changed. Session authenticated for 30 minutes.[/green]")
+    except (ValueError, FileNotFoundError) as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+
+@auth_app.command("check-master-password")
+def auth_check_master_password(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Check whether master password is configured and session is active."""
+    from traderbot.master_password import is_setup, session_active
+
+    configured = is_setup()
+    active = session_active() if configured else False
+
+    if json_output:
+        json_lib.dump({"configured": configured, "session_active": active}, sys.stdout)
+        return
+
+    console = Console()
+    if configured:
+        console.print("[green]Master password: configured[/green]")
+        if active:
+            console.print("[green]Session: authenticated[/green]")
+        else:
+            console.print("[yellow]Session: not authenticated[/yellow]")
+    else:
+        console.print("[red]Master password: not configured[/red]")
+
+
+@auth_app.command("set-kalshi")
+def auth_set_kalshi() -> None:
+    """Store Kalshi credentials in OS keyring (or .env fallback)."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
+    private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM", hide_input=True)
+
+    mgr = AuthManager()
+    api_source = mgr.set_credential("kalshi", "api_key", api_key)
+    pem_source = mgr.set_credential("kalshi", "private_key_pem", private_key_pem)
+
+    if api_source == "keyring" and pem_source == "keyring":
+        console.print("[green]Kalshi credentials stored in OS keyring.[/green]")
+    else:
+        console.print("[yellow]Keyring unavailable; credentials stored in .env file.[/yellow]")
+
+
+@auth_app.command("migrate")
+def auth_migrate(
+    service: Annotated[
+        str | None,
+        typer.Option("--service", "-s", help="Service to migrate (default: all)"),
+    ] = None,
+) -> None:
+    """Migrate credentials from .env to OS keyring."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    mgr = AuthManager()
+    result = mgr.migrate_to_keyring(service)
+
+    if result["migrated"] == 0 and result["skipped"] == 0:
+        console.print("[yellow]Keyring unavailable; migration skipped.[/yellow]")
+    elif result["migrated"] > 0:
+        console.print(f"[green]Migrated {result['migrated']} credential(s) to keyring.[/green]")
+        if result["skipped"] > 0:
+            console.print(f"[dim]Skipped {result['skipped']} (already in keyring or not found).[/dim]")
+    else:
+        console.print("[dim]No new credentials to migrate.[/dim]")
+
+
+@auth_app.command("delete-key")
+def auth_delete_key(
+    service: Annotated[str, typer.Argument(help="Service name")],
+    key: Annotated[str, typer.Argument(help="Key name (e.g., api_key)")],
+) -> None:
+    """Delete a credential from OS keyring."""
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    mgr = AuthManager()
+    if mgr.delete_credential(service, key):
+        console.print(f"[green]Deleted {service}.{key} from keyring.[/green]")
+    else:
+        console.print(f"[yellow]{service}.{key} not found in keyring or keyring unavailable.[/yellow]")
+
+
+@auth_app.command("clear-session")
+def auth_clear_session(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Clear the current authenticated session token."""
+    from traderbot.master_password import clear_session
+
+    clear_session()
+    if json_output:
+        json_lib.dump({"status": "session_cleared"}, sys.stdout)
+    else:
+        Console().print("[green]Session token cleared. Authentication will be required for next trade/simulate.[/green]")
+
+
+sandbox_app = typer.Typer(
+    name="sandbox",
+    help="Agent filesystem sandbox: isolate workspace, lock src/ read-only.",
+    rich_markup_mode="rich",
+)
+app.add_typer(sandbox_app, name="sandbox")
+
+
+@sandbox_app.command("enter")
+def sandbox_enter() -> None:
+    """Enter the sandbox: lock src/ read-only, create isolated workspace."""
+    from traderbot.sandbox import FilesystemSandbox
+
+    sandbox = FilesystemSandbox()
+    if sandbox.status.value == "active":
+        Console().print("[yellow]Sandbox is already active.[/yellow]")
+        return
+
+    try:
+        sandbox.enter()
+        Console().print(f"[green]Sandbox active[/green] (workspace: {sandbox.workspace_dir})")
+        if sandbox.is_available():
+            Console().print(f"[dim]macOS sandbox-exec enforcement enabled[/dim]")
+        else:
+            Console().print(f"[dim]Fallback: POSIX chmod enforcement[/dim]")
+    except Exception as e:
+        err_console.print(f"[red]Failed to enter sandbox:[/red] {e}")
+        raise typer.Exit(code=1)
+
+
+@sandbox_app.command("exit")
+def sandbox_exit(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Exit the sandbox: restore permissions, workspace retained."""
+    from traderbot.sandbox import FilesystemSandbox
+
+    sandbox = FilesystemSandbox()
+    sandbox.exit_sandbox()
+
+    if json_output:
+        json_lib.dump({"status": "sandbox_exited", "workspace": str(sandbox.workspace_dir)}, sys.stdout)
+    else:
+        Console().print("[green]Sandbox exited. Workspace retained at[/green]")
+        Console().print(f"[dim]{sandbox.workspace_dir}[/dim]")
+
+
+@sandbox_app.command("status")
+def sandbox_status(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Show sandbox status: active/inactive, enforcement mode, workspace path."""
+    from traderbot.sandbox import FilesystemSandbox, get_active_sandbox
+
+    sandbox = get_active_sandbox() or FilesystemSandbox()
+    source_readonly = sandbox.verify() if sandbox.status.value == "active" else False
+
+    if json_output:
+        json_lib.dump({
+            "status": str(sandbox.status),
+            "workspace": str(sandbox.workspace_dir),
+            "src_root": str(sandbox.src_root),
+            "source_readonly": source_readonly,
+            "os_sandbox_available": sandbox.is_available(),
+        }, sys.stdout)
+        return
+
+    console = Console()
+    status_color = "green" if sandbox.status.value == "active" else "yellow"
+    console.print(f"Status:       [{status_color}]{sandbox.status}[/{status_color}]")
+    console.print(f"Workspace:    [dim]{sandbox.workspace_dir}[/dim]")
+    console.print(f"Source root:  [dim]{sandbox.src_root}[/dim]")
+    console.print(f"Src read-only: {'[green]yes[/green]' if source_readonly else '[red]no[/red]'}")
+    console.print(f"OS sandbox:   {'available' if sandbox.is_available() else 'unavailable [dim](chmod fallback)[/dim]'}")
+
+
+@sandbox_app.command("verify")
+def sandbox_verify(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Test source tree write protection by attempting to create a probe file."""
+    from traderbot.sandbox import FilesystemSandbox
+
+    sandbox = FilesystemSandbox()
+    protected = sandbox.verify()
+
+    if json_output:
+        json_lib.dump({"source_write_protected": protected}, sys.stdout)
+    elif protected:
+        Console().print("[green]Source tree is write-protected. Sandbox working correctly.[/green]")
+    else:
+        Console().print("[red]Source tree is writable. Sandbox is not active or has failed.[/red]")
 
 
 @app.command()

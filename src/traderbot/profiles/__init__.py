@@ -9,11 +9,13 @@ from traderbot.profiles.runtime import (
     get_runtime_context,
     load_profile_config,
 )
+from traderbot.profiles.sysadmin import create_sysadmin_profile
 
 __all__ = [
     "ProfileAuthStore",
     "ProfileRegistry",
     "TradingProfile",
+    "create_sysadmin_profile",
     "get_current_profile",
     "get_runtime_context",
     "load_profile_config",

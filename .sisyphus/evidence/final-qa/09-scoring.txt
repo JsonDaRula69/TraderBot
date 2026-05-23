@@ -1,0 +1,47 @@
+V3 QA — Scenario 9: Scoring (Task 10)
+========================================
+
+Test file: experiments/v3/tests/test_scoring.py
+Result: 25/25 PASSED
+
+P&L Calculation (POSITION_SIZE=100):
+  - buy_yes + YES  → +100 * (1 - yes_price)    e.g., 0.60 → +40
+  - buy_yes + NO   → -100 * yes_price           e.g., 0.60 → -60
+  - buy_no  + NO   → +100 * yes_price           e.g., 0.60 → +60
+  - buy_no  + YES  → -100 * (1 - yes_price)     e.g., 0.60 → -40
+  - skip           → 0
+  - None settlement → 0
+
+Brier Score:
+  - YES at prob 0.80  → (0.80-1.0)^2 = 0.04
+  - NO  at prob 0.30  → (0.30-0.0)^2 = 0.09
+  - Perfect prediction → 0.0
+  - Worst prediction   → 1.0
+
+Weighted Brier:
+  - Contested (0.20 ≤ yes ≤ 0.80): 2.0× weight
+  - Blowout (yes < 0.20 or > 0.80): 0.5× weight
+  - Empty decisions → 0.0
+  - Boundary cases: 0.20, 0.80 → contested
+
+Delta Profit:
+  - treatment=+35, control=-20 → delta = 55
+  - Both zero → delta = 0
+  - Negative delta handled correctly
+
+Skip Rate:
+  - Basic: 2/5 skips → 0.4
+  - All skip → 1.0
+  - No skip → 0.0
+  - Empty → 0.0
+
+Score Run:
+  - 3 markets, 2 treatments, 2 replicates → correct aggregation
+  - Per-treatment: total_pnl, skip_rate, weighted_brier
+  - Delta profit: best_model_pnl - control_pnl
+
+BUG FOUND: score_run with 0 decisions throws UnboundLocalError (line 130).
+  `by_ticker` is defined inside the for-loop (line 82) but accessed outside (line 130).
+  Only triggers on empty decision sets — existing tests pass because they have data.
+
+VERDICT: PASS (1 known bug: UnboundLocalError on empty datasets in score_run)
