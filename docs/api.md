@@ -35,10 +35,12 @@ Get market details, orderbook, indicators, and edge estimate.
 
 ```bash
 traderbot trade TICKER --direction yes|no --quantity N --price CENTS \
-    --estimated-prob 0.75 --confidence 0.8 [--json]
+    --estimated-prob 0.75 --confidence 0.8 --confirm [--json]
 ```
 
 Place a trade through the risk pipeline. Returns sized position in cents or rejection reason.
+
+**Requires master password.** Run `traderbot auth setup-master-password` first if not already configured.
 
 | Arg | Default | Description |
 |---|---|---|
@@ -47,6 +49,7 @@ Place a trade through the risk pipeline. Returns sized position in cents or reje
 | `--price` | — | Limit price in cents |
 | `--estimated-prob` | — | Your estimated probability (0.0–1.0) — required for Kelly sizing |
 | `--confidence` | — | Your confidence in the estimate (0.0–1.0) — adjusts position size |
+| `--confirm` | — | Acknowledge trade placement (required; prompts for master password) |
 
 ### traderbot positions
 
@@ -91,10 +94,13 @@ Run backtests against historical data.
 ### traderbot paper
 
 ```bash
-traderbot paper --strategy NAME [--duration N] [--db PATH] [--json]
+traderbot paper TICKER --direction yes|no --quantity N --price CENTS \
+    --estimated-prob 0.75 --confidence 0.8 --confirm [--json]
 ```
 
 Paper trade a strategy with simulated orders.
+
+**Requires master password.** Run `traderbot auth setup-master-password` first if not already configured. Paper trades use real market data but do not place actual orders.
 
 ### traderbot compare
 

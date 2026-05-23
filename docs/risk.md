@@ -100,7 +100,7 @@ Three-tier system with increasing severity:
 | **Level 2: Halt** | Daily loss > 2% | No new trades; existing positions held | Automatic on next `check()` — resets when loss drops below threshold |
 | **Level 3: Full Stop** | Drawdown > 10% | All trading halted; `position_size_multiplier=0.0` | **Manual only** — `traderbot resume` or manual `FULL_STOP` flag clear |
 
-The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). On restart, the agent reads the persisted state and respects any active breaker level.
+The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). The state file is protected with an HMAC-SHA256 signature to prevent tampering. Any modification to the state file (e.g., resetting FULL_STOP to NORMAL) will fail verification and raise a `SecurityError`. On restart, the agent verifies the HMAC signature before reading the persisted state.
 
 ## Audit Trail
 

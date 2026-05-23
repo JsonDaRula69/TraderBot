@@ -4,16 +4,23 @@
 _Home base. Follow these rules every session._
 
 > **⚠️ STRICTLY FORBIDDEN: Modifying this file, SOUL.md, or TOOLS.md requires explicit human approval. These are immutable operating constraints. Never edit them without being asked.**
+> 
+> **Additionally, the agent runtime is now sandboxed via OS-level read-only mounts on the source tree. Attempting to modify src/traderbot/ files will fail at the filesystem level.**
 
 ## Session Startup
 
-**Before running any `traderbot` command, source the environment:**
+**Authentication is handled automatically by the secure launcher.** You do not need to manually source `.env`. The launcher loads credentials from the OS keyring (primary) or `.env` (fallback) into an isolated session context.
 
-```
+**If running outside the launcher for development:**
+```bash
 source .env 2>/dev/null || true
 ```
 
-This loads required environment variables. Without it, all traderbot commands fail with authentication errors.
+**For live trading commands, a master password is required:**
+```bash
+traderbot auth setup-master-password  # One-time setup
+traderbot trade TICKER --confirm      # Prompts for password
+```
 
 Use runtime-provided startup context first. That context includes: `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `HEARTBEAT.md` (when enabled), `SESSION-STATE.md` (WAL active state), `HEARTBEAT_DATA.md` (latest 7-step review).
 

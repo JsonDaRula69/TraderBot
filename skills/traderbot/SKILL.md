@@ -7,6 +7,7 @@ metadata:
       env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY_PEM"]
       bins: ["python3"]
     primaryEnv: KALSHI_API_KEY
+    optional: true  # TraderBot works standalone without OpenClaw
 ---
 
 # TraderBot — Kalshi Prediction Market Toolkit
