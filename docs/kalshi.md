@@ -13,7 +13,7 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 
 ## Authentication
 
-Kalshi uses per-request RSA-PSS signing. Each request includes three HTTP headers: `KALSHI-ACCESS-KEY`, `KALSHI-ACCESS-SIGNATURE`, and `KALSHI-ACCESS-TIMESTAMP`. The signature is computed by signing `{timestamp_ms}{METHOD}{path}` with RSA-PSS/SHA256/MGF1.
+Kalshi uses per-request RSA-PSS signing. Each request includes three HTTP headers: `KALSHI-ACCESS-KEY`, `KALSHI-ACCESS-SIGNATURE`, and `KALSHI-ACCESS-TIMESTAMP`. The signature is computed by signing `{timestamp_ms}{METHOD}{path}` with RSA-PSS/SHA256/MGF1. A cryptographically secure nonce is also included to prevent replay attacks.
 
 **Required environment variables:**
 ```bash
@@ -22,6 +22,16 @@ KALSHI_PRIVATE_KEY_PEM=-----BEGIN...      # PEM-encoded RSA private key — neve
 ```
 
 Our `kalshi/signing.py` implements `auth_headers()` which generates the three required headers per request. `kalshi/client.py` calls this on every HTTP request — no session tokens or login step needed.
+
+## TLS Certificate Pinning
+
+To defend against corporate MITM proxies or compromised CAs, TraderBot pins Kalshi's TLS certificate by its Subject Public Key Info (SPKI) hash:
+
+- **Production pin**: `Iu/+7wHLhGRvN84Vr2fyW7omLlvfmIcGNnaUf9uTkwA=`
+- **Implementation**: `kalshi/pinning.py` — `PinnedSSLContext` subclass
+- **Integration**: Both `KalshiClient` (httpx) and `KalshiWebSocket` (websockets) use the pinned SSL context
+
+If the pin does not match, the connection is aborted with a `SecurityError`. Update the pin via `traderbot utils update-kalshi-pin` if Kalshi rotates certificates.
 
 ## Key Endpoints
 
