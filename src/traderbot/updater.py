@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from packaging.version import InvalidVersion, Version
 
 from traderbot.paths import get_data_dir
@@ -19,8 +21,35 @@ logger = logging.getLogger(__name__)
 GITHUB_REPO = "JsonDaRula69/TraderBot"
 GITHUB_TAGS_URL = f"https://api.github.com/repos/{GITHUB_REPO}/tags"
 GITHUB_DEV_BRANCH_URL = f"https://api.github.com/repos/{GITHUB_REPO}/branches/dev"
+GITHUB_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
+PUBKEY_PATH = os.environ.get(
+    "TRADERBOT_UPDATE_PUBKEY_PATH",
+    str(Path(__file__).resolve().parent / "update_pubkey.pem"),
+)
 CACHE_DIR = get_data_dir()
 CACHE_FILE = CACHE_DIR / ".update_check_cache.json"
+
+
+class SignatureVerificationError(Exception):
+    """Ed25519 signature verification failed for a release asset."""
+
+
+def _load_update_public_key() -> Ed25519PublicKey:
+    """Load the Ed25519 public key for release verification."""
+    path = Path(PUBKEY_PATH)
+    if path.exists():
+        return Ed25519PublicKey.from_public_bytes(path.read_bytes().strip())
+
+    # Hardcoded key — replaced by maintainer before release.
+    hardcoded = os.environ.get("TRADERBOT_UPDATE_PUBKEY_B64")
+    if hardcoded:
+        import base64
+        return Ed25519PublicKey.from_public_bytes(base64.b64decode(hardcoded))
+
+    raise SignatureVerificationError(
+        "No Ed25519 update verification key found. "
+        "Set TRADERBOT_UPDATE_PUBKEY_PATH or TRADERBOT_UPDATE_PUBKEY_B64."
+    )
 
 
 def get_current_version() -> str:
@@ -30,12 +59,7 @@ def get_current_version() -> str:
 
 
 def fetch_latest_version(timeout: float = 10.0, dev: bool = False) -> tuple[str, str] | None:
-    """Fetch latest version from GitHub. Returns (version, html_url) or None.
-
-    Args:
-        timeout: HTTP request timeout in seconds.
-        dev: If True, check the dev branch commit instead of latest tag.
-    """
+    """Fetch latest version from GitHub. Returns (version, html_url) or None."""
     try:
         if dev:
             url = GITHUB_DEV_BRANCH_URL
@@ -84,7 +108,6 @@ def compare_versions(current: str, latest: str) -> bool:
 
 
 def _read_cache() -> dict | None:
-    """Read update check cache. Returns dict with 'ts', 'latest', 'url' or None."""
     if not CACHE_FILE.exists():
         return None
     try:
@@ -97,17 +120,12 @@ def _read_cache() -> dict | None:
 
 
 def _write_cache(latest: str, url: str) -> None:
-    """Write update check cache with current timestamp."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     CACHE_FILE.write_text(json.dumps({"ts": time.time(), "latest": latest, "url": url}))
 
 
 def check_for_updates(force: bool = False, check_interval_minutes: int = 30, dev: bool = False) -> dict | None:
-    """Check if a newer version exists. Returns dict with 'current', 'latest', 'url' or None.
-
-    Uses cache to avoid hitting GitHub API on every call. Respects check_interval_minutes.
-    Set force=True to bypass cache. Set dev=True to check dev branch.
-    """
+    """Check if a newer version exists. Returns dict with 'current', 'latest', 'url' or None."""
     if os.environ.get("TRADERBOT_NO_UPDATE_CHECK") or os.environ.get("CI"):
         return None
 
@@ -138,16 +156,57 @@ def check_for_updates(force: bool = False, check_interval_minutes: int = 30, dev
     return None
 
 
-def apply_update(restart: bool = False, dev: bool = False) -> bool:
-    """Apply update by running git pull + pip install. Returns True on success.
+def verify_release_signature(tag: str, signature_b64: str) -> bool:
+    """Verify an Ed25519 detached signature over a release tag."""
+    try:
+        pubkey = _load_update_public_key()
+    except SignatureVerificationError:
+        logger.warning("Cannot verify release signature: no public key configured")
+        return False
 
-    Data preservation: all runtime data lives in ~/.traderbot/ (outside repo) and
-    is never touched by git pull. The repo-local .traderbot/ dir is gitignored.
+    import base64
 
-    Args:
-        restart: Restart the process after update.
-        dev: Pull from dev branch instead of main.
-    """
+    try:
+        sig_bytes = base64.b64decode(signature_b64)
+    except Exception:
+        logger.debug("Signature base64 decode failed")
+        return False
+
+    try:
+        pubkey.verify(sig_bytes, tag.encode())
+        return True
+    except InvalidSignature:
+        logger.warning("Release signature verification FAILED for tag %s", tag)
+        return False
+
+
+def _fetch_release_signature(tag_name: str, timeout: float = 10.0) -> str | None:
+    """Fetch the Ed25519 signature from a GitHub release body."""
+    try:
+        url = f"{GITHUB_RELEASES_URL}/tags/{tag_name}"
+        resp = httpx.get(
+            url,
+            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "traderbot-update-checker"},
+            timeout=timeout,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            logger.debug("Failed to fetch release for %s: HTTP %s", tag_name, resp.status_code)
+            return None
+        body = resp.json().get("body", "")
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith("Ed25519-Signature:"):
+                return line.split(":", 1)[1].strip()
+        logger.debug("No Ed25519-Signature found in release body for %s", tag_name)
+        return None
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
+        logger.debug("Failed to fetch release signature: %s", exc)
+        return None
+
+
+def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
+    """Apply update by running git pull + pip install. Returns True on success."""
     import subprocess
 
     repo_dir = Path(__file__).resolve().parent.parent.parent
@@ -157,6 +216,16 @@ def apply_update(restart: bool = False, dev: bool = False) -> bool:
         if not (repo_dir / ".git").exists():
             logger.error("Cannot update: not a git repository (installed via ZIP?). Reinstall with: curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh")
             return False
+
+        if verify_signature and not dev:
+            latest_result = fetch_latest_version()
+            if latest_result is not None:
+                tag_ver, _ = latest_result
+                tag_name = f"v{tag_ver}"
+                sig = _fetch_release_signature(tag_name)
+                if sig is not None and not verify_release_signature(tag_name, sig):
+                    logger.error("Update aborted: Ed25519 signature verification failed")
+                    return False
 
         git_status = subprocess.run(
             ["git", "status", "--porcelain"],

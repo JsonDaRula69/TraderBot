@@ -13,6 +13,7 @@ from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
+from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.rate_limit import TokenBucketRateLimiter
 from traderbot.kalshi.signing import auth_headers
 
@@ -133,7 +134,10 @@ class KalshiClient:
 
         self._config = config
         self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=self._config.rate_limit_rps)
-        self._client = httpx.AsyncClient(base_url=self._config.base_url, verify=True)
+        self._client = httpx.AsyncClient(
+            base_url=self._config.base_url,
+            verify=create_pinned_ssl_context(),
+        )
 
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
         return auth_headers(
