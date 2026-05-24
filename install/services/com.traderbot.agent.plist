@@ -15,11 +15,13 @@
 		<string>set -a; source /Users/USERNAME/.traderbot/.env; set +a; exec /Users/USERNAME/traderbot/.venv/bin/traderbot scan --continuous</string>
 	</array>
 
-	<!-- EnvironmentVariables: TOKEN_PLACEHOLDER replaced by installer -->
+	<!-- EnvironmentVariables: placeholders replaced by installer -->
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>TRADERBOT_PROFILE_TOKEN</key>
 		<string>TOKEN_PLACEHOLDER</string>
+		<key>ENABLE_SANDBOX</key>
+		<string>SANDBOX_PLACEHOLDER</string>
 	</dict>
 
 	<!-- WorkingDirectory: USERNAME replaced by installer -->

@@ -1,13 +1,15 @@
 #!/bin/bash
-# Usage: install-launchd.sh <agent_name> <profile_token>
+# Usage: install-launchd.sh <agent_name> <profile_token> [enable_sandbox]
 # Installs a LaunchDaemon (boot-time, no login required) for macOS
+# Token is passed via EnvironmentVariables only — never written to .env.
 set -euo pipefail
 
 AGENT_NAME="$1"
 PROFILE_TOKEN="$2"
+ENABLE_SANDBOX="${3:-}"
 
 if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
-    echo "Usage: install-launchd.sh <agent_name> <profile_token>" >&2
+    echo "Usage: install-launchd.sh <agent_name> <profile_token> [enable_sandbox]" >&2
     exit 1
 fi
 
@@ -33,23 +35,13 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
     exit 1
 fi
 
-ENV_FILE="${HOME}/.traderbot/.env"
-mkdir -p "${HOME}/.traderbot"
-touch "$ENV_FILE"
-chmod 600 "$ENV_FILE"
-
-if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "" "s|^TRADERBOT_PROFILE_TOKEN=.*|TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
-else
-    echo "TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
-fi
-
 PLIST_FILE="/Library/LaunchDaemons/com.traderbot.agent.$AGENT_NAME.plist"
 USER_NAME="$(whoami)"
 
 sed -e "s/AGENT_ID/$AGENT_NAME/g" \
     -e "s/USERNAME/$USER_NAME/g" \
     -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" \
+    -e "s/SANDBOX_PLACEHOLDER/${ENABLE_SANDBOX:-}/g" \
     "$TEMPLATE_FILE" > "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
 
 if command -v plutil &>/dev/null; then

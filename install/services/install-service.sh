@@ -1,12 +1,14 @@
 #!/bin/bash
-# Usage: install-service.sh <agent_name> <profile_token>
+# Usage: install-service.sh <agent_name> <profile_token> [enable_sandbox]
+# Token is passed via Environment= only — never written to .env.
 set -euo pipefail
 
 AGENT_NAME="$1"
 PROFILE_TOKEN="$2"
+ENABLE_SANDBOX="${3:-}"
 
 if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
-    echo "Usage: install-service.sh <agent_name> <profile_token>" >&2
+    echo "Usage: install-service.sh <agent_name> <profile_token> [enable_sandbox]" >&2
     exit 1
 fi
 
@@ -27,17 +29,6 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
     exit 1
 fi
 
-ENV_FILE="${HOME}/.traderbot/.env"
-mkdir -p "${HOME}/.traderbot"
-touch "$ENV_FILE"
-chmod 600 "$ENV_FILE"
-
-if grep -q "^TRADERBOT_PROFILE_TOKEN=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^TRADERBOT_PROFILE_TOKEN=.*|TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}|" "$ENV_FILE"
-else
-    echo "TRADERBOT_PROFILE_TOKEN=${PROFILE_TOKEN}" >> "$ENV_FILE"
-fi
-
 VENV_BIN="${HOME}/traderbot/.venv/bin/traderbot"
 ACTUAL_USER="$(whoami)"
 ACTUAL_HOME="${HOME}"
@@ -46,6 +37,8 @@ sed \
     -e "s|^User=%i|User=$ACTUAL_USER|" \
     -e "s|/home/%i/|/home/$ACTUAL_USER/|g" \
     -e "s|%h/.traderbot/.env|$ACTUAL_HOME/.traderbot/.env|g" \
+    -e "s|TOKEN_PLACEHOLDER|$PROFILE_TOKEN|g" \
+    -e "s|SANDBOX_PLACEHOLDER|${ENABLE_SANDBOX:-}|g" \
     "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
 
 if command -v systemd-analyze &>/dev/null; then
