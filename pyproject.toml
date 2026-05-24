@@ -25,6 +25,8 @@ dependencies = [
     "cryptography>=42.0",
     "portalocker>=2.8",
     "keyring>=25.0",
+    "numpy>=1.26",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -81,4 +83,9 @@ markers = [
     "integration: integration tests (mocked external services)",
     "live: live integration tests (real API calls, skip on missing keys)",
     "slow: slow tests (skipped in fast runs)",
+]
+
+[dependency-groups]
+dev = [
+    "respx>=0.23.1",
 ]
