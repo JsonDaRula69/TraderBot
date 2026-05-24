@@ -594,10 +594,7 @@ setup_api_credentials() {
             break
         fi
     done
-    echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers):"
-    # Capture PEM key with stty -echo so terminal doesn't leak lines.
-    # Discard any content before -----BEGIN and after -----END.
-    echo "Paste below (ends at -----END... or blank line to skip):"
+    echo "Kalshi API secret (paste the full PEM key including BEGIN...END markers, or press Enter to skip):"
     local pem_started=false
     kalshi_secret=""
     local old_tty_settings
