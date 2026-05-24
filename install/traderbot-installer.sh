@@ -477,6 +477,21 @@ uninstall_services() {
 
 update_services() {
     local os_type="$1"
+    local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+
+    if [[ -x "$tb_bin" ]]; then
+        echo "Verifying Ed25519 update trust anchor..."
+        if "$tb_bin" update --check 2>/dev/null; then
+            echo "  Ed25519 trust anchor verified."
+        else
+            echo "  Warning: No Ed25519 trust anchor found. Initialising..."
+            "$tb_bin" update --init-trust 2>/dev/null || echo "  Warning: --init-trust failed. Proceeding without trust verification."
+        fi
+
+        echo "Refreshing Kalshi TLS pin..."
+        "$tb_bin" auth check --service kalshi 2>/dev/null || echo "  Warning: TLS pin refresh failed."
+    fi
+
     stop_services "$os_type" || {
         echo "Error: Failed to stop services." >&2
         exit 1
@@ -511,11 +526,12 @@ install_service_for_agent() {
     local agent_name="$1"
     local profile_token="$2"
     local os_type="$3"
+    local enable_sandbox="${4:-}"
     local script_dir="${INSTALL_DIR}"
     if [[ "$os_type" == "macos" ]]; then
-        bash "${script_dir}/install/services/install-launchd.sh" "$agent_name" "$profile_token"
+        bash "${script_dir}/install/services/install-launchd.sh" "$agent_name" "$profile_token" "$enable_sandbox"
     else
-        bash "${script_dir}/install/services/install-service.sh" "$agent_name" "$profile_token"
+        bash "${script_dir}/install/services/install-service.sh" "$agent_name" "$profile_token" "$enable_sandbox"
     fi
 }
 
@@ -758,6 +774,97 @@ setup_api_credentials() {
     return 0
 }
 
+prompt_os_keyring() {
+    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ ! -x "$tb_cmd" ]]; then
+        echo "TraderBot binary not found. Skipping keyring prompt." >&2
+        return 1
+    fi
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "Non-interactive mode — skipping keyring setup."
+        return 0
+    fi
+    echo
+    echo "=== OS Keyring ==="
+    echo "Kalshi credentials have been written to .env."
+    read -r -p "Store in OS keyring for encrypted storage? [Y/n]: " keyring_choice
+    if [[ -z "$keyring_choice" ]] || [[ "$keyring_choice" =~ ^[Yy]$ ]]; then
+        echo "Running traderbot auth set-kalshi..."
+        "$tb_cmd" auth set-kalshi 2>&1 || echo "Warning: traderbot auth set-kalshi failed." >&2
+    else
+        echo "Skipped. Run later with: traderbot auth set-kalshi"
+    fi
+}
+
+setup_master_password() {
+    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ ! -x "$tb_cmd" ]]; then
+        echo "TraderBot binary not found. Skipping master password setup." >&2
+        return 1
+    fi
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "Non-interactive mode — skipping master password setup."
+        echo "Set later with: traderbot auth setup-master-password"
+        return 0
+    fi
+    echo
+    echo "=== Master Password ==="
+    echo "A master password is required to gate trade/simulate commands."
+    echo "This uses PBKDF2 key derivation to secure your master key."
+    echo
+    if "$tb_cmd" auth check-master-password --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('configured') else 1)" 2>/dev/null; then
+        echo "Master password already configured."
+        return 0
+    fi
+    echo "Running traderbot auth setup-master-password (interactive)..."
+    if "$tb_cmd" auth setup-master-password 2>&1; then
+        echo "Master password created. Session authenticated for 30 minutes."
+    else
+        echo "Warning: Master password setup failed."
+        echo "Run manually: traderbot auth setup-master-password"
+    fi
+}
+
+prompt_enable_sandbox() {
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        ENABLE_SANDBOX="${TRADERBOT_ENABLE_SANDBOX:-}"
+        return
+    fi
+    echo
+    echo "=== Agent Sandbox ==="
+    echo "Restrict agent filesystem access to only the project directory."
+    read -r -p "Enable agent filesystem sandbox? [Y/n]: " sandbox_choice
+    if [[ -z "$sandbox_choice" ]] || [[ "$sandbox_choice" =~ ^[Yy]$ ]]; then
+        ENABLE_SANDBOX="1"
+        echo "Sandbox enabled (ENABLE_SANDBOX=1)."
+    else
+        ENABLE_SANDBOX=""
+        echo "Sandbox disabled."
+    fi
+}
+
+prompt_tls_pinning() {
+    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ ! -x "$tb_cmd" ]]; then
+        echo "TraderBot binary not found. Skipping TLS pinning." >&2
+        return 1
+    fi
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "Non-interactive mode — skipping TLS pinning."
+        return 0
+    fi
+    echo
+    echo "=== TLS Pinning ==="
+    echo "Pin the current Kalshi API TLS certificate for added security."
+    read -r -p "Update Kalshi TLS pin? [y/N]: " tls_choice
+    if [[ "$tls_choice" =~ ^[Yy]$ ]]; then
+        echo "Checking Kalshi TLS pin..."
+        "$tb_cmd" auth check --service kalshi 2>&1 || echo "Warning: TLS pin update failed."
+    else
+        echo "Skipped. Run later with: traderbot auth check --service kalshi"
+    fi
+}
+
 interactive_config_flow() {
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
         echo "=== TraderBot Configuration (non-interactive) ==="
@@ -781,7 +888,16 @@ interactive_config_flow() {
             exit 1
         fi
     fi
+    echo
     echo "=== TraderBot Configuration ==="
+    echo
+
+    setup_api_credentials
+    prompt_os_keyring
+    setup_master_password
+    prompt_enable_sandbox
+    prompt_tls_pinning
+
     echo
     local REPLY=""
     read -r -p "Create a trading profile? (y/n): " -n 1 REPLY
@@ -950,8 +1066,6 @@ interactive_config_flow() {
         fi
     fi
 
-    setup_api_credentials
-
     echo
     echo "=== Agent Assignment ==="
     echo "TraderBot profiles bind to OpenClaw agents."
@@ -1018,7 +1132,7 @@ interactive_config_flow() {
 
     if [[ -n "$token_value" ]]; then
         echo "Installing service for agent $agent_name..."
-        install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE"
+        install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
     fi
 
     echo
