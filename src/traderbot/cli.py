@@ -11,13 +11,17 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.profiles.models import TradingProfile
+from traderbot.experiment.cli import experiment_app
+
+if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
+
 from traderbot.profiles.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
@@ -502,8 +506,8 @@ def trade(
             "wal_intent_id": wal_entry.intent_id,
         }
 
-    from traderbot.risk.audit import AuditLogger
     from traderbot.kalshi.models import Decision
+    from traderbot.risk.audit import AuditLogger
 
     decision = Decision(
         timestamp=datetime.now(UTC),
@@ -988,7 +992,11 @@ def news(
     from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import DataSourcesConfig, NewsAggregator
-    from traderbot.profiles.config import resolve_fred_key, resolve_newsapi_key, resolve_openweather_key
+    from traderbot.profiles.config import (
+        resolve_fred_key,
+        resolve_newsapi_key,
+        resolve_openweather_key,
+    )
     from traderbot.profiles.runtime import get_current_profile
 
     console = Console()
@@ -1192,7 +1200,7 @@ def sentiment(
     from traderbot.news.cache_paths import get_news_cache_path
     from traderbot.news.classifier import NewsClassifier
     from traderbot.news.impact_assessor import ImpactAssessor
-    from traderbot.news.models import NewsCategory, NewsItem, NewsSource
+    from traderbot.news.models import NewsCategory, NewsItem
     from traderbot.news.sentiment_scorer import SentimentScorer
     from traderbot.news.sources import NewsAggregator
     from traderbot.profiles.config import resolve_newsapi_key
@@ -1360,8 +1368,12 @@ def news_ingest(
     automatically deduplicate by URL hash.
     """
     from traderbot.news.ingest import ingest_news
+    from traderbot.profiles.config import (
+        resolve_fred_key,
+        resolve_newsapi_key,
+        resolve_openweather_key,
+    )
     from traderbot.profiles.runtime import get_current_profile
-    from traderbot.profiles.config import resolve_newsapi_key, resolve_openweather_key, resolve_fred_key
 
     console = Console()
 
@@ -1739,8 +1751,7 @@ def paper(
     from traderbot.kalshi.client import KalshiClient
     from traderbot.kalshi.markets import MarketService
     from traderbot.kalshi.provider import ProdDataProvider
-    from traderbot.simulation.engine import Signal
-    from traderbot.simulation.paper_trader import PaperTrader, DEFAULT_INITIAL_BALANCE_CENTS
+    from traderbot.simulation.paper_trader import DEFAULT_INITIAL_BALANCE_CENTS, PaperTrader
     from traderbot.simulation.settlement import SettlementVerifier
     from traderbot.simulation.strategies import get_strategy
 
@@ -1845,7 +1856,6 @@ def paper(
                         orderbook = asyncio.run(market_service.get_orderbook(market.ticker))
 
                         prices = [int(p) for p in market.outcome_prices]
-                        from traderbot.kalshi.models import Trade as _Trade
 
                         signals = strat.on_market_open(market, trader.get_portfolio())
                         for sig in signals:
@@ -1896,7 +1906,7 @@ def paper(
         json_lib.dump(result, sys.stdout, default=str)
         return
 
-    console.print(f"\n[bold]Paper Trading Summary[/bold]")
+    console.print("\n[bold]Paper Trading Summary[/bold]")
     console.print(f"  Strategy:    {strategy}")
     console.print(f"  Cash:       ${portfolio.cash_cents / 100:.2f}")
     console.print(f"  P&L:        ${pnl / 100:+.2f}")
@@ -2472,9 +2482,9 @@ def sandbox_enter() -> None:
         sandbox.enter()
         Console().print(f"[green]Sandbox active[/green] (workspace: {sandbox.workspace_dir})")
         if sandbox.is_available():
-            Console().print(f"[dim]macOS sandbox-exec enforcement enabled[/dim]")
+            Console().print("[dim]macOS sandbox-exec enforcement enabled[/dim]")
         else:
-            Console().print(f"[dim]Fallback: POSIX chmod enforcement[/dim]")
+            Console().print("[dim]Fallback: POSIX chmod enforcement[/dim]")
     except Exception as e:
         err_console.print(f"[red]Failed to enter sandbox:[/red] {e}")
         raise typer.Exit(code=1)
@@ -2625,6 +2635,9 @@ profile_app = typer.Typer(
 )
 app.add_typer(profile_app, name="profile")
 
+# Experiment CLI sub-app
+app.add_typer(experiment_app, name="experiment")
+
 
 @profile_app.command("create")
 def profile_create(
@@ -2730,7 +2743,7 @@ def profile_create(
     console.print(f"[green]✓[/green] Created profile '{name}' in {profile_mode} mode")
 
 
-def _interactive_profile_create(console: Console, registry: "ProfileRegistry") -> None:
+def _interactive_profile_create(console: Console, registry: ProfileRegistry) -> None:
     """Walk user through profile creation with numbered selections."""
     from traderbot.kalshi.models import MarketCategory
     from traderbot.profiles.models import TradingProfile
@@ -2790,22 +2803,22 @@ def _interactive_profile_create(console: Console, registry: "ProfileRegistry") -
     rm = typer.prompt("  Risk multiplier", default="1.0")
     risk_mult = float(rm)
 
-    mpp = typer.prompt(f"  Max position per market %", default=f"{HARD_LIMITS['max_position_per_market_pct']:.0%}")
+    mpp = typer.prompt("  Max position per market %", default=f"{HARD_LIMITS['max_position_per_market_pct']:.0%}")
     max_pos_pct = _parse_pct(mpp)
 
-    mdl = typer.prompt(f"  Max daily loss %", default=f"{HARD_LIMITS['max_daily_loss_pct']:.0%}")
+    mdl = typer.prompt("  Max daily loss %", default=f"{HARD_LIMITS['max_daily_loss_pct']:.0%}")
     max_daily = _parse_pct(mdl)
 
-    mdd = typer.prompt(f"  Max drawdown %", default=f"{HARD_LIMITS['max_drawdown_pct']:.0%}")
+    mdd = typer.prompt("  Max drawdown %", default=f"{HARD_LIMITS['max_drawdown_pct']:.0%}")
     max_drawdown = _parse_pct(mdd)
 
-    mop = typer.prompt(f"  Max open positions", default=str(int(HARD_LIMITS["max_open_positions"])))
+    mop = typer.prompt("  Max open positions", default=str(int(HARD_LIMITS["max_open_positions"])))
     max_open = int(mop)
 
-    ml = typer.prompt(f"  Min liquidity threshold (cents)", default=str(int(HARD_LIMITS["min_liquidity_threshold"])))
+    ml = typer.prompt("  Min liquidity threshold (cents)", default=str(int(HARD_LIMITS["min_liquidity_threshold"])))
     min_liq = int(ml)
 
-    me = typer.prompt(f"  Min edge %", default=f"{HARD_LIMITS['min_edge_pct']:.0%}")
+    me = typer.prompt("  Min edge %", default=f"{HARD_LIMITS['min_edge_pct']:.0%}")
     min_edge = _parse_pct(me)
 
     # Paper trading balance
@@ -2972,8 +2985,8 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
     combination OpenClaw supports: explicit workspace, inherited default workspace,
     agentDir-only configs, and default-flagged agents.
     """
-    from pathlib import Path
     import json as _json
+    from pathlib import Path
 
     # 1. Read openclaw.json — authoritative agent definitions
     config_path = Path.home() / ".openclaw" / "openclaw.json"
@@ -3037,10 +3050,8 @@ def profile_assign(
     Called without arguments, enters interactive mode: select a profile, then an agent, then choose merge or overwrite.
     Called with profile_name and agent_id, applies directly (non-interactive with --yes).
     """
-    from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.injection_strategies import set_skip_prompts
     from traderbot.profiles.registry import ProfileRegistry
-    from traderbot.profiles.tokens import assign_token, generate_token
 
     if yes:
         set_skip_prompts(True)
@@ -3067,7 +3078,6 @@ def _do_assign(
     script_output: bool = False,
 ) -> None:
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
-    from traderbot.profiles.injection_strategies import set_skip_prompts
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
 
@@ -3154,7 +3164,7 @@ def _do_assign(
         raise typer.Exit(1) from None
 
 
-def _interactive_assign(console: Console, registry: "ProfileRegistry", overwrite: bool = False) -> None:
+def _interactive_assign(console: Console, registry: ProfileRegistry, overwrite: bool = False) -> None:
     from traderbot.profiles.discovery import discover_agents
 
     profiles = registry.list_profiles()
@@ -3216,7 +3226,7 @@ def _interactive_assign(console: Console, registry: "ProfileRegistry", overwrite
     # Paper trading balance prompt
     profile = registry.get_profile(profile_name)
     if profile and profile.mode == "paper" and profile.initial_balance_cents is None:
-        console.print(f"\n[bold]Paper trading initial balance[/bold]")
+        console.print("\n[bold]Paper trading initial balance[/bold]")
         console.print("[dim]  This profile has no initial balance set. Without it, paper trading cannot start.[/dim]")
         console.print("[dim]  $100 = 10000 cents, $1000 = 100000 cents[/dim]")
         ib = typer.prompt("  Initial balance (cents)", default="10000")
@@ -3388,7 +3398,7 @@ def _interactive_profile_select(profiles: list[str], console: Console) -> str | 
     return profiles[choice - 1]
 
 
-def _interactive_profile_action(name: str, console: Console, registry: "ProfileRegistry") -> None:
+def _interactive_profile_action(name: str, console: Console, registry: ProfileRegistry) -> None:
     profile = registry.get_profile(name)
     if profile is None:
         console.print(f"[red]Error:[/red] Profile '{name}' not found")
@@ -3424,7 +3434,7 @@ def _interactive_profile_action(name: str, console: Console, registry: "ProfileR
         _interactive_assign_agent(name, console, registry)
 
 
-def _interactive_edit_profile(name: str, profile: "TradingProfile", console: Console, registry: "ProfileRegistry") -> None:
+def _interactive_edit_profile(name: str, profile: TradingProfile, console: Console, registry: ProfileRegistry) -> None:
     from traderbot.kalshi.models import MarketCategory
 
     update_kwargs: dict = {}
@@ -3438,7 +3448,7 @@ def _interactive_edit_profile(name: str, profile: "TradingProfile", console: Con
             return
         update_kwargs["mode"] = new_mode
 
-    new_desc = typer.prompt(f"  Description", default=profile.description)
+    new_desc = typer.prompt("  Description", default=profile.description)
     if new_desc != profile.description:
         update_kwargs["description"] = new_desc
 
@@ -3520,7 +3530,7 @@ def _interactive_edit_profile(name: str, profile: "TradingProfile", console: Con
         console.print(f"[red]Error:[/red] {e}")
 
 
-def _interactive_delete_profile(name: str, console: Console, registry: "ProfileRegistry") -> None:
+def _interactive_delete_profile(name: str, console: Console, registry: ProfileRegistry) -> None:
     confirm = typer.prompt(f"Delete profile '{name}'? Type 'yes' to confirm")
     if confirm.lower() != "yes":
         console.print("[yellow]Cancelled[/yellow]")
@@ -3533,7 +3543,7 @@ def _interactive_delete_profile(name: str, console: Console, registry: "ProfileR
         console.print(f"[red]Error:[/red] {e}")
 
 
-def _interactive_assign_agent(name: str, console: Console, registry: "ProfileRegistry") -> None:
+def _interactive_assign_agent(name: str, console: Console, registry: ProfileRegistry) -> None:
     from traderbot.profiles.discovery import discover_agents
     from traderbot.profiles.injection import inject_token, propagate_workspace_files
     from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
@@ -3610,7 +3620,7 @@ def _apply_profile_update(
     min_edge_pct: float | None,
     initial_balance_cents: int | None = None,
     console: Console = None,
-    registry: "ProfileRegistry" = None,
+    registry: ProfileRegistry = None,
 ) -> None:
     from traderbot.kalshi.models import MarketCategory
 
@@ -4476,7 +4486,7 @@ def cache_command(
         raise typer.Exit(1)
 
     async def _warm() -> dict[str, int]:
-        from traderbot.kalshi.markets import _event_category_cache, _event_cache_ts
+        from traderbot.kalshi.markets import _event_cache_ts, _event_category_cache
 
         client = KalshiClient()
         svc = MarketService(client)
