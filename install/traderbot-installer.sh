@@ -597,12 +597,15 @@ setup_api_credentials() {
     echo "Kalshi API secret (paste the full PEM key including BEGIN/END markers):"
     # Capture PEM key with stty -echo so terminal doesn't leak lines.
     # Discard any content before -----BEGIN and after -----END.
+    echo "Paste below (ends at -----END... or blank line to skip):"
     local pem_started=false
     kalshi_secret=""
     local old_tty_settings
     old_tty_settings=$(stty -g 2>/dev/null) || true
+    # Ensure terminal is restored even if user interrupts
+    trap "stty '$old_tty_settings' 2>/dev/null || true" EXIT INT TERM
     stty -echo 2>/dev/null || true
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == *"-----BEGIN"* ]]; then
             pem_started=true
         fi
@@ -616,7 +619,13 @@ setup_api_credentials() {
             break
         fi
     done
+    # Clear the trap — we’ll restore settings ourselves below
+    trap "stty '$old_tty_settings' 2>/dev/null || true" EXIT INT TERM 2>/dev/null || true
+    trap "" EXIT INT TERM 2>/dev/null || true
     stty "$old_tty_settings" 2>/dev/null || true
+    # Drain any trailing lines from the paste to prevent stdin pollution
+    local _drain
+    while IFS= read -r -t 0.3 _drain; do : ; done 2>/dev/null || true
     echo
     kalshi_secret="${kalshi_secret%$'\n'}"
     if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
