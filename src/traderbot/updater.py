@@ -266,8 +266,13 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         if git_status.stdout.strip():
             untracked = [line.strip() for line in git_status.stdout.strip().splitlines() if not line.startswith("??")]
             if untracked:
-                logger.error("Cannot update: uncommitted changes in working tree. Commit or stash first.")
-                return False
+                logger.info("Uncommitted changes detected, auto-stashing before update")
+                subprocess.run(
+                    ["git", "stash", "--include-untracked"],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    timeout=30,
+                )
 
         subprocess.run(["git", "pull", "origin", branch], cwd=repo_dir, check=True, capture_output=True)
         pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
