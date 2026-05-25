@@ -436,8 +436,9 @@ def trade(
     try:
         client = KalshiClient()
         service = MarketService(client)
-        market = asyncio.run(service.get_market(ticker))
-        orderbook = asyncio.run(service.get_orderbook(ticker))
+        market, orderbook = asyncio.run(
+            asyncio.gather(service.get_market(ticker), service.get_orderbook(ticker))
+        )
         prob = implied_probability(orderbook)
         market_price_cents = prob.mid_price_cents
         market_implied = prob.yes_prob if direction.lower() == "yes" else prob.no_prob
