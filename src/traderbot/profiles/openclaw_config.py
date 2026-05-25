@@ -7,6 +7,8 @@ during the ``traderbot profile assign`` flow. All functions are idempotent.
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -112,16 +114,32 @@ export default {
 def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
     """Run an ``openclaw`` CLI command. Returns ``True`` on success.
 
-    Searches common install locations — the ``openclaw`` binary is often
-    installed via npm global but not always on the default SSH ``PATH``.
+    Searches common install locations and ensures the npm global bin
+    directory is on PATH (required when spawned from a Python
+    subprocess that has not sourced the user's shell init files).
     """
+    env = os.environ.copy()
+    env["PATH"] = ":".join([
+        str(Path.home() / ".npm-global" / "bin"),
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/bin",
+        "/bin",
+        env.get("PATH", ""),
+    ])
+
     for cli_path in _OPENCLAW_CLI_CANDIDATES:
+        resolved = shutil.which(str(cli_path))
+        if not cli_path.exists() and not resolved:
+            continue
+        cmd = resolved if resolved else str(cli_path)
         try:
             result = subprocess.run(
-                [str(cli_path), *args],
+                [cmd, *args],
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
             if result.returncode == 0:
                 return True

@@ -388,6 +388,7 @@ install_traderbot() {
                 local REPLY=""
                 read -r -p "Update to latest? (y/n): " -n 1 REPLY
                 echo
+                read -r
                 if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
                     echo "Skipping installation."
                     return 0
@@ -1245,6 +1246,7 @@ prompt_sysadmin_setup() {
     local sysadmin_reply=""
     read -r -p "Set up a sysadmin agent? (y/n): " -n 1 sysadmin_reply
     echo
+    read -r
     if [[ ! ${sysadmin_reply:-} =~ ^[Yy]$ ]]; then
         echo "Skipping sysadmin setup."
         return 0
@@ -1343,6 +1345,9 @@ interactive_config_flow() {
         echo "Skipping profile creation."
         return 0
     fi
+
+    # Drain the trailing newline left by read -n 1
+    read -r
 
     profile_name=""
     while [[ -z "$profile_name" ]]; do
