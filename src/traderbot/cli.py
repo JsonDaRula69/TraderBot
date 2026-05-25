@@ -2372,10 +2372,16 @@ def auth_change_master_password() -> None:
 def auth_check_master_password(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Check whether master password is configured and session is active."""
-    from traderbot.master_password import is_setup, session_active
+    """Check whether master password is configured and session is active.
+
+    If configured but not active, attempts auto-authentication so that
+    paper-mode trading agents can trade without manual password entry.
+    """
+    from traderbot.master_password import _try_auto_authenticate, is_setup, session_active
 
     configured = is_setup()
+    if configured and not session_active():
+        _try_auto_authenticate()
     active = session_active() if configured else False
 
     if json_output:
