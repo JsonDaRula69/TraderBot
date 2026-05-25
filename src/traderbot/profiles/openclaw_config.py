@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _OPENCLAW_DIR = Path.home() / ".openclaw"
-_OPENCLAW_CONFIG_PATH = _OPENCLAW_DIR / "openclaw.json"
 _HOOKS_DIR = _OPENCLAW_DIR / "hooks"
 
 # Common locations for the openclaw CLI
@@ -150,7 +149,7 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-    return None
+    return False
 
 def get_openclaw_version() -> str | None:
     """Return installed OpenClaw version string, or ``None``."""
