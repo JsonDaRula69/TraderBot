@@ -1561,6 +1561,18 @@ interactive_config_flow() {
         echo "Assignment skipped. TraderBot not found."
     fi
 
+    local token_value=""
+    if [[ -x "$tb_cmd" ]]; then
+        set +e
+        token_value=$("$tb_cmd" profile get-token "$profile_name" 2>/dev/null)
+        set -e
+    fi
+
+    if [[ -n "$token_value" ]]; then
+        echo "Installing service for agent $agent_name..."
+        install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
+    fi
+
     if [[ -x "$tb_cmd" ]]; then
         echo
         echo "=== Verification ==="

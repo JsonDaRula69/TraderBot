@@ -3304,6 +3304,19 @@ def profile_revoke(
             console.print(f"[yellow]Warning:[/yellow] Failed to remove token from TOOLS.md: {e}")
 
 
+@profile_app.command("get-token")
+def profile_get_token(
+    profile_name: Annotated[str, typer.Argument(help="Profile name")],
+) -> None:
+    """Output the raw token for a profile (for service installation)."""
+    from traderbot.profiles.tokens import get_profile_token
+
+    token = get_profile_token(profile_name)
+    if token is None:
+        raise typer.Exit(1)
+    print(token)
+
+
 @profile_app.command("assignments")
 def profile_assignments(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
