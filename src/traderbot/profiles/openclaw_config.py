@@ -6,14 +6,13 @@ during the ``traderbot profile assign`` flow. All functions are idempotent.
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -110,27 +109,6 @@ export default {
 """
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _read_openclaw_config() -> dict[str, Any]:
-    """Read ``openclaw.json``, returning empty dict if missing or corrupt."""
-    if not _OPENCLAW_CONFIG_PATH.exists():
-        return {}
-    try:
-        return json.loads(_OPENCLAW_CONFIG_PATH.read_text())
-    except (json.JSONDecodeError, OSError):
-        logger.warning("Failed to parse %s, starting fresh", _OPENCLAW_CONFIG_PATH)
-        return {}
-
-
-def _write_openclaw_config(config: dict[str, Any]) -> None:
-    """Write ``openclaw.json`` atomically."""
-    _OPENCLAW_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _OPENCLAW_CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
-
-
 def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
     """Run an ``openclaw`` CLI command. Returns ``True`` on success.
 
@@ -206,31 +184,3 @@ def ensure_agent_bootstrap_hook() -> bool:
     return True
 
 
-def configure_agent_sandbox(agent_id: str) -> bool:
-    """Add or update an agent entry in ``openclaw.json`` with sandbox and
-    workspace access settings.
-
-    Enables sandboxing and ``workspaceAccess: \"rw\"`` for the given agent ID.
-    The sandbox prevents the agent from reading/writing files outside its
-    workspace via absolute paths.  Idempotent.
-    """
-    config = _read_openclaw_config()
-    agents = config.setdefault("agents", {})
-    agent_list = agents.setdefault("list", [])
-
-    for entry in agent_list:
-        if entry.get("id") == agent_id:
-            # Add sandbox config if not already set
-            entry["sandbox"] = entry.get("sandbox", True)
-            entry.setdefault("workspaceAccess", "rw")
-            break
-    else:
-        agent_list.append({
-            "id": agent_id,
-            "sandbox": True,
-            "workspaceAccess": "rw",
-        })
-
-    _write_openclaw_config(config)
-    logger.info("Sandbox configured for agent '%s'", agent_id)
-    return True
