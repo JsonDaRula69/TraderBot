@@ -133,6 +133,30 @@ def authenticate(password: str) -> bool:
     return True
 
 
+def _read_env_file_env(key: str) -> str | None:
+    """Read a value from ~/.traderbot/.env if the file exists.
+
+    Fallback for when env vars are not passed through the process hierarchy
+    (e.g. OpenClaw agent subprocesses). This does NOT load into os.environ.
+    """
+    try:
+        from traderbot.paths import get_data_dir
+
+        env_path = get_data_dir() / ".env"
+        if not env_path.exists():
+            return None
+        for line in env_path.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            k, sep, v = stripped.partition("=")
+            if sep and k.strip() == key:
+                return v.strip().strip("\"'")
+    except Exception:
+        logger.debug("Failed to read .env for key %s", key, exc_info=True)
+    return None
+
+
 def _try_auto_authenticate() -> bool:
     stored = _read_master_key()
     if stored is None:
@@ -141,7 +165,9 @@ def _try_auto_authenticate() -> bool:
     key = stored[1]
     env_var = "TRADERBOT_AUTO_AUTH_PAPER"
 
-    if os.environ.get(env_var):
+    # Check process environment first, then fall back to .env file
+    auto_auth = os.environ.get(env_var) or _read_env_file_env(env_var)
+    if auto_auth and auto_auth.lower() in ("1", "true", "yes"):
         os.environ[SESSION_TOKEN_ENV] = _make_session_token(key, int(time.time()))
         logger.info("Auto-authenticated: %s set", env_var)
         return True

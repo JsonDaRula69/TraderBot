@@ -139,10 +139,40 @@ def check_for_updates(force: bool = False, check_interval_minutes: int = 30, dev
                 if compare_versions(current, cache["latest"]):
                     logger.info("Update available: v%s -> v%s", current, cache["latest"])
                     return {"current": current, "latest": cache["latest"], "url": cache.get("url", "")}
-                return None
+                if compare_versions(cache["latest"], current):
+                    return None
+                # cached latest < current — cache is stale (likely manually updated),
+                # fall through to fetch and refresh.
 
     result = fetch_latest_version(dev=dev)
     if result is None:
+        # Failed to fetch the latest version info (e.g. no network).
+        # Check if origin/main has newer commits than local HEAD.
+        try:
+            import subprocess
+
+            repo_dir = Path(__file__).resolve().parent.parent.parent
+            if (repo_dir / ".git").exists():
+                local_sha = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=repo_dir, capture_output=True, text=True, timeout=5,
+                ).stdout.strip()
+                remote_sha = subprocess.run(
+                    ["git", "ls-remote", "origin", "refs/heads/main"],
+                    cwd=repo_dir, capture_output=True, text=True, timeout=15,
+                ).stdout.strip().split()[0] if not dev else None
+                dev_sha = subprocess.run(
+                    ["git", "ls-remote", "origin", "refs/heads/dev"],
+                    cwd=repo_dir, capture_output=True, text=True, timeout=15,
+                ).stdout.strip().split()[0] if dev else None
+                upstream_sha = dev_sha if dev else remote_sha
+                if upstream_sha and local_sha != upstream_sha:
+                    branch = "dev" if dev else "main"
+                    remote_url = f"https://github.com/{GITHUB_REPO}/tree/{branch}"
+                    logger.info("Update available: local %s != origin/%s HEAD", local_sha[:8], branch)
+                    return {"current": current, "latest": current, "url": remote_url}
+        except Exception as exc:
+            logger.debug("Git-based update check failed: %s", exc)
         return None
 
     latest, url = result
