@@ -599,8 +599,14 @@ setup_api_credentials() {
     kalshi_secret=""
     local old_tty_settings
     old_tty_settings=$(stty -g 2>/dev/null) || true
-    # Ensure terminal is restored even if user interrupts
-    trap "stty '$old_tty_settings' 2>/dev/null || true" EXIT INT TERM
+    # Save current traps so we can restore them after PEM input
+    local _prev_exit_trap _prev_int_trap _prev_term_trap
+    _prev_exit_trap=$(trap -p EXIT)
+    _prev_int_trap=$(trap -p INT)
+    _prev_term_trap=$(trap -p TERM)
+    # Temporary trap: restore stty on abort, then re-raise the signal
+    trap "stty '\$old_tty_settings' 2>/dev/null || true; exit 130" INT
+    trap "stty '\$old_tty_settings' 2>/dev/null || true; exit 143" TERM
     stty -echo 2>/dev/null || true
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == *"-----BEGIN"* ]]; then
@@ -616,13 +622,14 @@ setup_api_credentials() {
             break
         fi
     done
-    # Clear the trap — we’ll restore settings ourselves below
-    trap "stty '$old_tty_settings' 2>/dev/null || true" EXIT INT TERM 2>/dev/null || true
-    trap "" EXIT INT TERM 2>/dev/null || true
     stty "$old_tty_settings" 2>/dev/null || true
     # Drain any trailing lines from the paste to prevent stdin pollution
     local _drain
     while IFS= read -r -t 0.3 _drain; do : ; done 2>/dev/null || true
+    # Restore original traps
+    eval "$_prev_exit_trap" 2>/dev/null || true
+    eval "$_prev_int_trap" 2>/dev/null || true
+    eval "$_prev_term_trap" 2>/dev/null || true
     echo
     kalshi_secret="${kalshi_secret%$'\n'}"
     if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
