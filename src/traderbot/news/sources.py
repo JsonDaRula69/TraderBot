@@ -1311,8 +1311,9 @@ class NewsAggregator:
     ) -> list[DataPoint]:
         """Fetch crypto market data from CoinGecko /coins/markets.
 
-        Uses x-cg-demo-api-key header when COINGECKO_API_KEY is set for
-        higher rate limits. Falls back to unauthenticated (free tier) otherwise.
+        Uses pro-api.coingecko.com with x-cg-pro-api-key header for Pro tier,
+        or api.coingecko.com with x-cg-demo-api-key header for Demo tier (default).
+        Falls back to unauthenticated (free tier) if no key is set.
         Returns DataPoint objects with prices/market caps in integer cents.
         If MENTIONS is in category_filter, also fetches /search/trending.
         """
@@ -1321,9 +1322,13 @@ class NewsAggregator:
 
         from traderbot.auth import get_credential
         coingecko_key = get_credential("coingecko", "api_key")
+        coingecko_tier = get_credential("coingecko", "tier")
+        cg_tier = coingecko_tier.get_secret_value() if coingecko_tier is not None else "demo"
+        cg_base = "https://pro-api.coingecko.com/api/v3" if cg_tier == "pro" else "https://api.coingecko.com/api/v3"
+        cg_header = "x-cg-pro-api-key" if cg_tier == "pro" else "x-cg-demo-api-key"
         headers: dict[str, str] = {}
         if coingecko_key is not None:
-            headers["x-cg-demo-api-key"] = coingecko_key.get_secret_value()
+            headers[cg_header] = coingecko_key.get_secret_value()
 
         results: list[DataPoint] = []
 
@@ -1340,7 +1345,7 @@ class NewsAggregator:
             for attempt in range(max_retries + 1):
                 try:
                     response = await self._client.get(
-                        "https://api.coingecko.com/api/v3/coins/markets",
+                        f"{cg_base}/coins/markets",
                         params=params,
                         headers=headers,
                     )
@@ -1438,7 +1443,7 @@ class NewsAggregator:
                 for attempt in range(max_retries + 1):
                     try:
                         trending_resp = await self._client.get(
-                            "https://api.coingecko.com/api/v3/search/trending",
+                            f"{cg_base}/search/trending",
                             headers=headers,
                         )
                         if trending_resp.status_code == 429:
@@ -1694,12 +1699,17 @@ class NewsAggregator:
         headers: dict[str, str] = {}
         from traderbot.auth import get_credential
         cg_key = get_credential("coingecko", "api_key")
+        cg_tier = get_credential("coingecko", "tier")
+        cg_tier_val = cg_tier.get_secret_value() if cg_tier is not None else "demo"
+        cg_base = "https://pro-api.coingecko.com/api/v3" if cg_tier_val == "pro" else "https://api.coingecko.com/api/v3"
+        cg_header = "x-cg-pro-api-key" if cg_tier_val == "pro" else "x-cg-demo-api-key"
+        headers: dict[str, str] = {}
         if cg_key is not None:
-            headers["x-cg-demo-api-key"] = cg_key.get_secret_value()
+            headers[cg_header] = cg_key.get_secret_value()
 
         try:
             response = await self._client.get(
-                "https://api.coingecko.com/api/v3/coins/markets",
+                f"{cg_base}/coins/markets",
                 params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 30, "page": 1, "sparkline": "false"},
                 headers=headers,
             )
@@ -1720,7 +1730,7 @@ class NewsAggregator:
             async with sem:
                 try:
                     response = await self._client.get(
-                        f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range",
+                        f"{cg_base}/coins/{coin_id}/market_chart/range",
                         params={"vs_currency": "usd", "from": str(from_timestamp), "to": str(end_ts)},
                         headers=headers,
                     )

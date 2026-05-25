@@ -1011,16 +1011,32 @@ except Exception:
     echo "Free tier works without a key (30 req/min). API key increases rate limits."
     echo "Register at https://www.coingecko.com/en/api"
     local cg_key=""
+    local cg_tier="demo"
     while true; do
         read -r -p "CoinGecko API key (press Enter to skip): " cg_key
         if [[ -z "$cg_key" ]]; then
             break
         fi
+        echo
+        echo "  Account type:"
+        echo "    1) Demo     (free/public API — api.coingecko.com)"
+        echo "    2) Pro      (paid plans — pro-api.coingecko.com)"
+        read -r -p "  Select [1]: " cg_tier_choice
+        case "$cg_tier_choice" in
+            2) cg_tier="pro" ;;
+            *) cg_tier="demo" ;;
+        esac
+        local cg_base_url="https://api.coingecko.com/api/v3"
+        local cg_header_name="x-cg-demo-api-key"
+        if [[ "$cg_tier" == "pro" ]]; then
+            cg_base_url="https://pro-api.coingecko.com/api/v3"
+            cg_header_name="x-cg-pro-api-key"
+        fi
         echo "  Validating CoinGecko API key..."
         local cg_status
         cg_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
-            -H "x-cg-demo-api-key: ${cg_key}" \
-            "https://api.coingecko.com/api/v3/ping" 2>/dev/null) || cg_status="000"
+            -H "${cg_header_name}: ${cg_key}" \
+            "${cg_base_url}/ping" 2>/dev/null) || cg_status="000"
         if [[ "$cg_status" == "200" ]]; then
             echo "  CoinGecko API key is valid."
             break
@@ -1038,7 +1054,8 @@ except Exception:
     done
     if [[ -n "$cg_key" ]]; then
         _env_set "$env_file" "COINGECKO_API_KEY" "$cg_key"
-        echo "CoinGecko key stored."
+        _env_set "$env_file" "COINGECKO_TIER" "$cg_tier"
+        echo "CoinGecko key stored (tier: ${cg_tier})."
     else
         echo "Skipped. Set later with: traderbot auth set-key coingecko api_key"
     fi

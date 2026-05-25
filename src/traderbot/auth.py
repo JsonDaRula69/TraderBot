@@ -20,7 +20,7 @@ _OPTIONAL_SERVICES: dict[str, list[str]] = {
     "newsapi": ["api_key"],
     "twitter": ["api_key"],
     "reddit": ["client_id", "client_secret"],
-    "coingecko": ["api_key"],
+    "coingecko": ["api_key", "tier"],
     "openweathermap": ["api_key"],
     "fred": ["api_key"],
 }
@@ -225,6 +225,8 @@ class AuthManager:
             return ["NEWSAPI_API_KEY", "NEWSAPI_KEY"]
         if service == "coingecko" and key == "api_key":
             return ["COINGECKO_API_KEY"]
+        if service == "coingecko" and key == "tier":
+            return ["COINGECKO_TIER"]
         service_prefix = service.upper()
         return [f"{service_prefix}_{key.upper()}"]
 
