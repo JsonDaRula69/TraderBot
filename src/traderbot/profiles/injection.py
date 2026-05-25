@@ -30,7 +30,9 @@ def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False
     If overwrite is False (default), templates are merged using fenced blocks.
     """
     _src_dir = Path(__file__).resolve().parent.parent.parent
-    template_dir = _src_dir.parent / ".openclaw" / "workspace"
+    workspace_root = _src_dir.parent / ".openclaw" / "workspace"
+    is_sysadmin = getattr(profile, "name", None) == "sysadmin"
+    template_dir = workspace_root if is_sysadmin else workspace_root / "agent"
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
