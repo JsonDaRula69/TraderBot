@@ -166,15 +166,4 @@ def get_openclaw_version() -> str | None:
             return result.stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    return None    return Nonedef get_openclaw_version() -> str | None:
-    """Return installed OpenClaw version string, or ``None``."""
-    try:
-        result = subprocess.run(
-            ["openclaw", "--version"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None    return None
+    return None

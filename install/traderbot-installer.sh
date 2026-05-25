@@ -1211,6 +1211,79 @@ prompt_tls_pinning() {
     fi
 }
 
+prompt_sysadmin_setup() {
+    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ ! -x "$tb_cmd" ]]; then
+        echo "TraderBot binary not found. Skipping sysadmin setup." >&2
+        return 1
+    fi
+    if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo "Non-interactive mode — skipping sysadmin setup."
+        return 0
+    fi
+    echo
+    echo "=== Sysadmin Setup ==="
+    echo "The sysadmin profile provides non-trading oversight, test lab management,"
+    echo "and serves as the human point of contact."
+    local sysadmin_reply=""
+    read -r -p "Set up a sysadmin agent? (y/n): " -n 1 sysadmin_reply
+    echo
+    if [[ ! ${sysadmin_reply:-} =~ ^[Yy]$ ]]; then
+        echo "Skipping sysadmin setup."
+        return 0
+    fi
+
+    local sysadmin_agent=""
+    echo "  1) main  (default OpenClaw agent)"
+    echo "  2) Custom agent name"
+    read -r -p "Select [1]: " agent_choice
+    case "$agent_choice" in
+        2)
+            read -r -p "Enter custom agent name: " sysadmin_agent
+            ;;
+        *)
+            sysadmin_agent="main"
+            ;;
+    esac
+
+    if [[ -z "$sysadmin_agent" ]]; then
+        echo "No agent selected. Skipping sysadmin setup."
+        return 0
+    fi
+
+    echo "Creating sysadmin profile and assigning to agent '$sysadmin_agent'..."
+    local tb_python="${INSTALL_DIR}/.venv/bin/python3"
+    if [[ -x "$tb_python" ]]; then
+        "$tb_python" -c "
+from traderbot.profiles.sysadmin import create_sysadmin_profile
+from traderbot.profiles.registry import ProfileRegistry
+registry = ProfileRegistry()
+if not registry.profile_exists('sysadmin'):
+    profile = create_sysadmin_profile()
+    registry.create_profile(profile)
+    print('Created sysadmin profile.')
+else:
+    print('Sysadmin profile already exists.')
+" 2>/dev/null || echo "Warning: sysadmin profile creation failed." >&2
+    fi
+
+    if [[ -x "$tb_cmd" ]]; then
+        set +e
+        local assign_output
+        assign_output=$("$tb_cmd" profile assign sysadmin "$sysadmin_agent" --yes 2>&1)
+        local assign_exit=$?
+        set -e
+        if [[ $assign_exit -eq 0 ]]; then
+            echo "Sysadmin profile assigned to agent '$sysadmin_agent'."
+            echo "$assign_output"
+        else
+            echo "Warning: sysadmin assignment failed (exit $assign_exit)." >&2
+            echo "$assign_output" >&2
+            echo "Run manually later: $tb_cmd profile assign sysadmin $sysadmin_agent"
+        fi
+    fi
+}
+
 interactive_config_flow() {
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
         echo "=== TraderBot Configuration (non-interactive) ==="
@@ -1243,6 +1316,7 @@ interactive_config_flow() {
     setup_master_password
     prompt_enable_sandbox
     prompt_tls_pinning
+    prompt_sysadmin_setup
 
     echo
     local REPLY=""
