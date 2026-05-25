@@ -784,22 +784,45 @@ setup_api_credentials() {
     echo
     echo "--- NewsAPI (optional) ---"
     local newsapi_key=""
-    read -r -p "NewsAPI key (press Enter to skip): " newsapi_key
-    if [[ -n "$newsapi_key" ]]; then
-        _validate_key "$newsapi_key" "NewsAPI key" 20 || newsapi_key=""
-        if [[ -n "$newsapi_key" ]]; then
-            _env_set "$env_file" "NEWSAPI_API_KEY" "$newsapi_key"
-            echo "NewsAPI key stored."
-            echo
-            echo "Select NewsAPI tier:"
-            echo "  1) Free      (100 requests/day)"
-            echo "  2) Business  (2,500 requests/day)"
-            newsapi_tier=$(_read_tier "Tier [1]: " 1 2 1)
-            case "$newsapi_tier" in
-                2) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "2500" ;;
-                *) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "100" ;;
-            esac
+    while true; do
+        read -r -p "NewsAPI key (press Enter to skip): " newsapi_key
+        if [[ -z "$newsapi_key" ]]; then
+            break
         fi
+        if ! _validate_key "$newsapi_key" "NewsAPI key" 20; then
+            newsapi_key=""
+            continue
+        fi
+        echo "  Validating NewsAPI key..."
+        local newsapi_status
+        newsapi_status=$(curl -fsS -o /dev/null -w "%{http_code}" "https://newsapi.org/v2/top-headlines/sources?apiKey=${newsapi_key}" 2>/dev/null) || newsapi_status="000"
+        if [[ "$newsapi_status" == "200" ]]; then
+            echo "  NewsAPI key is valid."
+            break
+        elif [[ "$newsapi_status" == "401" ]]; then
+            echo "  Invalid NewsAPI key (HTTP 401). Please re-enter."
+            newsapi_key=""
+            continue
+        elif [[ "$newsapi_status" == "429" ]]; then
+            echo "  NewsAPI key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${newsapi_status}). Proceeding anyway."
+            break
+        fi
+    done
+    if [[ -n "$newsapi_key" ]]; then
+        _env_set "$env_file" "NEWSAPI_API_KEY" "$newsapi_key"
+        echo "NewsAPI key stored."
+        echo
+        echo "Select NewsAPI tier:"
+        echo "  1) Free      (100 requests/day)"
+        echo "  2) Business  (2,500 requests/day)"
+        newsapi_tier=$(_read_tier "Tier [1]: " 1 2 1)
+        case "$newsapi_tier" in
+            2) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "2500" ;;
+            *) _env_set "$env_file" "NEWSAPI_DAILY_BUDGET" "100" ;;
+        esac
     fi
     if [[ -z "$newsapi_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key newsapi api_key"
