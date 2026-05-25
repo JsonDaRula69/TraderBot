@@ -72,6 +72,82 @@ _validate_prefix() {
     return 0
 }
 
+_detect_kalshi_tier() {
+    local env_file="$1"
+    local python_bin
+    python_bin=$(command -v python3 || command -v python || echo "")
+    if [[ -z "$python_bin" ]]; then
+        return 1
+    fi
+    echo "  Auto-detecting Kalshi API tier..."
+    local tier_info
+    tier_info=$("$python_bin" -c "
+import sys, json
+from pathlib import Path
+
+env_path = Path.home() / '.traderbot' / '.env'
+env_vars = {}
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        if '=' in line and not line.startswith('#'):
+            k, v = line.split('=', 1)
+            env_vars[k.strip()] = v.strip().strip('\"\"')
+
+api_key = env_vars.get('KALSHI_API_KEY', '')
+pem_path = env_vars.get('KALSHI_PRIVATE_KEY_PATH', '')
+
+if not api_key or not pem_path:
+    print('MISSING')
+    sys.exit(1)
+
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    import base64, time, urllib.request
+
+    private_key = serialization.load_pem_private_key(
+        Path(pem_path).read_bytes(), password=None
+    )
+    ts = str(int(time.time()))
+    msg = f'{api_key}{ts}GET/trade-api/v2/account/limits'
+    sig = private_key.sign(
+        msg.encode(),
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+    sig_b64 = base64.b64encode(sig).decode()
+
+    req = urllib.request.Request(
+        'https://api.elections.kalshi.com/trade-api/v2/account/limits',
+        headers={
+            'KALSHI-API-KEY': api_key,
+            'KALSHI-API-TIMESTAMP': ts,
+            'KALSHI-API-SIGNATURE': sig_b64,
+            'Accept': 'application/json'
+        }
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+        tier = data.get('usage_tier', 'basic').lower()
+        rate = data.get('read', {}).get('refill_rate', 20)
+        print(f'{tier}:{rate}')
+except Exception:
+    print('ERROR')
+    sys.exit(1)
+" 2>/dev/null) || tier_info=""
+
+    if [[ -z "$tier_info" ]] || [[ "$tier_info" == MISSING ]] || [[ "$tier_info" == ERROR ]]; then
+        echo "  Auto-detection failed. Falling back to manual selection."
+        return 1
+    fi
+
+    local detected_tier="${tier_info%%:*}"
+    local detected_rate="${tier_info##*:}"
+    echo "  Detected tier: ${detected_tier} (${detected_rate} req/sec)"
+    _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "$detected_rate"
+    return 0
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
