@@ -164,3 +164,99 @@ def get_openclaw_version() -> str | None:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return None
+
+
+def enable_session_memory_hook() -> bool:
+    """Enable the built-in ``session-memory`` hook.
+
+    Uses the ``openclaw`` CLI if available; falls back to writing the
+    hook entry directly into ``openclaw.json``.  Idempotent — safe to
+    call on every ``profile assign``.
+    """
+    # Fast path: try CLI
+    if _openclaw_cli("hooks", "enable", "session-memory"):
+        logger.info("Enabled session-memory hook via CLI")
+        return True
+
+    # Fallback: add to openclaw.json
+    config = _read_openclaw_config()
+    hooks = config.setdefault("hooks", {})
+    entries = hooks.setdefault("entries", {})
+    if "session-memory" not in entries:
+        entries["session-memory"] = {"enabled": True}
+        _write_openclaw_config(config)
+        logger.info("Enabled session-memory hook via config")
+    return True
+
+
+def ensure_agent_bootstrap_hook() -> bool:
+    """Create and enable the ``agent:bootstrap`` hook for pre-session validation.
+
+    Deploys ``HOOK.md`` and ``handler.ts`` to ``~/.openclaw/hooks/traderbot-bootstrap/``
+    and registers the hook in ``openclaw.json``.  Idempotent.
+    """
+    hook_dir = _HOOKS_DIR / BOOTSTRAP_HOOK_DIRNAME
+    hook_dir.mkdir(parents=True, exist_ok=True)
+
+    hook_md = hook_dir / "HOOK.md"
+    if not hook_md.exists():
+        hook_md.write_text(BOOTSTRAP_HOOK_MD_CONTENT)
+        logger.info("Created %s", hook_md)
+
+    handler = hook_dir / "handler.ts"
+    if not handler.exists():
+        handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
+        logger.info("Created %s", handler)
+
+    # Register in openclaw.json
+    config = _read_openclaw_config()
+    hooks = config.setdefault("hooks", {})
+
+    # Add as extra hook directory
+    extra_dirs = hooks.setdefault("extraHookDirs", [])
+    hook_dir_str = str(hook_dir)
+    if hook_dir_str not in extra_dirs:
+        extra_dirs.append(hook_dir_str)
+
+    # Also add as a named entry
+    entries = hooks.setdefault("entries", {})
+    if "traderbot-bootstrap" not in entries:
+        entries["traderbot-bootstrap"] = {"enabled": True}
+
+    _write_openclaw_config(config)
+
+    # Try CLI enable (best-effort)
+    _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
+
+    logger.info("Bootstrap hook deployed and registered")
+    return True
+
+
+def configure_agent_sandbox(agent_id: str) -> bool:
+    """Add or update an agent entry in ``openclaw.json`` with sandbox and
+    workspace access settings.
+
+    Enables sandboxing and ``workspaceAccess: \"rw\"`` for the given agent ID.
+    The sandbox prevents the agent from reading/writing files outside its
+    workspace via absolute paths.  Idempotent.
+    """
+    config = _read_openclaw_config()
+    agents = config.setdefault("agents", {})
+    agent_list = agents.setdefault("list", [])
+
+    for entry in agent_list:
+        if entry.get("id") == agent_id:
+            # Add sandbox config if not already set
+            entry["sandbox"] = entry.get("sandbox", True)
+            entry.setdefault("workspaceAccess", "rw")
+            break
+    else:
+        agent_list.append({
+            "id": agent_id,
+            "sandbox": True,
+            "workspaceAccess": "rw",
+        })
+
+    _write_openclaw_config(config)
+    logger.info("Sandbox configured for agent '%s'", agent_id)
+    return True
