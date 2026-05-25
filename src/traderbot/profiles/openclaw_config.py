@@ -167,35 +167,28 @@ def get_openclaw_version() -> str | None:
 
 
 def enable_session_memory_hook() -> bool:
-    """Enable the built-in ``session-memory`` hook.
+    """Enable the built-in ``session-memory`` hook via CLI only.
 
-    Uses the ``openclaw`` CLI if available; falls back to writing the
-    hook entry directly into ``openclaw.json``.  Idempotent — safe to
-    call on every ``profile assign``.
+    We no longer manipulate ``openclaw.json`` directly because the schema
+    changes between OpenClaw versions.  Rely on ``openclaw hooks enable``
+    to keep the config valid.  Best-effort — returns True regardless.
     """
-    # Fast path: try CLI
     if _openclaw_cli("hooks", "enable", "session-memory"):
         logger.info("Enabled session-memory hook via CLI")
-        return True
-
-    # Fallback: add to openclaw.json under hooks.internal.entries
-    config = _read_openclaw_config()
-    hooks = config.setdefault("hooks", {})
-    internal = hooks.setdefault("internal", {"enabled": True})
-    entries = internal.setdefault("entries", {})
-    if "session-memory" not in entries:
-        entries["session-memory"] = {"enabled": True}
-        hooks.pop("entries", None)
-        _write_openclaw_config(config)
-        logger.info("Enabled session-memory hook via config")
+    else:
+        logger.warning(
+            "Could not enable session-memory hook via CLI; "
+            "run 'openclaw hooks enable session-memory' manually if needed"
+        )
     return True
 
 
 def ensure_agent_bootstrap_hook() -> bool:
-    """Create and enable the ``agent:bootstrap`` hook for pre-session validation.
+    """Deploy bootstrap hook files to the filesystem.
 
-    Deploys ``HOOK.md`` and ``handler.ts`` to ``~/.openclaw/hooks/traderbot-bootstrap/``
-    and registers the hook in ``openclaw.json``.  Idempotent.
+    Hook registration is left to the OpenClaw CLI (``openclaw hooks enable``).
+    We no longer write to ``openclaw.json`` directly to avoid schema drift.
+    Idempotent.
     """
     hook_dir = _HOOKS_DIR / BOOTSTRAP_HOOK_DIRNAME
     hook_dir.mkdir(parents=True, exist_ok=True)
@@ -210,24 +203,7 @@ def ensure_agent_bootstrap_hook() -> bool:
         handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
         logger.info("Created %s", handler)
 
-    config = _read_openclaw_config()
-    hooks = config.setdefault("hooks", {})
-
-    extra_dirs = hooks.setdefault("extraHookDirs", [])
-    hook_dir_str = str(hook_dir)
-    if hook_dir_str not in extra_dirs:
-        extra_dirs.append(hook_dir_str)
-
-    internal = hooks.setdefault("internal", {"enabled": True})
-    entries = internal.setdefault("entries", {})
-    if "traderbot-bootstrap" not in entries:
-        entries["traderbot-bootstrap"] = {"enabled": True}
-        hooks.pop("entries", None)
-        _write_openclaw_config(config)
-
-    _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
-
-    logger.info("Bootstrap hook deployed and registered")
+    logger.info("Bootstrap hook files deployed to %s", hook_dir)
     return True
 
 
