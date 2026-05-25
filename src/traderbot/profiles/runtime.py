@@ -25,10 +25,15 @@ logger = logging.getLogger(__name__)
 def get_current_profile(**kwargs: Any) -> TradingProfile | None:
     """Read TRADERBOT_PROFILE_TOKEN env var and resolve to profile.
 
+    Falls back to ~/.traderbot/.env when the env var is not set in the
+    process environment (e.g. OpenClaw agent subprocesses).
+
     Returns:
         TradingProfile if token is valid and profile exists, None otherwise
     """
     token = os.environ.get("TRADERBOT_PROFILE_TOKEN")
+    if token is None:
+        token = _read_env_file_token()
     if token is None:
         logger.debug("No TRADERBOT_PROFILE_TOKEN environment variable set")
         return None
@@ -50,6 +55,26 @@ def get_current_profile(**kwargs: Any) -> TradingProfile | None:
 
     logger.info("Loaded profile '%s' (mode=%s)", profile.name, profile.mode)
     return profile
+
+
+def _read_env_file_token() -> str | None:
+    """Read TRADERBOT_PROFILE_TOKEN from ~/.traderbot/.env as a fallback for
+    agent subprocesses that don't inherit the parent's env vars."""
+    try:
+        from traderbot.paths import get_data_dir
+        env_path = get_data_dir() / ".env"
+        if not env_path.exists():
+            return None
+        for line in env_path.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            k, sep, v = stripped.partition("=")
+            if sep and k.strip() == "TRADERBOT_PROFILE_TOKEN":
+                return v.strip().strip("\"'")
+    except Exception:
+        logger.debug("Failed to read .env for TRADERBOT_PROFILE_TOKEN", exc_info=True)
+    return None
 
 
 def load_profile_config(
