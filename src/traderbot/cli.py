@@ -3130,7 +3130,6 @@ def _do_assign(
         )
         if script_output:
             console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
-            print(f"RAW_TOKEN:{token}")
 
         try:
             agent_path = _resolve_agent_path(agent_id)

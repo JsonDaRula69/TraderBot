@@ -130,9 +130,14 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
 
     for cli_path in _OPENCLAW_CLI_CANDIDATES:
         resolved = shutil.which(str(cli_path))
-        if not cli_path.exists() and not resolved:
+        if isinstance(cli_path, str):
+            if not resolved:
+                continue
+            cmd = resolved
+        elif not cli_path.exists() and not resolved:
             continue
-        cmd = resolved if resolved else str(cli_path)
+        else:
+            cmd = resolved if resolved else str(cli_path)
         try:
             result = subprocess.run(
                 [cmd, *args],
