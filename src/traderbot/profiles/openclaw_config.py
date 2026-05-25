@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -150,10 +149,8 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
             if result.returncode == 0:
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    return False
-
-
+            pass
+    return None
 
 def get_openclaw_version() -> str | None:
     """Return installed OpenClaw version string, or ``None``."""
