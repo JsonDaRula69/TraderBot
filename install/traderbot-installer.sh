@@ -660,71 +660,110 @@ setup_api_credentials() {
     echo "--- Kalshi (required) ---"
     local kalshi_key=""
     local kalshi_secret=""
+    local retry_mode="both"
     while true; do
-        read -r -p "Kalshi API key: " kalshi_key
+        if [[ "$retry_mode" == "both" ]]; then
+            kalshi_key=""
+            kalshi_secret=""
+        elif [[ "$retry_mode" == "key" ]]; then
+            kalshi_key=""
+        elif [[ "$retry_mode" == "pem" ]]; then
+            kalshi_secret=""
+        fi
+        retry_mode="both"
+
         if [[ -z "$kalshi_key" ]]; then
-            echo "  Kalshi API key is required. Enter it or press Ctrl+C to abort." >&2
-            continue
+            while true; do
+                read -r -p "Kalshi API key: " kalshi_key
+                if [[ -z "$kalshi_key" ]]; then
+                    echo "  Kalshi API key is required. Enter it or press Ctrl+C to abort." >&2
+                    continue
+                fi
+                if _validate_key "$kalshi_key" "Kalshi API key" 20; then
+                    break
+                fi
+            done
         fi
-        if _validate_key "$kalshi_key" "Kalshi API key" 20; then
+        if [[ -z "$kalshi_secret" ]]; then
+            echo "Kalshi API secret (paste the full PEM key including BEGIN...END markers):"
+            local pem_started=false
+            kalshi_secret=""
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                if [[ "$line" == *"-----BEGIN"* ]]; then
+                    pem_started=true
+                fi
+                if $pem_started; then
+                    kalshi_secret+="$line"$'\n'
+                fi
+                if [[ "$line" == *"-----END"* ]]; then
+                    break
+                fi
+                if [[ -z "$line" ]] && ! $pem_started; then
+                    break
+                fi
+            done
+            local _drain
+            while IFS= read -r -t 0.3 _drain; do : ; done 2>/dev/null || true
+            echo
+            kalshi_secret="${kalshi_secret%$'\n'}"
+            if [[ -n "$kalshi_secret" ]]; then
+                local line_count
+                line_count=$(printf '%s' "$kalshi_secret" | grep -c .)
+                echo "  PEM key received ($line_count lines, ${#kalshi_secret} bytes)"
+            fi
+            if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
+                echo "  Warning: PEM key should contain BEGIN/END markers. The key may be invalid." >&2
+            fi
+        fi
+        _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
+        if [[ -n "$kalshi_secret" ]]; then
+            local pem_path="${HOME}/.traderbot/kalshi_key.pem"
+            printf '%s' "$kalshi_secret" > "$pem_path"
+            chmod 600 "$pem_path"
+            _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
+        fi
+        echo "Kalshi credentials stored."
+        echo
+        if _detect_kalshi_tier "$env_file"; then
             break
         fi
+        echo
+        echo "  [ERROR] Could not auto-detect Kalshi API tier. Common causes:"
+        echo "    1. Incorrect API key or PEM key"
+        echo "    2. No internet connectivity"
+        echo "    3. Kalshi API is temporarily unavailable"
+        echo
+        echo "  Options:"
+        echo "    r) Re-enter API key"
+        echo "    p) Re-enter PEM key"
+        echo "    b) Re-enter both"
+        echo "    a) Abort installation"
+        echo
+        local fix_choice=""
+        while true; do
+            read -r -p "Choose option [r/p/b/a]: " fix_choice
+            case "$fix_choice" in
+                r|R)
+                    retry_mode="key"
+                    break
+                    ;;
+                p|P)
+                    retry_mode="pem"
+                    break
+                    ;;
+                b|B)
+                    break
+                    ;;
+                a|A)
+                    echo "Installation aborted by user."
+                    exit 1
+                    ;;
+                *)
+                    echo "  Invalid option. Choose r, p, b, or a."
+                    ;;
+            esac
+        done
     done
-    echo "Kalshi API secret (paste the full PEM key including BEGIN...END markers):"
-    local pem_started=false
-    kalshi_secret=""
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == *"-----BEGIN"* ]]; then
-            pem_started=true
-        fi
-        if $pem_started; then
-            kalshi_secret+="$line"$'\n'
-        fi
-        if [[ "$line" == *"-----END"* ]]; then
-            break
-        fi
-        if [[ -z "$line" ]] && ! $pem_started; then
-            break
-        fi
-    done
-    # Drain any trailing lines from the paste to prevent stdin pollution
-    local _drain
-    while IFS= read -r -t 0.3 _drain; do : ; done 2>/dev/null || true
-    echo
-    kalshi_secret="${kalshi_secret%$'\n'}"
-    if [[ -n "$kalshi_secret" ]]; then
-        local line_count
-        line_count=$(printf '%s' "$kalshi_secret" | grep -c .)
-        echo "  PEM key received ($line_count lines, ${#kalshi_secret} bytes)"
-    fi
-    if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
-        echo "  Warning: PEM key should contain BEGIN/END markers. The key may be invalid." >&2
-    fi
-    _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
-    if [[ -n "$kalshi_secret" ]]; then
-        local pem_path="${HOME}/.traderbot/kalshi_key.pem"
-        printf '%s' "$kalshi_secret" > "$pem_path"
-        chmod 600 "$pem_path"
-        _env_set "$env_file" "KALSHI_PRIVATE_KEY_PATH" "$pem_path"
-    fi
-    echo "Kalshi credentials stored."
-    echo
-    if ! _detect_kalshi_tier "$env_file"; then
-        echo "Select Kalshi API tier:"
-        echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
-        echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
-        echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
-        echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
-        echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
-        kalshi_tier=$(_read_tier "Tier [1]: " 1 5 1)
-        case "$kalshi_tier" in
-            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
-            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
-            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
-            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
-            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
-        esac
-    fi
 
     # --- NewsAPI (optional) ---
     echo
