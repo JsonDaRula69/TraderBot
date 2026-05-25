@@ -2300,9 +2300,15 @@ def auth_rotate(
 def auth_check(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
-    """Verify KALSHI_API_KEY is configured in environment."""
+    """Verify KALSHI_API_KEY is configured (keyring, .env, or environment)."""
     console = Console()
-    key = os.getenv("KALSHI_API_KEY")
+    from traderbot.auth import AuthManager
+    mgr = AuthManager()
+    result = mgr.get_credential("kalshi", "api_key")
+    if result is not None:
+        key = result.value.get_secret_value()
+    else:
+        key = None
 
     if key and key.strip():
         ok = True
