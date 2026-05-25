@@ -832,16 +832,44 @@ setup_api_credentials() {
     echo
     echo "--- Voyage (optional) ---"
     local voyage_key=""
-    read -r -p "Voyage API key (press Enter to skip): " voyage_key
+    while true; do
+        read -r -p "Voyage API key (press Enter to skip): " voyage_key
+        if [[ -z "$voyage_key" ]]; then
+            break
+        fi
+        if ! _validate_prefix "$voyage_key" "pa-" "Voyage API key"; then
+            voyage_key=""
+            continue
+        fi
+        if ! _validate_key "$voyage_key" "Voyage API key" 20; then
+            voyage_key=""
+            continue
+        fi
+        echo "  Validating Voyage API key..."
+        local voyage_status
+        voyage_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${voyage_key}" \
+            -H "Content-Type: application/json" \
+            -d '{"input": ["hello"], "model": "voyage-3"}' \
+            "https://api.voyageai.com/v1/embeddings" 2>/dev/null) || voyage_status="000"
+        if [[ "$voyage_status" == "200" ]]; then
+            echo "  Voyage API key is valid."
+            break
+        elif [[ "$voyage_status" == "401" ]]; then
+            echo "  Invalid Voyage API key (HTTP 401). Please re-enter."
+            voyage_key=""
+            continue
+        elif [[ "$voyage_status" == "429" ]]; then
+            echo "  Voyage API key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${voyage_status}). Proceeding anyway."
+            break
+        fi
+    done
     if [[ -n "$voyage_key" ]]; then
-        _validate_prefix "$voyage_key" "pa-" "Voyage API key" || voyage_key=""
-        if [[ -n "$voyage_key" ]]; then
-            _validate_key "$voyage_key" "Voyage API key" 20 || voyage_key=""
-        fi
-        if [[ -n "$voyage_key" ]]; then
-            _env_set "$env_file" "VOYAGE_API_KEY" "$voyage_key"
-            echo "Voyage key stored."
-        fi
+        _env_set "$env_file" "VOYAGE_API_KEY" "$voyage_key"
+        echo "Voyage key stored."
     fi
     if [[ -z "$voyage_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key voyage api_key"
@@ -851,13 +879,38 @@ setup_api_credentials() {
     echo
     echo "--- Twitter/X (optional) ---"
     local twitter_key=""
-    read -r -p "Twitter API key (press Enter to skip): " twitter_key
-    if [[ -n "$twitter_key" ]]; then
-        _validate_key "$twitter_key" "Twitter API key" 20 || twitter_key=""
-        if [[ -n "$twitter_key" ]]; then
-            _env_set "$env_file" "TWITTER_API_KEY" "$twitter_key"
-            echo "Twitter key stored."
+    while true; do
+        read -r -p "Twitter API key (Bearer token, press Enter to skip): " twitter_key
+        if [[ -z "$twitter_key" ]]; then
+            break
         fi
+        if ! _validate_key "$twitter_key" "Twitter API key" 20; then
+            twitter_key=""
+            continue
+        fi
+        echo "  Validating Twitter API key..."
+        local twitter_status
+        twitter_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${twitter_key}" \
+            "https://api.twitter.com/2/users/me" 2>/dev/null) || twitter_status="000"
+        if [[ "$twitter_status" == "200" ]]; then
+            echo "  Twitter API key is valid."
+            break
+        elif [[ "$twitter_status" == "401" ]] || [[ "$twitter_status" == "403" ]]; then
+            echo "  Invalid Twitter API key (HTTP ${twitter_status}). Please re-enter."
+            twitter_key=""
+            continue
+        elif [[ "$twitter_status" == "429" ]]; then
+            echo "  Twitter API key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${twitter_status}). Proceeding anyway."
+            break
+        fi
+    done
+    if [[ -n "$twitter_key" ]]; then
+        _env_set "$env_file" "TWITTER_API_KEY" "$twitter_key"
+        echo "Twitter key stored."
     fi
     if [[ -z "$twitter_key" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key twitter api_key"
@@ -868,18 +921,49 @@ setup_api_credentials() {
     echo "--- Reddit (optional) ---"
     local reddit_id=""
     local reddit_secret=""
-    read -r -p "Reddit client ID (press Enter to skip): " reddit_id
-    if [[ -n "$reddit_id" ]]; then
-        _validate_key "$reddit_id" "Reddit client ID" 10 || reddit_id=""
-        if [[ -n "$reddit_id" ]]; then
-            read -r -p "Reddit client secret: " -s reddit_secret
-            echo
-            _env_set "$env_file" "REDDIT_CLIENT_ID" "$reddit_id"
-            if [[ -n "$reddit_secret" ]]; then
-                _env_set "$env_file" "REDDIT_CLIENT_SECRET" "$reddit_secret"
-            fi
-            echo "Reddit credentials stored."
+    while true; do
+        read -r -p "Reddit client ID (press Enter to skip): " reddit_id
+        if [[ -z "$reddit_id" ]]; then
+            break
         fi
+        if ! _validate_key "$reddit_id" "Reddit client ID" 10; then
+            reddit_id=""
+            continue
+        fi
+        read -r -p "Reddit client secret: " -s reddit_secret
+        echo
+        if [[ -z "$reddit_secret" ]]; then
+            echo "  Reddit client secret is required. Please re-enter both."
+            reddit_id=""
+            continue
+        fi
+        echo "  Validating Reddit credentials..."
+        local reddit_token
+        reddit_token=$(curl -fsS -u "${reddit_id}:${reddit_secret}" \
+            -d "grant_type=client_credentials" \
+            -A "TraderBot/1.0" \
+            "https://www.reddit.com/api/v1/access_token" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('access_token', 'INVALID'))
+except Exception:
+    print('INVALID')
+" 2>/dev/null) || reddit_token=""
+        if [[ -n "$reddit_token" ]] && [[ "$reddit_token" != "INVALID" ]] && [[ "$reddit_token" != "null" ]]; then
+            echo "  Reddit credentials are valid."
+            break
+        fi
+        echo "  Invalid Reddit credentials. Please re-enter."
+        reddit_id=""
+        reddit_secret=""
+    done
+    if [[ -n "$reddit_id" ]]; then
+        _env_set "$env_file" "REDDIT_CLIENT_ID" "$reddit_id"
+        if [[ -n "$reddit_secret" ]]; then
+            _env_set "$env_file" "REDDIT_CLIENT_SECRET" "$reddit_secret"
+        fi
+        echo "Reddit credentials stored."
     fi
     if [[ -z "$reddit_id" ]]; then
         echo "Skipped. Set later with: traderbot auth set-key reddit client_id"
@@ -890,7 +974,30 @@ setup_api_credentials() {
     echo "--- OpenWeatherMap (optional) ---"
     echo "Free tier: 1,000 calls/day. Register at https://openweathermap.org/api"
     local owm_key=""
-    read -r -p "OpenWeatherMap API key (press Enter to skip): " owm_key
+    while true; do
+        read -r -p "OpenWeatherMap API key (press Enter to skip): " owm_key
+        if [[ -z "$owm_key" ]]; then
+            break
+        fi
+        echo "  Validating OpenWeatherMap API key..."
+        local owm_status
+        owm_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+            "https://api.openweathermap.org/data/2.5/weather?q=London&appid=${owm_key}" 2>/dev/null) || owm_status="000"
+        if [[ "$owm_status" == "200" ]]; then
+            echo "  OpenWeatherMap API key is valid."
+            break
+        elif [[ "$owm_status" == "401" ]]; then
+            echo "  Invalid OpenWeatherMap API key (HTTP 401). Please re-enter."
+            owm_key=""
+            continue
+        elif [[ "$owm_status" == "429" ]]; then
+            echo "  OpenWeatherMap API key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${owm_status}). Proceeding anyway."
+            break
+        fi
+    done
     if [[ -n "$owm_key" ]]; then
         _env_set "$env_file" "OPENWEATHER_API_KEY" "$owm_key"
         echo "OpenWeatherMap key stored."
@@ -904,7 +1011,31 @@ setup_api_credentials() {
     echo "Free tier works without a key (30 req/min). API key increases rate limits."
     echo "Register at https://www.coingecko.com/en/api"
     local cg_key=""
-    read -r -p "CoinGecko API key (press Enter to skip): " cg_key
+    while true; do
+        read -r -p "CoinGecko API key (press Enter to skip): " cg_key
+        if [[ -z "$cg_key" ]]; then
+            break
+        fi
+        echo "  Validating CoinGecko API key..."
+        local cg_status
+        cg_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+            -H "x-cg-demo-api-key: ${cg_key}" \
+            "https://api.coingecko.com/api/v3/ping" 2>/dev/null) || cg_status="000"
+        if [[ "$cg_status" == "200" ]]; then
+            echo "  CoinGecko API key is valid."
+            break
+        elif [[ "$cg_status" == "401" ]] || [[ "$cg_status" == "403" ]]; then
+            echo "  Invalid CoinGecko API key (HTTP ${cg_status}). Please re-enter."
+            cg_key=""
+            continue
+        elif [[ "$cg_status" == "429" ]]; then
+            echo "  CoinGecko API key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${cg_status}). Proceeding anyway."
+            break
+        fi
+    done
     if [[ -n "$cg_key" ]]; then
         _env_set "$env_file" "COINGECKO_API_KEY" "$cg_key"
         echo "CoinGecko key stored."
@@ -917,7 +1048,36 @@ setup_api_credentials() {
     echo "--- FRED (optional) ---"
     echo "Free tier: 120 req/min. Register at https://fred.stlouisfed.org/docs/api/api_key.html"
     local fred_key=""
-    read -r -p "FRED API key (press Enter to skip): " fred_key
+    while true; do
+        read -r -p "FRED API key (press Enter to skip): " fred_key
+        if [[ -z "$fred_key" ]]; then
+            break
+        fi
+        echo "  Validating FRED API key..."
+        local fred_status
+        fred_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+            "https://api.stlouisfed.org/fred/series?series_id=GNPCA&api_key=${fred_key}&file_type=json" 2>/dev/null) || fred_status="000"
+        if [[ "$fred_status" == "200" ]]; then
+            echo "  FRED API key is valid."
+            break
+        elif [[ "$fred_status" == "400" ]]; then
+            local fred_body
+            fred_body=$(curl -fsS "https://api.stlouisfed.org/fred/series?series_id=GNPCA&api_key=${fred_key}&file_type=json" 2>/dev/null | head -c 200)
+            if [[ "$fred_body" == *"Bad Request"* ]] || [[ "$fred_body" == *"Invalid"* ]]; then
+                echo "  Invalid FRED API key. Please re-enter."
+                fred_key=""
+                continue
+            fi
+            echo "  Could not validate key (HTTP 400). Proceeding anyway."
+            break
+        elif [[ "$fred_status" == "429" ]]; then
+            echo "  FRED API key is valid but rate-limited (HTTP 429). Continuing..."
+            break
+        else
+            echo "  Could not validate key (HTTP ${fred_status}). Proceeding anyway."
+            break
+        fi
+    done
     if [[ -n "$fred_key" ]]; then
         _env_set "$env_file" "FRED_API_KEY" "$fred_key"
         echo "FRED key stored."
