@@ -424,7 +424,7 @@ install_traderbot() {
                 _CLEANUP_TEMP_DIR="$temp_dir"
 
                 local http_code
-                http_code="$(curl -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
+                http_code="$(curl --max-time 30 --connect-timeout 10 -sSL -w '%{http_code}' -o "${temp_dir}/traderbot.zip" \
                     "https://github.com/${TRADERBOT_ORG}/TraderBot/archive/refs/heads/main.zip")"
                 if [[ "$http_code" != "200" ]] || ! file "${temp_dir}/traderbot.zip" | grep -q "Zip archive"; then
                     rm -f "${temp_dir}/traderbot.zip"
@@ -432,7 +432,7 @@ install_traderbot() {
                     read -r -p "Enter GitHub PAT for private repo (or press Enter to skip): " -s PAT
                     echo
                     if [[ -n "$PAT" ]]; then
-                        curl -sSL -H "Authorization: Bearer $PAT" \
+                        curl --max-time 30 --connect-timeout 10 -sSL -H "Authorization: Bearer $PAT" \
                             "https://api.github.com/repos/${TRADERBOT_ORG}/TraderBot/zipball/main" \
                             -o "${temp_dir}/traderbot.zip"
                     fi
@@ -795,7 +795,7 @@ setup_api_credentials() {
         fi
         echo "  Validating NewsAPI key..."
         local newsapi_status
-        newsapi_status=$(curl -fsS -o /dev/null -w "%{http_code}" "https://newsapi.org/v2/top-headlines/sources?apiKey=${newsapi_key}" 2>/dev/null) || newsapi_status="000"
+        newsapi_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" "https://newsapi.org/v2/top-headlines/sources?apiKey=${newsapi_key}" 2>/dev/null) || newsapi_status="000"
         if [[ "$newsapi_status" == "200" ]]; then
             echo "  NewsAPI key is valid."
             break
@@ -847,7 +847,7 @@ setup_api_credentials() {
         fi
         echo "  Validating Voyage API key..."
         local voyage_status
-        voyage_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+        voyage_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${voyage_key}" \
             -H "Content-Type: application/json" \
             -d '{"input": ["hello"], "model": "voyage-3"}' \
@@ -890,7 +890,7 @@ setup_api_credentials() {
         fi
         echo "  Validating Twitter API key..."
         local twitter_status
-        twitter_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+        twitter_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${twitter_key}" \
             "https://api.twitter.com/2/users/me" 2>/dev/null) || twitter_status="000"
         if [[ "$twitter_status" == "200" ]]; then
@@ -939,7 +939,7 @@ setup_api_credentials() {
         fi
         echo "  Validating Reddit credentials..."
         local reddit_token
-        reddit_token=$(curl -fsS -u "${reddit_id}:${reddit_secret}" \
+        reddit_token=$(curl --max-time 10 --connect-timeout 5 -fsS -u "${reddit_id}:${reddit_secret}" \
             -d "grant_type=client_credentials" \
             -A "TraderBot/1.0" \
             "https://www.reddit.com/api/v1/access_token" 2>/dev/null | python3 -c "
@@ -981,7 +981,7 @@ except Exception:
         fi
         echo "  Validating OpenWeatherMap API key..."
         local owm_status
-        owm_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+        owm_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
             "https://api.openweathermap.org/data/2.5/weather?q=London&appid=${owm_key}" 2>/dev/null) || owm_status="000"
         if [[ "$owm_status" == "200" ]]; then
             echo "  OpenWeatherMap API key is valid."
@@ -1018,7 +1018,7 @@ except Exception:
         fi
         echo "  Validating CoinGecko API key..."
         local cg_status
-        cg_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+        cg_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
             -H "x-cg-demo-api-key: ${cg_key}" \
             "https://api.coingecko.com/api/v3/ping" 2>/dev/null) || cg_status="000"
         if [[ "$cg_status" == "200" ]]; then
@@ -1055,7 +1055,7 @@ except Exception:
         fi
         echo "  Validating FRED API key..."
         local fred_status
-        fred_status=$(curl -fsS -o /dev/null -w "%{http_code}" \
+        fred_status=$(curl --max-time 10 --connect-timeout 5 -fsS -o /dev/null -w "%{http_code}" \
             "https://api.stlouisfed.org/fred/series?series_id=GNPCA&api_key=${fred_key}&file_type=json" 2>/dev/null) || fred_status="000"
         if [[ "$fred_status" == "200" ]]; then
             echo "  FRED API key is valid."
