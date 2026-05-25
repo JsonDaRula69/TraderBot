@@ -1531,7 +1531,6 @@ interactive_config_flow() {
     fi
 
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
-    local token_value=""
     local merge_mode="--yes"
     echo
     echo "Workspace file mode:"
@@ -1557,37 +1556,18 @@ interactive_config_flow() {
         if [[ -n "$TOKEN_OUTPUT" ]]; then
             echo "$TOKEN_OUTPUT"
             echo
-            token_value=$(echo "$TOKEN_OUTPUT" | sed -n 's/^RAW_TOKEN://p' || echo "")
         fi
     else
         echo "Assignment skipped. TraderBot not found."
     fi
 
-    if [[ -n "$token_value" ]]; then
-        echo "Installing service for agent $agent_name..."
-        install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
-    fi
-
-    echo
-    echo "=== Verification ==="
-    local tb_bin=""
-    if command -v traderbot &>/dev/null; then
-        tb_bin="traderbot"
-    elif [[ -x "${INSTALL_DIR}/.venv/bin/traderbot" ]]; then
-        tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
-    fi
-
-    if [[ -n "${TRADERBOT_PROFILE_TOKEN:-}" ]] && [[ -n "$tb_bin" ]]; then
-            if "$tb_bin" heartbeat --dry-run --json 2>/dev/null; then
-            echo "Heartbeat verification: PASSED"
+    if [[ -x "$tb_cmd" ]]; then
+        echo
+        echo "=== Verification ==="
+        if "$tb_cmd" profile show "$profile_name" --json >/dev/null 2>&1; then
+            echo "✓ Profile '$profile_name' verified in registry."
         else
-            echo "Heartbeat verification: FAILED (check credentials)"
-        fi
-    else
-        if [[ -z "$tb_bin" ]]; then
-            echo "TraderBot not found. Verification skipped."
-        else
-            echo "No profile token set. Verification skipped."
+            echo "Warning: Could not verify profile '$profile_name' in registry." >&2
         fi
     fi
 }

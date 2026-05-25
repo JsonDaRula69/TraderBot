@@ -129,7 +129,7 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
     ])
 
     for cli_path in _OPENCLAW_CLI_CANDIDATES:
-        resolved = shutil.which(str(cli_path))
+        resolved = shutil.which(str(cli_path), path=env["PATH"])
         if isinstance(cli_path, str):
             if not resolved:
                 continue
