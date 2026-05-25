@@ -82,7 +82,7 @@ _detect_kalshi_tier() {
     echo "  Auto-detecting Kalshi API tier..."
     local tier_info
     tier_info=$("$python_bin" -c "
-import sys, json
+import sys, json, traceback
 from pathlib import Path
 
 env_path = Path.home() / '.traderbot' / '.env'
@@ -103,16 +103,16 @@ if not api_key or not pem_path:
 try:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-    import base64, time, urllib.request
+    import base64, time, urllib.request, urllib.error
 
     private_key = serialization.load_pem_private_key(
         Path(pem_path).read_bytes(), password=None
     )
-    ts = str(int(time.time()))
-    msg = f'{api_key}{ts}GET/trade-api/v2/account/limits'
+    ts_ms = int(time.time() * 1000)
+    msg = f'{ts_ms}GET/trade-api/v2/account/limits'
     sig = private_key.sign(
         msg.encode(),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
         hashes.SHA256()
     )
     sig_b64 = base64.b64encode(sig).decode()
@@ -120,9 +120,9 @@ try:
     req = urllib.request.Request(
         'https://api.elections.kalshi.com/trade-api/v2/account/limits',
         headers={
-            'KALSHI-API-KEY': api_key,
-            'KALSHI-API-TIMESTAMP': ts,
-            'KALSHI-API-SIGNATURE': sig_b64,
+            'KALSHI-ACCESS-KEY': api_key,
+            'KALSHI-ACCESS-TIMESTAMP': str(ts_ms),
+            'KALSHI-ACCESS-SIGNATURE': sig_b64,
             'Accept': 'application/json'
         }
     )
@@ -131,13 +131,28 @@ try:
         tier = data.get('usage_tier', 'basic').lower()
         rate = data.get('read', {}).get('refill_rate', 20)
         print(f'{tier}:{rate}')
-except Exception:
-    print('ERROR')
+except urllib.error.HTTPError as e:
+    print(f'HTTP_ERROR:{e.code}:{e.reason}')
     sys.exit(1)
-" 2>/dev/null) || tier_info=""
+except Exception:
+    traceback.print_exc()
+    sys.exit(1)
+") || tier_info=""
 
-    if [[ -z "$tier_info" ]] || [[ "$tier_info" == MISSING ]] || [[ "$tier_info" == ERROR ]]; then
-        echo "  Auto-detection failed. Falling back to manual selection."
+    if [[ -z "$tier_info" ]] || [[ "$tier_info" == MISSING ]]; then
+        echo "  Auto-detection failed."
+        return 1
+    fi
+    if [[ "$tier_info" == HTTP_ERROR:* ]]; then
+        local err_code="${tier_info##HTTP_ERROR:}"
+        err_code="${err_code%%:*}"
+        if [[ "$err_code" == "401" ]] || [[ "$err_code" == "403" ]]; then
+            echo "  Auto-detection failed: Authentication error (HTTP $err_code)"
+        elif [[ "$err_code" == "404" ]]; then
+            echo "  Auto-detection failed: API endpoint not found (HTTP 404) — tier unknown"
+        else
+            echo "  Auto-detection failed: HTTP error $err_code"
+        fi
         return 1
     fi
 
