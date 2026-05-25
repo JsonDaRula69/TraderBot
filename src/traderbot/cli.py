@@ -37,6 +37,38 @@ def _mask_token(token: str) -> str:
     """Mask a token, showing only the last 4 characters."""
     return "****" + token[-4:] if len(token) > 4 else "****"
 
+
+def _write_token_to_env(token: str, console: Console | None = None) -> None:
+    """Write TRADERBOT_PROFILE_TOKEN to ~/.traderbot/.env so agent subprocesses
+    that don't inherit systemd env vars can still resolve the profile."""
+    from traderbot.paths import get_data_dir
+
+    env_path = get_data_dir() / ".env"
+    try:
+        if env_path.exists():
+            lines = env_path.read_text().splitlines()
+            found = False
+            new_lines = []
+            for line in lines:
+                if line.strip().startswith("TRADERBOT_PROFILE_TOKEN="):
+                    new_lines.append(f"TRADERBOT_PROFILE_TOKEN={token}")
+                    found = True
+                else:
+                    new_lines.append(line)
+            if not found:
+                new_lines.append(f"TRADERBOT_PROFILE_TOKEN={token}")
+            env_path.write_text("\n".join(new_lines) + "\n")
+        else:
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            env_path.write_text(f"TRADERBOT_PROFILE_TOKEN={token}\n")
+        env_path.chmod(0o600)
+        if console:
+            console.print("[green]✓[/green] Token written to .env")
+    except Exception as e:
+        logger.warning("Failed to write token to .env: %s", e)
+        if console:
+            console.print(f"[yellow]Warning:[/yellow] Could not write token to .env: {e}")
+
 app = typer.Typer(
     name="traderbot",
     help="Autonomous prediction market investment toolkit for Kalshi.",
@@ -161,7 +193,7 @@ def scan(
     table.add_column("Volume", justify="right")
     table.add_column("State", style="green")
     for m in markets:
-        table.add_row(m.ticker, m.question, str(m.volume), m.status)
+        table.add_row(m["ticker"], m["question"], str(m["volume"]), m["status"])
     console.print(table)
 
 
@@ -3139,6 +3171,10 @@ def _do_assign(
         console.print(
             f"[green]✓[/green] Assigned token to profile '{profile_name}' for agent '{agent_id}'"
         )
+
+        # Write token to .env so it's available to agent subprocesses
+        _write_token_to_env(token, console)
+
         if script_output:
             console.print(f"Token: [bold]{_mask_token(token)}[/bold]")
 
