@@ -1611,6 +1611,7 @@ merge_openclaw_agent_config() {
         cp "$agent_config" "$config_path"
         echo "Created $config_path from agent config template."
     else
+        cp "$config_path" "${config_path}.bak.$(date +%s)"
         # Use python3 for correct deep merge (deduplicates agents.list by ID)
         if command -v python3 &>/dev/null; then
             python3 -c "
