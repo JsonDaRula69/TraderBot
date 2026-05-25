@@ -64,12 +64,14 @@ class PinnedSSLContext(ssl.SSLContext):
     where the server's public key doesn't match any trusted pin.
     """
 
-    def __init__(self, trusted_pins: frozenset[str] | None = None) -> None:
-        super().__init__(ssl.PROTOCOL_TLS_CLIENT)
+    def __new__(cls, trusted_pins=None):
+        return super().__new__(cls, ssl.PROTOCOL_TLS_CLIENT)
+
+    def __init__(self, trusted_pins=None):
         self.check_hostname = True
         self.verify_mode = ssl.CERT_REQUIRED
         self.minimum_version = ssl.TLSVersion.TLSv1_2
-        self._trusted_pins: frozenset[str] = (
+        self._trusted_pins = (
             trusted_pins if trusted_pins is not None else frozenset({KALSHI_SPKI_PIN})
         )
         self.load_default_certs()
