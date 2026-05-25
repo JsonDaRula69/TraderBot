@@ -580,7 +580,7 @@ update_services() {
         fi
 
         echo "Refreshing Kalshi TLS pin..."
-        "$tb_bin" auth check --service kalshi 2>/dev/null || echo "  Warning: TLS pin refresh failed."
+        "$tb_bin" auth check 2>/dev/null || echo "  Warning: TLS pin refresh failed."
     fi
 
     stop_services "$os_type" || {
@@ -1205,9 +1205,9 @@ prompt_tls_pinning() {
     read -r -p "Update Kalshi TLS pin? [y/N]: " tls_choice
     if [[ "$tls_choice" =~ ^[Yy]$ ]]; then
         echo "Checking Kalshi TLS pin..."
-        "$tb_cmd" auth check --service kalshi 2>&1 || echo "Warning: TLS pin update failed."
+        "$tb_cmd" auth check 2>&1 || echo "Warning: TLS pin update failed."
     else
-        echo "Skipped. Run later with: traderbot auth check --service kalshi"
+        echo "Skipped. Run later with: traderbot auth check"
     fi
 }
 
