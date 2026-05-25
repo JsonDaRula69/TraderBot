@@ -637,20 +637,22 @@ setup_api_credentials() {
     fi
     echo "Kalshi credentials stored."
     echo
-    echo "Select Kalshi API tier:"
-    echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
-    echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
-    echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
-    echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
-    echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
-    kalshi_tier=$(_read_tier "Tier [1]: " 1 5 1)
-    case "$kalshi_tier" in
-        2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
-        3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
-        4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
-        5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
-        *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
-    esac
+    if ! _detect_kalshi_tier "$env_file"; then
+        echo "Select Kalshi API tier:"
+        echo "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
+        echo "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
+        echo "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
+        echo "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
+        echo "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
+        kalshi_tier=$(_read_tier "Tier [1]: " 1 5 1)
+        case "$kalshi_tier" in
+            2) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "30" ;;
+            3) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "100" ;;
+            4) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "200" ;;
+            5) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "400" ;;
+            *) _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "20" ;;
+        esac
+    fi
 
     # --- NewsAPI (optional) ---
     echo
