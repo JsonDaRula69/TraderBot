@@ -386,9 +386,7 @@ install_traderbot() {
             if command -v traderbot &>/dev/null; then
                 echo "TraderBot is already installed at $INSTALL_DIR"
                 local REPLY=""
-                read -r -p "Update to latest? (y/n): " -n 1 REPLY
-                echo
-                read -r
+                read -r -p "Update to latest? (y/n): " REPLY
                 if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
                     echo "Skipping installation."
                     return 0
@@ -1244,9 +1242,7 @@ prompt_sysadmin_setup() {
     echo "The sysadmin profile provides non-trading oversight, test lab management,"
     echo "and serves as the human point of contact."
     local sysadmin_reply=""
-    read -r -p "Set up a sysadmin agent? (y/n): " -n 1 sysadmin_reply
-    echo
-    read -r
+    read -r -p "Set up a sysadmin agent? (y/n): " sysadmin_reply
     if [[ ! ${sysadmin_reply:-} =~ ^[Yy]$ ]]; then
         echo "Skipping sysadmin setup."
         return 0
@@ -1338,16 +1334,11 @@ interactive_config_flow() {
     prompt_sysadmin_setup
 
     echo
-    local REPLY=""
-    read -r -p "Create a trading profile? (y/n): " -n 1 REPLY
-    echo
+    read -r -p "Create a trading profile? (y/n): " REPLY
     if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
         echo "Skipping profile creation."
         return 0
     fi
-
-    # Drain the trailing newline left by read -n 1
-    read -r
 
     profile_name=""
     while [[ -z "$profile_name" ]]; do
