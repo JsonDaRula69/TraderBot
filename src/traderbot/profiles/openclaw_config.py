@@ -178,12 +178,14 @@ def enable_session_memory_hook() -> bool:
         logger.info("Enabled session-memory hook via CLI")
         return True
 
-    # Fallback: add to openclaw.json
+    # Fallback: add to openclaw.json under hooks.internal.entries
     config = _read_openclaw_config()
     hooks = config.setdefault("hooks", {})
-    entries = hooks.setdefault("entries", {})
+    internal = hooks.setdefault("internal", {"enabled": True})
+    entries = internal.setdefault("entries", {})
     if "session-memory" not in entries:
         entries["session-memory"] = {"enabled": True}
+        hooks.pop("entries", None)
         _write_openclaw_config(config)
         logger.info("Enabled session-memory hook via config")
     return True
@@ -208,24 +210,21 @@ def ensure_agent_bootstrap_hook() -> bool:
         handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
         logger.info("Created %s", handler)
 
-    # Register in openclaw.json
     config = _read_openclaw_config()
     hooks = config.setdefault("hooks", {})
 
-    # Add as extra hook directory
     extra_dirs = hooks.setdefault("extraHookDirs", [])
     hook_dir_str = str(hook_dir)
     if hook_dir_str not in extra_dirs:
         extra_dirs.append(hook_dir_str)
 
-    # Also add as a named entry
-    entries = hooks.setdefault("entries", {})
+    internal = hooks.setdefault("internal", {"enabled": True})
+    entries = internal.setdefault("entries", {})
     if "traderbot-bootstrap" not in entries:
         entries["traderbot-bootstrap"] = {"enabled": True}
+        hooks.pop("entries", None)
+        _write_openclaw_config(config)
 
-    _write_openclaw_config(config)
-
-    # Try CLI enable (best-effort)
     _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
 
     logger.info("Bootstrap hook deployed and registered")
