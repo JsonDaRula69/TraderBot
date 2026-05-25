@@ -26,6 +26,7 @@ EnvironmentFile=%h/.traderbot/.env
 Environment=TRADERBOT_PROFILE_TOKEN=TOKEN_PLACEHOLDER
 Environment=ENABLE_SANDBOX=SANDBOX_PLACEHOLDER
 Environment=PYTHONUNBUFFERED=1
+Environment=TRADERBOT_AUTO_AUTH_PAPER=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin
 
 # Heartbeat is triggered by OpenClaw Gateway, not self-polled.

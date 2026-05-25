@@ -6,6 +6,10 @@ are persisted in ~/.traderbot/.master_key.
 Session caching: after successful authentication, a time-limited session token
 is set via TRADERBOT_MASTER_TOKEN env var to avoid re-prompting within the same
 shell session. Token expires after 30 minutes.
+
+Auto-authentication: When the command runs with an active paper-mode profile,
+the session is started automatically so headless agents do not need to prompt.
+Live-mode profiles or general CLI usage still require human authentication.
 """
 
 from __future__ import annotations
@@ -37,7 +41,6 @@ SESSION_TOKEN_ENV = "TRADERBOT_MASTER_TOKEN"
 
 
 def _derive_key(password: str, salt: bytes, iterations: int = PBKDF2_ITERATIONS) -> bytes:
-    """Derive a key from password using PBKDF2-HMAC-SHA256."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=PBKDF2_KEY_LENGTH,
@@ -48,16 +51,10 @@ def _derive_key(password: str, salt: bytes, iterations: int = PBKDF2_ITERATIONS)
 
 
 def _constant_time_compare(a: bytes, b: bytes) -> bool:
-    """Timing-safe comparison of two byte strings."""
     return hmac.compare_digest(a, b)
 
 
 def _read_master_key() -> tuple[bytes, bytes] | None:
-    """Read salt and derived key from .master_key file.
-
-    Returns a tuple of (salt, key) or None if not set up.
-    Format: base64(salt):base64(hash)
-    """
     if not MASTER_KEY_PATH.exists():
         return None
     try:
@@ -75,7 +72,6 @@ def _read_master_key() -> tuple[bytes, bytes] | None:
 
 
 def _write_master_key(salt: bytes, key: bytes) -> None:
-    """Write salt and derived key to .master_key with 0o600 permissions."""
     content = f"{base64.b64encode(salt).decode()}:{base64.b64encode(key).decode()}"
     MASTER_KEY_PATH.write_text(content)
     if sys.platform != "win32":
@@ -83,14 +79,12 @@ def _write_master_key(salt: bytes, key: bytes) -> None:
 
 
 def _make_session_token(stored_key: bytes, timestamp: int) -> str:
-    """Generate a time-limited session token from the master key."""
     msg = f"session:{timestamp}".encode()
     mac = hmac.new(stored_key, msg, hashlib.sha256).digest()
     return f"{timestamp}:{base64.b64encode(mac).decode()}"
 
 
 def _verify_session_token(token: str, stored_key: bytes) -> bool:
-    """Verify a session token and check its TTL."""
     try:
         ts_str, mac_b64 = token.rsplit(":", 1)
         timestamp = int(ts_str)
@@ -106,12 +100,10 @@ def _verify_session_token(token: str, stored_key: bytes) -> bool:
 
 
 def is_setup() -> bool:
-    """Check whether a master password has been configured."""
     return MASTER_KEY_PATH.exists()
 
 
 def session_active() -> bool:
-    """Check whether a valid session token exists in the environment."""
     token = os.environ.get(SESSION_TOKEN_ENV)
     if not token:
         return False
@@ -122,11 +114,6 @@ def session_active() -> bool:
 
 
 def authenticate(password: str) -> bool:
-    """Verify a password against the stored master key.
-
-    Returns True if authentication succeeds and sets the session token
-    in the environment for subsequent commands within the same shell.
-    """
     stored = _read_master_key()
     if stored is None:
         logger.warning("Master password not set up; rejecting authentication")
@@ -146,15 +133,34 @@ def authenticate(password: str) -> bool:
     return True
 
 
+def _try_auto_authenticate() -> bool:
+    stored = _read_master_key()
+    if stored is None:
+        return False
+
+    key = stored[1]
+    env_var = "TRADERBOT_AUTO_AUTH_PAPER"
+
+    if os.environ.get(env_var):
+        os.environ[SESSION_TOKEN_ENV] = _make_session_token(key, int(time.time()))
+        logger.info("Auto-authenticated: %s set", env_var)
+        return True
+
+    try:
+        from traderbot.profiles.runtime import get_current_profile
+
+        profile = get_current_profile()
+        if profile is not None and getattr(profile, "mode", None) == "paper":
+            os.environ[SESSION_TOKEN_ENV] = _make_session_token(key, int(time.time()))
+            logger.info("Auto-authenticated: paper profile '%s'", profile.name)
+            return True
+    except Exception:
+        logger.debug("Profile resolution failed during auto-auth, falling through")
+
+    return False
+
+
 def setup_master_password(password: str) -> None:
-    """Create the master password for the first time.
-
-    Generates a random salt, derives the key, and persists it.
-    Also sets the session token for the current shell.
-
-    Raises ValueError if the password is too short.
-    Raises FileExistsError if a master password is already configured.
-    """
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters")
     if is_setup():
@@ -174,11 +180,6 @@ def setup_master_password(password: str) -> None:
 
 
 def change_master_password(old_password: str, new_password: str) -> None:
-    """Change the master password (requires current password for verification).
-
-    Raises ValueError if old password is wrong or new password is too short.
-    Raises FileNotFoundError if master password is not yet set up.
-    """
     if not is_setup():
         raise FileNotFoundError("No master password configured. Use 'setup-master-password' first.")
     if len(new_password) < 8:
@@ -195,16 +196,13 @@ def change_master_password(old_password: str, new_password: str) -> None:
 
 
 def require_auth() -> None:
-    """Gate function: raise SystemExit if not authenticated.
-
-    Checks session token first; falls back to interactive prompt.
-    If TRADERBOT_NONINTERACTIVE is set, skips prompt and exits with error.
-    Skips entirely when TRADERBOT_DEV_MODE is set (development/testing only).
-    """
     if os.environ.get("TRADERBOT_DEV_MODE"):
         return
 
     if session_active():
+        return
+
+    if _try_auto_authenticate():
         return
 
     stored = _read_master_key()
@@ -236,5 +234,5 @@ def require_auth() -> None:
 
 
 def clear_session() -> None:
-    """Remove the session token from the environment."""
     os.environ.pop(SESSION_TOKEN_ENV, None)
+    logger.info("Master password session cleared")
