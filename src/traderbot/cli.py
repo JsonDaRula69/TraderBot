@@ -2389,12 +2389,36 @@ def auth_check_master_password(
 
 @auth_app.command("set-kalshi")
 def auth_set_kalshi() -> None:
-    """Store Kalshi credentials in OS keyring (or .env fallback)."""
+    """Store Kalshi credentials in OS keyring (or .env fallback).
+
+    If credentials already exist in .env, reads from there.
+    Only prompts if missing.
+    """
+    from pathlib import Path
     from traderbot.auth import AuthManager
 
     console = Console()
-    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
-    private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM", hide_input=True)
+    env_path = Path.home() / ".traderbot" / ".env"
+
+    # Try to read existing .env credentials first
+    api_key = None
+    private_key_pem = None
+    if env_path.exists():
+        env_content = env_path.read_text(encoding="utf-8")
+        for line in env_content.splitlines():
+            if line.startswith("KALSHI_API_KEY="):
+                api_key = line.split("=", 1)[1].strip().strip("'\"")
+            elif line.startswith("KALSHI_PRIVATE_KEY_PATH="):
+                pem_path = line.split("=", 1)[1].strip().strip("'\"")
+                pem_file = Path(pem_path)
+                if pem_file.exists():
+                    private_key_pem = pem_file.read_text(encoding="utf-8")
+
+    # Prompt only if still missing
+    if not api_key:
+        api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
+    if not private_key_pem:
+        private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM", hide_input=True)
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
