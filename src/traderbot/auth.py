@@ -54,10 +54,15 @@ def _is_keyring_available() -> bool:
         import keyring
 
         backend = keyring.get_keyring()
-        # keyring.backends.fail.Keyring is the sentinel for "no backend"
         if type(backend).__module__ == "keyring.backends.fail":
             logger.debug("Keyring unavailable: no suitable backend found")
             return False
+        if type(backend).__module__ == "keyring.backends.SecretService":
+            try:
+                backend.get_preferred_collection()
+            except Exception:
+                logger.debug("Keyring unavailable: SecretService backend not functional")
+                return False
         return True
     except ImportError:
         logger.debug("Keyring unavailable: keyring package not installed")

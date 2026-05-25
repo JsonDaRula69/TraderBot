@@ -1101,6 +1101,35 @@ prompt_os_keyring() {
         echo "Non-interactive mode — skipping keyring setup."
         return 0
     fi
+
+    local keyring_ok=false
+    local python_bin
+    python_bin=$(command -v python3 || command -v python || echo "")
+    if [[ -n "$python_bin" ]]; then
+        if "$python_bin" -c "
+import keyring, keyring.backends.SecretService
+from keyring.backends.SecretService import Keyring
+kr = Keyring()
+try:
+    kr.get_preferred_collection()
+    print('OK')
+except Exception:
+    print('FAIL')
+" 2>/dev/null | grep -q "OK"; then
+            keyring_ok=true
+        fi
+    fi
+
+    if [[ "$keyring_ok" != "true" ]]; then
+        echo
+        echo "=== OS Keyring ==="
+        echo "OS keyring (D-Bus / Secret Service) is not available on this system."
+        echo "Credentials remain in ~/.traderbot/.env (already secured with chmod 600)."
+        echo "To enable keyring later, install a desktop session or run:"
+        echo "  traderbot auth set-kalshi"
+        return 0
+    fi
+
     echo
     echo "=== OS Keyring ==="
     echo "Kalshi credentials have been written to .env."
