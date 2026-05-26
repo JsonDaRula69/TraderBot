@@ -46,6 +46,16 @@ class VoyageClient(BaseModel):
         super().__init__(**data)
         api_key = os.environ.get("VOYAGE_API_KEY")
         if not api_key:
+            from traderbot.paths import get_data_dir
+            env_path = get_data_dir() / ".env"
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith("VOYAGE_API_KEY="):
+                        api_key = stripped.split("=", 1)[1].strip().strip("\"'")
+                        os.environ["VOYAGE_API_KEY"] = api_key
+                        break
+        if not api_key:
             self._key_available = False
             logger.warning("VOYAGE_API_KEY not set — Voyage AI calls will return None")
         self._client = None
