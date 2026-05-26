@@ -327,6 +327,14 @@ def backfill_data(
     _fred_cred = get_credential("fred", "api_key")
     fred_key = _fred_cred.get_secret_value() if _fred_cred else None
     newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
+    if not newsapi_key:
+        _env_path = _os.path.expanduser("~/.traderbot/.env")
+        if _os.path.exists(_env_path):
+            for _line in open(_env_path):
+                _stripped = _line.strip()
+                if _stripped.startswith("NEWSAPI_API_KEY="):
+                    newsapi_key = _stripped.split("=", 1)[1].strip().strip("\"'")
+                    break
     ds_config = DataSourcesConfig(fred_key=fred_key, newsapi_key=newsapi_key)
     vs = vector_store or VectorStore()
     vs.init_collections()
@@ -444,6 +452,14 @@ def ingest_news(
     from traderbot.news.sources import DataSourcesConfig
 
     resolved_newsapi = newsapi_key or _os.environ.get("NEWSAPI_API_KEY")
+    if not resolved_newsapi:
+        _env_path = _os.path.expanduser("~/.traderbot/.env")
+        if _os.path.exists(_env_path):
+            for _line in open(_env_path):
+                _stripped = _line.strip()
+                if _stripped.startswith("NEWSAPI_API_KEY="):
+                    resolved_newsapi = _stripped.split("=", 1)[1].strip().strip("\"'")
+                    break
     resolved_ow = openweather_key or _os.environ.get("OPENWEATHER_API_KEY")
     resolved_fred = fred_key or _os.environ.get("FRED_API_KEY")
 
