@@ -31,7 +31,7 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 | `traderbot scan --category weather --limit 500 --json` | List all open weather markets | Primary. Filter by subcategory manually. |
 | `traderbot analyze TICKER --json` | Orderbook + implied probability | Required before every trade. |
 | `traderbot signals --category weather --json` | Blended trading signals (70% stat / 30% news) | Run each decision cycle. |
-| `traderbot data-points weather --json` | GFS/ECMWF/CMC ensemble data, CPC outlooks, NHC advisories | Primary. If unavailable → retry → fallback → halt. |
+| `traderbot data-points weather --json` | Daily historical weather (Open-Meteo), economic indicators (FRED), crypto prices (CoinGecko) from ChromaDB | Data pipeline populates this via daily backfill. **This is NOT real-time GFS/ECMWF/CMC model data** — it's historical records for edge calibration and bias tracking. For live forecasts use NWS web pages, wttr.in, or Open-Meteo Currents. If unavailable → check pipeline timers, log warning, continue with live NWS data. |
 | `traderbot news-context weather --json` | Pre-trade news context (filter for NOAA/NWS only) | Run each cycle. Ignore non-authoritative results. |
 | `traderbot news-summary --signals --json` | High-impact signal detection | Run each heartbeat. |
 | `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker | Supplementary only. Never trade on sentiment alone. |
