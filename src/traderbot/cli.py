@@ -543,12 +543,15 @@ def trade(
     if sized == 0:
         state = breaker.get_state()
         update_status(DEFAULT_SESSION_STATE_PATH, wal_entry.intent_id, WalStatus.CANCELLED)
+        odds = (100 - price) / max(price, 1)
+        sizing_reason = f"Kelly sizing returned 0 (prob={resolved_prob:.2f}, odds={odds:.1f}, conf={resolved_confidence:.1f})"
+        logger.warning("Trade rejected for %s: %s", ticker, sizing_reason)
         result = {
             "ticker": ticker,
             "direction": direction,
             "outcome": "rejected",
             "sized_position_cents": 0,
-            "reason": state.reason or "Risk check failed",
+            "reason": state.reason or sizing_reason,
             "wal_intent_id": wal_entry.intent_id,
         }
     else:
