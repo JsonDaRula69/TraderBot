@@ -355,6 +355,7 @@ def register_commands(parent_app: typer.Typer) -> None:
     @parent_app.command()
     def backfill(
         months: Annotated[int, typer.Option("--months", "-m", help="Months of history to backfill")] = 6,
+        json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
         """One-time historical data backfill for weather and economic indicators.
 
@@ -366,16 +367,23 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.news.ingest import backfill_data
 
         console = Console()
+        if json_output:
+            import json as json_lib
+
         console.print(f"[bold]Backfill:[/bold] fetching {months} months of historical data...")
 
         counts = backfill_data(months=months)
 
-        console.print()
-        console.print("[bold green]Backfill complete:[/bold green]")
-        for source, count in counts.items():
-            console.print(f"  {source}: {count} data points stored")
-        total = sum(counts.values())
-        console.print(f"  [bold]Total: {total}[/bold]")
+        if json_output:
+            json_lib.dump(counts, sys.stdout)
+            print()
+        else:
+            console.print()
+            console.print("[bold green]Backfill complete:[/bold green]")
+            for source, count in counts.items():
+                console.print(f"  {source}: {count} data points stored")
+            total = sum(counts.values())
+            console.print(f"  [bold]Total: {total}[/bold]")
 
     @parent_app.command()
     def data_points(
