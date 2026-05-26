@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -10,6 +11,8 @@ from traderbot.kalshi.models import PortfolioState, TradeRequest
 from traderbot.risk.circuit_breaker import CircuitBreaker
 from traderbot.risk.limits import HARD_LIMITS, run_all_checks
 from traderbot.risk.sizing import sized_position_for_trade
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
