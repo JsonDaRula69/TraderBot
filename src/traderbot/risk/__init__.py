@@ -22,6 +22,17 @@ class TradeResult(BaseModel):
     direction: Literal["yes", "no"]
 
 
+class RiskCheckError(Exception):
+    """Raised when risk checks reject a trade, carrying details about which check failed and why."""
+
+    def __init__(self, ticker: str, failures: list) -> None:
+        self.ticker = ticker
+        self.failures = failures
+        details = "; ".join(f.rejection_reason or f"{f.limit_name} failed (value={f.current_value}, limit={f.limit_value})" for f in failures)
+        super().__init__(f"Risk check rejected {ticker}: {details}")
+        self.detail = details
+
+
 __all__ = [
     "HARD_LIMITS",
     "CircuitBreaker",
@@ -105,8 +116,12 @@ def evaluate_trade_full(
     # This may over-reject trades that would pass with the Kelly-sized quantity.
     # Future: consider two-pass — soft check with original qty, hard check with sized qty.
     results = run_all_checks(trade_request, portfolio, limits=effective_limits)
-    if any(not r.passed for r in results):
-        return TradeResult(sized_position_cents=0, direction=trade_request.direction)
+    failed = [r for r in results if not r.passed]
+    if failed:
+        for r in failed:
+            msg = r.rejection_reason or f"{r.limit_name} check failed (value={r.current_value}, limit={r.limit_value})"
+            logger.warning("Trade rejected: %s — %s", trade_request.ticker, msg)
+        raise RiskCheckError(trade_request.ticker, failed)
 
     odds = (100 - trade_request.price_cents) / max(trade_request.price_cents, 1)
     max_position_cents = int(portfolio.portfolio_value_cents * max_position_pct)

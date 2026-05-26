@@ -433,6 +433,7 @@ def trade(
     from traderbot.profiles.runtime import get_current_profile
     from traderbot.risk import evaluate_trade
     from traderbot.risk.circuit_breaker import CircuitBreaker
+    from traderbot.risk import RiskCheckError
     from traderbot.wal import (
         DEFAULT_SESSION_STATE_PATH,
         WalAction,
@@ -520,7 +521,24 @@ def trade(
         confidence=resolved_confidence,
     )
 
-    sized = evaluate_trade(trade_request, portfolio, breaker, profile)
+    try:
+        sized = evaluate_trade(trade_request, portfolio, breaker, profile)
+    except RiskCheckError as rce:
+        update_status(DEFAULT_SESSION_STATE_PATH, wal_entry.intent_id, WalStatus.CANCELLED)
+        result = {
+            "ticker": ticker,
+            "direction": direction,
+            "outcome": "rejected",
+            "sized_position_cents": 0,
+            "reason": rce.detail,
+            "wal_intent_id": wal_entry.intent_id,
+        }
+        logger.warning("Trade rejected for %s: %s", ticker, rce.detail)
+        if json_output:
+            json_lib.dump(result, sys.stdout, default=str)
+            return
+        console.print(f"[red]Trade rejected: {rce.detail}[/red]")
+        return
 
     if sized == 0:
         state = breaker.get_state()
