@@ -1,0 +1,428 @@
+"""Admin commands: bootstrap, heartbeat, halt, resume, backfill, cache-warm, learnings."""
+from __future__ import annotations
+
+import asyncio
+import json as json_lib
+import platform as _platform
+import subprocess as _subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from traderbot.cli.helpers import (
+    _resolve_db_path,
+    _with_db,
+    _python_version_ok,
+    err_console,
+)
+
+
+def register_commands(parent_app: typer.Typer) -> None:
+
+    @parent_app.command()
+    def bootstrap(
+        dry_run: Annotated[
+            bool, typer.Option("--dry-run", help="Validate without writing to DB")
+        ] = False,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+    ) -> None:
+        """One-time setup wizard for new users."""
+        import platform
+
+        from traderbot.auth import AuthManager
+        from traderbot.db import DB_PATH, get_connection, init_schema
+        from traderbot.paths import get_data_dir
+
+        console = Console()
+        steps: dict[str, str | bool] = {}
+
+        # Step 1: Check Python version (3.12.x — chroma-hnswlib has no wheels for 3.13+)
+        py_ok, version_str, _py_version_tuple = _python_version_ok()
+        steps["python_version"] = version_str
+        steps["python_version_ok"] = py_ok
+
+        if not py_ok:
+            if json_output:
+                json_lib.dump(
+                    {"error": f"Python {version_str} — 3.12.x required (chromadb dependency)", "steps": steps},
+                    sys.stdout,
+                )
+                raise typer.Exit(code=1)
+            console.print(f"[red]Python {version_str} detected — 3.12.x required for chromadb dependency.[/red]")
+            raise typer.Exit(code=1)
+
+        # Step 2: Setup data directory
+        data_dir = get_data_dir()
+        db_path = DB_PATH
+
+        if not dry_run:
+            data_dir.mkdir(parents=True, exist_ok=True)
+            data_dir.chmod(0o700)
+        steps["data_dir"] = str(data_dir)
+        steps["data_dir_exists"] = data_dir.exists()
+
+        if not json_output:
+            console.print(f"[bold]Data directory:[/bold] {data_dir}")
+            if dry_run:
+                console.print("[dim][dry-run] Would create data directory[/dim]")
+            else:
+                console.print(f"  {'[green]✓[/green]' if data_dir.exists() else '[red]✗[/red]'} Created")
+
+        # Step 3: Initialize database
+        db_ok = False
+        if not dry_run:
+            try:
+                with get_connection(db_path) as conn:
+                    init_schema(conn)
+                db_ok = True
+            except Exception as e:
+                steps["db_error"] = str(e)
+
+        steps["db_path"] = str(db_path)
+        steps["db_ok"] = db_ok
+
+        if not json_output:
+            if dry_run:
+                console.print("[dim][dry-run] Would initialize database[/dim]")
+            else:
+                console.print(f"  {'[green]✓[/green] Database' if db_ok else '[red]✗[/red] Database'}")
+                if not db_ok:
+                    console.print(f"    Error: {steps.get('db_error', 'unknown')}")
+
+        # Step 4: Check credentials
+        auth_mgr = AuthManager()
+        result = auth_mgr.get_credential("kalshi", "api_key")
+        kalshi_ok = result is not None and result.value.get_secret_value() is not None
+        steps["kalshi_configured"] = kalshi_ok
+
+        if not json_output:
+            status = '[green]✓[/green]' if kalshi_ok else '[yellow]⚠[/yellow]'
+            console.print(f"  {status} Kalshi credentials")
+
+        # Step 5: System info
+        steps["platform"] = platform.system()
+        steps["platform_release"] = platform.release()
+
+        if json_output:
+            json_lib.dump({"status": "ok" if (py_ok and db_ok) else "issues_found", "steps": steps}, sys.stdout, default=str)
+        else:
+            console.print(f"\n[{'green' if py_ok and db_ok else 'yellow'}]Bootstrap {'complete' if not dry_run else 'dry-run complete'}[/{'green' if py_ok and db_ok else 'yellow'}]")
+            if dry_run:
+                console.print("[dim]Run without --dry-run to apply changes[/dim]")
+
+    @parent_app.command()
+    def heartbeat(
+        db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+        dry_run: Annotated[
+            bool, typer.Option("--dry-run", help="Report only — no state changes")
+        ] = False,
+    ) -> None:
+        """Periodic self-review: performance, adaptation, risk state, and learning promotion."""
+        from traderbot.db import init_schema
+        from traderbot.db.learnings import init_table as init_learnings_table
+        from traderbot.heartbeat import DEFAULT_HEARTBEAT_PATH, run_heartbeat_cycle
+        from traderbot.profiles.runtime import get_current_profile
+        from traderbot.simulation.adapter_state import resolve_state_path
+
+        console = Console()
+
+        def _run(conn):
+            init_schema(conn)
+            init_learnings_table(conn)
+            from traderbot.learning import init_task_observations_table
+
+            init_task_observations_table(conn)
+
+            # Compute state path based on profile
+            profile = get_current_profile()
+            state_path = None
+            if profile:
+                state_path = resolve_state_path(profile_base_dir=profile.base_dir)
+            else:
+                state_path = resolve_state_path(state_path=Path(".traderbot/adaptation_state.json"))
+
+            return asyncio.run(run_heartbeat_cycle(
+                conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run
+            ))
+
+        try:
+            result = _with_db(_resolve_db_path(db_path), _run)
+        except Exception as exc:
+            if json_output:
+                json_lib.dump({"error": str(exc)}, sys.stdout)
+            else:
+                console.print(f"[red]Heartbeat failed:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+        if json_output:
+            json_lib.dump(result.model_dump(mode="json"), sys.stdout, default=str)
+            return
+
+        perf = result.performance
+        decision = result.decisions
+        adapt = result.adaptation
+        lrn = result.learning_promotion
+        cb = result.circuit_breaker
+        health = result.system_health
+
+        console.print(f"\n[bold]Heartbeat[/bold] — {result.timestamp.isoformat()}")
+        console.print(f"  Steps completed: {', '.join(result.steps_completed)}")
+
+        console.print("\n[bold]Performance[/bold]")
+        pnl_str = f"{perf.total_pnl_cents / 100:+.2f}"
+        console.print(
+            f"  Trades: {perf.trade_count}  Win rate: {perf.win_rate:.0%}  P&L: {pnl_str} USD"
+        )
+        if perf.deviation_flag:
+            console.print(f"  [yellow]⚠ Performance deviation detected[/yellow]")
+
+        if decision.decisions_today >= 0:
+            console.print(f"\n[bold]Decisions[/bold] — {decision.decisions_today} today, "
+                          f"{decision.rejections_today} rejected")
+
+        if lrn.promoted > 0:
+            console.print(f"\n[bold]Learning Promotion[/bold] — {lrn.promoted} promoted, "
+                          f"{lrn.deprecated_if_unused} deprecated")
+
+        if cb.level != "NORMAL":
+            console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
+
+    @parent_app.command()
+    def halt(
+        force: Annotated[bool, typer.Option("--force", help="Force halt (set FULL_STOP)")] = False,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+    ) -> None:
+        """Check circuit breaker status or force halt."""
+        from traderbot.risk.circuit_breaker import CircuitBreaker
+
+        console = Console()
+        breaker = CircuitBreaker()
+
+        if force:
+            from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
+
+            breaker._state = CircuitBreakerState(
+                level=BreakerLevel.FULL_STOP,
+                can_trade=False,
+                position_size_multiplier=0.0,
+                reason="Manual halt via CLI",
+            )
+            breaker._persist_state()
+
+        state = breaker.get_state()
+        result = state.model_dump(mode="json")
+
+        if json_output:
+            json_lib.dump(result, sys.stdout, default=str)
+            return
+
+        console.print(f"[bold]Circuit Breaker:[/bold] {state.level.name}")
+        console.print(f"  Can trade:          {state.can_trade}")
+        console.print(f"  Size multiplier:    {state.position_size_multiplier}")
+        if state.reason:
+            console.print(f"  Reason:             {state.reason}")
+
+    @parent_app.command()
+    def resume(
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+    ) -> None:
+        """Resume trading after circuit breaker halt. Clears FULL_STOP/HALT state."""
+        from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker, CircuitBreakerState
+
+        console = Console()
+        breaker = CircuitBreaker()
+        breaker._state = CircuitBreakerState(
+            level=BreakerLevel.NORMAL,
+            can_trade=True,
+            position_size_multiplier=1.0,
+            reason="Manual resume via CLI",
+        )
+        breaker._persist_state()
+
+        if json_output:
+            json_lib.dump({"status": "resumed", "level": "NORMAL", "can_trade": True}, sys.stdout)
+        else:
+            console.print("[green]✓[/green] Trading resumed — circuit breaker cleared")
+
+    @parent_app.command()
+    def learnings(
+        status: Annotated[
+            str | None,
+            typer.Option("--status", help="Filter by status: active, deprecated, pending_review"),
+        ] = "active",
+        category: Annotated[
+            str | None,
+            typer.Option(
+                "--category",
+                help="Filter by category: MarketBehavior, RiskSignal, Timing, Strategy, Execution, FeatureRequest",
+            ),
+        ] = None,
+        promote: Annotated[
+            str | None,
+            typer.Option("--promote", help="Manually promote a pattern by pattern-key"),
+        ] = None,
+        db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+    ) -> None:
+        """List learned patterns and trigger promotions."""
+        from traderbot.db.learnings import (
+            LearningCategory,
+            LearningStatus,
+            find_by_pattern_key,
+            get_patterns,
+            init_table,
+        )
+        from traderbot.learning import promote_learning
+
+        console = Console()
+
+        def _run(conn):
+            init_table(conn)
+
+            if promote is not None:
+                entries = find_by_pattern_key(conn, promote)
+                active_entries = [e for e in entries if e.status != LearningStatus.DEPRECATED]
+                if not active_entries:
+                    if json_output:
+                        json_lib.dump(
+                            {"error": f"No active learning found for pattern-key: {promote}"},
+                            sys.stdout,
+                        )
+                    else:
+                        err_console.print(
+                            f"[red]No active learning found for pattern-key:[/red] {promote}"
+                        )
+                    raise typer.Exit(code=1)
+
+                learning_id = active_entries[0].id
+                result_path = promote_learning(conn, learning_id)
+                if result_path is None:
+                    if json_output:
+                        json_lib.dump(
+                            {"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout
+                        )
+                    else:
+                        err_console.print(f"[red]Promotion failed for learning[/red] #{learning_id}")
+                    raise typer.Exit(code=1)
+
+                promoted_entry = {
+                    "learning_id": learning_id,
+                    "pattern_key": promote,
+                    "promoted_to": str(result_path),
+                }
+                if json_output:
+                    json_lib.dump(promoted_entry, sys.stdout, default=str)
+                else:
+                    console.print(f"[green]✓[/green] Promoted pattern '{promote}'")
+                    console.print(f"    → {result_path}")
+                return
+
+            # Query patterns
+            status_filter: LearningStatus | None = None
+            if status is not None:
+                try:
+                    status_filter = LearningStatus(status)
+                except ValueError:
+                    if json_output:
+                        json_lib.dump({"error": f"Invalid status: {status}"}, sys.stdout)
+                    else:
+                        err_console.print(f"[red]Invalid status:[/red] {status}")
+                    raise typer.Exit(code=1)
+
+            category_filter: LearningCategory | None = None
+            if category is not None:
+                try:
+                    category_filter = LearningCategory(category)
+                except ValueError:
+                    if json_output:
+                        json_lib.dump({"error": f"Invalid category: {category}"}, sys.stdout)
+                    else:
+                        err_console.print(f"[red]Invalid category:[/red] {category}")
+                    raise typer.Exit(code=1)
+
+            patterns = get_patterns(conn, status=status_filter, category=category_filter)
+
+            if json_output:
+                json_lib.dump([p.model_dump(mode="json") for p in patterns], sys.stdout, default=str)
+                return
+
+            if not patterns:
+                console.print("[yellow]No patterns found.[/yellow]")
+                return
+
+            table = Table(title="Learned Patterns")
+            table.add_column("ID", justify="right")
+            table.add_column("Key", style="cyan")
+            table.add_column("Category", style="green")
+            table.add_column("Status")
+            table.add_column("Strength", justify="right")
+            table.add_column("Description")
+
+            for p in patterns:
+                table.add_row(
+                    str(p.id),
+                    p.pattern_key,
+                    p.category.value if p.category else "",
+                    p.status.value,
+                    f"{p.strength:.1f}" if p.strength is not None else "—",
+                    p.description or "",
+                )
+            console.print(table)
+
+        _with_db(_resolve_db_path(db_path), _run)
+
+    @parent_app.command("cache")
+    def cache_command(
+        action: Annotated[
+            str,
+            typer.Argument(help="Cache action: 'warm' to pre-populate event cache"),
+        ],
+        json_output: Annotated[
+            bool,
+            typer.Option("--json", help="Output as JSON"),
+        ] = False,
+    ) -> None:
+        """Manage TraderBot caches. Use 'warm' to pre-populate the event category cache."""
+        from traderbot.kalshi.client import KalshiClient
+        from traderbot.kalshi.markets import MarketService, _save_event_cache_to_disk
+
+        console = Console()
+
+        if action != "warm":
+            console.print(f"[red]Unknown cache action:[/red] {action}. Use 'warm'.")
+            raise typer.Exit(1)
+
+        async def _warm() -> dict[str, int]:
+            from traderbot.kalshi.markets import _event_cache_ts, _event_category_cache
+
+            client = KalshiClient()
+            svc = MarketService(client)
+            event_map = await svc._build_event_category_map()
+            _event_category_cache.update(event_map)
+            _event_cache_ts = time.monotonic()
+            _save_event_cache_to_disk()
+            await client.close()
+            return {"events": len(event_map), "categories": len(set(event_map.values()))}
+
+        result = asyncio.run(_warm())
+
+        if json_output:
+            json_lib.dump({"status": "warmed", **result}, sys.stdout)
+        else:
+            console.print(f"[green]✓[/green] Event cache warmed: {result['events']} events across {result['categories']} categories")

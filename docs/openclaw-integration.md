@@ -61,7 +61,7 @@ The agent spawns a sub-agent that executes independently. No human attention is 
 ```
 
 **Decision Loop cron**: Runs every 5 minutes, 24/7 (Kalshi prediction markets never close).
-**Heartbeat Loop cron**: Runs every 30 minutes.
+**Heartbeat Loop cron**: Runs every 6 hours (configurable via `--heartbeat-every`).
 
 The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
 
@@ -259,5 +259,5 @@ TraderBot is installed at the project level: `skills/traderbot/SKILL.md`. This m
 During development, the agent reads real market data from Kalshi's production API but simulates all orders locally. No trades are submitted to the exchange. This is controlled via the simulation engine:
 
 ```bash
-traderbot paper momentum  # runs strategy with local order simulation
+traderbot paper --strategy momentum  # runs strategy with local order simulation
 ```

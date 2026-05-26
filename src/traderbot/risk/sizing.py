@@ -12,11 +12,13 @@ def kelly_criterion(prob: float, odds: float) -> float:
 
 
 def fractional_kelly(prob: float, odds: float, fraction: float = 0.5) -> float:
-    full = kelly_criterion(prob, odds)
-    if full <= 0:
+    if prob <= 0 or prob >= 1 or odds <= 0:
         return 0.0
-    clamped = max(0.1, min(0.5, fraction))
-    return full * clamped
+    if not 0 < fraction <= 1:
+        return 0.0
+    q = 1 - prob
+    f = (odds * prob - q) / odds
+    return max(0.0, f) * fraction
 
 
 def confidence_scaled_size(kelly_fraction: float, confidence: float, bankroll_cents: int) -> int:

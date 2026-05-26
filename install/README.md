@@ -487,6 +487,44 @@ rm ~/Library/Logs/traderbot-molty.log
 rm ~/Library/Logs/traderbot-molty-error.log
 ```
 
+## Data Pipeline Timers
+
+New deployments auto-wire two recurring data pipeline timers via `install/services/install-data-pipeline.sh` (called automatically by the main installer).
+
+| Timer | Frequency | What It Does |
+|---|---|---|
+| `traderbot-news-ingest@.timer` | Every 30 min | Fetch, classify, embed, store news + data points to ChromaDB |
+| `traderbot-backfill-data@.timer` | Daily | Incremental historical data backfill (Open-Meteo, FRED, CoinGecko) |
+
+On install, `install-data-pipeline.sh` also runs an initial **6-month historical backfill** to seed the ChromaDB `data_points` collection so agents have context immediately.
+
+### Standalone installation
+
+```bash
+bash install/services/install-data-pipeline.sh
+```
+
+### Verify timers
+
+```bash
+systemctl list-timers | grep traderbot
+```
+
+### View pipeline logs
+
+```bash
+journalctl -u traderbot-news-ingest@$(whoami).service -n 50
+journalctl -u traderbot-backfill-data@$(whoami).service -n 50
+```
+
+### Troubleshooting
+
+If `traderbot data-points weather --json` returns 0 items:
+1. Check timers: `systemctl list-timers | grep traderbot`
+2. If timers are running but data_points is empty (< 24h since install), the initial backfill is in progress
+3. If timers are NOT running, run `bash install/services/install-data-pipeline.sh`
+4. For immediate results: `traderbot backfill --months 6` (runs synchronously, ~1-3 min)
+
 ## Future Enhancements
 
 - Automated installer script (Tasks 14-16)

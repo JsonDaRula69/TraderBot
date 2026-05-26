@@ -2,6 +2,39 @@
 
 How TraderBot tests strategies before risking real money — and how it learns from results.
 
+## V3 Experiment System
+
+The V3 experiment system (`traderbot experiment`) replaces the V2 simulation-only approach for evaluating new decision strategies. Rather than replaying historical data through a single strategy, V3 runs **within-subjects A/B experiments** that compare treatments against a control baseline on the same set of markets.
+
+Key differences from V2 simulation:
+
+| Aspect | V2 Simulation | V3 Experiment |
+|---|---|---|
+| Design | Single-strategy replay | Within-subjects (same markets, multiple treatments) |
+| Comparison | Manual (run two backtests) | Automatic (paired t-test vs control) |
+| Data source | Historical API replay | Pre-populated experiment DB |
+| LLM usage | Optional | Built in: treatments decide whether to query LLM |
+| Scoring | Win rate, Sharpe, Brier | Delta profit, p-value, Cohen's d, 95% CI |
+| Statistical rigor | Informal comparison | Formal hypothesis testing (p < 0.05) |
+
+The V2 backtest engine (`simulation/engine.py`) remains for strategy-level replay. The V3 experiment system (`experiment/harness.py`) is for treatment evaluation.
+
+### Experiment Pipeline
+
+1. **Populate**: `traderbot experiment populate` fetches markets from Kalshi and forecasts from Open-Meteo into the experiment database
+2. **Verify**: `traderbot experiment verify` confirms data coverage (market counts, forecast and price coverage, settlement status)
+3. **Run**: `traderbot experiment run --treatments control,calibration_bundle` executes all treatments across stratified market samples with replicates
+4. **Score**: `score_run()` automatically compares each treatment vs control using paired t-test and effect size
+5. **Results**: `traderbot experiment results <run-id>` regenerates scored results from the database
+
+### Within-Subjects Design
+
+Every market in a run is exposed to *all* treatments. This controls for market-level confounds (different difficulty, different volatility) because each market serves as its own control. The harness records decisions per `(treatment, ticker, timestep)` cell, and the scoring engine computes paired differences across markets.
+
+Market stratification (`select_markets`) groups by `(city_prefix, days_to_expiry_bucket)` to ensure balanced coverage across geographic and temporal dimensions.
+
+See [architecture.md](architecture.md#experiment-infrastructure) for full technical details of the experiment modules.
+
 ## Why Custom Backtesting?
 
 Stock market frameworks (backtrader, zipline, vectorbt) don't fit prediction markets because:
@@ -158,7 +191,7 @@ When a strategy passes paper trading validation:
 ### Prediction Market Specific Metrics
 
 | Metric | Description | Computation |
-163:|---|---|---|
+|---|---|---|
 | **Brier Score** | Accuracy of probability estimates (lower = better) | Mean of (predicted_prob - actual_outcome)² across all closed trades. For yes positions, predicted = entry_price/100; for no positions, predicted = 1 - entry_price/100. Actual = 1 if profitable, 0 if loss. |
 | **Calibration** | When we estimate 70% probability, do we win ~70% of the time? | Group predictions into probability bins, compare predicted vs. observed frequencies |
 | **Edge capture** | What fraction of identified edge do we actually capture after slippage? | mean(realized_edge) / mean(predicted_edge) |
@@ -166,7 +199,7 @@ When a strategy passes paper trading validation:
 
 ### Strategy Comparison
 
-`traderbot compare strategy_a strategy_b` runs both strategies on the same historical data and produces a side-by-side comparison across all metrics.
+`traderbot compare --profiles Conservative,Aggressive --strategy NAME` runs the same strategy across multiple risk profiles on the same historical data and produces a side-by-side comparison across all metrics.
 
 ## Strategy Profiles
 
@@ -231,36 +264,35 @@ Results are keyed by profile name, enabling side-by-side comparison:
 
 The `traderbot compare` CLI command uses `run_profiles()` to produce comparison output.
 
-## Bootstrap Calibration
+## Bootstrap Setup
 
-`traderbot bootstrap` — calibrates strategy parameters against historical data before live trading.
+`traderbot bootstrap` — one-time setup wizard for new users.
 
 ### Purpose
 
-Before running a strategy with real parameters, bootstrap calibration:
-1. Validates that historical data is sufficient for reliable backtesting
-2. Fits calibration parameters (e.g., probability thresholds, signal weights) to historical outcomes
-3. Produces a calibration report showing fit quality
+Before first use, bootstrap validates the environment:
+1. Checks Python version (3.12.x required for chromadb compatibility)
+2. Creates default config directory (`~/.traderbot/`)
+3. Initializes SQLite database with schema
+4. Prompts for Kalshi API credentials (keyring-first storage)
 
-### Bootstrap Command Spec
+### Bootstrap Command
 
 ```
-traderbot bootstrap [--from DATE] [--to DATE] [--profile NAME] [--db-path PATH]
+traderbot bootstrap [--dry-run] [--json]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--from` | 30 days ago | Start of calibration window |
-| `--to` | today | End of calibration window |
-| `--profile` | Moderate | Profile to calibrate |
-| `--db-path` | `.traderbot/db.sqlite` | Path to SQLite database |
+| `--dry-run` | False | Validate without writing to DB |
+| `--json` | False | Output as JSON for machine consumption |
 
 ### Output
 
-- Calibration report with fit quality per parameter
-- Recommended parameter values based on historical fit
-- Warnings if data is insufficient (< 30 days)
-- Warm-up period indicator for indicator stability
+- Step-by-step validation results
+- Configuration directory creation status
+- Database initialization status
+- API credential setup status
 
 ### Warm-Up Period Handling
 

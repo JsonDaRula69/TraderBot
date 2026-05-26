@@ -82,8 +82,8 @@ traderbot profile assign molty paper-aggressive
 ### 4. Set API credentials
 
 ```bash
-traderbot profile set-auth paper-aggressive kalshi
-# Prompts for API key ID and secret
+traderbot auth set-kalshi
+# Prompts for API key ID and secret; stores in keyring or .env
 ```
 
 ### 5. Enable persistence
@@ -107,6 +107,35 @@ systemctl --user status traderbot-agent@molty.service
 # View logs
 journalctl --user -u traderbot-agent@molty.service -f
 ```
+
+### 6. Install data pipeline timers
+
+New deployments now auto-wire the data pipeline via `install/services/install-data-pipeline.sh`. This is called automatically by the installer after agent setup, or can be run standalone:
+
+```bash
+bash install/services/install-data-pipeline.sh
+```
+
+This:
+- Runs an initial 6-month data backfill to seed ChromaDB data_points (weather, economic, crypto history)
+- Deploys `traderbot-news-ingest@.timer` — every 30 minutes (fetches news + data points from 9 sources)
+- Deploys `traderbot-backfill-data@.timer` — daily at midnight (incremental historical data enrichment)
+
+```bash
+# Check timer status
+systemctl list-timers | grep traderbot
+
+# View news ingestion logs
+journalctl -u traderbot-news-ingest@$(whoami).service -n 50
+
+# View data backfill logs
+journalctl -u traderbot-backfill-data@$(whoami).service -n 50
+
+# Check data_points collection was seeded
+traderbot data-points weather --json
+```
+
+> **Note for existing deployments**: If you deployed TraderBot before the pipeline timers existed, run `bash install/services/install-data-pipeline.sh` manually to backfill historical data and enable the timers.
 
 ## macOS Installation
 
@@ -150,6 +179,27 @@ launchctl list | grep traderbot
 
 # View logs
 tail -f ~/Library/Logs/traderbot-molty.log
+```
+
+### 5. Install data pipeline timers
+
+The installer runs `install/services/install-data-pipeline.sh` automatically after agent setup. On macOS, this deploys LaunchDaemons instead of systemd timers:
+
+```bash
+bash install/services/install-data-pipeline.sh
+```
+
+This:
+- Runs an initial 6-month data backfill to seed ChromaDB data_points (weather, economic, crypto history)
+- Deploys `com.traderbot.news-ingest` LaunchDaemon — every 30 minutes (fetches news + data points from 9 sources)
+- Deploys `com.traderbot.backfill-data` LaunchDaemon — daily at midnight (incremental historical data enrichment)
+
+```bash
+# Check LaunchDaemon status
+sudo launchctl list | grep traderbot
+
+# Run initial backfill manually if needed
+traderbot backfill --months 6
 ```
 
 ## Windows Installation
@@ -216,6 +266,8 @@ The installer registers three Windows Task Scheduler tasks:
 | `TraderBot-agent-{name}` | Hourly | Main agent scan loop |
 | `TraderBot-heartbeat-{name}` | Every 15 min | Agent heartbeat/health check |
 | `TraderBot-news-ingest` | Hourly | News content ingestion (shared) |
+
+> **Note**: The Windows installer does not currently register a daily backfill timer (`traderbot-backfill-data@.timer` — Linux only). To seed historical data on Windows, run `traderbot backfill --months 6` manually after installation. Daily data enrichment occurs via the news-ingest task's data points fetching.
 
 Tasks run in the background and survive reboots via Task Scheduler settings
 (`AllowStartIfOnBatteries`, `StartWhenAvailable`, restart on failure).

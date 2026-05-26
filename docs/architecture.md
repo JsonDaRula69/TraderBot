@@ -29,12 +29,12 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 
 | Attribute | Value |
 |---|---|
-| **Frequency** | Every 30 minutes |
+| **Frequency** | Every 6 hours (configurable via `cron setup --heartbeat-every`) |
 | **OpenClaw mechanism** | `isolated agentTurn` (autonomous background work) |
 | **Responsibility** | Performance review → adapt parameters → log learnings |
 
 **Cycle:**
-1. Review all decisions since last heartbeat (every 30 min automatically via cron)
+1. Review all decisions since last heartbeat (every 6h automatically via cron)
 2. Compare expected vs. actual outcomes for closed markets
 3. Identify patterns (wins, losses, near-misses)
 4. Adjust strategy parameters via Bayesian updating (`simulation/adaptation`)
@@ -44,7 +44,16 @@ The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-
 
 The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy emotionally — it adjusts mathematical parameters (prior distributions, confidence thresholds) based on observed evidence.
 
-### News Ingestion (Offline Pipeline)
+### News Ingestion & Data Backfill (Offline Pipeline)
+
+The pipeline consists of two independent systemd timers, both running outside any agent session:
+
+| Timer | Frequency | Command | Purpose |
+|---|---|---|---|
+| `traderbot-news-ingest@.timer` | Every 30 min | `traderbot news-ingest` | Fetch, classify, embed news + data points to ChromaDB |
+| `traderbot-backfill-data@.timer` | Daily (midnight) | `traderbot backfill --months 1` | Incremental historical data enrichment (Open-Meteo, FRED, CoinGecko) to ChromaDB `data_points` |
+
+#### News Ingestion
 
 | Attribute | Value |
 |---|---|
@@ -52,7 +61,7 @@ The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy
 | **Mechanism** | Standalone CLI command (`traderbot news-ingest`), no LLM required |
 | **Responsibility** | Fetch → classify → embed → store news and data points to ChromaDB |
 
-The news pipeline runs as a standalone systemd timer (`traderbot-news-ingest@.timer`) independent of any agent session. It:
+The news ingestion timer (`traderbot-news-ingest@.timer`) runs independently and:
 
 1. Fetches from 9 sources (NewsAPI, Reddit RSS, Open-Meteo, OpenWeatherMap, CoinGecko, TheSportsDB, FRED, Google Trends, Twitter/X stub)
 2. Parallelizes all HTTP calls via `asyncio.gather` for maximum throughput
@@ -62,10 +71,24 @@ The news pipeline runs as a standalone systemd timer (`traderbot-news-ingest@.ti
 6. Stores DataPoints (weather, economic, sports, crypto) to ChromaDB `data_points` collection
 7. Deduplicates by SHA-256 URL hash
 
-Agents query accumulated news via `traderbot news-context`, `traderbot news-summary`, or `traderbot signals --category` — they do not receive news inline during trading sessions.t` to main session
-6. If not → update internal sentiment state silently
+#### Data Backfill
 
-The News Loop is the only loop that uses `systemEvent` — because timely news sometimes requires human awareness (e.g., "The Fed just announced an emergency rate cut" is worth knowing about immediately).
+| Attribute | Value |
+|---|---|
+| **Frequency** | Daily (systemd timer) |
+| **Mechanism** | Standalone CLI command (`traderbot backfill`), idempotent |
+| **Responsibility** | Continuously enrich `data_points` with historical weather, economics, and crypto data |
+
+The backfill timer (`traderbot-backfill-data@.timer`) runs once per day and:
+1. Fetches Open-Meteo historical weather (past 92 days max per chunk, chunked for longer windows)
+2. Fetches FRED economic indicator history
+3. Fetches CoinGecko crypto price history
+4. Stores all items to ChromaDB `data_points` collection
+5. Skips already-stored items (idempotent by doc ID)
+
+On first install, `install-data-pipeline.sh` runs a one-shot 6-month backfill to seed the collection. Daily runs thereafter add incremental data.
+
+Agents query accumulated data via `traderbot data-points` and `traderbot news-context` — they do not receive pipeline data inline during trading sessions.
 
 ## Component Map
 
@@ -79,29 +102,30 @@ The News Loop is the only loop that uses `systemEvent` — because timely news s
 ┌──────────────────────────────────────────────────────────────┐
 │  cli.py — CLI entry point                                    │
 │  traderbot scan | analyze | trade | positions | backtest |    │
-│  paper | compare | performance | news | sentiment |          │
-│  heartbeat | learnings | bootstrap | auth                     │
-└──────┬───────┬───────────┬───────────┬───────────┬───────────┘
-       │       │           │           │           │
-       ▼       ▼           ▼           ▼           ▼
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │
-   │        │ │        │ │        │ │        │ │        │
-   │ client │ │indic.  │ │limits  │ │engine  │ │sources │
-   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│
-   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │
-   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │
-   │ history│ │        │ │        │ │profiles│ │embed.  │
-   │ ws     │ │        │ │        │ │data_ldr│ │vectors │
-   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘
-       │                      │
-       ▼                      ▼
-   ┌────────┐            ┌────────┐
-   │ Kalshi │            │  db    │
-   │   API  │            │positions│
-   │        │            │decisions│
-   └────────┘            │learnings│
-                         │ chroma  │
+│  paper | compare | performance | news | signals |             │
+│  sentiment | heartbeat | learnings | audit | halt | resume |  │
+│  bootstrap | auth | experiment | cron | cache                 │
+└──────┬───────┬───────────┬───────────┬───────────┬───────────┬───────────┐
+       │       │           │           │           │           │
+       ▼       ▼           ▼           ▼           ▼           ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────────┐
+   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │ │experiment  │
+   │        │ │        │ │        │ │        │ │        │ │            │
+   │ client │ │indic.  │ │limits  │ │engine  │ │sources │ │shared      │
+   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│ │registry    │
+   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │ │harness     │
+   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │ │results     │
+   │ history│ │        │ │        │ │profiles│ │embed.  │ │populate    │
+   │ ws     │ │        │ │        │ │data_ldr│ │vectors │ │treatments  │
+   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘ │methodologies│
+       │                      │                                └──────┬─────┘
+       ▼                      ▼                                       │
+   ┌────────┐            ┌────────┐                                   ▼
+   │ Kalshi │            │  db    │                            ┌──────────────┐
+   │   API  │            │positions│                            │ experiment db│
+   │        │            │decisions│                            │  (5 tables)  │
+   └────────┘            │learnings│                            │    + LLM     │
+                         │ chroma  │                            └──────────────┘
                          │ vectors │
                          └────────┘
 ```
@@ -129,6 +153,96 @@ The critical design boundary. Crossing it means the toolkit is making decisions 
 
 The toolkit computes, enforces, and executes. The agent decides, interprets, and sizes. Risk guards sit between them — the agent can request any trade, but the toolkit has veto power.
 
+## Experiment Infrastructure
+
+The experiment system runs A/B tests of trading treatments against prediction-market data, measuring whether LLM-driven decision strategies outperform market-implied probability baselines.
+
+### Database Schema
+
+`db/experiment_schema.py` — `create_tables(conn)` creates 5 SQLite tables:
+
+| Table | Purpose |
+|---|---|
+| `markets` | Market metadata: ticker, question, city, strike_type, strike_value, resolution_date, settlement_result, prices, volume |
+| `forecast_snapshots` | Temperature forecasts from Open-Meteo per ticker, with `days_before` and `source` |
+| `market_prices` | Price time series per ticker: timestep, yes_price_cents, no_price_cents |
+| `settlement_actuals` | Resolved outcomes: actual_temp_f, settlement_date |
+| `agent_decisions` | Experiment decisions: run_id, treatment, ticker, timestep, decision, estimated_prob, confidence, reasoning, timestamp |
+
+### Shared Interface
+
+`experiment/shared.py` — the contract every treatment must follow:
+
+```python
+class TreatmentInterface(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    def bypass_llm(self) -> bool:  # Default False; True for control treatments
+
+    @abstractmethod
+    def format_prompt(self, ctx: TreatmentContext) -> str: ...
+
+    @abstractmethod
+    def validate_response(self, response: dict) -> ValidatedDecision: ...
+```
+
+`TreatmentContext` bundles market data, forecast, accuracy metrics, prices, technical indicators, and prior decisions into a single frozen dataclass passed to every treatment.
+
+`ValidatedDecision` enforces valid `decision` values (`buy_yes`, `buy_no`, `skip`), bounded `estimated_prob` and `confidence` in [0.0, 1.0], and non-empty `reasoning`.
+
+### Treatment Registry
+
+`experiment/registry.py` — auto-discovery and lookup:
+
+| Function | Signature | Purpose |
+|---|---|---|
+| `discover_treatments` | `() -> dict[str, type]` | Scan `treatments/` package for TreatmentInterface subclasses |
+| `register_treatment` | `(name: str, cls: type) -> None` | Register a treatment class by name |
+| `get_treatment` | `(name: str) -> type | None` | Look up a registered treatment |
+| `list_treatments` | `() -> list[str]` | Return sorted list of treatment names |
+
+Treatments are declared in `experiment/treatments/__init__.py` via `TREATMENT_REGISTRY`, which lists all treatment classes. `discover_treatments()` iterates this list and validates each against `TreatmentInterface`.
+
+### Harness (Within-Subjects Design)
+
+`experiment/harness.py` — `Harness(conn, llm_client, seed)` runs within-subjects experiments:
+
+1. `select_markets(conn, markets_per_cell, seed)` (from `experiment/methodologies/db_utils`) stratifies markets by `(city_prefix, days_to_expiry_bucket)` for balanced sampling
+2. For each replicate and each market, the harness iterates over all treatment instances
+3. At each timestep, `TreatmentContext` is assembled from DB data (market row, forecasts, prices, technical indicators, prior decisions)
+4. Control treatments (`bypass_llm=True`) use market-implied probability directly; experimental treatments call `format_prompt` then `llm_client.query` then `validate_response`
+5. Every decision is recorded to `agent_decisions` with run_id, treatment, ticker, timestep, and full reasoning
+
+### Scoring Engine
+
+`experiment/results.py` — `score_run(db_path, run_id)` compares treatments vs control:
+
+- Groups final-timestep decisions by `(treatment, ticker)`
+- Computes P&L per decision based on settlement and entry prices
+- Runs paired t-test (manual implementation, no scipy dependency)
+- Computes Cohen's d with Hedges' g small-sample correction
+- Returns `ExperimentResults` per treatment with delta_profit, t_stat, p_value, effect_size, 95% CI, and an `improvement` flag (p < 0.05 and d > 0)
+
+### Treatments
+
+| Treatment | Module | `bypass_llm` | Description |
+|---|---|---|---|
+| `ControlTreatment` | `experiment/treatments/control` | `True` | Uses market-implied probability; no LLM call |
+| `CalibrationBundleTreatment` | `experiment/treatments/calibration_bundle` | `False` | Full calibration-rich prompt with forecast data, accuracy metrics, technical indicators, and prior decisions |
+
+### LLM Client
+
+`llm/client.py` — `LLMClient(provider, max_retries)` wraps any provider implementing `generate(prompt) -> str` with exponential-backoff retry (1s, 2s, 4s) on transient connection errors.
+
+`llm/ollama.py` — `OllamaProvider(model, base_url, timeout)` implements the `LLMProvider` protocol against a local Ollama server. Raises `OllamaConnectionError` on connectivity, timeout, or HTTP errors, which the client retries.
+
+### Market Stratification
+
+`experiment/methodologies/db_utils.py` — `select_markets(conn, markets_per_cell, seed)` groups markets into strata by `city_prefix` and days-to-expiry bucket (`lt7d`, `7-14d`, `gt14d`). Within each stratum, it randomly samples up to `markets_per_cell` tickers using the provided seed for reproducibility.
+
 ## Semantic Layer (Voyage AI + ChromaDB)
 > Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
 
@@ -152,9 +266,9 @@ The semantic layer provides search-optimized index capabilities. It is NOT the a
 ### ChromaDB
 
 - Persistent vector store with metadata filtering (ticker, category, date range)
-- TTL policy: embeddings auto-expire after configurable window (default 90 days)
+- No built-in TTL: embeddings persist until manually purged or collection reset
 - Async support: embedding generation and querying run without blocking the hot path
-- Collections: `decisions`, `heartbeats`, `news_signals`, `chart_embeddings`
+- Collections: `decisions`, `news`, `market_patterns`, `news_signals`, `market_conditions`, `data_points`
 
 ### Architecture Constraint
 
@@ -190,13 +304,14 @@ Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
 ### Bootstrap Flow
 
 ```
-Agent → "traderbot bootstrap --from 2026-01-01 --to 2026-03-01 --profile Moderate"
-   → simulation/data_loader fetches historical data (cached in SQLite)
-   → simulation/engine replays events through StrategyProfile
-   → Warm-up period: first N data points skipped for indicator stability
-   → Calibration parameters fit per-horizon (daily, weekly, monthly)
-   → Report: fit quality, recommended parameters, data sufficiency warnings
-   → IF data < 30 days → WARNING logged, partial results returned (never crashes)
+Agent → "traderbot bootstrap"
+   → cli.py: one-time setup wizard
+   → Check Python version (3.12+)
+   → Verify dependencies installed
+   → Auth check: KALSHI_API_KEY configured
+   → Database schema initialized
+   → Profile creation prompt (interactive)
+   → IF --dry-run → validate only, no writes
 ```
 
 ### Analysis Flow
@@ -277,31 +392,42 @@ class AnalysisRegistry:
 
 ## Security: Credential Management
 
-### .env-Based Credential Management
+### Dual-Layer Credential Management
 
-TraderBot uses a `.env` file for all credential and configuration storage. There is no separate credential backend.
+TraderBot uses OS-native keyring as the primary credential store, with `.env` file fallback when keyring is unavailable.
 
-- **Location**: `~/.traderbot/.env` with mode 0600
+- **Primary**: OS keyring (macOS Keychain, Windows Credential Locker, Linux Secret Service)
+  - Per-profile isolation via `traderbot.profiles.{name}.{service}` namespace
+- **Fallback**: `~/.traderbot/.env` with mode 0600
+  - All profiles share the same `.env` file; per-profile isolation requires keyring
+
 - **API keys**: `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`, `KALSHI_RATE_LIMIT_RPS`
 - **Profile resolution**: `TRADERBOT_PROFILE_TOKEN` set as an environment variable at agent startup
 
-All profiles share the same `.env` file. There is no per-profile credential isolation.
+See [security.md](security.md#credential-storage) for full details on resolution order, keyring namespaces, and per-profile auth.
 
 ### `traderbot auth` CLI
 
-The `traderbot auth` command manages credentials in the `.env` file:
+The `traderbot auth` command manages credentials via OS keyring with `.env` fallback:
 
 | Subcommand | Description |
 |---|---|
-| `traderbot auth check` | Verify that required env vars are set and valid |
-| `traderbot auth set-key <name> <value>` | Store a credential in `.env` |
+| `traderbot auth check` | Verify KALSHI_API_KEY is configured |
+| `traderbot auth set-kalshi` | Store Kalshi credentials (keyring or .env) |
 | `traderbot auth list-keys` | List configured credential names (values NOT shown) |
 | `traderbot auth rotate <name>` | Rotate a credential — prompts for new value |
+| `traderbot auth migrate [--service]` | Migrate credentials from .env to keyring |
+| `traderbot auth delete-key <service>` | Delete a stored credential |
+| `traderbot auth setup-master-password` | Set up master password for trade auth |
+| `traderbot auth change-master-password` | Change the master password |
+| `traderbot auth check-master-password` | Verify master password is configured |
+| `traderbot auth clear-session` | Clear session credential cache |
 
 ### Credential Resolution
 
-1. **`.env` file** (primary) — located at `~/.traderbot/.env`
+1. **OS keyring** (primary) — macOS Keychain / Windows Credential Locker / Linux Secret Service
 2. **Environment variables** (fallback) — for container deployments
+3. **.env file** (fallback) — `~/.traderbot/.env` when keyring unavailable
 
 All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
 
@@ -315,8 +441,8 @@ Internal dependency rules prevent circularity and maintain the enforcement bound
 - `simulation/` depends on: `kalshi/history`, `analysis/`, `risk/`
 - `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings), `CategoryAnalyzer` Protocol and `AnalysisRegistry` pattern for category-specific analysis dispatch
 - `db/` depends on: `kalshi/models`
-- `db/chroma` depends on: `kalshi/models` (for metadata), `voyageai` (for embedding generation)
-- `db/chroma` never depends on: `risk/` (search index has no enforcement role)
+- `db/vectors` depends on: `kalshi/models` (for metadata), `voyageai` (for embedding generation)
+- `db/vectors` never depends on: `risk/` (search index has no enforcement role)
 - `cli.py` depends on: all modules (orchestration layer)
 
 **Strict rule**: `risk/` never depends on `analysis/` or `news/`. Risk guards must be enforceable without understanding strategy signals. A signal can suggest "buy everything" — the risk module checks exposure regardless of signal quality.

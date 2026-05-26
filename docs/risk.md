@@ -16,7 +16,7 @@ HARD_LIMITS = {
     "max_position_per_market_pct": 0.05,    # Never >5% of portfolio in one market
     "max_daily_loss_pct": 0.02,              # Stop trading if down 2% today
     "max_drawdown_pct": 0.10,                # Halt ALL trading if down 10% from peak
-    "min_liquidity_threshold": 1000,          # Don't trade if open_interest < 1000
+    "min_liquidity_threshold": 500,           # Don't trade if open_interest < 500
     "max_open_positions": 20,                # Concentration limit
     "min_edge_pct": 0.03,                     # Must have 3%+ edge to trade
 }
@@ -44,9 +44,9 @@ If the portfolio drops 10% from its historical high, ALL trading stops. The agen
 
 ### Minimum Liquidity Threshold
 
-Markets with open interest below 1,000 contracts are excluded. Illiquid markets have wider spreads, worse fills, and are harder to exit in a downturn.
+Markets with open interest below 500 contracts are excluded. Illiquid markets have wider spreads, worse fills, and are harder to exit in a downturn.
 
-**Check**: `market.open_interest >= 1000`
+**Check**: `market.open_interest >= 500`
 
 ### Minimum Edge
 
@@ -110,7 +110,7 @@ Every trade decision — whether executed or rejected — is logged to `db/decis
 class Decision(BaseModel):
     timestamp: datetime
     ticker: str
-    direction: Literal["yes", "no", "hold"]
+    direction: Literal["yes", "no", "neutral"]
     quantity: int
     price: int                          # Price in cents (int, not float)
     signal_strength: float             # 0-1

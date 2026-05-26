@@ -119,6 +119,7 @@ class Market(BaseModel):
     category: str | None = None
     market_category: MarketCategory | None = None
     settlement_result: bool | None = None
+    strike_type: Literal["between", "less", "greater"] | None = None
 
     @field_validator("category", mode="before")
     @classmethod

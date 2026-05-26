@@ -25,7 +25,7 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 | `traderbot signals --json` | Active trading signals (`--category`, `--limit`) |
 | `traderbot news-context CATEGORY --json` | Pre-trade news context by category (aggregated sentiment + articles, add `--include-data` for quantitative readings) |
 | `traderbot data-points CATEGORY --json` | Query quantitative data points (weather, econ, crypto, sports) for a category |
-| `traderbot news-summary --json` | Query accumulated news from ChromaDB (`--since`, `--category`, `--query`, `--signalsonly`) |
+| `traderbot news-summary --json` | Query accumulated news from ChromaDB (`--since`, `--category`, `--query`, `--signals`) |
 | `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
 
 ### Trading & Positions

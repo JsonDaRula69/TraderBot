@@ -64,7 +64,7 @@ All risk parameters are validated against `HARD_LIMITS` at creation time. A prof
 | `max_daily_loss_pct` | 2% | N/A |
 | `max_drawdown_pct` | 10% | N/A |
 | `max_open_positions` | 20 | N/A |
-| `min_liquidity_threshold` | N/A | 1000 |
+| `min_liquidity_threshold` | N/A | 500 |
 | `min_edge_pct` | N/A | 3% |
 
 Attempting to create a profile with stricter-than-ceiling parameters raises `ValueError`.
@@ -79,7 +79,7 @@ An empty `enabled_categories` list means all categories are permitted. If a list
 
 ## Profile Registry
 
-`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in an AES-256 encrypted file at `~/.traderbot/profiles.enc`.
+`ProfileRegistry` manages CRUD operations for profiles. It stores profiles in an encrypted file at `~/.traderbot/profiles.enc`.
 
 ```python
 registry = ProfileRegistry()
@@ -95,21 +95,21 @@ Storage namespace: `traderbot.profiles.<name>` (`.env` file) or `~/.traderbot/pr
 
 ## Headless Linux / File Storage
 
-On headless Linux servers (no desktop environment, no D-Bus session), the `.env` file is the primary storage. `ProfileRegistry` falls back to an AES-256 encrypted file when `.env` is unavailable.
+On headless Linux servers (no desktop environment, no D-Bus session), the `.env` file is the primary storage. `ProfileRegistry` falls back to an encrypted file when `.env` is unavailable.
 
 ### Fallback Path
 
 ```
-~/.traderbot/profiles.enc    # AES-256 encrypted JSON blob (mode 0600)
+~/.traderbot/profiles.enc    # Encrypted JSON blob (Fernet: AES-128-CBC + HMAC-SHA256, mode 0600)
 ```
 
 The file stores all profiles as a single JSON dictionary, encrypted via `cryptography.fernet` (Fernet, AES-128-CBC with HMAC-SHA256).
 
 ### Encryption Key
 
-The AES-256 key is derived as follows:
+The Fernet key is derived as follows:
 
-1. **Key file available**: A 32-byte random key is stored in `~/.traderbot/.profile_key` (mode 0600).
+1. **Key file available**: A 32-byte random key is stored in `~/.traderbot/.profile_key` (mode 0600). Note: Fernet uses this 32-byte key internally for AES-128-CBC encryption (16 bytes) and HMAC-SHA256 signing (16 bytes).
 2. **Key file missing**: A 32-byte key is generated and stored in `~/.traderbot/.profile_key`.
 
 The `_derive_or_create_key()` function creates the key on first access and caches it.
@@ -194,8 +194,15 @@ traderbot profile create <name> --mode paper|live [--description TEXT] \
     [--max-position-pct N] [--max-daily-loss-pct N] [--max-drawdown-pct N] \
     [--max-open-positions N] [--min-liquidity N] [--min-edge-pct N]
 
+# Note: CLI --min-liquidity maps to model field min_liquidity_threshold
+
 traderbot profile list [--json]
 traderbot profile show <name> [--json]
+traderbot profile update <name> [--mode paper|live] [--description TEXT] \
+    [--categories CAT1,CAT2,...] [--risk-multiplier N] \
+    [--max-position-pct N] [--max-daily-loss-pct N] [--max-drawdown-pct N] \
+    [--max-open-positions N] [--min-liquidity N] [--min-edge-pct N] \
+    [--initial-balance-cents N]
 traderbot profile delete <name> [--keep-data]
 
 # Agent assignment
@@ -204,7 +211,7 @@ traderbot profile revoke <profile-name>               # Revoke token, remove fro
 traderbot profile assignments [--json]               # List all token assignments
 
 # Credential management
-traderbot profile set-auth <profile-name> <service> <key>
+traderbot auth set-kalshi                                 # Store Kalshi credentials (keyring or .env)
 traderbot profile auth <profile-name> [--json]
 
 # Discovery

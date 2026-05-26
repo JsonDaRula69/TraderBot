@@ -31,7 +31,7 @@ To defend against corporate MITM proxies or compromised CAs, TraderBot pins Kals
 - **Implementation**: `kalshi/pinning.py` — `PinnedSSLContext` subclass
 - **Integration**: Both `KalshiClient` (httpx) and `KalshiWebSocket` (websockets) use the pinned SSL context
 
-If the pin does not match, the connection is aborted with a `SecurityError`. Update the pin via `traderbot utils update-kalshi-pin` if Kalshi rotates certificates.
+If the pin does not match, the connection is aborted with a `SecurityError`. If Kalshi rotates certificates, the pin constant in `kalshi/pinning.py` must be updated manually.
 
 ## Key Endpoints
 
@@ -125,7 +125,7 @@ Key Pydantic models in `kalshi/models.py`:
 
 - **Market** (V2): ticker, title, status, close_time (ISO datetime), last_price_cents, yes_bid_cents, yes_ask_cents, no_bid_cents, no_ask_cents, volume_fp, open_interest_fp
 - **MarketV2**: Raw V2 API response model before normalization
-- **OrderBook**: yes/no bids and asks with depth (nested under `orderbook_fp`)
+- **OrderBook**: yes/no bids with depth (nested under `orderbook_fp`; Kalshi order books expose bids only, no asks)
 - **Trade**: timestamp, price, quantity, side
 - **Order**: id, ticker, side, price, quantity, status, created_time
 - **Position**: ticker, quantity, avg_price, settlement_result

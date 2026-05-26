@@ -114,7 +114,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 - `traderbot backtest <strategy> 2026-01-01 2026-03-01` produces valid performance metrics
 - Paper trading simulates execution against prod market data with realistic fills
 - Slippage modeled in backtests (worst-case fill within spread)
-- `traderbot compare strategy_a strategy_b` produces side-by-side metrics
+- `traderbot compare --profiles Conservative,Aggressive --strategy NAME` produces side-by-side metrics
 - Historical data cached locally to avoid re-fetching
 
 ## Phase 6: Decision Logging & Self-Learning Foundation
@@ -130,7 +130,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Workspace files | `.openclaw/workspace/` | AGENTS.md, SOUL.md, TOOLS.md, BOOT.md, BOOTSTRAP.md, HEARTBEAT.md, IDENTITY.md, USER.md, MEMORY.md |
 
 **Key enhancements**:
-- **Pattern staleness constraint**: `max_age_days=30` enforced in `db/learnings.py` — patterns older than 30 days from last recurrence are not eligible for promotion.
+- **Pattern staleness constraint**: `max_age_days=30` enforced in `learning.py` — patterns older than 30 days from last recurrence are not eligible for promotion.
 - **PENDING_REVIEW promotion**: Learnings and feature requests are promoted to PENDING_REVIEW status, surfaced in heartbeat reviews, and require explicit human approval before any operating rule changes.
 - **Graceful degradation logging**: All fallback paths (Voyage, ChromaDB, news sources) MUST log WARNING-level messages when degrading.
 

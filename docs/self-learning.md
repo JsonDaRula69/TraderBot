@@ -8,6 +8,21 @@ The agent improves through **math, not emotions**. When outcomes differ from pre
 
 This is the critical distinction from human traders who tilt, chase losses, or develop superstitions. The adaptation engine only changes parameters based on statistical evidence.
 
+## Experiment Pipeline
+
+New trading strategies and decision improvements go through a structured experiment pipeline before deployment. This prevents unvalidated changes from reaching production.
+
+| Stage | Description | Command |
+|---|---|---|
+| **DISCOVER** | Identify a potential improvement from heartbeat patterns or learnings | `traderbot heartbeat`, `traderbot learnings` |
+| **PROMOTE** | Recurring pattern reaches promotion threshold (Recurrence-Count >= 3) | `traderbot learnings --promote KEY` |
+| **DESIGN** | Encode the improvement as a TreatmentInterface subclass | Code: `experiment/treatments/` |
+| **VALIDATE** | Populate experiment DB, verify data coverage | `traderbot experiment populate`, `traderbot experiment verify` |
+| **EVALUATE** | Run within-subjects experiment against control baseline | `traderbot experiment run --treatments control,<new_treatment>` |
+| **DEPLOY / REJECT** | If p < 0.05 and effect_size > 0, integrate into production. Otherwise, reject | Exit code 2 = significant improvement; 0 = no improvement |
+
+The experiment system (`traderbot experiment`) provides the statistical rigor that informal backtesting cannot. Each treatment is compared against the control on the same markets using paired t-tests and effect size analysis. See [simulation.md](simulation.md#v3-experiment-system) for the experiment system design and [architecture.md](architecture.md#experiment-infrastructure) for module details.
+
 ## Bayesian Parameter Adaptation
 
 `simulation/adaptation.py` — the math layer that adjusts strategy parameters.

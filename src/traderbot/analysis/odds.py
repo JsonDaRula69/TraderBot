@@ -49,7 +49,7 @@ def implied_probability(orderbook: OrderBook) -> ImpliedProb:
     no_prob = best_no_bid / 100.0
     best_yes_ask = 100 - best_no_bid
     spread_cents = best_yes_ask - best_yes_bid
-    mid_price_cents = round((best_yes_bid + best_yes_ask) / 2)
+    mid_price_cents = max(1, round((best_yes_bid + best_yes_ask) / 2))
 
     return ImpliedProb(
         yes_prob=yes_prob,

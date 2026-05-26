@@ -1573,6 +1573,12 @@ interactive_config_flow() {
         install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
     fi
 
+    # Install data pipeline timers (news-ingest every 30m + backfill daily)
+    if [[ -x "$SCRIPT_DIR/services/install-data-pipeline.sh" ]]; then
+        echo "Installing data pipeline timers..."
+        bash "$SCRIPT_DIR/services/install-data-pipeline.sh"
+    fi
+
     if [[ -x "$tb_cmd" ]]; then
         echo
         echo "=== Verification ==="

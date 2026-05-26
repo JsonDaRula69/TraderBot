@@ -1,6 +1,6 @@
-<!-- TRADERBOT_BOOT_START -->
+<!-- TRADERBOT_SYSADMIN_BOOT_START -->
 <!-- ASK_THEN_MERGE -->
-# BOOT.md
+# BOOT.md - Sysadmin Boot Sequence
 
 Run `traderbot --version` on startup to verify the CLI is available.
 If the command fails, notify the user: "TraderBot CLI not found. Run: uv pip install -e ."
@@ -8,45 +8,39 @@ Then reply with NO_REPLY.
 
 ## Full Boot Sequence
 
-After confirming the CLI is available, run the following checks in order to establish full market and portfolio status:
+After confirming the CLI is available, run the following checks in order to establish full fleet and system status:
 
-### 1. Profile & Configuration
+### 1. Fleet Inventory
 - Run `traderbot profile assignments --json` to list all profile→agent mappings
-- If a profile is assigned to this agent, run `traderbot profile show <profile_name> --json` to display current parameters (risk multiplier, max position %, categories)
-- If no profile is assigned, note: "No profile assigned. Running with HARD_LIMITS defaults."
+- Read `SESSION-STATE.md` → compare registered agents against profile assignments
+- Note any agents registered in SESSION-STATE but missing from profile assignments (stale entries)
+- Note any assigned profiles that aren't registered in SESSION-STATE (new agents to register)
 
 ### 2. Circuit Breaker Status
-- Run `traderbot halt --json` to check current circuit breaker state (OK, SLOW, HALT, FULL_STOP)
-- If state is HALT or FULL_STOP, do NOT attempt new trades. Surface alert to user immediately.
+- Run `traderbot halt --json` to check global circuit breaker state (OK, SLOW, HALT, FULL_STOP)
+- If any circuit breaker is HALT or FULL_STOP, investigate and surface alert to main session with level and daily loss %
 
-### 3. Portfolio & Position Status
-- Run `traderbot positions --json` to list all current positions (ticker, side, quantity, avg price, P&L)
-- Run `traderbot performance --json` to get trade count, total P&L, and win rate
+### 3. Agent Health Overview
+- For EACH agent registered in `SESSION-STATE.md`:
+  - Check its `HEARTBEAT_DATA.md` at `agents/<category>/HEARTBEAT_DATA.md` (if it exists)
+  - Note last heartbeat timestamp, circuit breaker level, and any open alerts
+  - Read `agents/<category>/SESSION-STATE.md` (if it exists) for active positions and pending actions
 
-### 4. Available Markets
-- Run `traderbot scan --limit 50 --json` to discover currently open markets
-- Note the available market tickers and their categories
-- Cross-reference with enabled categories in the active profile (if any)
+### 4. System Health
+- Run `traderbot heartbeat --json` to run the 7-step review from the sysadmin perspective
+- Read `HEARTBEAT_DATA.md` to check API and DB status
 
-### 5. Session State
-- Read `SESSION-STATE.md` to check:
-  - Active positions listed
-  - Pending actions (must be reconciled if any exist from a crashed session)
-  - Tracked markets list
-  - Last heartbeat timestamp
-
-### 6. Heartbeat Data
-- Read `HEARTBEAT_DATA.md` (if exists) to get the latest 7-step review output
-- Note any open alerts or required actions
-
-### 7. Learnings & Errors
-- Run `traderbot learnings --json` to check for PENDING_REVIEW entries
+### 5. Learnings & Errors
+- Run `traderbot learnings list --json` to check for PENDING_REVIEW entries across all agents
 - Read `.learnings/ERRORS.md` to check for unresolved errors from last session
 
-### 8. News & Sentiment (if markets are tracked)
-- Run `source .env 2>/dev/null || true` before any traderbot command
-- If SESSION-STATE.md lists tracked markets, run `traderbot news --json` to fetch latest news
-- For each tracked ticker, run `traderbot sentiment <TICKER> --json` to get current sentiment
+### 6. Test Lab
+- Check `test-lab/backlog.md` for any pending experiments
+- Note any completed tests that need review or results to summarize
+
+### 7. News & High-Impact Events
+- Run `traderbot news-summary --signals --json` to check for high-impact news
+- If any signal impact score > 0.7, note it for the fleet status report
 
 ## Boot Complete
 
@@ -55,14 +49,14 @@ After all checks, output a summary:
 ```
 BOOT COMPLETE
 - CLI: vX.XX.XX
-- Profile: <name> (or HARD_LIMITS)
-- Circuit Breaker: <state>
-- Positions: N (P&L: $X.XX)
-- Tracked Markets: <list>
-- Pending Actions: N
-- Last Heartbeat: <timestamp or Never>
+- Circuit Breaker: <state> (fleet-wide)
+- Active Agents: N registered, N with heartbeats
+- System: API <status>, DB <status>
 - Pending Reviews: N
+- Pending Tests: N
+- High-Impact Signals: N
 ```
 
-If circuit breaker is HALT/FULL_STOP or there are pending actions from a crashed session, reply with the summary and highlight the issue. Otherwise, proceed normally.
-<!-- TRADERBOT_BOOT_END -->
+If the fleet circuit breaker is HALT or FULL_STOP, include that alert in the summary and proceed with caution — investigate root cause before any new agent actions.
+
+If no agents are registered in SESSION-STATE.md, note: "No agents registered. Awaiting agent fleet deployment or profile assignments."

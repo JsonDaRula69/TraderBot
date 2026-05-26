@@ -7,68 +7,89 @@
 
 | Tier | Rule |
 |---|---|
-| **🟢 Sysadmin-autonomous** | Run freely without asking. No permission needed. These are read-only / analytical. |
-| **🔴 Human-only / Escalation** | You MUST either request EXPLICIT permission or escalate to the human BEFORE acting. Do not execute these on your own. If unsure, ask. |
+| **🟢 Sysadmin-autonomous** | Run freely without asking. No permission needed. The sysadmin manages the entire fleet lifecycle autonomously. |
+| **🔴 Exception only** | Reserved for system-critical operations that the human should handle personally. These are rare. |
 
-If a command is not listed below, assume it requires permission (🔴 Human-only).
+If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's probably covered by a general category below).
 
 ---
 
 ## 🟢 Sysadmin-Autonomous Commands
 
+### Sub-Agent & Session Tools
+
+| Tool | Purpose |
+|---|---|
+| `sessions_list` | List all sessions (filter by kind, label, agent) — discover agent sessions |
+| `sessions_history` | Read agent SESSION-STATE.md and Pending Actions across the fleet |
+| `sessions_send` | Notify agents of experiment status (RECEIVED, DEPLOYED, REJECTED) |
+| `sessions_spawn` | Spawn isolated test-lab execution sub-agents if needed |
+| `subagents` | List spawned sub-agent status |
+
+### Fleet Management
+
+| Command | Purpose | Signature |
+|---|---|---|
+| `traderbot profile create <name>` | Create a new profile | `--mode paper/live --categories ... --risk-multiplier 0.5 --max-position-pct 10 --min-edge-pct 3` |
+| `traderbot profile update <name>` | Update profile parameters | `--risk-multiplier --max-position-pct --max-daily-loss-pct --max-drawdown-pct --max-open-positions --min-liquidity-threshold --min-edge-pct --initial-balance-cents` |
+| `traderbot profile assign <agent-id> <profile>` | Assign an agent to a profile | No named options |
+| `traderbot profile revoke <profile>` | Revoke an agent's profile | No named options |
+| `traderbot profile list --json` | List all profiles | |
+| `traderbot profile show <name> --json` | Show profile details | |
+| `traderbot profile assignments --json` | List token assignments | |
+| `traderbot profile delete <name>` | Delete a profile | |
+| `traderbot profile get-token <name>` | Get profile token for service install | |
+| `traderbot auth setup-master-password` | Set master password | Required for paper trades |
+| `traderbot auth set-kalshi` | Set Kalshi API credentials (interactive prompt) | |
+| `traderbot auth set-voyage` | Set Voyage AI API key | |
+| `traderbot auth set-newsapi` | Set NewsAPI key | |
+| `traderbot auth check-kalshi` | Validate Kalshi credentials | |
+| `traderbot cron setup` | Install systemd timers for news + backfill | |
+
 ### Oversight & Monitoring
 
 | Command | Purpose |
 |---|---|
-| `traderbot scan --json` | List open markets (read-only overview for all categories) |
-| `traderbot heartbeat --json` | Run the 7-step self-review cycle on behalf of managed agents |
-| `traderbot performance --json` | Review P&L and win rate across agents (`--from`, `--to`) |
-| `traderbot halt` | Check circuit breaker status (read-only for sysadmin) |
+| `traderbot scan --json` | List open markets (`--category`, `--limit`) |
+| `traderbot heartbeat --json` | Run the 7-step self-review cycle |
+| `traderbot performance --json` | Review P&L and win rate (`--from`, `--to`, per-agent) |
+| `traderbot halt --json` | Check circuit breaker status |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
-| `traderbot learnings list --json` | List learning patterns (`--status`, `--category`) |
-| `traderbot compare --profiles name1,name2 --json` | Compare performance across profiles/agents |
 
-### Test Lab (Sysadmin Domain)
+### Test Lab (Experiments & Backtesting)
 
-| Command | Purpose |
-|---|---|
-| `traderbot backtest --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Historical backtest (test lab only) |
-| `traderbot paper TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --confirm --json` | Paper trade (requires `--confirm` and master password) |
+| Command | Purpose | Signature |
+|---|---|---|
+| `traderbot backtest --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Historical backtest against Kalshi API data | `--strategy <name> --from <date> --to <date> --bankroll <cents> --json` |
+| `traderbot compare --profiles Conservative,Moderate --strategy momentum --from YYYY-MM-DD --to YYYY-MM-DD --json` | Compare strategy performance across risk profiles | Uses PRESETS names (Conservative, Moderate, Aggressive). `--strategy`, `--from`, `--to`, `--bankroll`, `--json` |
+| `traderbot paper --strategy momentum --duration 60 --initial-balance 10000 --json` | Run a paper trading session with real market data | Session-based. `--strategy <name>`, `--duration <minutes>`, `--initial-balance <dollars>`, `--json` |
+| `traderbot experiment populate --category KXHIGH --max-markets 200` | Populate experiment DB with market + forecast data | `--category`, `--max-markets`, `--db` |
+| `traderbot experiment verify` | Verify experiment DB coverage | `--db` |
+| `traderbot experiment run --treatments control,variant --replicates 3 --model glm-5.1:cloud` | Run within-subjects A/B experiment over treatments | `--treatments`, `--control`, `--replicates`, `--seed`, `--model`, `--dry-run`, `--run-id` |
+| `traderbot experiment results <run-id>` | Score a completed experiment run | `--db`, `--output-format json/text` |
+| `traderbot experiment list-treatments` | List all available treatments from registry | `--output-format json/text` |
 
 ### Analysis & Context
 
 | Command | Purpose |
 |---|---|
-| `traderbot news-summary --since <last_session_end> --json` | Query accumulated news from ChromaDB |
-| `traderbot news-context CATEGORY --json` | Pre-trade news context by category (read-only) |
-| `traderbot data-points CATEGORY --json` | Query quantitative data points |
-| `traderbot sentiment TICKER --json` | Aggregate sentiment for a ticker |
-
-### Agent Management
-
-| Command | Purpose |
-|---|---|
-| `traderbot profile assignments --json` | List token assignments (see which agents are paired) |
-| `traderbot profile list --json` | List all profiles |
-| `traderbot profile show <name> --json` | Show profile details |
+| `traderbot news-summary --since <timestamp> --json` | Query accumulated news from ChromaDB. `--signals` for high-impact only. `--category`, `--query`, `--source`, `--limit`. |
+| `traderbot news-context <CATEGORY> --include-data --json` | Pre-trade news context by category. `--hours`, `--limit`, `--include-data` for quantitative readings. |
+| `traderbot data-points <CATEGORY> --json` | Query quantitative data points (weather, economics, etc.). `--hours`, `--limit`. |
+| `traderbot sentiment <TICKER> --json` | Aggregate sentiment for a ticker. |
+| `traderbot learnings --status active --json` | List learning patterns. `--status`, `--category`, `--promote <pattern-key>` |
+| `traderbot scan --category <cat> --limit 500 --json` | List open markets. `--continuous` for 5min polling mode. |
 
 ---
 
-## 🔴 Human-only / Escalation Commands
+## 🔴 Exception Only
 
-| Command | Purpose | Why Human-only |
-|---|---|---|
-| `traderbot profile create <name> --mode paper \ --categories ...` | Create a new trading profile | Defines risk parameters and trading scope |
-| `traderbot profile assign <agent-id> <profile>` | Assign an agent to a profile | Gives an agent real trading authority |
-| `traderbot profile revoke <profile>` | Revoke an agent assignment | Removes an agent's authority |
-| `traderbot trade TICKER ...` | Live trade | Real monetary risk — only category agents, never sysadmin |
-| `traderbot profile set-auth <name> kalshi` | Set Kalshi API credentials | Credential management |
-| `traderbot auth setup-master-password` | Set master password | Security-critical |
+| Command | Reason |
+|---|---|
+| `traderbot shutdown` | Halts all agents, closes positions. Human decision. |
+| Modify `AGENTS.md`, `SOUL.md`, `TOOLS.md` | Immutable operating constraints. Requires human approval. |
 
-**IMPORTANT:** The sysadmin does NOT execute `traderbot trade`. If you see a trade command, it is either:
-- A category agent running autonomously (report it if anomalous), or
-- A user request that should be routed to the appropriate category agent, or
-- A test-lab paper trade (requires approval and master password)
+All other commands are 🟢 autonomous. The sysadmin manages the fleet end-to-end.
 
 ---
 
