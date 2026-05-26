@@ -158,7 +158,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         intent_id = write_intent(
-            WalAction.TRADE,
+            WalAction.BUY,
             {
                 "ticker": ticker,
                 "direction": direction,
