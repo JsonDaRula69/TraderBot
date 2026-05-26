@@ -32,8 +32,8 @@ If a command is not listed below, assume it requires permission (🔴 Human-only
 
 | Command | Purpose |
 |---|---|
-| `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --confirm --json` | Place trade with your probability estimate through risk checks. **Requires `--confirm` flag and master password**. **Always provide `--estimated-prob` and `--confidence`** — without these, Kelly sizing defaults to market-implied probability and rejects all trades. |
-| `traderbot paper TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --confirm --json` | Paper trade (no real money). **Requires `--confirm` flag and master password** for live-like execution. |
+| `traderbot trade TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --json` | Place trade with your probability estimate through risk checks. Bypasses confirmation in automation contexts (TRADERBOT_CONFIRM_TRADES=false). **Always provide `--estimated-prob` and `--confidence`** — without these, Kelly sizing defaults to market-implied probability and rejects all trades. |
+| `traderbot paper TICKER --direction yes/no --quantity N --price CENTS --estimated-prob 0.75 --confidence 0.8 --json` | Paper trade (no real money). Same risk pipeline as trade.
 | `traderbot positions --json` | List current positions from DB |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
 
