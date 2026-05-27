@@ -28,11 +28,38 @@ def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False
 
     If overwrite is True, template content replaces target files entirely.
     If overwrite is False (default), templates are merged using fenced blocks.
+
+    Template selection (in order):
+    1. Sysadmin profile → workspace root
+    2. Category-specific template when profile has exactly one category
+       (e.g., profile with categories=[WEATHER] → workspace/weather/)
+    3. Generic agent template → workspace/agent/ (fallback)
     """
     _src_dir = Path(__file__).resolve().parent.parent.parent
     workspace_root = _src_dir.parent / ".openclaw" / "workspace"
     is_sysadmin = getattr(profile, "name", None) == "sysadmin"
-    template_dir = workspace_root if is_sysadmin else workspace_root / "agent"
+
+    if is_sysadmin:
+        template_dir = workspace_root
+    elif hasattr(profile, "categories") and profile.categories:
+        # Try category-specific template directory for single-category profiles
+        from traderbot.kalshi.models import MarketCategory
+
+        # Get the single category if there's exactly one, otherwise use generic
+        cat_names = {c.value.lower() for c in profile.categories}
+        template_dir = workspace_root / "agent"  # default fallback
+        for cat_name in cat_names:
+            cat_template = workspace_root / cat_name
+            if cat_template.exists():
+                template_dir = cat_template
+                break
+    else:
+        template_dir = workspace_root / "agent"
+
+    logger.info(
+        "Using template dir %s for profile=%s target=%s",
+        template_dir, getattr(profile, "name", "?"), target_dir,
+    )
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
