@@ -26,6 +26,10 @@ class InjectionStrategy(StrEnum):
     ASK_THEN_MERGE = "ask_then_merge"
 
 
+# Template markers for each file type.
+# The merge code uses these to extract content from templates and inject into targets.
+# Category-specific templates may use custom markers (e.g. TRADERBOT_WEATHER_AGENT_*)
+# — the merge will fall back to whole-file content when markers don't match.
 FENCED_BLOCK_MARKERS: dict[str, tuple[str, str]] = {
     "AGENTS.md": ("<!-- TRADERBOT_RULES_START -->", "<!-- TRADERBOT_RULES_END -->"),
     "SOUL.md": ("<!-- TRADERBOT_SOUL_START -->", "<!-- TRADERBOT_SOUL_END -->"),
@@ -49,6 +53,8 @@ FILE_STRATEGIES: dict[str, InjectionStrategy] = {
     "SESSION-STATE.md": InjectionStrategy.INIT_IF_MISSING,
     "HEARTBEAT_DATA.md": InjectionStrategy.INIT_IF_MISSING,
     ".learnings/": InjectionStrategy.INIT_IF_MISSING,
+    "test-lab/backlog.md": InjectionStrategy.INIT_IF_MISSING,
+    "test-lab/results/": InjectionStrategy.INIT_IF_MISSING,
 }
 
 
@@ -85,6 +91,27 @@ def _extract_marked_section(
     return template_content[start_idx:end_idx]
 
 
+def _detect_markers(template_content: str, fallback_markers: tuple[str, str]) -> tuple[str, str]:
+    """Auto-detect which markers are actually in the template.
+
+    Checks the standard fallback markers first. If they're not found,
+    searches for any <!-- TRADERBOT_*_START --> pattern in the template.
+    This handles category-specific templates (e.g. weather uses
+    TRADERBOT_WEATHER_AGENT_START instead of TRADERBOT_RULES_START)."""
+    start, end = fallback_markers
+    if start in template_content and end in template_content:
+        return fallback_markers
+    import re as _re
+    match = _re.search(r'<!--\s+(TRADERBOT_\w+)_START\s+-->', template_content)
+    if match:
+        prefix = match.group(1)
+        custom_start = f"<!-- {prefix}_START -->"
+        custom_end = f"<!-- {prefix}_END -->"
+        if custom_start in template_content and custom_end in template_content:
+            return (custom_start, custom_end)
+    return fallback_markers
+
+
 def fenced_merge(
     template_content: str, target_path: Path, markers: tuple[str, str]
 ) -> None:
@@ -93,9 +120,17 @@ def fenced_merge(
     If target doesn't exist, writes the full template.
     If target has markers, replaces the block between them.
     If target lacks markers, appends the block at the end.
+
+    Auto-detects custom markers in templates (e.g. TRADERBOT_WEATHER_AGENT_START
+    instead of TRADERBOT_RULES_START) so category-specific workspaces merge correctly.
     """
-    start_marker, end_marker = markers
+    # Auto-detect actual markers used in this template
+    actual_markers = _detect_markers(template_content, markers)
+    start_marker, end_marker = actual_markers
     block = _extract_fenced_block(template_content, start_marker, end_marker)
+    # If block extraction failed with detected markers, fall back to full template
+    if not block:
+        block = template_content
     if not target_path.exists():
         target_path.write_text(template_content)
         return
@@ -103,7 +138,7 @@ def fenced_merge(
     if start_marker in existing and end_marker in existing:
         new_content = _replace_fenced_block(existing, start_marker, end_marker, block)
     else:
-        new_content = existing.rstrip() + "\n\n" + block + "\n"
+        new_content = existing.rstrip() + "\n\n" + start_marker + "\n" + block + "\n" + end_marker + "\n"
     target_path.write_text(new_content)
 
 

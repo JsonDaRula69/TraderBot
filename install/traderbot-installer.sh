@@ -1330,6 +1330,10 @@ else:
         if [[ $assign_exit -eq 0 ]]; then
             echo "Sysadmin profile assigned to agent '$sysadmin_agent'."
             echo "$assign_output"
+            # Register sysadmin cron jobs (isolated heartbeat tasks)
+            echo "Registering sysadmin heartbeat cron jobs..."
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" 2>/dev/null || \
+                echo "  Warning: sysadmin cron registration skipped."
         else
             echo "Warning: sysadmin assignment failed (exit $assign_exit)." >&2
             echo "$assign_output" >&2
