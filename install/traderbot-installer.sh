@@ -539,7 +539,7 @@ uninstall_services() {
     if [[ "$os_type" == "macos" ]]; then
         local daemon_dir="/Library/LaunchDaemons"
         if [[ -d "$daemon_dir" ]]; then
-            find "$daemon_dir" -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
+            find "$daemon_dir" -maxdepth 1 -name 'com.traderbot.*.plist' 2>/dev/null | while read -r plist; do
                 local label
                 label="$(basename "$plist" .plist)"
                 sudo launchctl bootout "system/${label}" 2>/dev/null || \
@@ -551,15 +551,16 @@ uninstall_services() {
     else
         local service_dir="/etc/systemd/system"
         if [[ -d "$service_dir" ]]; then
-            find "$service_dir" -maxdepth 1 -name 'traderbot-agent@*.service' 2>/dev/null | while read -r service; do
+            find "$service_dir" -maxdepth 1 -name 'traderbot-*@*.service' 2>/dev/null | while read -r service; do
                 local unit
                 unit="$(basename "$service")"
+                local timer="${unit%.service}.timer"
                 sudo systemctl stop "$unit" 2>/dev/null || true
                 sudo systemctl disable "$unit" 2>/dev/null || true
                 sudo rm -f "$service"
-                echo "Removed: $service"
+                sudo rm -f "$service_dir/$timer" 2>/dev/null || true
+                echo "Removed: $unit"
             done
-            sudo systemctl daemon-reload 2>/dev/null || true
         fi
     fi
     echo "Services uninstalled. Data preserved at $INSTALL_DIR and ~/.traderbot/"
@@ -590,25 +591,48 @@ update_services() {
         echo "Error: Failed to update TraderBot." >&2
         exit 1
     }
+    # Refresh data pipeline timers
+    if [[ -x "$INSTALL_DIR/install/services/install-data-pipeline.sh" ]]; then
+        echo "Refreshing data pipeline timers..."
+        bash "$INSTALL_DIR/install/services/install-data-pipeline.sh"
+    fi
     start_services "$os_type" || {
         echo "Error: Failed to start services." >&2
         exit 1
     }
 }
 
+stop_services() {
+    local os_type="$1"
+    if [[ "$os_type" == "macos" ]]; then
+        sudo launchctl bootout system/com.traderbot.news-ingest.* 2>/dev/null || true
+        sudo launchctl bootout system/com.traderbot.backfill-data.* 2>/dev/null || true
+        find /Library/LaunchDaemons -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
+            local label
+            label="$(basename "$plist" .plist)"
+            sudo launchctl bootout "system/${label}" 2>/dev/null || \
+                sudo launchctl unload "$plist" 2>/dev/null || true
+        done
+    else
+        sudo systemctl stop 'traderbot-agent@*' 2>/dev/null || true
+        sudo systemctl stop 'traderbot-news-ingest@*' 2>/dev/null || true
+        sudo systemctl stop 'traderbot-backfill-data@*' 2>/dev/null || true
+    fi
+}
+
 start_services() {
     local os_type="$1"
     if [[ "$os_type" == "macos" ]]; then
-        find /Library/LaunchDaemons -maxdepth 1 -name 'com.traderbot.agent.*.plist' 2>/dev/null | while read -r plist; do
+        find /Library/LaunchDaemons -maxdepth 1 -name 'com.traderbot.*.plist' 2>/dev/null | while read -r plist; do
             local label
             label="$(basename "$plist" .plist)"
             sudo launchctl kickstart -p "system/${label}" 2>/dev/null || \
                 sudo launchctl load "$plist" 2>/dev/null || true
         done
     else
-        sudo systemctl list-unit-files --type=service 2>/dev/null | grep 'traderbot-agent@' | awk '{print $1}' | while read -r unit; do
-            sudo systemctl start "$unit" 2>/dev/null || true
-        done
+        sudo systemctl start 'traderbot-agent@*' 2>/dev/null || true
+        sudo systemctl enable --now 'traderbot-news-ingest@*.timer' 2>/dev/null || true
+        sudo systemctl enable --now 'traderbot-backfill-data@*.timer' 2>/dev/null || true
     fi
 }
 

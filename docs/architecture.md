@@ -243,6 +243,81 @@ Treatments are declared in `experiment/treatments/__init__.py` via `TREATMENT_RE
 
 `experiment/methodologies/db_utils.py` — `select_markets(conn, markets_per_cell, seed)` groups markets into strata by `city_prefix` and days-to-expiry bucket (`lt7d`, `7-14d`, `gt14d`). Within each stratum, it randomly samples up to `markets_per_cell` tickers using the provided seed for reproducibility.
 
+## Data Provider & Signal Engine Architecture
+
+The data layer uses a category-agnostic provider/signal framework at `src/traderbot/data/` designed for scalable multi-category support. Each category (weather, economics, sports, crypto) implements its own data provider and signal engine by subclassing the base ABCs.
+
+### Module Structure
+
+```
+src/traderbot/data/
+├── __init__.py              # Package exports
+├── base_provider.py          # BaseDataProvider ABC
+├── base_signals.py           # BaseSignalEngine ABC
+├── models.py                 # CityForecast, ModelConsensus, BiasReport, TradingSignal
+├── registry.py               # ProviderRegistry — register/discover providers by category
+└── weather/                  # Weather category implementation
+    ├── __init__.py
+    ├── nws_client.py         # NWS API gridpoint resolution + structured forecast fetch
+    ├── provider.py           # WeatherDataProvider — NWS + Open-Meteo ensemble (GFS/ECMWF/GEM)
+    └── signals.py            # WeatherSignalEngine — forecast-vs-market edge + bias adjustment
+```
+
+### Base Classes
+
+| Class | File | Methods |
+|---|---|---|
+| **BaseDataProvider** | `data/base_provider.py` | `get_forecasts(cities)`, `get_model_consensus(city)`, `get_historical_bias(city, model, days)` |
+| **BaseSignalEngine** | `data/base_signals.py` | `compute_signals(forecasts, markets)` → `list[TradingSignal]` |
+| **ProviderRegistry** | `data/registry.py` | `register_provider(name, cls)`, `get_provider(name)`, `list_providers()` |
+
+### Data Models
+
+| Model | Purpose | Key Fields |
+|---|---|---|
+| **CityForecast** | Single-city forecast from a provider | `ticker`, `city`, `date`, `high_temp_f`, `low_temp_f`, `precip_prob`, `source` |
+| **EnsembleRun** | One model in a multi-model ensemble | `model_name`, `forecast_temp_f`, `valid_time` |
+| **ModelConsensus** | Aggregate across GFS/ECMWF/GEM | `mean_temp`, `std_dev`, `spread`, `agreement_score` (0-1) |
+| **BiasReport** | Historical accuracy for city/model | `city`, `model`, `mean_error`, `mean_abs_error`, `std_error`, `total_comparisons` |
+| **TradingSignal** | Trading recommendation | `ticker`, `direction`, `estimated_prob`, `market_prob`, `edge`, `confidence`, `model_consensus`, `bias_adjustment`, `reasoning` |
+
+### Weather Data Sources
+
+| Source | Endpoint | Provided By | Data |
+|---|---|---|---|
+| NWS API | `api.weather.gov` | `NwsClient` | Structured forecast: high/low temp, precip prob, wind, detailed text. Gridpoints resolved via `/points/{lat},{lon}` and cached to `~/.traderbot/nws_gridpoints.json`. |
+| Open-Meteo Models | `api.open-meteo.com/v1/forecast` | `WeatherDataProvider` | Ensemble data for GFS (`gfs_seamless`), ECMWF (`ecmwf_ifens`), GEM (`gem_global`). Returns `daily.temperature_2m_max` per model. |
+| Forecast Bias | `traderbot.db` | `ForecastBias` | SQLite table tracking forecast vs actual per city. Queried via `query_bias(conn, city, model, days)`. |
+
+### Signal Generation Pipeline
+
+The `WeatherSignalEngine.compute_signals()` processes each market:
+
+1. **Match**: Map market ticker to city forecast via `_TICKER_TO_CITY` table
+2. **Estimate probability**: Logistic function comparing forecast temp to market threshold (σ=5°F), handling greater/less/between strike types
+3. **Get market probability**: Extract from order book `implied_probability().yes_prob` (falls back to 0.50)
+4. **Compute edge**: `estimated_prob - market_prob`
+5. **Model consensus**: `_compute_agreement_penalty()` — tiers 0.3/0.5/0.7/0.8/0.95 based on GFS/ECMWF/GEM agreement
+6. **Bias adjustment**: Query `forecast_bias` SQLite table, normalize `mean_error` to [-1, 1]
+7. **Final confidence**: `base × agreement_mult × (1 − |bias|)`
+
+### Adding a New Category
+
+1. Create `data/<category>/provider.py` subclassing `BaseDataProvider`
+2. Create `data/<category>/signals.py` subclassing `BaseSignalEngine`
+3. Register: `ProviderRegistry.register_provider("<category>", MyDataProvider)`
+4. CLI available: `traderbot data signals --category <category> --json`
+
+### CLI Commands
+
+All commands live under `traderbot data` sub-app in `cli/data.py`:
+
+| Command | Example | Output |
+|---|---|---|
+| `forecasts` | `traderbot data forecasts --cities NYC,CHI,LA --json` | NWS high, GFS/ECMWF/GEM highs, spread |
+| `signals` | `traderbot data signals --category weather --json` | Ticker, direction, est. prob, market prob, edge, confidence |
+| `bias` | `traderbot data bias NYC --days 90 --json` | Mean error, MAE, bias direction, sample size |
+
 ## Semantic Layer (Voyage AI + ChromaDB)
 > Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
 
