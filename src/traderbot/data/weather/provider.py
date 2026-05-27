@@ -52,6 +52,37 @@ _CITY_MAP: dict[str, tuple[float, float]] = {
     "San Francisco": (37.77, -122.42),
 }
 
+# Short-code aliases for CLI convenience
+_CITY_ALIASES: dict[str, str] = {
+    "NYC": "New York", "NY": "New York",
+    "PHIL": "Philadelphia", "PHL": "Philadelphia",
+    "PHX": "Phoenix",
+    "MIN": "Minneapolis", "MSP": "Minneapolis",
+    "SEA": "Seattle",
+    "CHI": "Chicago",
+    "HOU": "Houston",
+    "LA": "Los Angeles", "LAX": "Los Angeles",
+    "MIA": "Miami",
+    "DEN": "Denver",
+    "ATL": "Atlanta",
+    "BOS": "Boston",
+    "DAL": "Dallas", "DFW": "Dallas",
+    "DET": "Detroit",
+    "SF": "San Francisco", "SFO": "San Francisco",
+}
+
+def _resolve_city(city_input: str) -> str | None:
+    """Resolve a city input (full name, short code, or ticker prefix) to a full city name."""
+    if city_input in _CITY_MAP:
+        return city_input
+    if city_input in _CITY_ALIASES:
+        return _CITY_ALIASES[city_input]
+    # Check ticker prefix
+    for prefix, (name, _, _, _) in _KALSHI_CITY_MAP.items():
+        if prefix == city_input:
+            return name
+    return None
+
 # Kalshi ticker → (city_name, lat, lon, timezone)
 _KALSHI_CITY_MAP: dict[str, tuple[str, float, float, str]] = {
     "KXHIGHNY": ("New York", 40.71, -74.01, "America/New_York"),
@@ -125,24 +156,30 @@ class WeatherDataProvider(BaseDataProvider):
         """Fetch NWS forecasts for a list of cities, warming Open-Meteo ensemble in parallel.
 
         Args:
-            cities: List of city names to fetch forecasts for.
+            cities: List of city names or short codes (e.g. 'New York', 'NYC', 'KXHIGHNY').
 
         Returns:
-            Dict mapping city name to its CityForecast (sourced from NWS).
+            Dict mapping resolved city name to its CityForecast (sourced from NWS).
             Cities that fail to resolve are omitted silently.
         """
-        valid = [c for c in cities if c in _CITY_MAP]
-        if not valid:
+        resolved: list[str] = []
+        for c in cities:
+            name = _resolve_city(c)
+            if name:
+                resolved.append(name)
+            else:
+                logger.warning("Unknown city input: %s", c)
+        if not resolved:
             return {}
 
-        # Launch NWS forecast fetches for every valid city.
+        # Launch NWS forecast fetches for every resolved city.
         nws_tasks = [
-            self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in valid
+            self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
         ]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
             self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1])
-            for c in valid
+            for c in resolved
         ]
 
         nws_results = await asyncio.gather(*nws_tasks, return_exceptions=True)
@@ -150,7 +187,7 @@ class WeatherDataProvider(BaseDataProvider):
         _ = await asyncio.gather(*om_tasks, return_exceptions=True)
 
         forecasts: dict[str, CityForecast] = {}
-        for city, result in zip(valid, nws_results, strict=True):
+        for city, result in zip(resolved, nws_results, strict=True):
             if isinstance(result, Exception):
                 logger.error("NWS fetch failed for %s: %s", city, result)
             elif isinstance(result, CityForecast):
