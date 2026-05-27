@@ -157,15 +157,16 @@ def register_commands(parent_app: typer.Typer) -> None:
                 console.print("[red]API connection required.[/red]")
             return
 
-        intent_id = write_intent(
-            WalAction.BUY,
-            {
-                "ticker": ticker,
-                "direction": direction,
-                "quantity": quantity,
-                "price": price,
-            },
+        entry = write_intent(
+            DEFAULT_SESSION_STATE_PATH,
+            action=WalAction.BUY,
+            ticker=ticker,
+            direction=direction,
+            quantity=quantity,
+            price_cents=price,
+            reason=f"trade {direction} {ticker} @ {price}¢",
         )
+        intent_id = entry.intent_id
 
         async def _execute():
             market = await market_svc.get_market(ticker)
@@ -206,7 +207,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 json_lib.dump({"status": "rejected", "ticker": ticker, "reason": str(e)}, sys.stdout)
             else:
                 console.print(f"[red]Trade rejected[/red]: {ticker} — {e}")
-            update_status(intent_id, WalStatus.REJECTED, reason=str(e))
+            update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
             return
 
         if not result["approved"]:
@@ -214,7 +215,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 json_lib.dump({"status": "rejected", "ticker": ticker, "reason": result.get("reason", "risk check")}, sys.stdout)
             else:
                 console.print(f"[red]Trade rejected[/red]: {ticker} — {result['reason']}")
-            update_status(intent_id, WalStatus.REJECTED, reason=result.get("reason", "risk check"))
+            update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
             return
 
         if result.get("adjusted"):
@@ -225,7 +226,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             json_lib.dump({"status": "approved", "ticker": ticker, **result}, sys.stdout, default=str)
         else:
             console.print(f"[green]Trade approved[/green]: {ticker} {direction} x{result.get('adjusted_quantity', quantity)} @ {result.get('adjusted_price', price)}¢")
-        update_status(intent_id, WalStatus.EXECUTED)
+        update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
 
         # Record position in SQLite for persistence across sessions
         from traderbot.db.positions import upsert as upsert_position
