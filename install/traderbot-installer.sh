@@ -611,6 +611,57 @@ update_services() {
             fi
         done
     fi
+
+    # Refresh agent workspace files (replace templates, preserve user data)
+    echo "Refreshing agent workspace files..."
+    local ws_root="$HOME/.openclaw/workspace"
+    local template_root="$INSTALL_DIR/.openclaw/workspace"
+    for agent_dir in "$ws_root"/*/; do
+        [ -d "$agent_dir" ] || continue
+        local ag_name
+        ag_name="$(basename "$agent_dir")"
+
+        # Determine template source
+        local tdir=""
+        if [[ "$ag_name" == "main" ]] || grep -q "system administrator\|sysadmin\|fleet oversight" "$agent_dir/AGENTS.md" 2>/dev/null; then
+            tdir="$template_root"
+        elif [[ -d "$template_root/$ag_name" ]]; then
+            tdir="$template_root/$ag_name"
+        elif [[ -d "$template_root/agents/$ag_name" ]]; then
+            tdir="$template_root/agents/$ag_name"
+        else
+            tdir="$template_root/agent"
+        fi
+
+        if [[ ! -d "$tdir" ]]; then
+            echo "  Skipping $ag_name — no template dir ($tdir)"
+            continue
+        fi
+
+        # Template files to replace (overwrite)
+        local replaced=0
+        local preserved=0
+        for f in AGENTS.md SOUL.md TOOLS.md IDENTITY.md BOOTSTRAP.md BOOT.md HEARTBEAT.md; do
+            if [[ -f "$tdir/$f" ]]; then
+                cp "$tdir/$f" "$agent_dir/$f" 2>/dev/null && ((replaced++)) || true
+            fi
+        done
+        # Preserved files (never overwrite)
+        for f in USER.md HEARTBEAT_DATA.md SESSION-STATE.md MEMORY.md; do
+            if [[ -f "$agent_dir/$f" ]]; then
+                ((preserved++))
+            fi
+        done
+        # Preserved directories
+        for d in .learnings; do
+            if [[ -d "$agent_dir/$d" ]]; then
+                ((preserved++))
+            fi
+        done
+        if [[ $replaced -gt 0 || $preserved -gt 0 ]]; then
+            echo "  $ag_name: $replaced files replaced, $preserved files preserved"
+        fi
+    done
     start_services "$os_type" || {
         echo "Error: Failed to start services." >&2
         exit 1
