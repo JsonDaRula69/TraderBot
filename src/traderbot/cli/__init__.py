@@ -151,7 +151,7 @@ def uninstall(
         if platform.system() == "Darwin":
             daemon_dir = Path("/Library/LaunchDaemons")
             if daemon_dir.exists():
-                for plist in daemon_dir.glob("com.traderbot.agent.*.plist"):
+                for plist in daemon_dir.glob("com.traderbot.*.plist"):
                     label = plist.stem
                     _sp.run([_SUDO, _LAUNCHCTL, "bootout", f"system/{label}"], capture_output=True)
                     result = _sp.run([_SUDO, "rm", "-f", str(plist)], capture_output=True)
@@ -160,18 +160,29 @@ def uninstall(
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
             if service_dir.exists():
-                for svc in service_dir.glob("traderbot-agent@*.service"):
+                for svc in list(service_dir.glob("traderbot-*@*.service")) + list(service_dir.glob("traderbot-*@*.timer")):
                     unit = svc.name
                     _sp.run([_SUDO, _SYSTEMCTL, "stop", unit], capture_output=True)
                     _sp.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
                     _sp.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     removed_services.append(str(svc))
+                # Clean up orphaned wants symlinks
+                for wants_dir in [
+                    Path("/etc/systemd/system/multi-user.target.wants"),
+                    Path("/etc/systemd/system/timers.target.wants"),
+                ]:
+                    for link in wants_dir.glob("traderbot-*"):
+                        if link.is_symlink():
+                            _sp.run([_SUDO, "rm", "-f", str(link)], capture_output=True)
+                            removed_services.append(str(link))
+                _sp.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
         removed.extend(removed_services)
     else:
+        removed_services: list[str] = []
         if platform.system() == "Darwin":
             daemon_dir = Path("/Library/LaunchDaemons")
             if daemon_dir.exists():
-                plists = list(daemon_dir.glob("com.traderbot.agent.*.plist"))
+                plists = list(daemon_dir.glob("com.traderbot.*.plist"))
                 if plists:
                     console.print("[bold]Step 1a: Remove launch daemons[/bold]")
                     for plist in plists:
@@ -180,20 +191,51 @@ def uninstall(
                         result = _sp.run([_SUDO, "rm", "-f", str(plist)], capture_output=True)
                         if result.returncode == 0:
                             console.print(f"  Removed: {label}")
-                            removed.append(str(plist))
+                            removed_services.append(str(plist))
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
             if service_dir.exists():
-                services = list(service_dir.glob("traderbot-agent@*.service"))
-                if services:
-                    console.print("[bold]Step 1a: Remove systemd services[/bold]")
-                    for svc in services:
+                unit_files = list(service_dir.glob("traderbot-*@*.service")) + list(service_dir.glob("traderbot-*@*.timer"))
+                if unit_files:
+                    console.print("[bold]Step 1a: Remove systemd services and timers[/bold]")
+                    for svc in unit_files:
                         unit = svc.name
                         _sp.run([_SUDO, _SYSTEMCTL, "stop", unit], capture_output=True)
                         _sp.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
                         _sp.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                         console.print(f"  Removed: {unit}")
-                        removed.append(str(svc))
+                        removed_services.append(str(svc))
+                # Clean up orphaned wants symlinks
+                for wants_dir in [
+                    Path("/etc/systemd/system/multi-user.target.wants"),
+                    Path("/etc/systemd/system/timers.target.wants"),
+                ]:
+                    for link in wants_dir.glob("traderbot-*"):
+                        if link.is_symlink():
+                            _sp.run([_SUDO, "rm", "-f", str(link)], capture_output=True)
+                            console.print(f"  Removed symlink: {link.name}")
+                            removed_services.append(str(link))
+                _sp.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
+        removed.extend(removed_services)
+
+    # Step 1b: Remove OpenClaw cron jobs
+    if not json_output:
+        console.print("[bold]Step 1b: Remove OpenClaw cron jobs[/bold]")
+    cron_removed = []
+    try:
+        cron_output = _sp.run(["openclaw", "cron", "list", "--json"], capture_output=True, text=True, timeout=10)
+        if cron_output.returncode == 0:
+            import json as _cjson
+            cron_jobs = _cjson.loads(cron_output.stdout)
+            for job in cron_jobs if isinstance(cron_jobs, list) else cron_jobs.get("jobs", []):
+                jid = job.get("id") if isinstance(job, dict) else None
+                if jid:
+                    _sp.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
+                    cron_removed.append(jid)
+    except Exception:
+        pass
+    if cron_removed and not json_output:
+        console.print(f"  Removed {len(cron_removed)} cron jobs")
 
     # Step 2: Remove user data
     if remove_data and data_dir.exists():
