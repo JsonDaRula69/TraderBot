@@ -278,9 +278,80 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
         logger.info("Updated successfully from %s branch", branch)
+
+        # Refresh agent workspace files (replace templates, preserve user data)
+        _refresh_workspace_files(repo_dir)
+
         if restart:
             os.execv(sys.executable, [sys.executable, *sys.argv])
         return True
     except subprocess.CalledProcessError as exc:
         logger.error("Update failed: %s", exc)
         return False
+
+
+def _refresh_workspace_files(repo_dir: Path) -> None:
+    """Refresh agent workspace files from the repo's template directory.
+
+    Replaces template files (AGENTS.md, SOUL.md, TOOLS.md, etc.) with the
+    latest versions from the repo. Preserves user-managed files: USER.md,
+    MEMORY.md, HEARTBEAT_DATA.md, SESSION-STATE.md, and .learnings/.
+    """
+    import shutil as _shutil
+
+    ws_root = Path.home() / ".openclaw" / "workspace"
+    template_root = repo_dir / ".openclaw" / "workspace"
+
+    if not template_root.exists():
+        logger.debug("No workspace templates at %s, skipping refresh", template_root)
+        return
+
+    if not ws_root.exists():
+        logger.debug("No deployed workspaces at %s, skipping refresh", ws_root)
+        return
+
+    template_files = [
+        "AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md",
+        "BOOTSTRAP.md", "BOOT.md", "HEARTBEAT.md",
+    ]
+    preserved_files = {
+        "USER.md", "MEMORY.md", "HEARTBEAT_DATA.md", "SESSION-STATE.md",
+    }
+    preserved_dirs = {".learnings"}
+
+    for agent_dir in sorted(ws_root.iterdir()):
+        if not agent_dir.is_dir():
+            continue
+        agent_name = agent_dir.name
+
+        # Determine template source
+        tdir = template_root / agent_name
+        if not tdir.exists():
+            tdir = template_root / "agents" / agent_name
+        if not tdir.exists():
+            tdir = template_root / "agent"
+        if not tdir.exists():
+            logger.debug("No template source for %s, using fallback", agent_name)
+            continue
+
+        replaced = 0
+        preserved = 0
+        for fname in template_files:
+            src = tdir / fname
+            dst = agent_dir / fname
+            if src.exists():
+                _shutil.copy2(str(src), str(dst))
+                replaced += 1
+
+        for fname in preserved_files:
+            if (agent_dir / fname).exists():
+                preserved += 1
+
+        for dname in preserved_dirs:
+            if (agent_dir / dname).is_dir():
+                preserved += 1
+
+        logger.info(
+            "Workspace refresh for %s: %d files replaced, %d preserved",
+            agent_name, replaced, preserved,
+        )
