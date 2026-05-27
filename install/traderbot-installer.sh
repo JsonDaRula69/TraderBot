@@ -1603,6 +1603,13 @@ interactive_config_flow() {
         bash "$SCRIPT_DIR/services/install-data-pipeline.sh"
     fi
 
+    # Register sysadmin OpenClaw cron jobs (isolated heartbeat tasks)
+    if [[ -x "$tb_cmd" ]]; then
+        echo "Registering sysadmin heartbeat cron jobs..."
+        "$tb_cmd" cron setup-heartbeat-tasks --agent main 2>/dev/null || \
+            echo "  Warning: cron registration failed (openclaw may not be installed)."
+    fi
+
     if [[ -x "$tb_cmd" ]]; then
         echo
         echo "=== Verification ==="
