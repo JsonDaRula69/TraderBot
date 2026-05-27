@@ -35,8 +35,6 @@ FENCED_BLOCK_MARKERS: dict[str, tuple[str, str]] = {
     "SOUL.md": ("<!-- TRADERBOT_SOUL_START -->", "<!-- TRADERBOT_SOUL_END -->"),
     "TOOLS.md": ("<!-- TRADERBOT_TOOLS_START -->", "<!-- TRADERBOT_TOOLS_END -->"),
     "IDENTITY.md": ("<!-- TRADERBOT_PROFILE_START -->", "<!-- TRADERBOT_PROFILE_END -->"),
-    "BOOTSTRAP.md": ("<!-- TRADERBOT_BOOTSTRAP_START -->", "<!-- TRADERBOT_BOOTSTRAP_END -->"),
-    "BOOT.md": ("<!-- TRADERBOT_BOOT_START -->", "<!-- TRADERBOT_BOOT_END -->"),
     "HEARTBEAT.md": ("<!-- TRADERBOT_HEARTBEAT_START -->", "<!-- TRADERBOT_HEARTBEAT_END -->"),
 }
 
@@ -45,12 +43,10 @@ FILE_STRATEGIES: dict[str, InjectionStrategy] = {
     "SOUL.md": InjectionStrategy.FENCED_MERGE,
     "TOOLS.md": InjectionStrategy.FENCED_MERGE,
     "IDENTITY.md": InjectionStrategy.FENCED_MERGE,
-    "BOOTSTRAP.md": InjectionStrategy.ASK_THEN_MERGE,
-    "BOOT.md": InjectionStrategy.ASK_THEN_MERGE,
-    "HEARTBEAT.md": InjectionStrategy.ASK_THEN_MERGE,
     "USER.md": InjectionStrategy.INIT_IF_MISSING,
     "MEMORY.md": InjectionStrategy.INIT_IF_MISSING,
     "SESSION-STATE.md": InjectionStrategy.INIT_IF_MISSING,
+    "HEARTBEAT.md": InjectionStrategy.INIT_IF_MISSING,
     "HEARTBEAT_DATA.md": InjectionStrategy.INIT_IF_MISSING,
     ".learnings/": InjectionStrategy.INIT_IF_MISSING,
     "test-lab/backlog.md": InjectionStrategy.INIT_IF_MISSING,

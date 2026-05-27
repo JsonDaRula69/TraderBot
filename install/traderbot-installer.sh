@@ -641,7 +641,7 @@ update_services() {
         # Template files to replace (overwrite)
         local replaced=0
         local preserved=0
-        for f in AGENTS.md SOUL.md TOOLS.md IDENTITY.md BOOTSTRAP.md BOOT.md HEARTBEAT.md; do
+        for f in AGENTS.md SOUL.md TOOLS.md IDENTITY.md HEARTBEAT.md; do
             if [[ -f "$tdir/$f" ]]; then
                 cp "$tdir/$f" "$agent_dir/$f" 2>/dev/null && ((replaced++)) || true
             fi

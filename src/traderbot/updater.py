@@ -312,7 +312,7 @@ def _refresh_workspace_files(repo_dir: Path) -> None:
 
     template_files = [
         "AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md",
-        "BOOTSTRAP.md", "BOOT.md", "HEARTBEAT.md",
+        "HEARTBEAT.md",
     ]
     preserved_files = {
         "USER.md", "MEMORY.md", "HEARTBEAT_DATA.md", "SESSION-STATE.md",
