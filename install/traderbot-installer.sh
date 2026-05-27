@@ -596,6 +596,21 @@ update_services() {
         echo "Refreshing data pipeline timers..."
         bash "$INSTALL_DIR/install/services/install-data-pipeline.sh"
     fi
+
+    # Re-register sysadmin and agent cron jobs after update
+    if [[ -x "$tb_bin" ]]; then
+        echo "Re-registering sysadmin cron jobs..."
+        "$tb_bin" cron setup-heartbeat-tasks --agent main 2>/dev/null || true
+        # Re-register cron for all deployed agents
+        for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weatherman/agent; do
+            if [[ -d "$agent_dir" ]]; then
+                local ag_id
+                ag_id="$(basename "$(dirname "$agent_dir")")"
+                echo "Re-registering cron jobs for $ag_id..."
+                "$tb_bin" cron setup-heartbeat-tasks --agent "$ag_id" 2>/dev/null || true
+            fi
+        done
+    fi
     start_services "$os_type" || {
         echo "Error: Failed to start services." >&2
         exit 1
@@ -1595,6 +1610,13 @@ interactive_config_flow() {
     if [[ -n "$token_value" ]]; then
         echo "Installing service for agent $agent_name..."
         install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
+
+        # Register agent-specific heartbeat cron jobs
+        if [[ -x "$tb_cmd" ]]; then
+            echo "Registering agent heartbeat cron jobs for $agent_name..."
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$agent_name" 2>/dev/null || \
+                echo "  Warning: agent cron registration skipped (openclaw may not be installed)."
+        fi
     fi
 
     # Install data pipeline timers (news-ingest every 30m + backfill daily)
