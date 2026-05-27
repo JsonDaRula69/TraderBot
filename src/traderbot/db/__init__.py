@@ -7,6 +7,7 @@ from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING
 
 from traderbot.db.decisions import init_table as init_decisions_table
+from traderbot.db.forecast_bias import init_table as init_forecast_bias_table
 from traderbot.db.positions import init_table as init_positions_table
 from traderbot.paths import get_db_path as _get_db_path
 
@@ -35,9 +36,10 @@ def get_connection(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    """Create positions and decisions tables if they do not exist."""
+    """Create positions, decisions, and forecast_bias tables if they do not exist."""
     init_positions_table(conn)
     init_decisions_table(conn)
+    init_forecast_bias_table(conn)
 
 
 __all__ = ["DB_PATH", "get_connection", "init_schema"]

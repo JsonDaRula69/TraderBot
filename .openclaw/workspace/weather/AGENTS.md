@@ -125,13 +125,14 @@ The NWS gridpoint API (`api.weather.gov/points/{lat},{lon}`) returns data for sp
 |---|---|
 | 1. SCAN | `traderbot scan --category weather --limit 200 --json` |
 | 2. FILTER | Contracts within decision horizon. Remove expired/paused. |
-| 3. ASSESS_WEATHER_CONTEXT | Check for active NHC advisories, NWS warnings, emergency declarations |
-| 4. ASSESS_MODEL_DATA | `traderbot data-points weather --json` — check model availability and consensus |
-| 5. ANALYZE_CANDIDATES | For promising contracts: `traderbot analyze <TICKER> --json` |
-| 6. SIGNALS | `traderbot signals --category weather --json` |
-| 7. NEWS_CHECK | `traderbot news-context weather --json` — filter for NOAA/NWS only |
-| 8. TRADE_OR_WAIT | If risk pipeline passes and edge >= profile threshold → trade. Else wait. |
-| 9. LOG | Every decision in SESSION-STATE.md — whether I traded or not |
+| 3. ASSESS_WEATHER_CONTEXT | Check for active NHC advisories, NWS warnings, emergency declarations. Use `traderbot data forecasts --cities NYC,CHI,LA --json` for structured data. |
+| 4. MODEL_CONSENSUS | `traderbot data forecasts --cities NYC,CHI,LA --json` — NWS high + GFS/ECMWF/GEM ensemble with spread. If all 3 models agree (spread < 2°F), high conviction. If spread > 5°F, halve position sizing. |
+| 5. SIGNALS | `traderbot data signals --category weather --json` — forecast-vs-market edge with bias-adjusted confidence. This replaces the old `signals` command for weather. |
+| 6. BIAS_CHECK | `traderbot data bias <CITY> --days 90 --json` — check if NWS has been over/under-predicting for this city recently. Adjust estimated probability accordingly. |
+| 7. ANALYZE_CANDIDATES | For promising contracts: `traderbot analyze <TICKER> --json` |
+| 8. NEWS_CHECK | `traderbot news-context weather --json` — filter for NOAA/NWS only |
+| 9. TRADE_OR_WAIT | If risk pipeline passes and edge >= profile threshold → trade. Wait. |
+| 10. LOG | Every decision in SESSION-STATE.md — whether I traded or not |
 
 ### High-Impact Event Cadence
 

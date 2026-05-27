@@ -19,6 +19,7 @@ from traderbot.cli.trade import register_commands as register_trade
 from traderbot.cli.market import register_commands as register_market
 from traderbot.cli.news import register_commands as register_news
 from traderbot.cli.admin import register_commands as register_admin
+from traderbot.cli.data import data_app
 from traderbot.cli.helpers import (
     _LAUNCHCTL,
     _SUDO,
@@ -32,6 +33,7 @@ app.add_typer(auth_app, name="auth")
 app.add_typer(cron_app, name="cron")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(profile_app, name="profile")
+app.add_typer(data_app, name="data")
 
 # Register flat commands
 register_trade(app)
