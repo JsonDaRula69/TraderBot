@@ -356,7 +356,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                         err_console.print(f"[red]Invalid category:[/red] {category}")
                     raise typer.Exit(code=1)
 
-            patterns = get_patterns(conn, status=status_filter, category=category_filter)
+            patterns = get_patterns(conn, category=category_filter)
 
             if json_output:
                 json_lib.dump([p.model_dump(mode="json") for p in patterns], sys.stdout, default=str)
