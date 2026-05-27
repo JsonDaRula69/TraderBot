@@ -232,7 +232,130 @@ def _remove_news_ingest_timer(
         pass
 
 
-@cron_app.command("setup")
+_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
+    {
+        "name": "circuit-breaker-check",
+        "cron_expr": "*/30 * * * *",
+        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert.",
+    },
+    {
+        "name": "data-forecast-check",
+        "cron_expr": "*/30 * * * *",
+        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers. Log status.",
+    },
+    {
+        "name": "news-scan",
+        "cron_expr": "*/30 * * * *",
+        "message": "Run `traderbot news-context weather --json`. Check for NHC advisories, NWS warnings, emergency declarations. If any active, surface alert to sysadmin.",
+    },
+    {
+        "name": "position-health",
+        "cron_expr": "0 * * * *",
+        "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. Surface any at-risk positions to sysadmin.",
+    },
+    {
+        "name": "performance-review",
+        "cron_expr": "0 */6 * * *",
+        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Review learning promotions. Surface any issues.",
+    },
+    {
+        "name": "learning-promotion",
+        "cron_expr": "0 */6 * * *",
+        "message": "Read `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3. Promote each to PENDING_REVIEW via `traderbot learnings --promote <key>` if not already. For each newly promoted, follow Experiment Design Flow in AGENTS.md.",
+    },
+    {
+        "name": "pipeline-health",
+        "cron_expr": "0 */6 * * *",
+        "message": "Check pipeline timers via `systemctl list-timers --all | grep traderbot`. Verify data_points count > 0. Surface any inactive timers or stale data to sysadmin.",
+    },
+]
+
+
+@cron_app.command("setup-heartbeat-tasks")
+def cron_setup_heartbeat_tasks(
+    agent_id: Annotated[
+        str,
+        typer.Option("--agent", help="OpenClaw agent ID to register heartbeat tasks for"),
+    ],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON"),
+    ] = False,
+) -> None:
+    """Register each heartbeat task as an isolated cron job.
+
+    Each task runs in its own isolated cron session — zero collision with
+    trading or other tasks. Replaces the monolithic HEARTBEAT.md tasks: block.
+    """
+    console = Console()
+    results: list[dict[str, str | bool]] = []
+
+    if not shutil.which("openclaw"):
+        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
+        raise typer.Exit(1)
+
+    for job in _HEARTBEAT_CRON_JOBS:
+        args = [
+            "--name", f"{agent_id}-{job['name']}",
+            "--cron", job["cron_expr"],
+            "--session", "isolated",
+            "--message", job["message"],
+            "--agent", agent_id,
+        ]
+        exit_code, output = _run_openclaw_cron_add(args)
+        success = exit_code == 0
+        results.append({
+            "name": job["name"],
+            "registered": success,
+            "output": output if not success else "",
+        })
+
+    if json_output:
+        json_lib.dump(results, sys.stdout, indent=2)
+        return
+
+    console.print("[bold]Heartbeat Task Registration[/bold]")
+    for r in results:
+        status = "[green]✓[/green]" if r["registered"] else "[red]✗[/red]"
+        console.print(f"  {status} {r['name']}")
+    console.print("\nAll tasks run in isolated cron sessions. No collision with trading.")
+
+
+@cron_app.command("remove-heartbeat-tasks")
+def cron_remove_heartbeat_tasks(
+    agent_id: Annotated[
+        str,
+        typer.Option("--agent", help="OpenClaw agent ID to remove heartbeat tasks for"),
+    ],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON"),
+    ] = False,
+) -> None:
+    """Remove all registered heartbeat cron tasks for an agent."""
+    import subprocess
+
+    console = Console()
+    removed: list[str] = []
+
+    for job in _HEARTBEAT_CRON_JOBS:
+        job_name = f"{agent_id}-{job['name']}"
+        try:
+            result = subprocess.run(
+                ["openclaw", "cron", "remove", job_name],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0:
+                removed.append(job["name"])
+        except Exception:
+            pass
+
+    if json_output:
+        json_lib.dump({"removed": removed}, sys.stdout, indent=2)
+        return
+
+    for name in removed:
+        console.print(f"  [green]✓[/green] Removed {name}")
+    if not removed:
+        console.print("[yellow]No heartbeat tasks found to remove.[/yellow]")
 def cron_setup(
     agent_id: Annotated[
         str,
