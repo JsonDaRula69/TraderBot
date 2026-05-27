@@ -197,19 +197,21 @@ class NwsClient:
                     generated_at_str.replace("Z", "+00:00")
                 )
 
-        return CityForecast(
-            ticker=ticker,
-            city=city_name,
-            lat=lat,
-            lon=lon,
-            date=forecast_date,
-            high_temp_f=high_temp,
-            low_temp_f=low_temp,
-            precip_prob=precip_prob,
-            wind_speed=wind_speed,
-            detailed_forecast=current.get("detailedForecast", ""),
-            source="nws",
-        )
+            return CityForecast(
+                ticker=parsed_ticker,
+                city=city_name,
+                lat=lat,
+                lon=lon,
+                date=start_time.date(),
+                high_temp_f=max_temp,
+                low_temp_f=min_temp,
+                precip_prob=precip_prob,
+                wind_speed=float(period.get("windSpeed", "0").split()[0])
+                    if isinstance(period.get("windSpeed"), str) and period.get("windSpeed", "0").split()[0].replace(".", "").isdigit()
+                    else 0.0,
+                detailed_forecast=period.get("detailedForecast", ""),
+                source="nws",
+            )
 
     async def get_forecasts(self, cities: list[str]) -> dict[str, CityForecast]:
         results: dict[str, CityForecast] = {}

@@ -82,13 +82,19 @@ def signals_cmd(
     ] = False,
 ) -> None:
     """Compute and display trading signals from weather data."""
+    from traderbot.data.weather.provider import WeatherDataProvider
     from traderbot.data.weather.signals import WeatherSignalEngine
 
     console = Console()
+    cities = ["New York", "Chicago", "Los Angeles", "Phoenix", "Seattle",
+              "Denver", "Houston", "Miami", "Atlanta", "Boston",
+              "Dallas", "Philadelphia", "Minneapolis", "Detroit", "San Francisco"]
 
     try:
+        provider = WeatherDataProvider()
+        forecasts = asyncio.run(provider.get_forecasts(cities))
         engine = WeatherSignalEngine()
-        results = asyncio.run(engine.compute_signals(category=category))
+        results = engine.compute_signals(forecasts=forecasts, markets={})
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
@@ -141,9 +147,18 @@ def bias_cmd(
 ) -> None:
     """Show historical forecast bias for a city."""
     from traderbot.data.weather.provider import WeatherDataProvider
+    from traderbot.db import get_connection
+    from traderbot.db.forecast_bias import init_table
 
     console = Console()
     city_code = city.strip().upper()
+
+    # Ensure forecast_bias table exists
+    try:
+        with get_connection() as conn:
+            init_table(conn)
+    except Exception:
+        pass
 
     try:
         provider = WeatherDataProvider()
