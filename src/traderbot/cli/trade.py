@@ -236,9 +236,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         )
         from traderbot.kalshi.trading import TradingService
         from traderbot.profiles.runtime import get_current_profile
-        from traderbot.risk import evaluate_trade
-        from traderbot.risk.circuit_breaker import CircuitBreaker
-        from traderbot.risk import RiskCheckError
+        from traderbot.risk import evaluate_trade_full, RiskCheckError
         from traderbot.wal import (
             DEFAULT_SESSION_STATE_PATH,
             WalAction,
@@ -314,10 +312,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         breaker_state = breaker.get_state()
 
         try:
-            result = evaluate_trade(
+            result = evaluate_trade_full(
                 trade_req=trade_req,
                 portfolio=portfolio_state,
-                circuit_breaker=breaker_state,
+                breaker=breaker_state,
                 profile=profile,
             )
         except RiskCheckError as e:
@@ -328,21 +326,18 @@ def register_commands(parent_app: typer.Typer) -> None:
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
             return
 
-        if not result["approved"]:
+        if result.sized_position_cents <= 0:
             if json_output:
-                json_lib.dump({"status": "rejected", "ticker": ticker, "reason": result.get("reason", "risk check")}, sys.stdout)
+                json_lib.dump({"status": "rejected", "ticker": ticker, "reason": "Risk check returned zero position"}, sys.stdout)
             else:
-                console.print(f"[red]Trade rejected[/red]: {ticker} — {result['reason']}")
+                console.print(f"[red]Trade rejected[/red]: {ticker} — risk check returned zero position")
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
             return
 
-        if result.get("adjusted"):
-            adj_qty = result.get("adjusted_quantity", quantity)
-            adj_price = result.get("adjusted_price", price)
-            console.print(f"[dim]Adjusted: quantity {adj_qty}, price {adj_price}¢[/dim]")
-        else:
-            adj_qty = quantity
-            adj_price = price
+        # Use the sized position but keep agent's original quantity for the order
+        # The risk module computes max safe position, the agent provides quantity
+        adj_qty = quantity
+        adj_price = price
 
         # Live mode: submit to Kalshi exchange
         if not profile.paper_mode:
@@ -388,8 +383,8 @@ def register_commands(parent_app: typer.Typer) -> None:
             with get_connection(pos_db) as conn:
                 upsert_position(conn, KalshiPosition(
                     ticker=ticker,
-                    quantity=result.get("adjusted_quantity", quantity),
-                    avg_price=result.get("adjusted_price", price),
+                    quantity=adj_qty,
+                    avg_price=adj_price,
                     settlement_result=None,
                 ))
         except Exception as exc:
