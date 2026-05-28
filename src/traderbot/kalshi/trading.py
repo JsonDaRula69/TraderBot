@@ -22,9 +22,13 @@ class TradingService:
         self._client = client
 
     async def place_order(self, order_request: OrderRequest) -> OrderResult:
-        """Submit a new order and return the V2 create response."""
+        """Submit a new order via the V2 endpoint and return the response.
+
+        Uses Create Order (V2) at /portfolio/events/orders/v2 with
+        dollar-based fixed-point pricing per the Kalshi API spec.
+        """
         body = order_request.to_v2_body()
-        response = await self._client.post("/portfolio/events/orders", **body)
+        response = await self._client.post("/portfolio/events/orders/v2", **body)
         response.raise_for_status()
         data = response.json()
         return OrderResult(

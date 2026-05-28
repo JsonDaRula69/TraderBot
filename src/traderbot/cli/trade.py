@@ -103,12 +103,18 @@ def register_commands(parent_app: typer.Typer) -> None:
         no_confirm: Annotated[
             bool, typer.Option("--no-confirm", help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.")
         ] = False,
+        live: Annotated[
+            bool, typer.Option("--live", help="Submit order to Kalshi exchange. Default is paper-only (risk check + local tracking).")
+        ] = False,
     ) -> None:
         """Place a trade through risk checks.
 
         Use --estimated-prob and --confidence to provide your own probability estimate
         instead of relying on market-implied probability, which often yields ~0 edge
         and causes all trades to be rejected by the Kelly sizing formula.
+
+        By default runs in paper mode: risk check + WAL logging + position tracking only.
+        Pass --live to actually submit the order to Kalshi.
         """
         from traderbot.master_password import require_auth
         require_auth()
@@ -116,7 +122,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.analysis.odds import implied_probability
         from traderbot.kalshi.client import KalshiClient
         from traderbot.kalshi.markets import MarketService
-        from traderbot.kalshi.models import PortfolioState, TradeRequest
+        from traderbot.kalshi.models import (
+            OrderRequest, OrderSideV2, PortfolioState, TradeRequest,
+        )
+        from traderbot.kalshi.trading import TradingService
         from traderbot.profiles.runtime import get_current_profile
         from traderbot.risk import evaluate_trade
         from traderbot.risk.circuit_breaker import CircuitBreaker
@@ -219,14 +228,47 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         if result.get("adjusted"):
-            console.print(f"[dim]Adjusted: quantity {result.get('adjusted_quantity', quantity)}, "
-                          f"price {result.get('adjusted_price', price)}¢[/dim]")
-
-        if json_output:
-            json_lib.dump({"status": "approved", "ticker": ticker, **result}, sys.stdout, default=str)
+            adj_qty = result.get("adjusted_quantity", quantity)
+            adj_price = result.get("adjusted_price", price)
+            console.print(f"[dim]Adjusted: quantity {adj_qty}, price {adj_price}¢[/dim]")
         else:
-            console.print(f"[green]Trade approved[/green]: {ticker} {direction} x{result.get('adjusted_quantity', quantity)} @ {result.get('adjusted_price', price)}¢")
-        update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
+            adj_qty = quantity
+            adj_price = price
+
+        # Live mode: submit to Kalshi exchange
+        if live:
+            side = OrderSideV2.bid if direction == "yes" else OrderSideV2.ask
+            # V2 uses dollar-based prices: e.g. 65¢ → "0.65"
+            dollar_price = f"{adj_price / 100:.2f}"
+            order_req = OrderRequest(
+                ticker=ticker, side=side,
+                count=str(adj_qty), price=dollar_price,
+            )
+            trading_svc = TradingService(client)
+            try:
+                order_result = asyncio.run(trading_svc.place_order(order_req))
+                if json_output:
+                    json_lib.dump({
+                        "status": "submitted", "ticker": ticker,
+                        "order_id": order_result.order_id,
+                        "fill_count": order_result.fill_count,
+                    }, sys.stdout, default=str)
+                else:
+                    console.print(f"[green]Order submitted[/green]: ID {order_result.order_id}, "
+                                  f"fill count {order_result.fill_count}")
+                update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
+            except Exception as e:
+                console.print(f"[red]Order submission failed[/red]: {e}")
+                update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.CANCELLED)
+                if json_output:
+                    json_lib.dump({"status": "failed", "ticker": ticker, "error": str(e)}, sys.stdout)
+                return
+        else:
+            if json_output:
+                json_lib.dump({"status": "approved", "ticker": ticker, **result}, sys.stdout, default=str)
+            else:
+                console.print(f"[green]Trade approved (paper)[/green]: {ticker} {direction} x{adj_qty} @ {adj_price}¢")
+            update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
 
         # Record position in SQLite for persistence across sessions
         from traderbot.db.positions import upsert as upsert_position
