@@ -36,42 +36,55 @@ def _run_openclaw_cron_add(args: list[str]) -> tuple[int, str]:
 
 
 def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
-    """Write heartbeat config for an agent into ~/.openclaw/openclaw.json."""
-    import json as _json
+    """Configure heartbeat isolation for an agent via the openclaw CLI.
 
-    config_path = Path.home() / ".openclaw" / "openclaw.json"
-    config: dict = {}
+    Uses ``openclaw config set`` to write per-agent heartbeat settings
+    (isolatedSession, lightContext) — avoids direct openclaw.json edits.
 
-    if config_path.exists():
-        try:
-            config = _json.loads(config_path.read_text())
-        except (ValueError, OSError):
-            config = {}
+    Falls back silently if openclaw is not available.
+    """
+    import subprocess as _sp
 
-    agents = config.setdefault("agents", {})
-    agent_list = agents.setdefault("list", [])
+    try:
+        # Find the agent's index in agents.list
+        list_result = _sp.run(
+            ["openclaw", "config", "get", "agents.list", "--json"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if list_result.returncode != 0:
+            return False
 
-    for entry in agent_list:
-        if entry.get("id") == agent_id:
-            entry["heartbeat"] = {
-                "every": heartbeat_interval,
-                "lightContext": True,
-                "isolatedSession": True,
-            }
-            break
-    else:
-        agent_list.append({
-            "id": agent_id,
-            "heartbeat": {
-                "every": heartbeat_interval,
-                "lightContext": True,
-                "isolatedSession": True,
-            },
-        })
+        agent_list = _json.loads(list_result.stdout)
+        if not isinstance(agent_list, list):
+            return False
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(_json.dumps(config, indent=2) + "\n")
-    return True
+        agent_idx = None
+        for i, entry in enumerate(agent_list):
+            if entry.get("id") == agent_id:
+                agent_idx = i
+                break
+
+        if agent_idx is None:
+            return False
+
+        prefix = f"agents.list[{agent_idx}]"
+
+        # Set heartbeat config keys via CLI
+        _sp.run(
+            ["openclaw", "config", "set", f"{prefix}.heartbeat.every", heartbeat_interval],
+            capture_output=True, timeout=10,
+        )
+        _sp.run(
+            ["openclaw", "config", "set", f"{prefix}.heartbeat.isolatedSession", "true", "--strict-json"],
+            capture_output=True, timeout=10,
+        )
+        _sp.run(
+            ["openclaw", "config", "set", f"{prefix}.heartbeat.lightContext", "true", "--strict-json"],
+            capture_output=True, timeout=10,
+        )
+        return True
+    except Exception:
+        return False
 
 
 def _install_news_ingest_timer(
