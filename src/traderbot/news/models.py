@@ -23,6 +23,7 @@ class NewsSource(StrEnum):
     OPENWEATHERMAP = "openweathermap"
     FRED = "fred"
     GOOGLE_TRENDS = "google_trends"
+    NWS_ALERTS = "nws_alerts"
 
 
 NewsCategory = MarketCategory

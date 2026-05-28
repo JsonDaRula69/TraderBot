@@ -19,6 +19,109 @@ from traderbot.cli.helpers import _resolve_db_path, _with_db, _get_strategy
 logger = logging.getLogger(__name__)
 
 
+async def _analyze_realtime(
+    ticker: str, console: Console, json_output: bool
+) -> None:
+    """Stream real-time orderbook via WebSocket and display updates."""
+    from traderbot.kalshi.websocket import KalshiWebSocket
+
+    ws = KalshiWebSocket()
+
+    try:
+        await ws.connect()
+        await ws.subscribe(
+            channels=["orderbook_delta", "ticker"],
+            market_ticker=ticker,
+        )
+    except Exception as exc:
+        logger.error("WebSocket connect/subscribe failed for %s: %s", ticker, exc)
+        if json_output:
+            json_lib.dump({"error": f"WebSocket error: {exc}"}, sys.stdout)
+        else:
+            console.print(f"[red]WebSocket error for {ticker}:[/red] {exc}")
+        return
+
+    snapshot_printed = False
+    try:
+        while True:
+            try:
+                msg = await asyncio.wait_for(ws.receive(), timeout=30.0)
+            except TimeoutError:
+                console.print("[yellow]No data received for 30 seconds — disconnecting.[/yellow]")
+                break
+
+            msg_type = msg.get("type", "")
+
+            if msg_type == "orderbook_snapshot":
+                if snapshot_printed:
+                    continue
+                snapshot_printed = True
+                console.print(f"\n[bold cyan]📡 {ticker}[/bold cyan] — Real-time Orderbook (WebSocket)")
+                data = msg.get("msg", {})
+
+                if json_output:
+                    json_lib.dump({"ticker": ticker, "type": "snapshot", "data": data}, sys.stdout, default=str)
+                else:
+                    _print_orderbook_snapshot(console, data)
+
+            elif msg_type == "orderbook_delta":
+                if not snapshot_printed:
+                    continue
+                changes = msg.get("msg", {}).get("changes", [])
+                if json_output:
+                    json_lib.dump({"ticker": ticker, "type": "delta", "changes": changes}, sys.stdout, default=str)
+                else:
+                    ts = msg.get("ts", "")
+                    console.print(f"\n[yellow]Δ {ts}[/yellow]")
+                    for change in changes:
+                        side = change.get("side", "?")
+                        price = change.get("price", "?")
+                        size = change.get("size", "?")
+                        direction = change.get("direction", "?")
+                        console.print(
+                            f"  {side} {direction} @ {price}¢ × {size}"
+                        )
+
+            elif msg_type == "ticker":
+                if json_output:
+                    json_lib.dump({"ticker": ticker, "type": "ticker", "data": msg.get("msg", {})}, sys.stdout, default=str)
+
+    except KeyboardInterrupt:
+        console.print("\n[dim]Disconnecting...[/dim]")
+    except Exception as exc:
+        logger.warning("WebSocket stream error for %s: %s", ticker, exc)
+        if json_output:
+            json_lib.dump({"error": str(exc)}, sys.stdout)
+        else:
+            console.print(f"[red]Stream error:[/red] {exc}")
+    finally:
+        await ws.close()
+
+
+def _print_orderbook_snapshot(console: Console, data: dict) -> None:
+    """Pretty-print an orderbook snapshot from WebSocket data."""
+    from traderbot.analysis.odds import implied_probability
+
+    sides: dict[str, list[dict]] = {"yes": [], "no": []}
+    for entry in data.get("book", []):
+        sides.setdefault(entry.get("side", "?"), []).append(entry)
+
+    yes_entries = sides.get("yes", [])
+    no_entries = sides.get("no", [])
+    console.print(f"\n[bold]{'Side':<6} {'Price':>6} {'Size':>6}  Implied[/bold]")
+    console.print("[dim]" + "─" * 40 + "[/dim]")
+
+    for entry in yes_entries:
+        p = entry.get("price", 0)
+        s = entry.get("size", 0)
+        console.print(f"  YES   {p:>5}¢ {s:>5}  {implied_probability(p):.1%}")
+
+    for entry in no_entries:
+        p = entry.get("price", 0)
+        s = entry.get("size", 0)
+        console.print(f"  NO    {p:>5}¢ {s:>5}  {implied_probability(p):.1%}")
+
+
 def register_commands(parent_app: typer.Typer) -> None:
 
     @parent_app.command()
@@ -27,11 +130,19 @@ def register_commands(parent_app: typer.Typer) -> None:
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
         ] = False,
+        realtime: Annotated[
+            bool, typer.Option("--realtime", help="Use WebSocket for real-time orderbook streaming")
+        ] = False,
     ) -> None:
         """Get market details, orderbook, and indicators."""
+        console = Console()
+
+        if realtime:
+            asyncio.run(_analyze_realtime(ticker, console, json_output))
+            return
+
         from traderbot.kalshi.markets import MarketService
 
-        console = Console()
         try:
             from traderbot.kalshi.client import KalshiClient
 

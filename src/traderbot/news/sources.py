@@ -136,6 +136,7 @@ SOURCE_CATEGORY_COVERAGE: dict[NewsSource, list[NewsCategory]] = {
     NewsSource.OPENWEATHERMAP: [NewsCategory.WEATHER],
     NewsSource.FRED: [NewsCategory.ECONOMICS, NewsCategory.FINANCIALS],
     NewsSource.GOOGLE_TRENDS: [NewsCategory.MENTIONS, NewsCategory.SOCIAL],
+    NewsSource.NWS_ALERTS: [NewsCategory.WEATHER],
 }
 
 SOURCE_REQUIRES_KEY: frozenset[NewsSource] = frozenset({NewsSource.OPENWEATHERMAP, NewsSource.FRED})
@@ -199,6 +200,7 @@ class NewsAggregator:
         NewsSource.COINGECKO,
         NewsSource.THESPORTSDB,
         NewsSource.OPENWEATHERMAP,
+        NewsSource.NWS_ALERTS,
         NewsSource.FRED,
         NewsSource.GOOGLE_TRENDS,
     ]
@@ -277,6 +279,8 @@ class NewsAggregator:
                     return await self._fetch_thesportsdb(category_filter, limit)
                 case NewsSource.OPENWEATHERMAP:
                     return await self._fetch_openweathermap(category_filter, limit)
+                case NewsSource.NWS_ALERTS:
+                    return await self._fetch_nws_alerts(category_filter, limit)
                 case NewsSource.FRED:
                     return await self._fetch_fred(category_filter, limit)
                 case NewsSource.GOOGLE_TRENDS:
@@ -867,6 +871,94 @@ class NewsAggregator:
                 logger.warning("Open-Meteo parallel fetch exception: %s", r)
 
         return points
+
+    _NWS_ALERT_STATES: ClassVar[list[str]] = [
+        "NY", "PA", "AZ", "MN", "WA", "IL", "TX", "CA", "FL", "CO", "GA", "MA", "MI",
+    ]
+
+    async def _fetch_nws_alerts(
+        self,
+        category_filter: list[NewsCategory] | None = None,
+        limit: int = 20,
+    ) -> list[NewsItem]:
+        if category_filter and NewsCategory.WEATHER not in category_filter:
+            return []
+
+        seen_ids: set[str] = set()
+        items: list[NewsItem] = []
+
+        sem = asyncio.Semaphore(5)
+
+        async def _fetch_state(state: str) -> list[dict[str, Any]]:
+            async with sem:
+                url = f"https://api.weather.gov/alerts/active/area/{state}"
+                try:
+                    resp = await self._client.get(url)
+                    resp.raise_for_status()
+                    data: dict[str, Any] = resp.json()
+                    return data.get("features", [])
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    logger.warning("NWS alerts fetch failed for %s: %s", state, exc)
+                    return []
+
+        tasks = [_fetch_state(s) for s in self._NWS_ALERT_STATES]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("NWS alert fetch task failed: %s", result)
+                continue
+            if not isinstance(result, list):
+                continue
+            for feature in result:
+                props: dict[str, Any] = feature.get("properties", {})
+                alert_id: str = props.get("id", "")
+                if not alert_id or alert_id in seen_ids:
+                    continue
+                seen_ids.add(alert_id)
+
+                event: str = props.get("event", "Unknown Alert")
+                headline: str = props.get("headline", event)
+                severity: str = props.get("severity", "Unknown")
+                urgency: str = props.get("urgency", "Unknown")
+                area_desc: str = props.get("areaDesc", "")
+                description: str = props.get("description", "")[:3000]
+
+                effective_str: str = props.get("effective", "")
+                published_at = datetime.now(UTC)
+                if effective_str:
+                    with contextlib.suppress(ValueError):
+                        published_at = datetime.fromisoformat(
+                            effective_str.replace("Z", "+00:00")
+                        )
+
+                title = headline if headline else f"[NWS {severity}] {event}"
+                body_parts = [f"{event} — Severity: {severity}"]
+                if urgency != "Unknown":
+                    body_parts.append(f"Urgency: {urgency}")
+                if area_desc:
+                    body_parts.append(f"Areas: {area_desc}")
+                if description:
+                    body_parts.append(description)
+
+                items.append(
+                    NewsItem(
+                        id=f"nws-alert-{alert_id}",
+                        title=_sanitize_content(title[:200]),
+                        body=_sanitize_content(" | ".join(body_parts)),
+                        source=NewsSource.NWS_ALERTS,
+                        url=f"https://api.weather.gov/alerts/{alert_id}",
+                        published_at=published_at,
+                        category=NewsCategory.WEATHER,
+                        data_freshness="realtime",
+                    )
+                )
+                if len(items) >= limit:
+                    break
+            if len(items) >= limit:
+                break
+
+        return items
 
     async def _backfill_open_meteo(
         self,
