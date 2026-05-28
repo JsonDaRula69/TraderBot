@@ -1,22 +1,14 @@
 # Deployment
 
-This guide covers installing TraderBot on Ubuntu (Debian-based Linux), Windows, and macOS, setting up profiles, assigning agents, and configuring persistence.
-
 ## Installer
 
-Two installer scripts are provided:
-
-| Script | Platform | Shell |
-|--------|----------|-------|
-| `install/traderbot-installer.sh` | Linux, macOS | Bash |
-| `install/Install-TraderBot.ps1` | Windows | PowerShell |
+The main entry point is `install/traderbot-installer.sh`. It handles OpenClaw bootstrap, TraderBot installation, and interactive configuration in three phases.
 
 ### Linux/macOS
 
 ```bash
-bash install/traderbot-installer.sh              # Interactive install
-bash install/traderbot-installer.sh --uninstall  # Remove services
-bash install/traderbot-installer.sh --update      # Pull latest and restart
+curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh \
+  -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh
 ```
 
 ### Windows

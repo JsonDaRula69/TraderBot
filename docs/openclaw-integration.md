@@ -8,31 +8,67 @@ The TraderBot installer (`install/traderbot-installer.sh`) manages the full Open
 
 ### Phase 1 — OpenClaw Bootstrap
 1. **Detect** if `openclaw` CLI is installed
-2. If missing: prompt to install via `npm install -g @openclaw/cli`; rehashes PATH if npm global bin is not on PATH
+2. If missing: prompt to install via `npm install -g openclaw`; runs `npm approve-scripts openclaw` for bundled plugins; rehashes PATH if npm global bin is not on PATH
 3. **Detect** if gateway is running
 4. If not running: prompt to install service (`openclaw gateway install` with error surfacing) and start (`openclaw gateway start`)
 5. Wait for gateway readiness (polls up to 30s)
+6. **Run baseline setup** (mandatory): `openclaw setup --workspace ~/.openclaw/workspace` — initializes config defaults and workspace
 
 ### Phase 2 — Agent Creation + Hooks + Validation + Guided Setup
-1. **Create default agent**: `openclaw agents add main`
+1. **Create default agent**: `openclaw agents add main --non-interactive --workspace ~/.openclaw/workspace`
 2. **Enable bundled hooks**:
    - `openclaw hooks enable command-logger`
    - `openclaw hooks enable session-memory`
-   - `openclaw hooks enable compaction-notifier`
-   - `openclaw hooks enable agent-bootstrap`
 3. **Run repair**: `openclaw doctor --fix`
 4. **Validate config**: `openclaw config validate`
-5. **Optional — baseline setup**: `openclaw setup --workspace ~/.openclaw/workspace`
-6. **Optional — LLM provider**: `openclaw configure --section models` (interactive wizard)
-7. **Optional — chat channels**: `openclaw channels add --guided` (interactive wizard)
-8. **Optional — runtime health**: `openclaw doctor`
+5. **Optional — LLM provider**: `openclaw configure --section models` (interactive wizard)
+6. **Optional — runtime health**: `openclaw doctor`
 
-### Phase 3 — Profile Assignment
-During the interactive config flow, when the user assigns a profile to an agent:
-1. Agent is auto-created via `openclaw agents add <name>` if it doesn't exist
-2. Token is generated and workspace files deployed via `traderbot profile assign`
-3. Systemd service is installed for the agent
-4. Cron jobs are registered via `traderbot cron setup-heartbeat-tasks --agent <name>`
+### Phase 3 — Interactive Config (API Credentials → Profiles → Category Agents)
+API credentials are collected first, then:
+
+1. **Sysadmin setup**: sysadmin profile created and assigned to agent `main`
+2. **Category agent loop** (per selected category):
+   - Agent auto-created via `openclaw agents add <name> --non-interactive --workspace ~/.openclaw/workspace`
+   - Profile created with `--mode paper|live` and `--categories <cat>`
+   - Profile assigned to agent via `traderbot profile assign`
+   - Systemd service installed
+   - Isolated cron jobs registered via `traderbot cron setup-heartbeat-tasks --agent <name>`
+3. **Data pipeline timers installed** via `install-data-pipeline.sh`
+4. **Sysadmin cron jobs registered** via `traderbot cron setup-heartbeat-tasks --agent main`
+5. **Optional — Docker sandbox**: prompt to build and configure sandbox for category agents
+
+### Docker Sandbox
+
+Category agents run inside OpenClaw's Docker sandbox for filesystem isolation. Sysadmin (main) is NOT sandboxed.
+
+Config at `agents.defaults.sandbox`:
+
+| Setting | Value |
+|---|---|
+| `mode` | `non-main` |
+| `backend` | `docker` |
+| `scope` | `agent` |
+| `workspaceAccess` | `rw` |
+| `docker.image` | `traderbot-sandbox:bookworm-slim` |
+| `docker.network` | `bridge` |
+| `docker.readOnlyRoot` | `true` |
+| `docker.capDrop` | `["ALL"]` |
+| `docker.memory` | `1g` |
+
+Build image: `bash install/docker/build-sandbox.sh`
+
+### Uninstallation
+
+`traderbot uninstall` interactively prompts for each removal category:
+
+1. **System services** (always removed): systemd services, timers, wants symlinks, `daemon-reload`
+2. **User-level systemd**: OpenClaw gateway service
+3. **OpenClaw cron jobs**: each job removed by ID
+4. **User data** (prompted): `~/.traderbot/` including profiles, credentials, logs
+5. **Repository** (prompted): `~/traderbot/`
+
+Flags: `--json` for machine-readable output. No `--remove-data` or `--remove-repo` flags needed — prompts handle it.
 
 ## OpenClaw Configuration
 
