@@ -1740,6 +1740,21 @@ interactive_config_flow() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if command -v openclaw &>/dev/null; then
         create_openclaw_agent "$agent_name" || true
+
+        # Optional channel binding prompt
+        local do_bind=""
+        read -r -p "Bind agent '$agent_name' to a chat channel (Telegram/Discord) for direct commands? (y/n): " do_bind
+        if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
+            echo "  Available channels: telegram, discord, slack, whatsapp, matrix"
+            read -r -p "  Channel name: " bind_channel
+            if [[ -n "${bind_channel:-}" ]]; then
+                read -r -p "  Account ID (or * for all accounts) [*]: " bind_account
+                bind_account="${bind_account:-*}"
+                echo "  Binding agent '$agent_name' to $bind_channel:$bind_account..."
+                openclaw agents bind --agent "$agent_name" --bind "${bind_channel}:${bind_account}" 2>&1 || \
+                    echo "  Warning: channel binding failed. Ensure the channel is configured in openclaw.json."
+            fi
+        fi
     fi
     local merge_mode="--yes"
     echo
