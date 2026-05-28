@@ -726,6 +726,16 @@ uninstall_services() {
             done
         fi
     fi
+
+    if [[ -L "/usr/local/bin/traderbot" ]]; then
+        sudo rm -f /usr/local/bin/traderbot
+        echo "Removed: /usr/local/bin/traderbot"
+    fi
+    if [[ -L "${HOME}/.local/bin/traderbot" ]]; then
+        rm -f "${HOME}/.local/bin/traderbot"
+        echo "Removed: ${HOME}/.local/bin/traderbot"
+    fi
+
     echo "Services uninstalled. Data preserved at $INSTALL_DIR and ~/.traderbot/"
 }
 
