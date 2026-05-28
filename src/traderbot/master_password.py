@@ -10,6 +10,10 @@ shell session. Token expires after 30 minutes.
 Auto-authentication: When the command runs with an active paper-mode profile,
 the session is started automatically so headless agents do not need to prompt.
 Live-mode profiles or general CLI usage still require human authentication.
+
+Auto-refresh: session_active() proactively refreshes the token when it is
+within SESSION_REFRESH_THRESHOLD of expiry. This ensures 24/7 autonomous
+agents never hit a stale token without human intervention.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ PBKDF2_ITERATIONS = 600_000
 PBKDF2_KEY_LENGTH = 32
 PBKDF2_SALT_LENGTH = 32
 SESSION_TOKEN_TTL = 30 * 60
+SESSION_REFRESH_SECS = 5 * 60
 SESSION_TOKEN_ENV = "TRADERBOT_MASTER_TOKEN"
 
 
@@ -110,7 +115,23 @@ def session_active() -> bool:
     stored = _read_master_key()
     if stored is None:
         return False
-    return _verify_session_token(token, stored[1])
+
+    stored_key = stored[1]
+
+    # Proactive refresh: if the token is within SESSION_REFRESH_SECS of expiry,
+    # re-issue a fresh one so long-running agents never hit a stale token.
+    try:
+        ts_str, _ = token.rsplit(":", 1)
+        age = int(time.time()) - int(ts_str)
+    except (ValueError, TypeError):
+        age = 0
+
+    if age >= SESSION_TOKEN_TTL - SESSION_REFRESH_SECS:
+        os.environ[SESSION_TOKEN_ENV] = _make_session_token(stored_key, int(time.time()))
+        logger.debug("Session token refreshed proactively (age=%ds)", age)
+        return True
+
+    return _verify_session_token(token, stored_key)
 
 
 def authenticate(password: str) -> bool:

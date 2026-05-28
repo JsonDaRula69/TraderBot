@@ -313,7 +313,7 @@ def _interactive_delete_profile(name: str, console: Console, registry) -> None:
 
 def _interactive_assign_agent(name: str, console: Console, registry) -> None:
     from traderbot.profiles.discovery import discover_agents
-    from traderbot.profiles.injection import inject_token, propagate_workspace_files
+    from traderbot.profiles.injection import propagate_workspace_files
     from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
 
     agents = discover_agents()
@@ -357,12 +357,10 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
         agent_path = _resolve_agent_path(agent_id)
         if agent_path and agent_path.exists():
             propagate_workspace_files(registry.get_profile(name), agent_path, overwrite=overwrite)
-            inject_token(str(agent_path), token)
             mode = "overwritten" if overwrite else "merged"
-            console.print(f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/")
+            console.print(f"[green]✓[/green] Workspace files {mode} into {agent_id}/")
         else:
-            console.print(f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'")
-            console.print("Token assigned but not injected into workspace")
+            logger.info("Agent workspace not found for '%s' — token assigned to .env only", agent_id)
     except TokenAlreadyAssignedError:
         console.print(f"[yellow]Profile '{name}' already has a token assigned.[/yellow]")
         console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
@@ -377,7 +375,7 @@ def _do_assign(
     console: Console | None = None,
     script_output: bool = False,
 ) -> None:
-    from traderbot.profiles.injection import inject_token, propagate_workspace_files
+    from traderbot.profiles.injection import propagate_workspace_files
     from traderbot.profiles.registry import ProfileRegistry
     from traderbot.profiles.tokens import TokenAlreadyAssignedError, assign_token, generate_token
 
@@ -407,16 +405,12 @@ def _do_assign(
         try:
             agent_path = _resolve_agent_path(agent_id)
             if not agent_path or not agent_path.exists():
-                console.print(
-                    f"[yellow]Warning:[/yellow] Agent directory not found for '{agent_id}'"
-                )
-                console.print("Token assigned but not injected into TOOLS.md")
+                logger.info("Agent workspace not found for '%s' — token in .env only", agent_id)
             else:
                 propagate_workspace_files(profile, agent_path, overwrite=overwrite)
-                inject_token(str(agent_path), token)
                 mode = "overwritten" if overwrite else "merged"
                 console.print(
-                    f"[green]✓[/green] Workspace files {mode} and token injected into {agent_id}/"
+                    f"[green]✓[/green] Workspace files {mode} into {agent_id}/"
                 )
 
                 try:
@@ -453,11 +447,9 @@ def _do_assign(
                         f"{oc_err}"
                     )
         except FileNotFoundError:
-            console.print("[yellow]Warning:[/yellow] Agent directory not found")
-            console.print("Token assigned but not injected into TOOLS.md")
+            logger.info("Agent workspace not found — token in .env only")
         except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Failed to inject token into TOOLS.md: {e}")
-            console.print("Token assigned but not injected")
+            logger.warning("Failed to propagate workspace files: %s", e)
     except TokenAlreadyAssignedError:
         console.print(f"[yellow]Profile '{profile_name}' already has a token assigned.[/yellow]")
         console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
@@ -863,7 +855,6 @@ def profile_revoke(
 ) -> None:
     """Revoke a token assigned to a profile."""
     from traderbot.profiles.tokens import get_profile_token, resolve_token, revoke_token
-    from traderbot.profiles.injection import remove_token_from_tools
 
     console = Console()
 
@@ -877,15 +868,6 @@ def profile_revoke(
 
     revoke_token(token)
     console.print(f"[green]✓[/green] Revoked token for profile '{profile_name}'")
-
-    if agent_id:
-        try:
-            agent_path = _resolve_agent_path(agent_id)
-            if agent_path and agent_path.exists():
-                remove_token_from_tools(str(agent_path))
-                console.print(f"[green]✓[/green] Token removed from {agent_id}/TOOLS.md")
-        except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Failed to remove token from TOOLS.md: {e}")
 
 
 @profile_app.command("get-token")
