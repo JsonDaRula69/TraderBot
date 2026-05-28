@@ -239,10 +239,104 @@ find_compatible_python() {
 }
 
 check_openclaw() {
-    if [[ -d "${HOME}/.openclaw" ]] && command -v openclaw &>/dev/null; then
+    if command -v openclaw &>/dev/null; then
+        echo "  OpenClaw found: $(openclaw --version 2>/dev/null || echo 'installed')"
         return 0
     fi
+    echo "  OpenClaw not found."
+    echo ""
+    echo "┌─────────────────────────────────────────────────────────┐"
+    echo "│  OpenClaw Gateway Required                             │"
+    echo "│                                                         │"
+    echo "│  TraderBot agents run as OpenClaw agents. The gateway  │"
+    echo "│  manages agent sessions, cron jobs, and hooks.         │"
+    echo "│                                                         │"
+    echo "│  Install OpenClaw now? (requires npm, ~30s)            │"
+    echo "└─────────────────────────────────────────────────────────┘"
+    local install_openclaw=""
+    read -r -p "Install OpenClaw via npm? (y/n): " install_openclaw
+    if [[ ! "${install_openclaw:-}" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "OpenClaw is required. Install manually:"
+        echo "  npm install -g @openclaw/cli"
+        echo "Then re-run this installer."
+        return 1
+    fi
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found. Install Node.js first:"
+        echo "  Linux: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs"
+        echo "  macOS: brew install node"
+        return 1
+    fi
+    echo "  Installing OpenClaw via npm..."
+    npm install -g @openclaw/cli 2>&1 || {
+        echo "  Failed to install OpenClaw. Install manually and re-run." >&2
+        return 1
+    }
+    echo "  OpenClaw installed successfully."
+    return 0
+}
+
+ensure_gateway_running() {
+    if openclaw gateway status &>/dev/null; then
+        echo "  OpenClaw gateway is running."
+        return 0
+    fi
+    echo ""
+    echo "OpenClaw gateway is not running."
+    local setup_gw=""
+    read -r -p "Install gateway service and start now? (y/n): " setup_gw
+    if [[ ! "${setup_gw:-}" =~ ^[Yy]$ ]]; then
+        echo "  Gateway required for agent creation and cron. Start manually: openclaw gateway start"
+        return 1
+    fi
+    echo "  Installing OpenClaw gateway service..."
+    openclaw gateway install 2>&1 || true
+    echo "  Starting OpenClaw gateway..."
+    openclaw gateway start 2>&1 || {
+        echo "  Failed to start gateway. Start manually: openclaw gateway start" >&2
+        return 1
+    }
+    # Wait for gateway to be ready
+    for i in $(seq 1 10); do
+        if openclaw gateway status &>/dev/null; then
+            echo "  Gateway is ready."
+            return 0
+        fi
+        sleep 2
+    done
+    echo "  Gateway start timed out. Check: openclaw gateway status" >&2
     return 1
+}
+
+agent_exists() {
+    local name="$1"
+    openclaw agents list 2>/dev/null | grep -qP "^\s*${name}\s" && return 0
+    openclaw agents list 2>/dev/null | grep -qP "${name}" && return 0
+    return 1
+}
+
+create_openclaw_agent() {
+    local name="$1"
+    if agent_exists "$name"; then
+        echo "  Agent '$name' already exists."
+        return 0
+    fi
+    echo "  Creating OpenClaw agent '$name'..."
+    openclaw agents add "$name" 2>&1 || {
+        echo "  Warning: Failed to create agent '$name'. Create manually: openclaw agents add $name" >&2
+        return 1
+    }
+}
+
+enable_openclaw_hooks() {
+    local hooks_to_enable=("$@")
+    for hook in "${hooks_to_enable[@]}"; do
+        if openclaw hooks list 2>/dev/null | grep -q "$hook"; then
+            echo "  Enabling hook: $hook..."
+            openclaw hooks enable "$hook" 2>/dev/null || true
+        fi
+    done
 }
 
 check_docker() {
@@ -1619,12 +1713,16 @@ interactive_config_flow() {
     read -r -p "Agent name to assign (or press Enter to skip): " agent_name
     if [[ -z "$agent_name" ]]; then
         echo "Skipping agent assignment. Run later:"
-        echo "  openclaw agents add $profile_name"
-        echo "  traderbot profile assign $profile_name $agent_name"
+        echo "  openclaw agents add <name>"
+        echo "  traderbot profile assign $profile_name <name>"
         return 0
     fi
 
+    # Auto-create the agent if it doesn't exist
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
+    if command -v openclaw &>/dev/null; then
+        create_openclaw_agent "$agent_name" || true
+    fi
     local merge_mode="--yes"
     echo
     echo "Workspace file mode:"
@@ -1732,21 +1830,19 @@ main() {
 
     echo "Checking for OpenClaw..."
     if ! check_openclaw; then
-        echo "" >&2
-        echo "┌─────────────────────────────────────────────────────────┐" >&2
-        echo "│  OpenClaw Gateway Required                             │" >&2
-        echo "│                                                         │" >&2
-        echo "│  TraderBot agents run as OpenClaw agents. The gateway  │" >&2
-        echo "│  The gateway manages agent sessions.                  │" >&2
-        echo "│                                                         │" >&2
-        echo "│  Install: https://github.com/openclaw/openclaw         │" >&2
-        echo "│                                                         │" >&2
-        echo "│  After installing OpenClaw:                             │" >&2
-        echo "│    1. Run: openclaw init                                │" >&2
-        echo "│    2. Configure your agent workspace                    │" >&2
-        echo "│    3. Re-run this installer                             │" >&2
-        echo "└─────────────────────────────────────────────────────────┘" >&2
         exit 1
+    fi
+
+    echo "Setting up OpenClaw gateway..."
+    if ensure_gateway_running; then
+        echo "  Creating default agents..."
+        create_openclaw_agent "main" || true
+
+        echo "  Enabling bundled OpenClaw hooks..."
+        enable_openclaw_hooks "command-logger" "session-memory" "compaction-notifier" "agent-bootstrap" || true
+        echo "  OpenClaw setup complete."
+    else
+        echo "  OpenClaw gateway not available. Agent creation and hooks will be manual."
     fi
 
     echo "Installing dependencies..."

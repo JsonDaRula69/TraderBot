@@ -1,67 +1,122 @@
 # OpenClaw Integration
 
-How TraderBot integrates with the OpenClaw agent framework — skill definition, workspace files, cron architectures, and proactive agent patterns.
+How TraderBot integrates with the OpenClaw agent framework — lifecycle management, workspace files, isolated cron tasks, hooks, and the full install flow.
 
-## OpenClaw Overview
+## Installation Lifecycle
 
-[OpenClaw](https://github.com/openclaw/openclaw) is a self-hosted personal AI assistant with a skill system. Skills are defined by `SKILL.md` files that tell the agent what tools are available, how to call them, and when to use them.
+The TraderBot installer (`install/traderbot-installer.sh`) manages the full OpenClaw lifecycle in three phases:
 
-The agent consumes TraderBot via **exec** calls — it shells out to our CLI commands and interprets the structured output.
+### Phase 1 — OpenClaw Bootstrap
+1. **Detect** if `openclaw` CLI is installed
+2. If missing: prompt to install via `npm install -g @openclaw/cli`
+3. **Detect** if gateway is running
+4. If not running: prompt to install service (`openclaw gateway install`) and start (`openclaw gateway start`)
+5. Wait for gateway readiness (polls up to 20s)
 
-## Skill Definition
+### Phase 2 — Agent Creation + Hooks
+1. **Create default agent**: `openclaw agents add main`
+2. **Enable bundled hooks**:
+   - `openclaw hooks enable command-logger` — logs every command to `~/.openclaw/logs/commands.log`
+   - `openclaw hooks enable session-memory` — auto-saves last 15 messages to `workspace/memory/YYYY-MM-DD-HHMM.md`
+   - `openclaw hooks enable compaction-notifier` — shows "compacting history..." during session compaction
+   - `openclaw hooks enable agent-bootstrap` — our custom hook (see below)
 
-The `skills/traderbot/SKILL.md` file is the integration contract. It defines:
+### Phase 3 — Profile Assignment
+During the interactive config flow, when the user assigns a profile to an agent:
+1. Agent is auto-created via `openclaw agents add <name>` if it doesn't exist
+2. Token is generated and workspace files deployed via `traderbot profile assign`
+3. Systemd service is installed for the agent
+4. Cron jobs are registered via `traderbot cron setup-heartbeat-tasks --agent <name>`
 
-- **Available commands** and their arguments
-- **When the agent should use each command** (trigger phrases)
-- **Expected output format** (JSON structured responses)
-- **Environment requirements** (API keys, Python version)
+## OpenClaw Configuration
 
-```yaml
----
-name: traderbot
-description: Autonomous prediction market investment toolkit for Kalshi
-metadata:
-  openclaw:
-    requires:
-      env: ["KALSHI_API_KEY", "KALSHI_PRIVATE_KEY_PEM"]
-      bins: ["python3"]
-    primaryEnv: KALSHI_API_KEY
----
-```
+### Heartbeat Configuration
 
-### Command Categories
+Each agent has `isolatedSession: true` and `lightContext: true` configured in their heartbeat settings. This means every heartbeat turn runs in a fresh session with minimum bootstrap context (only `HEARTBEAT.md`).
 
-| Category | Commands | Agent Trigger |
-|---|---|---|
-| **Market Analysis** | `scan`, `analyze`, `signals` | "What markets look interesting?", "Check KXBTCD markets" |
-| **Trading** | `trade`, `positions`, `cancel` | "Buy Yes on BTC touch", "Show my positions" |
-| **Simulation** | `backtest`, `paper`, `compare`, `performance` | "Test this strategy", "How did we do last week?" |
-| **Self-Improvement** | `heartbeat`, `learnings`, `audit` | Periodic (cron), "Review our performance", "What have we learned?" |
-| **News/Sentiment** | `news`, `sentiment`, `news-ingest`, `news-context`, `news-summary` | "What's the latest news?", "Check BTC sentiment", "Get pre-trade news context" |
-
-## Three-Loop Cron Architecture
-
-OpenClaw supports two cron execution modes. TraderBot uses both intentionally:
-
-### `isolated agentTurn` — Autonomous Background Work
-
-Used for: **Decision Loop** and **Heartbeat Loop**
-
-The agent spawns a sub-agent that executes independently. No human attention is needed. The sub-agent reads `SESSION-STATE.md` for context and writes results back.
+Configured via `cli/cron.py:_write_heartbeat_config()` which writes directly to `openclaw.json`. Heartbeat settings are not exposed through the `openclaw` CLI, so this is the only method.
 
 ```json
 {
-  "sessionTarget": "isolated",
-  "payload": {
-    "kind": "agentTurn",
-    "message": "AUTONOMOUS: Run traderbot decision loop. Read SESSION-STATE.md for tracked markets. Execute analysis, risk-check, and trades within guard rails. Log all decisions."
+  "heartbeat": {
+    "every": "30m",
+    "isolatedSession": true,
+    "lightContext": true
   }
 }
 ```
 
-**Decision Loop cron**: Runs every 5 minutes, 24/7 (Kalshi prediction markets never close).
-**Heartbeat Loop cron**: Runs every 6 hours (configurable via `--heartbeat-every`).
+### Bootstrap Hook
+
+Deployed at `~/.openclaw/hooks/traderbot-bootstrap/` and enabled via `openclaw hooks enable agent-bootstrap`. Fires on `agent:bootstrap` before workspace files are injected. Checks:
+
+1. SESSION-STATE.md for PENDING/ESCALATE entries
+2. HEARTBEAT_DATA.md for circuit breaker state (HALT/FULL_STOP)
+3. Injects a Pre-Session Status block when issues are found
+
+## Workspace File Architecture
+
+### Auto-Injected Bootstrap Files (all 8 recognized basenames)
+
+| File | Strategy | Purpose |
+|---|---|---|
+| `AGENTS.md` | Fenced merge | Trading rules, market types, decision loop |
+| `SOUL.md` | Fenced merge | Agent personality, principles, autonomy |
+| `TOOLS.md` | Fenced merge | CLI reference, auth tiers, tool autonomy |
+| `IDENTITY.md` | Fenced merge | Prebuilt name, creature, vibe, emoji |
+| `USER.md` | Init if missing | Human preferences (name, pronouns, style) |
+| `HEARTBEAT.md` | Init if missing | Task schedule reference (cron handles execution) |
+| `BOOTSTRAP.md` | Not used | Removed — all agents are prebuilt frozen identities |
+| `MEMORY.md` | Init if missing | Long-term curated operational memory |
+
+### Non-Bootstrap Files (explicitly referenced by agents)
+
+| File | Loaded By | Purpose |
+|---|---|---|
+| `SESSION-STATE.md` | AGENTS.md (boot sequence) | WAL protocol — active positions, pending actions |
+| `HEARTBEAT_DATA.md` | AGENTS.md (boot sequence) | Latest 7-step review, circuit breaker state |
+| `.learnings/` | AGENTS.md (learning tasks) | Discovered patterns, errors, feature requests |
+
+### Template Selection
+
+`propagate_workspace_files()` selects templates by profile category:
+1. Sysadmin (`categories=[ALL]` with min risk) → `workspace/` root templates
+2. Weather agent (`categories=[WEATHER]`) → `workspace/weather/` templates if they exist
+3. Other categories → `workspace/agent/` fallback
+
+## Isolated Cron Architecture
+
+Each agent gets 7 isolated cron jobs registered during install. Every job runs in a dedicated `cron:<jobId>` session — zero collision with trading or other tasks:
+
+### Per-Agent Jobs (registered for every trading agent)
+
+| Job | Interval | Purpose |
+|---|---|---|
+| `circuit-breaker-check` | 30m | `traderbot halt --json` |
+| `data-forecast-check` | 30m | `traderbot data forecasts` |
+| `news-scan` | 30m | `traderbot news-context` |
+| `position-health` | 1h | `traderbot positions --json` |
+| `performance-review` | 6h | `traderbot heartbeat --json` |
+| `learning-promotion` | 6h | `.learnings/` recurrence >= 3 check |
+| `pipeline-health` | 6h | Pipeline timers, data_points count |
+
+### Sysadmin Jobs (registered for "main" agent)
+
+| Job | Interval | Purpose |
+|---|---|---|
+| `fleet-health` | 30m | Agent circuit breakers, fleet status |
+| `experiment-check` | 30m | New experiment designs from agents |
+| `experiment-execution` | 30m | Process queued experiments |
+| `learning-review` | 1h | Cross-agent learning patterns |
+| `news-scan` | 2h | High-impact signals > 0.7 |
+| `pipeline-health` | 3h | Timer status, data pipeline |
+
+## Update Flow
+
+Both `traderbot update` (Python) and `update_services()` (bash) refresh workspace files after pulling new code:
+
+- **Replaced**: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md
+- **Preserved**: USER.md, MEMORY.md, HEARTBEAT_DATA.md, SESSION-STATE.md, .learnings/ (configurable via `--heartbeat-every`).
 
 The heartbeat loop also includes capability gap detection — scanning `.learnings/FEATURE_REQUESTS.md` for recurring feature requests that warrant human review. Entries with `Recurrence-Count >= 3` are promoted to `PENDING_REVIEW` status and surfaced for human evaluation.
 
