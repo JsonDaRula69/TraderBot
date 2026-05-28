@@ -377,7 +377,12 @@ create_openclaw_agent() {
         return 0
     fi
     echo "  Creating OpenClaw agent '$name'..."
-    openclaw agents add "$name" --non-interactive --workspace "$HOME/.openclaw/workspace" 2>&1 || {
+    # Category agents get their own workspace subdirectory under the root
+    local agent_ws="$HOME/.openclaw/workspace"
+    if [[ "$name" != "main" ]]; then
+        agent_ws="$HOME/.openclaw/workspace/$name"
+    fi
+    openclaw agents add "$name" --non-interactive --workspace "$agent_ws" 2>&1 || {
         echo "  Warning: Failed to create agent '$name'. Create manually: openclaw agents add $name" >&2
         return 1
     }
@@ -1800,7 +1805,7 @@ interactive_config_flow() {
 
         local cat_token=""
         if [[ -x "$tb_cmd" ]]; then
-            cat_token=$("$tb_cmd" profile get-token "$cat_profile" 2>/dev/null) || true
+            cat_token=$("$tb_cmd" profile get-token "$cat_profile" 2>/dev/null | tail -1) || true
         fi
         if [[ -n "$cat_token" ]]; then
             install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE"
