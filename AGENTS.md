@@ -55,6 +55,13 @@ This file defines conventions for AI-assisted development of this project. All A
 - All Pydantic models MUST use `ConfigDict(strict=True, extra="forbid")` — including `BaseSettings` subclasses
 - All monetary values in cents as `int` — never `float`
 
+## Agent Operating Procedures
+
+- **Prompt before fixing discovered issues** — If you discover bugs, inconsistencies, or improvement opportunities while working on a task — even if they're unrelated to the current task — always ask the user before fixing them. Don't fix silently or assume permission.
+- **Always use the questions tool** — When prompting the user or asking questions, always use the `question` tool. Do not ask questions inline or in plain text.
+- **Always maintain a todo list** — Use `todowrite` for every task, even simple ones. If the user interrupts you mid-task, evaluate the priority of the new request and insert it into the todo list in the appropriate order. Never leave tasks with `in_progress` status unfinished.
+- **Update VERSION on every commit** — Before every `git commit`, increment the patch version in `VERSION` (repo root). The format is `vMAJOR.MINOR.PATCH` (e.g., `v0.13.23`). The VERSION file is the single source of truth — `traderbot/__init__.py` reads it with `importlib.metadata` as fallback.
+
 ## Code Style
 
 - Use Pydantic v2 models for all data structures
