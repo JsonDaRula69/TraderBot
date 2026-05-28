@@ -387,6 +387,149 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         _with_db(_resolve_db_path(db_path), _run)
 
+    @parent_app.command("check-settlements")
+    def check_settlements(
+        db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+        dry_run: Annotated[
+            bool, typer.Option("--dry-run", help="Report only — no DB writes")
+        ] = False,
+    ) -> None:
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.positions import list_all, update_settlement
+        from traderbot.kalshi.client import KalshiClient
+        from traderbot.kalshi.portfolio import PortfolioService
+
+        console = Console()
+
+        db_path = _resolve_db_path(db_path)
+        with get_connection(db_path) as conn:
+            init_schema(conn)
+            local_positions = list_all(conn)
+            local_tickers = {p.ticker for p in local_positions if p.settlement_result is None}
+
+        if not local_tickers:
+            if json_output:
+                json_lib.dump({"checked": 0, "updated": 0, "positions": []}, sys.stdout)
+            else:
+                console.print("[dim]No open positions to settle.[/dim]")
+            return
+
+        async def _check() -> dict:
+            client = KalshiClient()
+            portfolio = PortfolioService(client)
+            settlements = await portfolio.get_settlements()
+            await client.close()
+
+            updated_positions: list[dict] = []
+            checked = 0
+            updated = 0
+
+            for s in settlements:
+                if s.ticker not in local_tickers:
+                    continue
+                checked += 1
+
+                if s.settlement_price_cents == 100:
+                    result = True
+                elif s.settlement_price_cents == 0:
+                    result = False
+                else:
+                    result = None
+
+                pnl = s.pnl_cents
+
+                if not dry_run and result is not None:
+                    with get_connection(db_path) as conn:
+                        did_update = update_settlement(conn, s.ticker, result, pnl)
+                        if did_update:
+                            updated += 1
+                elif dry_run:
+                    updated += 1
+
+                updated_positions.append(
+                    {
+                        "ticker": s.ticker,
+                        "result": result,
+                        "pnl_cents": pnl,
+                        "settled_at": s.settled_at.isoformat() if s.settled_at else None,
+                        "dry_run": dry_run,
+                    }
+                )
+
+            return {"checked": checked, "updated": updated, "positions": updated_positions}
+
+        try:
+            result = asyncio.run(_check())
+        except Exception as exc:
+            if json_output:
+                json_lib.dump({"error": str(exc)}, sys.stdout)
+            else:
+                console.print(f"[red]Settlement check failed:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+        if json_output:
+            json_lib.dump(result, sys.stdout, default=str)
+            return
+
+        if result["checked"] == 0:
+            console.print("[dim]No new settlements found for open positions.[/dim]")
+        else:
+            console.print(
+                f"[green]✓[/green] Settlements checked: {result['checked']} — "
+                f"updated: {result['updated']} (dry_run={dry_run})"
+            )
+            for pos in result["positions"]:
+                res_label = "YES" if pos["result"] is True else "NO" if pos["result"] is False else "UNKNOWN"
+                console.print(
+                    f"  • {pos['ticker']}: {res_label} — PnL ${pos['pnl_cents']/100:.2f}"
+                )
+
+    @parent_app.command("reconcile")
+    def reconcile_command(
+        db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
+        json_output: Annotated[
+            bool, typer.Option("--json", help="Output as JSON for machine consumption")
+        ] = False,
+    ) -> None:
+        from traderbot.db import get_connection, init_schema
+        from traderbot.db.reconciliation import reconcile_all
+        from traderbot.kalshi.client import KalshiClient
+
+        console = Console()
+        db = _resolve_db_path(db_path)
+        with get_connection(db) as conn:
+            init_schema(conn)
+
+        async def _run() -> dict:
+            client = KalshiClient()
+            counts = await reconcile_all(db, client)
+            await client.close()
+            return counts
+
+        try:
+            result = asyncio.run(_run())
+        except Exception as exc:
+            if json_output:
+                json_lib.dump({"error": str(exc)}, sys.stdout)
+            else:
+                console.print(f"[red]Reconciliation failed:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+        if json_output:
+            json_lib.dump(result, sys.stdout, default=str)
+            return
+
+        pos = result.get("positions", {})
+        settle = result.get("settlements", {})
+        console.print(
+            f"[green]✓[/green] Reconciliation complete — "
+            f"positions updated={pos.get('updated', 0)} closed={pos.get('closed', 0)} added={pos.get('added', 0)} | "
+            f"settlements settled={settle.get('settled', 0)} skipped={settle.get('skipped', 0)}"
+        )
+
     @parent_app.command("cache")
     def cache_command(
         action: Annotated[

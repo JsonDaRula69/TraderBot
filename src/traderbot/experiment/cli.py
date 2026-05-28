@@ -20,6 +20,11 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from traderbot.experiment.harness import Harness
+from traderbot.experiment.populate import populate_cmd
+from traderbot.llm.client import LLMClient
+from traderbot.llm.ollama import OllamaProvider
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / ".traderbot" / "experiments" / "experiment.db"
@@ -79,19 +84,10 @@ def experiment_populate(
     """Populate the experiment database with market data from Kalshi + Open-Meteo."""
     is_json = ctx.parent.obj.get("json_output", True) if ctx.parent else True
 
-    try:
-        from traderbot.experiment.populate import populate_cmd
-    except ImportError as err:
-        if is_json:
-            _write_json({"status": "error", "error": "populate module not available (T14 not yet implemented)"})
-        else:
-            err_console.print("[red]Error:[/red] populate module not available (T14 not yet implemented)")
-        raise typer.Exit(code=1) from err
-
     db_path = _resolve_db(db)
 
     try:
-        count = populate_cmd(db_path=str(db_path), max_markets=max_markets)
+        count = populate_cmd(db_path=str(db_path), max_markets=max_markets, category=category)
     except Exception as e:
         if is_json:
             _write_json({"status": "error", "error": str(e)})
@@ -252,21 +248,8 @@ def experiment_run(
         err_console.print(f"[red]Database not found:[/red] {db_path}. Run 'experiment populate' first.")
         raise typer.Exit(code=1)
 
-    try:
-        from traderbot.experiment.harness import Harness
-    except ImportError as e:
-        err_console.print("[red]Error:[/red] harness module not available (T15 not yet implemented)")
-        raise typer.Exit(code=1) from e
-
-    try:
-        from traderbot.llm.client import LLMClient
-        from traderbot.llm.ollama import OllamaProvider
-
-        provider = OllamaProvider(model=model)
-        llm_client = LLMClient(provider=provider)
-    except ImportError as e:
-        err_console.print("[red]Error:[/red] LLM client not available")
-        raise typer.Exit(code=1) from e
+    provider = OllamaProvider(model=model)
+    llm_client = LLMClient(provider=provider)
 
     conn = sqlite3.connect(str(db_path))
     try:

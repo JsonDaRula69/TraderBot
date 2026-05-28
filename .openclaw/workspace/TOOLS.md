@@ -55,6 +55,7 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 | `traderbot performance --json` | Review P&L and win rate (`--from`, `--to`, per-agent) |
 | `traderbot halt --json` | Check circuit breaker status |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
+| `traderbot reconcile --json` | Sync local positions with Kalshi |
 
 ### Test Lab (Experiments & Backtesting)
 

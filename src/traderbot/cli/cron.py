@@ -267,6 +267,12 @@ _HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. Surface any at-risk positions to sysadmin.",
     },
     {
+        "name": "settlement-monitor",
+        "cron_expr": "0 * * * *",
+        "session": "isolated",
+        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`.",
+    },
+    {
         "name": "performance-review",
         "cron_expr": "0 */6 * * *",
         "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Review learning promotions. Surface any issues.",

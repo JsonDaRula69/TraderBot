@@ -12,6 +12,7 @@ session — so they never collide with trading or each other._
 | data-forecast-check | 30m | `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` |
 | news-scan | 30m | `traderbot news-context weather --json` |
 | position-health | 1h | `traderbot positions --json` |
+| settlement-monitor | 1h | Check recently settled markets, update local positions with PnL |
 | performance-review | 6h | `traderbot heartbeat --json` |
 | learning-promotion | 6h | `.learnings/LEARNINGS.md` PENDING_REVIEW promotion + experiment design |
 | pipeline-health | 6h | Pipeline timer status + data_points collection count |

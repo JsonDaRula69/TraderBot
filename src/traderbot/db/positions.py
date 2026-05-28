@@ -21,6 +21,7 @@ class DbPosition(BaseModel):
     quantity: Annotated[int, Field(ge=0)]
     avg_price: Annotated[int, Field(ge=0, description="Average price in cents")]
     settlement_result: bool | None = None
+    pnl_cents: int = 0
     updated_at: datetime
 
 
@@ -33,23 +34,41 @@ def init_table(conn: sqlite3.Connection) -> None:
             quantity INTEGER NOT NULL DEFAULT 0,
             avg_price INTEGER NOT NULL DEFAULT 0,
             settlement_result INTEGER,
+            pnl_cents INTEGER DEFAULT 0,
             updated_at TEXT NOT NULL
         )"""
     )
+    _ensure_column(
+        conn,
+        "positions",
+        "pnl_cents",
+        "ALTER TABLE positions ADD COLUMN pnl_cents INTEGER DEFAULT 0",
+    )
     conn.commit()
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in columns:
+        conn.execute(ddl)
 
 
 def upsert(conn: sqlite3.Connection, position: Position) -> None:
-    """Insert or replace a position by its unique ticker."""
+    """Insert or replace a position by its unique ticker, preserving existing pnl_cents."""
     now = datetime.now(UTC).isoformat()
+    existing = conn.execute(
+        "SELECT pnl_cents FROM positions WHERE ticker = ?", (position.ticker,)
+    ).fetchone()
+    pnl_cents = existing["pnl_cents"] if existing else 0
     conn.execute(
-        """INSERT OR REPLACE INTO positions (ticker, quantity, avg_price, settlement_result, updated_at)
-           VALUES (?, ?, ?, ?, ?)""",
+        """INSERT OR REPLACE INTO positions
+           (ticker, quantity, avg_price, settlement_result, pnl_cents, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         (
             position.ticker,
             position.quantity,
             position.avg_price,
             position.settlement_result,
+            pnl_cents,
             now,
         ),
     )
@@ -100,8 +119,35 @@ def update_avg_price(
     conn.commit()
 
 
+def update_settlement(
+    conn: sqlite3.Connection,
+    ticker: str,
+    result: bool,
+    pnl_cents: int,
+) -> bool:
+    now = datetime.now(UTC).isoformat()
+    cursor = conn.execute(
+        "UPDATE positions SET settlement_result = ?, pnl_cents = ?, updated_at = ? WHERE ticker = ?",
+        (int(result), pnl_cents, now, ticker),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def mark_closed(conn: sqlite3.Connection, ticker: str) -> bool:
+    now = datetime.now(UTC).isoformat()
+    cursor = conn.execute(
+        "UPDATE positions SET quantity = 0, avg_price = 0, updated_at = ? WHERE ticker = ?",
+        (now, ticker),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def count_open(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL").fetchone()
+    row = conn.execute(
+        "SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL AND quantity > 0"
+    ).fetchone()
     return row[0] if row else 0
 
 

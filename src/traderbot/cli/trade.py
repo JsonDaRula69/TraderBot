@@ -395,6 +395,14 @@ def register_commands(parent_app: typer.Typer) -> None:
         except Exception as exc:
             logger.warning("Failed to persist position to DB: %s", exc)
 
+        try:
+            from traderbot.db.reconciliation import reconcile_positions
+
+            counts = asyncio.run(reconcile_positions(pos_db, client))
+            logger.info("Post-trade reconciliation: %s", counts)
+        except Exception as exc:
+            logger.warning("Post-trade reconciliation failed: %s", exc)
+
     @parent_app.command()
     def positions(
         db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
@@ -430,9 +438,11 @@ def register_commands(parent_app: typer.Typer) -> None:
         table.add_column("Quantity", justify="right")
         table.add_column("Avg Price", justify="right")
         table.add_column("Settled")
+        table.add_column("PnL (¢)", justify="right")
         for p in all_positions:
             settled = "\u2014" if p.settlement_result is None else str(p.settlement_result)
-            table.add_row(p.ticker, str(p.quantity), str(p.avg_price), settled)
+            pnl = str(p.pnl_cents) if p.settlement_result is not None else "\u2014"
+            table.add_row(p.ticker, str(p.quantity), str(p.avg_price), settled, pnl)
         console.print(table)
 
     @parent_app.command()
