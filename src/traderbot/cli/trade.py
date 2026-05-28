@@ -103,9 +103,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         no_confirm: Annotated[
             bool, typer.Option("--no-confirm", help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.")
         ] = False,
-        live: Annotated[
-            bool, typer.Option("--live", help="Submit order to Kalshi exchange. Default is paper-only (risk check + local tracking).")
-        ] = False,
     ) -> None:
         """Place a trade through risk checks.
 
@@ -113,8 +110,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         instead of relying on market-implied probability, which often yields ~0 edge
         and causes all trades to be rejected by the Kelly sizing formula.
 
-        By default runs in paper mode: risk check + WAL logging + position tracking only.
-        Pass --live to actually submit the order to Kalshi.
+        Routes automatically based on the active profile's mode:
+        - Paper profile: risk check + WAL logging + local position tracking only
+        - Live profile: submits order to Kalshi exchange after risk check passes
         """
         from traderbot.master_password import require_auth
         require_auth()
@@ -236,7 +234,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             adj_price = price
 
         # Live mode: submit to Kalshi exchange
-        if live:
+        if not profile.paper_mode:
             side = OrderSideV2.bid if direction == "yes" else OrderSideV2.ask
             # V2 uses dollar-based prices: e.g. 65¢ → "0.65"
             dollar_price = f"{adj_price / 100:.2f}"
