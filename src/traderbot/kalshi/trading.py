@@ -1,5 +1,6 @@
 """Order placement service — create, cancel, and track Kalshi portfolio orders."""
 
+import logging
 from typing import Any
 
 from traderbot.kalshi.client import KalshiClient
@@ -13,6 +14,8 @@ from traderbot.kalshi.models import (
     OrderType,
     TradingOrder,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TradingService:
@@ -28,23 +31,38 @@ class TradingService:
         dollar-based fixed-point pricing per the Kalshi API spec.
         """
         body = order_request.to_v2_body()
+        logger.info(
+            "Placing order: ticker=%s side=%s count=%s price=%s",
+            order_request.ticker, order_request.side, order_request.count, order_request.price,
+        )
         response = await self._client.post("/portfolio/events/orders/v2", **body)
         response.raise_for_status()
         data = response.json()
+        order_id = data["order_id"]
+        fill_count = data.get("fill_count", "0")
+        remaining_count = data.get("remaining_count", "0")
+        logger.info(
+            "Order placed: order_id=%s fill_count=%s remaining_count=%s",
+            order_id, fill_count, remaining_count,
+        )
+        if int(fill_count) == 0 and int(remaining_count) > 0:
+            logger.warning("Partial fill for order %s: %s/%s filled", order_id, fill_count, remaining_count)
         return OrderResult(
-            order_id=data["order_id"],
+            order_id=order_id,
             client_order_id=data.get("client_order_id"),
-            fill_count=data.get("fill_count", "0"),
-            remaining_count=data.get("remaining_count", "0"),
+            fill_count=fill_count,
+            remaining_count=remaining_count,
             average_fill_price=data.get("average_fill_price"),
             ts_ms=data.get("ts_ms"),
         )
 
     async def cancel_order(self, order_id: str) -> CancelResponse:
         """Cancel an existing order by ID."""
+        logger.info("Cancelling order: order_id=%s", order_id)
         response = await self._client.delete(f"/portfolio/events/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
+        logger.info("Order cancelled: order_id=%s reduced_by=%s", data["order_id"], data.get("reduced_by"))
         return CancelResponse(
             order_id=data["order_id"],
             status=None,
@@ -53,6 +71,7 @@ class TradingService:
 
     async def get_order(self, order_id: str) -> TradingOrder:
         """Retrieve a single order by ID."""
+        logger.debug("Fetching order: order_id=%s", order_id)
         response = await self._client.get(f"/portfolio/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
@@ -65,10 +84,12 @@ class TradingService:
         if ticker is not None:
             params["ticker"] = ticker
 
+        logger.debug("Listing orders: ticker=%s", ticker)
         response = await self._client.get("/portfolio/orders", **params)
         response.raise_for_status()
         data = response.json()
         orders_raw = data.get("orders", [])
+        logger.info("Fetched %d orders", len(orders_raw))
         return [self._parse_order(o) for o in orders_raw]
 
     @staticmethod

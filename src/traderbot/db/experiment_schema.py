@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 
 def create_tables(conn: sqlite3.Connection) -> None:
@@ -80,3 +83,4 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
 
     conn.commit()
+    logger.info("Created experiment database tables (markets, forecast_snapshots, market_prices, settlement_actuals, agent_decisions)")

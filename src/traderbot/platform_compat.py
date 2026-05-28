@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import platform as _platform
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_platform() -> str:
@@ -93,16 +96,23 @@ def launchd_remove_services(glob_pattern: str) -> list[str]:
     sudo = shutil.which("sudo") or "/usr/bin/sudo"
     launchctl = shutil.which("launchctl") or "/bin/launchctl"
     daemon_dir = Path("/Library/LaunchDaemons")
-    if daemon_dir.exists():
-        for plist in daemon_dir.glob(glob_pattern):
-            label = plist.stem
-            subprocess.run(
-                [sudo, launchctl, "bootout", f"system/{label}"],
-                capture_output=True,
-            )
-            result = subprocess.run([sudo, "rm", "-f", str(plist)], capture_output=True)
-            if result.returncode == 0:
-                removed.append(str(plist))
+    if not daemon_dir.exists():
+        logger.debug("launchd daemon dir %s does not exist, nothing to remove", daemon_dir)
+        return removed
+    for plist in daemon_dir.glob(glob_pattern):
+        label = plist.stem
+        logger.info("Removing launchd service: %s (%s)", label, plist)
+        subprocess.run(
+            [sudo, launchctl, "bootout", f"system/{label}"],
+            capture_output=True,
+        )
+        result = subprocess.run([sudo, "rm", "-f", str(plist)], capture_output=True)
+        if result.returncode == 0:
+            removed.append(str(plist))
+            logger.info("Removed launchd plist: %s", plist)
+        else:
+            logger.warning("Failed to remove launchd plist %s: %s", plist, result.stderr.decode().strip())
+    logger.info("launchd service removal complete: %d services removed", len(removed))
     return removed
 
 
@@ -118,17 +128,23 @@ def systemd_remove_services(
     systemctl = shutil.which("systemctl") or "/usr/bin/systemctl"
     service_dir = Path("/etc/systemd/system")
     if not service_dir.exists():
+        logger.debug("systemd service dir %s does not exist", service_dir)
         return removed
     for svc in service_dir.glob(service_glob):
         unit = svc.name
+        logger.info("Removing systemd service: %s", unit)
         subprocess.run([sudo, systemctl, "stop", unit], capture_output=True)
         subprocess.run([sudo, systemctl, "disable", unit], capture_output=True)
         result = subprocess.run([sudo, "rm", "-f", str(svc)], capture_output=True)
         if result.returncode == 0:
             removed.append(str(svc))
+            logger.info("Removed systemd unit: %s", unit)
+        else:
+            logger.warning("Failed to remove systemd unit %s: %s", unit, result.stderr.decode().strip())
     if timer_glob:
         for svc in list(service_dir.glob(timer_glob)):
             timer_unit = svc.name.replace(".service", ".timer")
+            logger.info("Removing systemd timer: %s", timer_unit)
             subprocess.run([sudo, systemctl, "stop", timer_unit], capture_output=True)
             subprocess.run([sudo, systemctl, "disable", timer_unit], capture_output=True)
             result = subprocess.run([sudo, "rm", "-f", str(svc)], capture_output=True)
@@ -139,6 +155,7 @@ def systemd_remove_services(
                 subprocess.run([sudo, "rm", "-f", str(timer_path)], capture_output=True)
                 removed.append(str(timer_path))
     subprocess.run([sudo, systemctl, "daemon-reload"], capture_output=True)
+    logger.info("systemd service removal complete: %d units removed", len(removed))
     return removed
 
 
@@ -161,6 +178,7 @@ def task_scheduler_remove_tasks(task_name_pattern: str) -> list[str]:
             parts = line.split(",")
             task_name = parts[0].strip().strip('"')
             if task_name_pattern in task_name:
+                logger.info("Removing task scheduler task: %s", task_name)
                 del_result = subprocess.run(
                     ["schtasks", "/delete", "/tn", task_name, "/f"],
                     capture_output=True,
@@ -168,6 +186,10 @@ def task_scheduler_remove_tasks(task_name_pattern: str) -> list[str]:
                 )
                 if del_result.returncode == 0:
                     removed.append(task_name)
+                    logger.info("Removed task: %s", task_name)
+                else:
+                    logger.warning("Failed to remove task %s: %s", task_name, del_result.stderr.decode().strip())
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
+    logger.info("Task scheduler removal complete: %d tasks removed", len(removed))
     return removed

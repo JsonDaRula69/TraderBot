@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from traderbot.data.models import BiasReport, CityForecast, ModelConsensus
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDataProvider(ABC):
@@ -15,6 +18,10 @@ class BaseDataProvider(ABC):
     Subclass and implement the async methods to integrate with
     specific weather data sources (NWS, Open-Meteo, GFS, etc.).
     """
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        logger.info("Data provider initialized: %s", cls.__name__)
 
     @abstractmethod
     async def get_forecasts(self, cities: list[str]) -> dict[str, CityForecast]:

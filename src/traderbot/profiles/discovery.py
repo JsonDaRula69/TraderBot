@@ -1,8 +1,11 @@
 """OpenClaw agent discovery from openclaw.json config."""
 
 import json
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _OPENCLAW_DIR = Path.home() / ".openclaw"
 _OPENCLAW_CONFIG = _OPENCLAW_DIR / "openclaw.json"
@@ -36,6 +39,7 @@ def discover_agents(workspace_dir: str = ".openclaw/workspace") -> list[dict[str
             seen.add(agent["agent_id"])
             agents.append(agent)
 
+    logger.info("Discovered %d agents", len(agents))
     return agents
 
 
@@ -43,6 +47,7 @@ def _discover_from_config() -> list[dict[str, str]]:
     """Parse openclaw.json for agent definitions — the authoritative source."""
     config_path = _get_openclaw_config()
     if not config_path.exists():
+        logger.debug("No openclaw config found at %s", config_path)
         return []
 
     try:
@@ -100,6 +105,7 @@ def _discover_from_agent_dirs() -> list[dict[str, str]]:
     """Scan ~/.openclaw/agents/<agentId>/ for workspaces with IDENTITY.md."""
     agents_dir = _get_openclaw_dir() / "agents"
     if not agents_dir.exists():
+        logger.debug("No agents dir found at %s", agents_dir)
         return []
 
     results = []
@@ -114,6 +120,7 @@ def _discover_from_agent_dirs() -> list[dict[str, str]]:
                 "path": str(agent_dir),
             })
 
+    logger.debug("Discovered %d agents from agent dirs", len(results))
     return results
 
 
@@ -140,6 +147,7 @@ def _discover_from_workspaces(workspace_dir: str) -> list[dict[str, str]]:
                 "path": path,
             })
 
+    logger.debug("Discovered %d agents from workspaces", len(results))
     return results
 
 

@@ -129,7 +129,9 @@ class ProfileRegistry:
 
     def list_profiles(self) -> list[str]:
         data = self._read_profiles_file()
-        return sorted(data.keys())
+        names = sorted(data.keys())
+        logger.debug("Listed %d profiles", len(names))
+        return names
 
     def delete_profile(self, name: str, keep_data: bool = True) -> None:
         if not self.profile_exists(name):

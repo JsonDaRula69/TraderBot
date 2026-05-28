@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from traderbot.data.models import CityForecast, TradingSignal
     from traderbot.experiment.shared import MarketData
+
+logger = logging.getLogger(__name__)
 
 
 class BaseSignalEngine(ABC):

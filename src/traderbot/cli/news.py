@@ -1,5 +1,7 @@
 """News commands: news, news-ingest, news-context, backfill, data-points, news-summary."""
 from __future__ import annotations
+import logging
+logger = logging.getLogger(__name__)
 
 import asyncio
 import json as json_lib

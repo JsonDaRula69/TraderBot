@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Literal
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -78,6 +81,7 @@ def insert(conn: sqlite3.Connection, decision: Decision) -> int:
         ),
     )
     conn.commit()
+    logger.info("Stored decision for %s: direction=%s outcome=%s qty=%d", decision.ticker, decision.direction, decision.outcome, decision.quantity)
     return cursor.lastrowid
 
 
@@ -94,6 +98,7 @@ def list_by_ticker(conn: sqlite3.Connection, ticker: str) -> list[DbDecision]:
     rows = conn.execute(
         "SELECT * FROM decisions WHERE ticker = ? ORDER BY timestamp", (ticker,)
     ).fetchall()
+    logger.debug("Queried %d decisions for ticker '%s'", len(rows), ticker)
     return [_row_to_model(r) for r in rows]
 
 
@@ -128,6 +133,7 @@ def list_by_outcome(conn: sqlite3.Connection, outcome: str) -> list[DbDecision]:
     rows = conn.execute(
         "SELECT * FROM decisions WHERE outcome = ? ORDER BY timestamp", (outcome,)
     ).fetchall()
+    logger.debug("Queried %d decisions with outcome '%s'", len(rows), outcome)
     return [_row_to_model(r) for r in rows]
 
 
@@ -135,12 +141,15 @@ def update_actual_result(conn: sqlite3.Connection, id: int, result: bool) -> Non
     """Set the actual_result for a decision."""
     conn.execute("UPDATE decisions SET actual_result = ? WHERE id = ?", (result, id))
     conn.commit()
+    logger.info("Updated actual_result for decision %d: %s", id, result)
 
 
 def count(conn: sqlite3.Connection) -> int:
     """Return the total number of decisions."""
     row = conn.execute("SELECT COUNT(*) AS cnt FROM decisions").fetchone()
-    return row["cnt"]
+    cnt = row["cnt"]
+    logger.debug("Decision count: %d", cnt)
+    return cnt
 
 
 def _row_to_model(row: sqlite3.Row) -> DbDecision:

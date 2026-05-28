@@ -1,4 +1,8 @@
+import logging
+
 from traderbot.experiment.shared import TreatmentInterface
+
+logger = logging.getLogger(__name__)
 
 _registry: dict[str, type] = {}
 
@@ -12,11 +16,15 @@ def discover_treatments() -> dict[str, type]:
         if not issubclass(cls, TreatmentInterface):
             raise TypeError(f"Treatment {cls.__name__} must subclass TreatmentInterface")
         discovered[cls.__name__] = cls
+    logger.info("Discovered %d treatments: %s", len(discovered), list(discovered.keys()))
     return discovered
 
 
 def register_treatment(name: str, cls: type) -> None:
+    if name in _registry:
+        logger.warning("Duplicate registration: treatment %s already registered", name)
     _registry[name] = cls
+    logger.info("Registered treatment %s -> %s", name, cls.__name__)
 
 
 def get_treatment(name: str) -> type | None:

@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import asyncio
 import json as json_lib
+import logging
 import platform as _platform
 import subprocess as _subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Annotated
+
+from traderbot.logging_config import configure_root_logger
+
+logger = logging.getLogger(__name__)
 
 import typer
 from rich.console import Console
@@ -34,6 +39,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """One-time setup wizard for new users."""
+        configure_root_logger()
         import platform
 
         from traderbot.auth import AuthManager
@@ -110,6 +116,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         steps["platform"] = platform.system()
         steps["platform_release"] = platform.release()
 
+        logger.info("Bootstrap %s — python=%s py_ok=%s db_ok=%s kalshi=%s",
+                     "complete" if not dry_run else "dry-run",
+                     version_str, py_ok, db_ok, kalshi_ok)
         if json_output:
             json_lib.dump({"status": "ok" if (py_ok and db_ok) else "issues_found", "steps": steps}, sys.stdout, default=str)
         else:
@@ -128,6 +137,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """Periodic self-review: performance, adaptation, risk state, and learning promotion."""
+        configure_root_logger()
         from traderbot.db import init_schema
         from traderbot.db.learnings import init_table as init_learnings_table
         from traderbot.heartbeat import DEFAULT_HEARTBEAT_PATH, run_heartbeat_cycle
@@ -158,6 +168,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         try:
             result = _with_db(_resolve_db_path(db_path), _run)
         except Exception as exc:
+            logger.warning("Heartbeat failed: %s", exc)
             if json_output:
                 json_lib.dump({"error": str(exc)}, sys.stdout)
             else:
@@ -197,6 +208,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         if cb.level != "NORMAL":
             console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
 
+        logger.info("Heartbeat complete — steps=%s trades=%d win_rate=%.0f%% pnl=%s promoted=%d cb=%s",
+                     ", ".join(result.steps_completed), perf.trade_count,
+                     perf.win_rate * 100, pnl_str, lrn.promoted, cb.level)
+
     @parent_app.command()
     def halt(
         force: Annotated[bool, typer.Option("--force", help="Force halt (set FULL_STOP)")] = False,
@@ -205,6 +220,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """Check circuit breaker status or force halt."""
+        configure_root_logger()
         from traderbot.risk.circuit_breaker import CircuitBreaker
 
         console = Console()
@@ -213,6 +229,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         if force:
             from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
 
+            logger.warning("Manual halt via CLI — force=%s", force)
             breaker._state = CircuitBreakerState(
                 level=BreakerLevel.FULL_STOP,
                 can_trade=False,
@@ -241,6 +258,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """Resume trading after circuit breaker halt. Clears FULL_STOP/HALT state."""
+        configure_root_logger()
         from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker, CircuitBreakerState
 
         console = Console()
@@ -252,6 +270,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             reason="Manual resume via CLI",
         )
         breaker._persist_state()
+        logger.warning("Circuit breaker reset to NORMAL — trading resumed")
 
         if json_output:
             json_lib.dump({"status": "resumed", "level": "NORMAL", "can_trade": True}, sys.stdout)
@@ -281,6 +300,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """List learned patterns and trigger promotions."""
+        configure_root_logger()
         from traderbot.db.learnings import (
             LearningCategory,
             LearningStatus,
@@ -313,6 +333,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 learning_id = active_entries[0].id
                 result_path = promote_learning(conn, learning_id)
                 if result_path is None:
+                    logger.warning("Promotion failed for learning #%d — pattern_key=%s", learning_id, promote)
                     if json_output:
                         json_lib.dump(
                             {"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout
@@ -326,6 +347,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     "pattern_key": promote,
                     "promoted_to": str(result_path),
                 }
+                logger.info("Promoted pattern '%s' — learning_id=%d → %s", promote, learning_id, result_path)
                 if json_output:
                     json_lib.dump(promoted_entry, sys.stdout, default=str)
                 else:

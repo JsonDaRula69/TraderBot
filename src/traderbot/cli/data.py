@@ -1,5 +1,7 @@
 """Data pipeline commands: forecasts, signals, and historical bias."""
 from __future__ import annotations
+import logging
+logger = logging.getLogger(__name__)
 
 import asyncio
 import json as json_lib

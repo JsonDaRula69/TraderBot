@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import sqlite3
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -323,26 +326,30 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
         else:
             t_stat, p_value = _paired_ttest(treatment_pnls, ctrl_pnls)
 
-        # Cohen's d
         effect = _cohen_d(diffs)
+        ci = (mean_delta - 1.96 * std_delta / math.sqrt(n),
+              mean_delta + 1.96 * std_delta / math.sqrt(n))
 
-        # 95% CI
-        se = std_delta / math.sqrt(n) if n > 0 and std_delta > 0 else 0.0
-        ci_low = mean_delta - 1.96 * se
-        ci_high = mean_delta + 1.96 * se
-
-        results.append(
-            ExperimentResults(
-                treatment=treatment,
-                control=control_name,
-                delta_profit=mean_delta,
-                t_stat=float(t_stat),
-                p_value=float(p_value),
-                effect_size=effect,
-                ci_low=ci_low,
-                ci_high=ci_high,
-                n_markets=n,
-            )
+        result = ExperimentResults(
+            treatment=treatment,
+            control=control_name,
+            delta_profit=mean_delta,
+            t_stat=t_stat,
+            p_value=p_value,
+            effect_size=effect,
+            ci_low=ci[0],
+            ci_high=ci[1],
+            n_markets=n,
         )
+        results.append(result)
+
+        logger.info(
+            "Scored %s vs %s: p=%.4f d=%.3f delta=%.2f n=%d improvement=%s",
+            treatment, control_name, p_value, effect, mean_delta, n, result.improvement,
+        )
+        if result.improvement:
+            logger.info("Deployment criterion met for %s vs %s", treatment, control_name)
+        else:
+            logger.info("Deployment criterion rejected for %s vs %s", treatment, control_name)
 
     return results

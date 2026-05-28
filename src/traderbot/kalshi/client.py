@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,8 @@ from traderbot.kalshi.signing import auth_headers
 
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigurationError(Exception):
@@ -163,6 +166,7 @@ class KalshiClient:
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
             await self._rate_limiter.acquire()
+            logger.debug("Request %s %s (attempt %d/%d)", method, path, attempt + 1, self._config.max_retries + 1)
             try:
                 if method.upper() in ("GET", "DELETE"):
                     response = await self._client.request(
@@ -173,15 +177,20 @@ class KalshiClient:
                         method, path, json=params, headers=headers
                     )
 
+                logger.info("API %s %s -> %d", method, path, response.status_code)
+
                 if response.status_code == 429:
+                    logger.warning("Rate limit exceeded on %s %s", method, path)
                     raise RateLimitError(f"Rate limit exceeded: {path}")
 
                 if response.status_code in (401, 403):
+                    logger.error("Auth failure on %s %s: HTTP %d", method, path, response.status_code)
                     raise AuthenticationError(
                         f"Auth failure on {path}: HTTP {response.status_code}"
                     )
 
                 if response.status_code >= 500:
+                    logger.warning("Server error %d on %s %s", response.status_code, method, path)
                     last_exc = httpx.HTTPStatusError(
                         f"Server error {response.status_code}",
                         request=response.request,
@@ -193,12 +202,15 @@ class KalshiClient:
             except (RateLimitError, AuthenticationError):
                 raise
             except httpx.HTTPError as exc:
+                logger.warning("HTTP error on %s %s: %s", method, path, exc)
                 last_exc = exc
 
             if attempt < self._config.max_retries:
                 delay = self._config.retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
+                logger.debug("Retrying %s %s in %.2fs (attempt %d)", method, path, delay, attempt + 1)
                 await asyncio.sleep(delay)
 
+        logger.error("Max retries exceeded for %s %s", method, path)
         if last_exc is not None:
             raise last_exc
         msg = "Max retries exceeded"

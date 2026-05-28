@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -138,6 +141,7 @@ def record_pattern(
         ),
     )
     conn.commit()
+    logger.info("Recorded learning pattern: category=%s summary='%s' confidence=%.2f", category.value, summary, confidence)
     return cursor.lastrowid
 
 
@@ -155,6 +159,7 @@ def get_patterns(
     min_confidence: float = 0.0,
 ) -> list[LearningRecord]:
     """Query patterns with optional filters."""
+    logger.debug("Querying patterns: category=%s min_confidence=%.2f", category.value if category else None, min_confidence)
     if category is not None:
         rows = conn.execute(
             "SELECT * FROM learnings WHERE category = ? AND confidence >= ? ORDER BY confidence DESC",
@@ -182,6 +187,7 @@ def promote_pattern(conn: sqlite3.Connection, learning_id: int, confidence: floa
         (new_confidence, now, learning_id),
     )
     conn.commit()
+    logger.info("Promoted pattern %d to confidence=%.2f", learning_id, new_confidence)
 
 
 def deprecate_pattern(conn: sqlite3.Connection, learning_id: int) -> None:
@@ -192,6 +198,7 @@ def deprecate_pattern(conn: sqlite3.Connection, learning_id: int) -> None:
         (LearningStatus.DEPRECATED.value, now, learning_id),
     )
     conn.commit()
+    logger.info("Deprecated pattern %d", learning_id)
 
 
 def record_feature_request(
@@ -229,6 +236,7 @@ def record_feature_request(
         ),
     )
     conn.commit()
+    logger.info("Recorded feature request: key='%s' priority=%s", pattern_key, priority.value)
     return cursor.lastrowid
 
 

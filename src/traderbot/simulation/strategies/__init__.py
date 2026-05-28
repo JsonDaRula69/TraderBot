@@ -1,6 +1,10 @@
 """Backtest strategy implementations for binary prediction markets."""
 
+import logging
+
 from traderbot.simulation.engine import Context, Signal
+
+logger = logging.getLogger(__name__)
 
 
 class MomentumStrategy:
@@ -16,6 +20,7 @@ class MomentumStrategy:
             return []
         direction = "yes" if yes_price > 0.5 else "no"
         prob = yes_price if direction == "yes" else 1.0 - yes_price
+        logger.debug("MomentumStrategy on_market_open: %s edge=%.3f dir=%s", market.ticker, edge, direction)
         return [
             Signal(
                 ticker=market.ticker,
@@ -44,6 +49,7 @@ class MeanReversionStrategy:
             return []
         direction = "no" if yes_price > 0.65 else "yes"
         prob = 1.0 - yes_price if direction == "no" else yes_price
+        logger.debug("MeanReversionStrategy on_market_open: %s price=%.3f dir=%s", market.ticker, yes_price, direction)
         return [
             Signal(
                 ticker=market.ticker,

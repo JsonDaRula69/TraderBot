@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import _map_category, _unix_to_datetime
@@ -9,6 +10,8 @@ from traderbot.kalshi.models import Event
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_event(raw: dict[str, Any]) -> Event:
@@ -50,16 +53,21 @@ class EventsService:
         if state is not None:
             params["state"] = state
 
+        logger.debug("Fetching events: limit=%d state=%s", limit, state)
         response = await self._client.get("/events", **params)
         response.raise_for_status()
         data = response.json()
         raw_events = data.get("events", [])
+        logger.info("Fetched %d events", len(raw_events))
         return [_normalize_event(e) for e in raw_events]
 
     async def get_event(self, event_ticker: str) -> Event:
         """Return detail for a single event by ticker."""
+        logger.debug("Fetching event: ticker=%s", event_ticker)
         response = await self._client.get(f"/events/{event_ticker}")
         response.raise_for_status()
         data = response.json()
         raw = data.get("event", data)
-        return _normalize_event(raw)
+        normalized = _normalize_event(raw)
+        logger.info("Fetched event: ticker=%s markets_count=%d", event_ticker, normalized.markets_count)
+        return normalized

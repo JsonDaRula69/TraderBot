@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,8 @@ from traderbot.kalshi.models import Fill, Position, Settlement
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
+
+logger = logging.getLogger(__name__)
 
 BALANCE_CACHE_TTL: int = 3600  # 1 hour in seconds
 
@@ -25,9 +28,12 @@ class PortfolioService:
 
     async def get_balance(self) -> dict:
         """Return the current account balance (no cache)."""
+        logger.debug("Fetching account balance")
         response = await self._client.get("/portfolio/balance")
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        logger.info("Balance fetched: %s", data)
+        return data
 
     async def get_cached_balance(self) -> dict | None:
         """Return account balance, cached with hourly TTL.
@@ -36,6 +42,7 @@ class PortfolioService:
         """
         now = time.monotonic()
         if self._balance_cache is not None and (now - self._balance_cache_ts) < BALANCE_CACHE_TTL:
+            logger.debug("Returning cached balance")
             return self._balance_cache
         try:
             data = await self.get_balance()
@@ -43,6 +50,7 @@ class PortfolioService:
             self._balance_cache_ts = now
             return data
         except Exception:
+            logger.warning("Failed to fetch balance, returning stale cache")
             return self._balance_cache  # return stale cache on error
 
     async def get_positions(
@@ -61,7 +69,9 @@ class PortfolioService:
         response = await self._client.get("/portfolio/positions", **params)
         response.raise_for_status()
         data = response.json()
-        return [Position.model_validate(p) for p in data.get("positions", [])]
+        positions = [Position.model_validate(p) for p in data.get("positions", [])]
+        logger.info("Fetched %d positions", len(positions))
+        return positions
 
     async def get_fills(
         self,
@@ -79,7 +89,9 @@ class PortfolioService:
         response = await self._client.get("/portfolio/fills", **params)
         response.raise_for_status()
         data = response.json()
-        return [Fill.model_validate(f) for f in data.get("fills", [])]
+        fills = [Fill.model_validate(f) for f in data.get("fills", [])]
+        logger.info("Fetched %d fills", len(fills))
+        return fills
 
     async def get_settlements(
         self,
@@ -135,4 +147,6 @@ class PortfolioService:
                 )
             except Exception:
                 continue
+        total_pnl = sum(s.pnl_cents for s in settlements)
+        logger.info("Fetched %d settlements, total PnL=%d cents", len(settlements), total_pnl)
         return settlements

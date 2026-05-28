@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
+
+logger = logging.getLogger(__name__)
 
 VALID_CHANNELS: frozenset[str] = frozenset({
     "ticker",
@@ -54,6 +57,7 @@ class KalshiWebSocket:
 
     async def connect(self) -> None:
         """Connect to the Kalshi WebSocket with RSA-PSS auth and TLS cert pinning."""
+        logger.info("Connecting to WebSocket: %s", self._config.base_url)
         headers = auth_headers(
             self._config.api_key.get_secret_value(),
             self._config.resolve_private_key(),
@@ -61,11 +65,16 @@ class KalshiWebSocket:
             "/trade-api/ws/v2",
         )
         headers["Content-Type"] = "application/json"
-        self._ws = await websockets.connect(
-            self._config.base_url,
-            additional_headers=headers,
-            ssl=create_pinned_ssl_context(),
-        )
+        try:
+            self._ws = await websockets.connect(
+                self._config.base_url,
+                additional_headers=headers,
+                ssl=create_pinned_ssl_context(),
+            )
+            logger.info("WebSocket connected: %s", self._config.base_url)
+        except Exception:
+            logger.error("WebSocket connection failed: %s", self._config.base_url)
+            raise
 
     async def subscribe(
         self,
@@ -101,6 +110,7 @@ class KalshiWebSocket:
 
         msg = {"id": self._message_id, "cmd": "subscribe", "params": params}
         await self._ws.send(json.dumps(msg))
+        logger.info("Subscribed to channels=%s ticker=%s", channels, market_ticker or market_tickers)
 
     async def unsubscribe(
         self,
@@ -136,6 +146,7 @@ class KalshiWebSocket:
 
         msg = {"id": self._message_id, "cmd": "unsubscribe", "params": params}
         await self._ws.send(json.dumps(msg))
+        logger.info("Unsubscribed from channels=%s ticker=%s", channels, market_ticker or market_tickers)
 
     async def receive(self) -> dict[str, Any]:
         """Receive the next message from the WebSocket.
@@ -144,12 +155,17 @@ class KalshiWebSocket:
             Parsed JSON message as a dict.
         """
         raw = await self._ws.recv()
-        return json.loads(raw)
+        data = json.loads(raw)
+        if isinstance(data, dict) and "channel" in data:
+            logger.debug("WS message on channel=%s", data.get("channel"))
+        return data
 
     async def close(self) -> None:
         """Close the WebSocket connection."""
         if self._ws is not None:
+            logger.info("Closing WebSocket connection")
             await self._ws.close()
+            logger.info("WebSocket connection closed")
 
     async def __aenter__(self) -> KalshiWebSocket:
         await self.connect()

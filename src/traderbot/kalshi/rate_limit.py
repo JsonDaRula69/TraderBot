@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 
 class TokenBucketRateLimiter:
@@ -23,12 +26,18 @@ class TokenBucketRateLimiter:
 
     async def acquire(self) -> None:
         """Wait until a token is available."""
+        waited = False
         while True:
             async with self._lock:
                 self._refill()
                 if self._tokens >= 1.0:
                     self._tokens -= 1.0
+                    logger.debug("Rate limit token acquired: tokens_remaining=%.2f", self._tokens)
+                    if waited:
+                        logger.info("Rate limit wait ended: tokens=%.2f", self._tokens)
                     return
+            logger.debug("Rate limit throttling: tokens=%.2f, sleeping", self._tokens)
+            waited = True
             await asyncio.sleep(1.0 / self._rate)
 
     def _refill(self) -> None:

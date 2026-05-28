@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
     import sqlite3
 
     from traderbot.kalshi.history import HistoryService
+
+logger = logging.getLogger(__name__)
 
 _MIN_VOLUME_THRESHOLD = 100
 _MIN_TRADES_FOR_QUALITY = 1
@@ -83,8 +86,10 @@ class DataLoader:
     async def get_markets(self, start: date, end: date) -> list[Market]:
         cached = self._get_cached_markets(start, end)
         if cached is not None:
+            logger.debug("Markets cache HIT: %s to %s (%d markets)", start, end, len(cached))
             return cached
 
+        logger.info("Markets cache MISS: fetching from API %s to %s", start, end)
         markets = await self._fetch_all_markets()
         self._cache_markets(start, end, markets)
         return markets
@@ -92,8 +97,10 @@ class DataLoader:
     async def get_trades(self, ticker: str) -> list[Trade]:
         cached = self._get_cached_trades(ticker)
         if cached is not None:
+            logger.debug("Trades cache HIT: %s (%d trades)", ticker, len(cached))
             return cached
 
+        logger.info("Trades cache MISS: fetching %s from API", ticker)
         trades = await self._fetch_all_trades(ticker)
         self._cache_trades(ticker, trades)
         return trades

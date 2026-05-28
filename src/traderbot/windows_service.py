@@ -9,10 +9,13 @@ News ingest    -> Task Scheduler (schtasks.exe)
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 _SC = shutil.which("sc.exe") or shutil.which("sc")
 _SCHTASKS = shutil.which("schtasks.exe") or shutil.which("schtasks")
@@ -76,6 +79,7 @@ def create_service(svc: WindowsServiceDef) -> bool:
 
     Sets auto-start, restart-on-failure, and description.
     """
+    logger.info("Creating Windows service: name=%s display='%s' bin=%s", svc.name, svc.display_name, svc.bin_path)
     result = _sc([
         "create", svc.name,
         "binPath=", svc.bin_path,
@@ -83,6 +87,7 @@ def create_service(svc: WindowsServiceDef) -> bool:
         "DisplayName=", svc.display_name,
     ])
     if result.returncode != 0:
+        logger.warning("Failed to create service %s: %s", svc.name, result.stderr.strip())
         return False
 
     if svc.description:
@@ -93,24 +98,35 @@ def create_service(svc: WindowsServiceDef) -> bool:
         "reset=", "86400",
         "actions=", "restart/10000/restart/30000/restart/60000",
     ])
+    logger.info("Created Windows service: %s", svc.name)
     return True
 
 
 def start_service(name: str) -> bool:
     """Start a Windows Service."""
     result = _sc(["start", name])
+    if result.returncode == 0:
+        logger.info("Started Windows service: %s", name)
+    else:
+        logger.warning("Failed to start Windows service %s: %s", name, result.stderr.strip())
     return result.returncode == 0
 
 
 def stop_service(name: str) -> bool:
     """Stop a Windows Service."""
     result = _sc(["stop", name])
+    if result.returncode == 0:
+        logger.info("Stopped Windows service: %s", name)
     return result.returncode == 0
 
 
 def delete_service(name: str) -> bool:
     """Delete a Windows Service."""
     result = _sc(["delete", name])
+    if result.returncode == 0:
+        logger.info("Deleted Windows service: %s", name)
+    else:
+        logger.warning("Failed to delete Windows service %s: %s", name, result.stderr.strip())
     return result.returncode == 0
 
 
@@ -148,24 +164,37 @@ def install_agent_service(
     )
 
     if not create_service(svc):
+        logger.error("Failed to create agent service: %s", name)
         return False
 
     if profile_token:
         _sc(["config", name, f"env=TRADERBOT_PROFILE_TOKEN={profile_token}"])
+        logger.debug("Set TRADERBOT_PROFILE_TOKEN for service %s", name)
 
     if working_dir:
         _sc(["config", name, "obj=LocalSystem", "binPath=", svc.bin_path])
 
-    return start_service(name)
+    started = start_service(name)
+    if started:
+        logger.info("Agent service installed and started: %s", name)
+    else:
+        logger.warning("Agent service installed but failed to start: %s", name)
+    return started
 
 
 def uninstall_agent_service(agent_name: str) -> bool:
     """Remove agent Windows Service and return True if it was cleaned up."""
     name = f"TraderBotAgent-{agent_name}"
     if not service_exists(name):
+        logger.debug("Agent service '%s' does not exist, nothing to uninstall", name)
         return True
     stop_service(name)
-    return delete_service(name)
+    deleted = delete_service(name)
+    if deleted:
+        logger.info("Agent service uninstalled: %s", name)
+    else:
+        logger.warning("Failed to uninstall agent service: %s", name)
+    return deleted
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +222,7 @@ def create_scheduled_task(task: ScheduledTaskDef) -> bool:
 
     Equivalent to systemd timer with OnCalendar=*:0/N.
     """
+    logger.info("Creating scheduled task: name=%s interval=%dmin cmd=%s", task.task_name, task.interval_minutes, task.command)
     result = _schtasks([
         "/create",
         "/tn", task.task_name,
@@ -201,12 +231,20 @@ def create_scheduled_task(task: ScheduledTaskDef) -> bool:
         "/mo", str(task.interval_minutes),
         "/f",
     ])
+    if result.returncode == 0:
+        logger.info("Created scheduled task: %s", task.task_name)
+    else:
+        logger.warning("Failed to create scheduled task %s: %s", task.task_name, result.stderr.strip())
     return result.returncode == 0
 
 
 def delete_scheduled_task(task_name: str) -> bool:
     """Delete a scheduled task."""
     result = _schtasks(["/delete", "/tn", task_name, "/f"])
+    if result.returncode == 0:
+        logger.info("Deleted scheduled task: %s", task_name)
+    else:
+        logger.warning("Failed to delete scheduled task %s: %s", task_name, result.stderr.strip())
     return result.returncode == 0
 
 
@@ -232,15 +270,24 @@ def install_news_ingest_task(
         command=f'"{venv_python}" -m traderbot news-ingest --json',
         interval_minutes=interval_minutes,
     )
-    return create_scheduled_task(task)
+    created = create_scheduled_task(task)
+    if created:
+        logger.info("News ingest task installed: user=%s interval=%dmin", user, interval_minutes)
+    else:
+        logger.warning("Failed to install news ingest task for user=%s", user)
+    return created
 
 
 def uninstall_news_ingest_task(user: str) -> bool:
     """Remove the news ingest scheduled task."""
     task_name = f"TraderBot News Ingest - {user}"
     if not task_exists(task_name):
+        logger.debug("News ingest task '%s' does not exist, nothing to uninstall", task_name)
         return True
-    return delete_scheduled_task(task_name)
+    deleted = delete_scheduled_task(task_name)
+    if deleted:
+        logger.info("News ingest task uninstalled: %s", task_name)
+    return deleted
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 """Cron command group — register decision/heartbeat cron loops with OpenClaw."""
 from __future__ import annotations
+import logging
+logger = logging.getLogger(__name__)
 
 import json as json_lib
 import os

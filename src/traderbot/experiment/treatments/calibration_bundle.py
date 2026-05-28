@@ -1,10 +1,14 @@
 """Calibration bundle treatment — V3 prompt with full forecast accuracy and technical context."""
 
+import logging
+
 from traderbot.experiment.shared import (
     TreatmentContext,
     TreatmentInterface,
     ValidatedDecision,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CalibrationBundleTreatment(TreatmentInterface):
@@ -15,6 +19,8 @@ class CalibrationBundleTreatment(TreatmentInterface):
     return a structured JSON decision.
     """
 
+    _markets_processed: int = 0
+
     @property
     def name(self) -> str:
         return "calibration_bundle"
@@ -24,6 +30,8 @@ class CalibrationBundleTreatment(TreatmentInterface):
         return False
 
     def format_prompt(self, ctx: TreatmentContext) -> str:
+        self._markets_processed += 1
+        logger.info("Calibration bundle: processing market %d", self._markets_processed)
         m = ctx.market
         f = ctx.forecast
         a = ctx.accuracy
@@ -78,21 +86,22 @@ CURRENT PRICES
   YES price: {p.current_yes_cents} cents
   NO price: {p.current_no_cents} cents
   Spread: {p.spread_cents} cents
-  Price history trend: {price_trend}
+  Price trend: {price_trend}
 
 TECHNICAL INDICATORS
   RSI: {rsi}
-  Bollinger upper: {bb_upper}
-  Bollinger lower: {bb_lower}
-  EMA short: {ema_short}
-  EMA long: {ema_long}
+  Bollinger Upper: {bb_upper}
+  Bollinger Lower: {bb_lower}
+  EMA Short: {ema_short}
+  EMA Long: {ema_long}
 
 PRIOR DECISIONS
-{prior_lines}{system_section}
-ANALYSIS INSTRUCTIONS
-1. Compare the forecast to the threshold, accounting for forecast accuracy (Brier score, calibration error, sample size).
-2. Evaluate whether the market price offers edge relative to your probability estimate.
-3. Consider technical indicators (RSI extremes, Bollinger band position, EMA crossover signals).
+{prior_lines}
+{system_section}
+INSTRUCTIONS
+1. Analyze whether the forecast temperature supports the market YES/NO outcome.
+2. Consider the accuracy of past forecasts using the Brier score and calibration error.
+3. Use the price trend, technical indicators, and current prices to gauge market sentiment.
 4. Review prior decisions for consistency or new information.
 5. Return a JSON object with exactly these fields:
    - "decision": one of "buy_yes", "buy_no", or "skip"

@@ -1,9 +1,12 @@
 """Pydantic v2 data models for weather-based market data and trading signals."""
 
+import logging
 from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 
 class CityForecast(BaseModel):

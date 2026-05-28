@@ -40,6 +40,7 @@ class SettlementVerifier:
         self._paper_trader = paper_trader
         self._cache = cache
         self._portfolio_service = portfolio_service
+        logger.info("SettlementVerifier initialized")
 
     async def check_settlements_on_startup(self) -> None:
         """Reconcile all open positions against settlement data at startup."""

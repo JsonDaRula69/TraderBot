@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -73,6 +76,7 @@ def upsert(conn: sqlite3.Connection, position: Position) -> None:
         ),
     )
     conn.commit()
+    logger.info("Upserted position %s: qty=%d price=%d", position.ticker, position.quantity, position.avg_price)
 
 
 def get(conn: sqlite3.Connection, ticker: str) -> DbPosition | None:
@@ -86,6 +90,7 @@ def get(conn: sqlite3.Connection, ticker: str) -> DbPosition | None:
 def list_all(conn: sqlite3.Connection) -> list[DbPosition]:
     """Return all positions ordered by ticker."""
     rows = conn.execute("SELECT * FROM positions ORDER BY ticker").fetchall()
+    logger.debug("Listed %d positions", len(rows))
     return [_row_to_model(r) for r in rows]
 
 
@@ -106,6 +111,7 @@ def update_avg_price(
         "SELECT quantity, avg_price FROM positions WHERE ticker = ?", (ticker,)
     ).fetchone()
     if row is None:
+        logger.warning("Cannot update avg price: position '%s' not found", ticker)
         raise ValueError(f"Position not found: {ticker}")
     old_qty: int = row["quantity"]
     old_avg: int = row["avg_price"]
@@ -131,7 +137,12 @@ def update_settlement(
         (int(result), pnl_cents, now, ticker),
     )
     conn.commit()
-    return cursor.rowcount > 0
+    updated = cursor.rowcount > 0
+    if updated:
+        logger.info("Updated settlement for %s: result=%s pnl=%d", ticker, result, pnl_cents)
+    else:
+        logger.warning("No position found to update settlement for ticker '%s'", ticker)
+    return updated
 
 
 def mark_closed(conn: sqlite3.Connection, ticker: str) -> bool:
@@ -141,7 +152,10 @@ def mark_closed(conn: sqlite3.Connection, ticker: str) -> bool:
         (now, ticker),
     )
     conn.commit()
-    return cursor.rowcount > 0
+    closed = cursor.rowcount > 0
+    if closed:
+        logger.info("Marked position '%s' as closed", ticker)
+    return closed
 
 
 def count_open(conn: sqlite3.Connection) -> int:

@@ -227,8 +227,10 @@ class PaperTrader:
 
         if fill.quantity < 0:
             self._close_position(fill, now)
+            logger.info("Paper fill: CLOSE %s %s qty=%d price=%d slippage=%d", fill.ticker, fill.side, abs(fill.quantity), fill.price_cents, fill.slippage_cents)
         else:
             self._open_or_add_position(fill, now)
+            logger.info("Paper fill: OPEN %s %s qty=%d price=%d slippage=%d", fill.ticker, fill.side, fill.quantity, fill.price_cents, fill.slippage_cents)
 
         self._log_decision(fill)
 

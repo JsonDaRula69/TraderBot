@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
@@ -17,6 +18,8 @@ from traderbot.analysis.portfolio import (
 
 if TYPE_CHECKING:
     from traderbot.simulation.engine import BacktestResult, BacktestTrade
+
+logger = logging.getLogger(__name__)
 
 
 class StrategyComparison(BaseModel):

@@ -96,15 +96,17 @@ class AuthManager:
         if _is_keyring_available():
             keyring_val = self._get_from_keyring(service, key)
             if keyring_val is not None:
+                logger.debug("Resolved %s/%s from keyring", service, key)
                 return CredentialResult(
                     service=service, key=key, value=SecretStr(keyring_val), source="keyring"
                 )
+            logger.debug("Keyring available but %s/%s not found, checking env", service, key)
 
         env_keys = self._service_key_to_env(service, key)
         for env_key in env_keys:
             env_val = os.environ.get(env_key)
             if env_val is not None:
-                logger.debug("Using %s from environment", env_key)
+                logger.debug("Resolved %s/%s from env var %s", service, key, env_key)
                 return CredentialResult(
                     service=service, key=key, value=SecretStr(env_val), source="env"
                 )
@@ -113,14 +115,16 @@ class AuthManager:
 
         env_path = get_data_dir() / ".env"
         if env_path.exists():
+            logger.debug("Checking .env file at %s for %s/%s", env_path, service, key)
             for env_key in env_keys:
                 file_val = _env_file_get_value(env_path, env_key)
                 if file_val is not None:
-                    logger.debug("Using %s from %s", env_key, env_path)
+                    logger.debug("Resolved %s/%s from %s (env var %s)", service, key, env_path, env_key)
                     return CredentialResult(
                         service=service, key=key, value=SecretStr(file_val), source="env"
                     )
 
+        logger.warning("Credential %s/%s not found in any source (keyring, env, .env)", service, key)
         return None
 
     def set_credential(self, service: str, key: str, value: str) -> Literal["keyring", "env"]:

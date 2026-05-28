@@ -8,6 +8,28 @@ INSTALL_DIR="${HOME}/traderbot"
 SUPPORTED_DISTROS="ubuntu|debian|raspbian"
 _CLEANUP_TEMP_DIR=""
 
+# ── Installer Logging ─────────────────────────────────────────────────────
+TRADERBOT_LOG_DIR="${HOME}/.traderbot/logs"
+TRADERBOT_INSTALL_LOG="${TRADERBOT_LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$TRADERBOT_LOG_DIR" 2>/dev/null || true
+
+_log() {
+    local level="$1"
+    local message="$2"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[${timestamp}] [${level}] ${message}" >> "$TRADERBOT_INSTALL_LOG"
+    if [[ "$level" == "ERROR" ]] || [[ "$level" == "WARN" ]]; then
+        echo "  ${message}" >&2
+    fi
+}
+
+_log_info()  { _log "INFO" "$1"; }
+_log_warn()  { _log "WARN" "$1"; }
+_log_error() { _log "ERROR" "$1"; }
+
+_log_info "Installer started. Log: $TRADERBOT_INSTALL_LOG"
+
 cleanup() {
     if [[ -n "$_CLEANUP_TEMP_DIR" ]] && [[ -d "$_CLEANUP_TEMP_DIR" ]]; then
         rm -rf "$_CLEANUP_TEMP_DIR"
@@ -239,8 +261,12 @@ find_compatible_python() {
 }
 
 check_openclaw() {
+    _log_info "Checking for OpenClaw..."
     if command -v openclaw &>/dev/null; then
-        echo "  OpenClaw found: $(openclaw --version 2>/dev/null || echo 'installed')"
+        local oc_ver
+        oc_ver="$(openclaw --version 2>/dev/null || echo 'installed')"
+        echo "  OpenClaw found: $oc_ver"
+        _log_info "OpenClaw found: $oc_ver"
         return 0
     fi
     echo "  OpenClaw not found."
@@ -293,8 +319,10 @@ check_openclaw() {
 }
 
 ensure_gateway_running() {
+    _log_info "Checking gateway status..."
     if openclaw gateway status &>/dev/null; then
         echo "  OpenClaw gateway is running."
+        _log_info "Gateway already running."
         return 0
     fi
     echo ""
@@ -1548,38 +1576,25 @@ interactive_config_flow() {
     prompt_sysadmin_setup
 
     echo
-    read -r -p "Create a trading profile? (y/n): " REPLY
-    if [[ ! ${REPLY:-} =~ ^[Yy]$ ]]; then
-        echo "Skipping profile creation."
+    local configure_agents=""
+    read -r -p "Configure category agents? (y/n): " configure_agents
+    if [[ ! "${configure_agents:-}" =~ ^[Yy]$ ]]; then
+        echo "Skipping agent configuration."
         return 0
     fi
 
-    profile_name=""
-    while [[ -z "$profile_name" ]]; do
-        read -r -p "Profile name: " profile_name
-        if [[ -z "$profile_name" ]]; then
-            echo "Profile name cannot be empty."
-        fi
-    done
-
-    echo "Select trading mode:"
-    echo "  1) paper  (recommended — no real money at risk)"
-    echo "  2) live   (real money — use with caution)"
-    read -r -p "Choice [1]: " mode_choice
-    case "$mode_choice" in
-        2) profile_mode="live" ;;
-        *) profile_mode="paper" ;;
-    esac
-
-    echo "Select market categories (↑/↓ navigate, SPACE to toggle, ENTER to confirm):"
+    echo "Select market categories to configure agents for (↑/↓ navigate, SPACE to toggle, ENTER to confirm):"
     echo
     local -a CAT_KEYS=(economics politics weather sports science_and_technology crypto commodities companies elections entertainment financials health mentions social)
     local -a CAT_LABELS=("Economics" "Politics" "Climate and Weather" "Sports" "Science and Technology" "Crypto" "Commodities" "Companies" "Elections" "Entertainment" "Financials" "Health" "Mentions" "Social")
     local -a CAT_SELECTED=()
-    for _ in "${CAT_KEYS[@]}"; do
+    local _ci=0
+    for _ci in "${!CAT_KEYS[@]}"; do
         CAT_SELECTED+=("0")
     done
+    unset _ci
     local cur=0
+    local profile_categories=""
 
     if [[ ! -t 0 ]] || [[ -z "${TERM:-}" ]]; then
         profile_categories=$(IFS=,; echo "${CAT_KEYS[*]}")
@@ -1696,232 +1711,128 @@ interactive_config_flow() {
         echo "Selected categories: $profile_categories"
     fi
 
-    if command -v traderbot &>/dev/null; then
-        if ! traderbot profile create "$profile_name" --mode "$profile_mode" \
-            --categories "$profile_categories" 2>&1; then
-            echo "Warning: profile create failed. Try: traderbot profile create $profile_name --mode $profile_mode --categories $profile_categories" >&2
-        fi
-    else
-        local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
-        if [[ -x "$tb_bin" ]]; then
-            if ! "$tb_bin" profile create "$profile_name" --mode "$profile_mode" \
-                --categories "$profile_categories" 2>&1; then
-                echo "Warning: profile create failed." >&2
-            fi
-        else
-            echo "TraderBot not in PATH. Profile creation skipped." >&2
-        fi
-    fi
-
-    echo
-    echo "=== Agent Assignment ==="
-
-    local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
-    local agent_names_to_assign=()
-
-    # Check if user selected multiple categories — offer per-category agents
+    # Parse selected categories
     local IFS=','
     local -a selected_cats=()
-    for c in $profile_categories; do
-        selected_cats+=("$c")
+    local _c=""
+    for _c in $profile_categories; do
+        selected_cats+=("$_c")
     done
+    unset _c
     IFS=' '
-
-    if [[ ${#selected_cats[@]} -gt 1 ]]; then
-        echo "You selected ${#selected_cats[@]} categories. You can assign all to one agent,"
-        echo "or create a dedicated agent for each category (gets prebuilt identity)."
-        echo "  1) One agent for all categories (generic templates)"
-        read -r -p "  2) Dedicated agent per category (prebuilt identities) [2]: " assign_strategy
-        if [[ "${assign_strategy:-2}" == "2" ]]; then
-            for cat in "${selected_cats[@]}"; do
-                local suggested_name="${cat:0:1}"
-                # Build a shorter suggested name from the category
-                case "$cat" in
-                    weather) suggested_name="weatherman" ;;
-                    economics|politics|sports|crypto) suggested_name="$cat" ;;
-                    science_and_technology) suggested_name="science" ;;
-                    commodities) suggested_name="commodities" ;;
-                    companies) suggested_name="companies" ;;
-                    elections) suggested_name="elections" ;;
-                    entertainment) suggested_name="entertainment" ;;
-                    financials) suggested_name="financials" ;;
-                    health) suggested_name="health" ;;
-                    mentions) suggested_name="mentions" ;;
-                    social) suggested_name="social" ;;
-                    *) suggested_name="${cat:0:8}" ;;
-                esac
-                local cat_name=""
-                read -r -p "  Agent name for '$cat' (Enter for '$suggested_name', or 'skip'): " cat_name
-                if [[ "${cat_name,,}" == "skip" ]]; then
-                    echo "  Skipping $cat."
-                    continue
-                fi
-                cat_name="${cat_name:-$suggested_name}"
-                agent_names_to_assign+=("$cat_name")
-
-                if command -v openclaw &>/dev/null; then
-                    create_openclaw_agent "$cat_name" || true
-                fi
-
-                if [[ -x "$tb_cmd" ]]; then
-                    echo "  Assigning profile '$profile_name' to agent '$cat_name'..."
-                    set +e
-                    local cat_assign_out
-                    cat_assign_out=$("$tb_cmd" profile assign "$profile_name" "$cat_name" --yes 2>&1)
-                    set -e
-                    if [[ $? -ne 0 ]]; then
-                        echo "  Warning: assign failed for $cat_name: $cat_assign_out" >&2
-                    fi
-                fi
-
-                # Install service for this agent
-                local cat_token=""
-                if [[ -x "$tb_cmd" ]]; then
-                    cat_token=$("$tb_cmd" profile get-token "$profile_name" 2>/dev/null) || true
-                fi
-                if [[ -n "$cat_token" ]]; then
-                    install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
-                    if [[ -x "$tb_cmd" ]]; then
-                        "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || \
-                            echo "  Warning: cron registration skipped for $cat_name."
-                    fi
-                fi
-            done
-            echo "  Category agents assigned. Skipping single-agent flow."
-            return 0
-        fi
-    fi
-
-    # Single-agent flow (default for 1 category or user chose option 1)
-    echo "TraderBot profiles bind to OpenClaw agents."
-    echo "Each agent must have a workspace created via: openclaw agents add <name>"
-    echo
-    if command -v openclaw &>/dev/null; then
-        echo "Available agents (via openclaw agents list --bindings):"
-        openclaw agents list --bindings 2>&1 || echo "  (run 'openclaw agents add <name>' to create one)"
-    elif command -v traderbot &>/dev/null; then
-        echo "Available agents:"
-        traderbot profile discover-agents 2>&1 || echo "  (none found)"
-    else
-        if [[ -x "$tb_cmd" ]]; then
-            echo "Available agents:"
-            "$tb_cmd" profile discover-agents 2>&1 || echo "  (none found)"
-        else
-            echo "  (traderbot not found for agent discovery)"
-        fi
-    fi
-
-    echo
-    read -r -p "Agent name to assign (or press Enter to skip): " agent_name
-    if [[ -z "$agent_name" ]]; then
-        echo "Skipping agent assignment. Run later:"
-        echo "  openclaw agents add <name>"
-        echo "  traderbot profile assign $profile_name <name>"
-        return 0
-    fi
-    agent_names_to_assign=("$agent_name")
 
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
 
-    # Process each agent in the assignment list
-    for agent_name in "${agent_names_to_assign[@]}"; do
-        # Auto-create the agent if it doesn't exist
-        if command -v openclaw &>/dev/null; then
-            create_openclaw_agent "$agent_name" || true
+    # Per-category agent configuration loop
+    local _cat=""
+    for _cat in "${selected_cats[@]}"; do
+        local suggested_name=""
+        case "$_cat" in
+            weather) suggested_name="weatherman" ;;
+            economics|politics|sports|crypto) suggested_name="$_cat" ;;
+            science_and_technology) suggested_name="science" ;;
+            commodities) suggested_name="commodities" ;;
+            companies) suggested_name="companies" ;;
+            elections) suggested_name="elections" ;;
+            entertainment) suggested_name="entertainment" ;;
+            financials) suggested_name="financials" ;;
+            health) suggested_name="health" ;;
+            mentions) suggested_name="mentions" ;;
+            social) suggested_name="social" ;;
+            *) suggested_name="${_cat:0:8}" ;;
+        esac
+
+        local cat_name=""
+        read -r -p "Agent name for '$_cat' (Enter for '$suggested_name', or 'skip'): " cat_name
+        if [[ "${cat_name,,}" == "skip" ]]; then
+            echo "  Skipping $_cat."
+            continue
         fi
-    done
+        cat_name="${cat_name:-$suggested_name}"
 
-    # Only ask about channel binding and mode once (first agent)
-    local first_agent="${agent_names_to_assign[0]}"
-    local do_bind=""
-    if command -v openclaw &>/dev/null; then
-        read -r -p "Bind agent(s) to a chat channel (Telegram/Discord) for direct commands? (y/n): " do_bind
-        if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
-            for agent_name in "${agent_names_to_assign[@]}"; do
-                echo "  Available channels: telegram, discord, slack, whatsapp, matrix"
-                read -r -p "  Channel name for '$agent_name' (or press Enter to skip): " bind_channel
-                if [[ -n "${bind_channel:-}" ]]; then
-                    read -r -p "  Account ID (or * for all accounts) [*]: " bind_account
-                    bind_account="${bind_account:-*}"
-                    echo "  Binding agent '$agent_name' to $bind_channel:$bind_account..."
-                    openclaw agents bind --agent "$agent_name" --bind "${bind_channel}:${bind_account}" 2>&1 || \
-                        echo "  Warning: channel binding failed."
-                fi
-            done
-        fi
-    fi
+        local cat_mode="paper"
+        echo "  Select mode for '$cat_name':"
+        echo "    1) paper  (simulated trades, no real money)"
+        read -r -p "    2) live   (real money on Kalshi) [1]: " mode_choice
+        case "$mode_choice" in
+            2) cat_mode="live" ;;
+            *) cat_mode="paper" ;;
+        esac
 
-    local merge_mode="--yes"
-    echo
-    echo "Workspace file mode:"
-    echo "  1) Merge — backup existing files, then merge TraderBot templates (recommended)"
-    echo "  2) Overwrite — replace workspace files with TraderBot templates"
-    read -r -p "Select [1]: " ws_choice
-    case "$ws_choice" in
-        2) merge_mode="--yes --overwrite" ;;
-        *) merge_mode="--yes" ;;
-    esac
-
-    for agent_name in "${agent_names_to_assign[@]}"; do
+        local cat_profile="${cat_name}-${cat_mode}"
         if [[ -x "$tb_cmd" ]]; then
-            echo "Assigning agent $agent_name to profile $profile_name..."
+            echo "  Creating profile '$cat_profile' (mode=$cat_mode, category=$_cat)..."
+            _log_info "Creating profile $cat_profile for agent $cat_name (mode=$cat_mode)"
+            if ! "$tb_cmd" profile create "$cat_profile" --mode "$cat_mode" --categories "$_cat" 2>&1; then
+                echo "  Warning: profile creation failed for $cat_name." >&2
+                _log_warn "Profile creation failed for $cat_name"
+                continue
+            fi
+        else
+            echo "  TraderBot not found. Skipping profile creation." >&2
+            continue
+        fi
+
+        if command -v openclaw &>/dev/null; then
+            create_openclaw_agent "$cat_name" || true
+        fi
+
+        if [[ -x "$tb_cmd" ]]; then
+            echo "  Assigning profile '$cat_profile' to agent '$cat_name'..."
+            _log_info "Assigning $cat_profile to $cat_name"
             set +e
-            local assign_out
-            assign_out=$("$tb_cmd" profile assign "$profile_name" "$agent_name" $merge_mode 2>&1)
+            local cat_assign_out=""
+            cat_assign_out=$("$tb_cmd" profile assign "$cat_profile" "$cat_name" --yes 2>&1)
             local assign_exit=$?
             set -e
             if [[ $assign_exit -ne 0 ]]; then
-                echo "Error: assign failed (exit code $assign_exit) for $agent_name:" >&2
-                echo "$assign_out" >&2
-            else
-                echo "$assign_out"
+                echo "  Warning: assign failed: $cat_assign_out" >&2
+                _log_warn "Assign failed for $cat_name: $cat_assign_out"
+                continue
             fi
-        else
-            echo "Assignment skipped for $agent_name. TraderBot not found." >&2
         fi
 
-        local token_value=""
+        local cat_token=""
         if [[ -x "$tb_cmd" ]]; then
-            set +e
-            token_value=$("$tb_cmd" profile get-token "$profile_name" 2>/dev/null)
-            set -e
+            cat_token=$("$tb_cmd" profile get-token "$cat_profile" 2>/dev/null) || true
         fi
-
-        if [[ -n "$token_value" ]]; then
-            echo "Installing service for agent $agent_name..."
-            install_service_for_agent "$agent_name" "$token_value" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
-
-            # Register agent-specific heartbeat cron jobs
+        if [[ -n "$cat_token" ]]; then
+            install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
             if [[ -x "$tb_cmd" ]]; then
-                echo "Registering agent heartbeat cron jobs for $agent_name..."
-                "$tb_cmd" cron setup-heartbeat-tasks --agent "$agent_name" --skip-heartbeat-config 2>/dev/null || \
-                    echo "  Warning: agent cron registration skipped for $agent_name."
+                echo "  Registering cron jobs for $cat_name..."
+                "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || true
             fi
         fi
-    done
 
-    # Install data pipeline timers (news-ingest every 30m + backfill daily)
+        if command -v openclaw &>/dev/null; then
+            local do_bind=""
+            read -r -p "  Bind '$cat_name' to a chat channel? (y/n): " do_bind
+            if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
+                read -r -p "    Channel (telegram/discord/slack/whatsapp/matrix): " bind_channel
+                if [[ -n "${bind_channel:-}" ]]; then
+                    read -r -p "    Account ID (or * for all) [*]: " bind_account
+                    bind_account="${bind_account:-*}"
+                    openclaw agents bind --agent "$cat_name" --bind "${bind_channel}:${bind_account}" 2>&1 || true
+                fi
+            fi
+        fi
+        echo "  Agent '$cat_name' configured ($cat_mode, $_cat)."
+        _log_info "Agent $cat_name configured: profile=$cat_profile mode=$cat_mode category=$_cat"
+    done
+    unset _cat
+
     if [[ -x "$SCRIPT_DIR/services/install-data-pipeline.sh" ]]; then
         echo "Installing data pipeline timers..."
         bash "$SCRIPT_DIR/services/install-data-pipeline.sh"
     fi
 
-    # Register sysadmin OpenClaw cron jobs (isolated heartbeat tasks)
     if [[ -x "$tb_cmd" ]]; then
         echo "Registering sysadmin heartbeat cron jobs..."
-        "$tb_cmd" cron setup-heartbeat-tasks --agent main 2>/dev/null || \
-            echo "  Warning: cron registration failed (openclaw may not be installed)."
+        "$tb_cmd" cron setup-heartbeat-tasks --agent main 2>/dev/null || true
     fi
 
-    if [[ -x "$tb_cmd" ]]; then
-        echo
-        echo "=== Verification ==="
-        if "$tb_cmd" profile show "$profile_name" --json >/dev/null 2>&1; then
-            echo "✓ Profile '$profile_name' verified in registry."
-        else
-            echo "Warning: Could not verify profile '$profile_name' in registry." >&2
-        fi
-    fi
+    echo
+    echo "=== Configuration Complete ==="
 }
 
 

@@ -187,12 +187,15 @@ class WeatherDataProvider(BaseDataProvider):
         _ = await asyncio.gather(*om_tasks, return_exceptions=True)
 
         forecasts: dict[str, CityForecast] = {}
+        success_count = 0
         for city, result in zip(resolved, nws_results, strict=True):
             if isinstance(result, Exception):
                 logger.error("NWS fetch failed for %s: %s", city, result)
             elif isinstance(result, CityForecast):
                 forecasts[city] = result
+                success_count += 1
 
+        logger.info("get_forecasts: %d/%d cities succeeded", success_count, len(resolved))
         return forecasts
 
     async def get_model_consensus(self, city: str) -> ModelConsensus:
@@ -244,6 +247,8 @@ class WeatherDataProvider(BaseDataProvider):
         agreement = max(0.0, 1.0 - (std / max(abs(mean), 1.0)))
         agreement = min(1.0, agreement)
 
+        logger.info("get_model_consensus: %d models, agreement=%.3f", len(runs), agreement)
+
         return ModelConsensus(
             mean_temp=round(mean, 2),
             std_dev=round(std, 2),
@@ -268,6 +273,8 @@ class WeatherDataProvider(BaseDataProvider):
         """
         with get_connection() as conn:
             stats = _query_bias(conn, city, model, days)
+
+        logger.info("get_historical_bias: city=%s model=%s mean_error=%.3f count=%d", city, model, stats["mean_error"], stats["count"])
 
         return BiasReport(
             city=city,

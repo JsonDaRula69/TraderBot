@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from traderbot.data.base_provider import BaseDataProvider
+
+logger = logging.getLogger(__name__)
 
 _registry: dict[str, type[BaseDataProvider]] = {}
 
@@ -27,6 +30,7 @@ def register_provider(name: str, cls: type[BaseDataProvider]) -> None:
             f"Provider {cls.__name__} must subclass BaseDataProvider"
         )
     _registry[name] = cls
+    logger.info("Registered provider '%s' -> %s", name, cls.__name__)
 
 
 def get_provider(name: str) -> type[BaseDataProvider] | None:

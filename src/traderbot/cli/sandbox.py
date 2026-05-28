@@ -1,5 +1,7 @@
 """Sandbox command group — agent filesystem isolation."""
 from __future__ import annotations
+import logging
+logger = logging.getLogger(__name__)
 
 import json as json_lib
 import sys

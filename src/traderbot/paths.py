@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_data_dir() -> Path:
@@ -38,12 +41,16 @@ def get_logs_dir() -> Path:
 
 def get_workspace_dir() -> Path:
     """Return the OpenClaw workspace directory (relative to CWD)."""
-    return Path.cwd() / ".openclaw" / "workspace"
+    ws = Path.cwd() / ".openclaw" / "workspace"
+    logger.debug("Workspace dir: %s", ws)
+    return ws
 
 
 def get_agent_workspace_dir() -> Path:
     """Return the sandbox-isolated agent workspace directory."""
-    return get_data_dir() / "agent_workspace"
+    aws = get_data_dir() / "agent_workspace"
+    logger.debug("Agent workspace dir: %s", aws)
+    return aws
 
 
 def get_master_key_path() -> Path:
@@ -60,6 +67,7 @@ def ensure_data_dir() -> Path:
     """Create data directory if it doesn't exist and return it."""
     path = get_data_dir()
     path.mkdir(parents=True, exist_ok=True)
+    logger.info("Data dir: %s", path)
     return path
 
 

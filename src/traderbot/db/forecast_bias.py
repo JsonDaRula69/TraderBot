@@ -6,8 +6,11 @@ aggregate bias statistics per city/model.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -58,6 +61,7 @@ def record_forecast(
         ),
     )
     conn.commit()
+    logger.info("Recorded forecast: city=%s model=%s error=%.1f°F", city, model, error_f)
 
 
 def query_bias(
@@ -81,6 +85,7 @@ def query_bias(
 
     errors = [r[0] for r in rows]
     if not errors:
+        logger.debug("Bias query for city=%s model=%s days=%d: no data found", city, model, days)
         return {
             "mean_error": 0.0,
             "mean_abs_error": 0.0,
@@ -93,8 +98,7 @@ def query_bias(
     mean = sum(errors) / n
     mean_abs = sum(abs(e) for e in errors) / n
     variance = sum((e - mean) ** 2 for e in errors) / n
-    std = variance**0.5
-
+    std = variance ** 0.5
     return {
         "mean_error": round(mean, 2),
         "mean_abs_error": round(mean_abs, 2),
@@ -125,4 +129,5 @@ def query_all_cities(
         stats = query_bias(conn, city, model, days)
         results.append({"city": city, **stats})
 
+    logger.debug("Bias query for all cities model=%s days=%d: %d cities found", model, days, len(results))
     return sorted(results, key=lambda r: r["city"])

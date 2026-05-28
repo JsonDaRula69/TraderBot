@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import date  # noqa: TC003
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
     from traderbot.simulation.data_loader import DataLoader
     from traderbot.simulation.profiles import StrategyProfile
+
+logger = logging.getLogger(__name__)
 
 
 class BacktestError(Exception):
@@ -112,6 +115,7 @@ class BacktestEngine:
     ) -> BacktestResult:
         self._profile = profile
         markets = await self._data_loader.get_markets(start, end)
+        logger.info("Backtest run: %d markets loaded for %s to %s", len(markets), start, end)
 
         trades_by_ticker: dict[str, list[Trade]] = {}
         for market in markets:
@@ -150,6 +154,7 @@ class BacktestEngine:
                 )
 
                 signals = self._strategy.on_market_open(market, context)
+                logger.debug("Market open %s: %d signals", market.ticker, len(signals))
                 self._process_signals(signals, market, positions, portfolio_value_cents, breaker, context)
 
             elif event["type"] == "trade":
@@ -172,6 +177,7 @@ class BacktestEngine:
                 )
 
                 signals = self._strategy.on_trade(trade, context)
+                logger.debug("Trade event %s: %d signals", ticker, len(signals))
                 self._process_signals(signals, matching_market, positions, portfolio_value_cents, breaker, context)
 
             elif event["type"] == "settle":
@@ -199,6 +205,10 @@ class BacktestEngine:
                     if portfolio_value_cents > peak_value_cents:
                         peak_value_cents = portfolio_value_cents
 
+                    logger.info("Settlement %s: outcome=%s pnl=%d", market.ticker, outcome, pnl)
+                else:
+                    logger.debug("Settlement %s: no open position", market.ticker)
+
                 breaker_state = breaker.get_state()
                 portfolio = self._build_portfolio(
                     portfolio_value_cents, peak_value_cents, positions, daily_loss_cents
@@ -212,7 +222,12 @@ class BacktestEngine:
                 )
                 self._strategy.on_settle(market, outcome, settle_context)
 
-        return self._compute_result(closed_trades, positions, portfolio_value_cents)
+        result = self._compute_result(closed_trades, positions, portfolio_value_cents)
+        logger.info(
+            "Backtest complete: %d trades, pnl=%d, win_rate=%s",
+            result.trade_count, result.total_pnl_cents, result.win_rate,
+        )
+        return result
 
     def _build_event_stream(
         self,

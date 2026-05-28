@@ -42,24 +42,23 @@ _TICKER_TO_CITY: dict[str, str] = {
 
 
 def _estimate_prob_from_threshold(forecast_temp: float, threshold: float, strike_type: str) -> float:
-    """Convert a temperature forecast into an estimated probability of exceeding a threshold.
-
-    Uses a logistic-style mapping centered on the threshold. Assumes a ~5°F
-    standard-deviation uncertainty band around the forecast.
-    """
     import math
 
     sigma = 5.0
     z = (forecast_temp - threshold) / sigma
 
     if strike_type == "greater":
-        return 1.0 / (1.0 + math.exp(-z))
-    if strike_type == "less":
-        return 1.0 / (1.0 + math.exp(z))
-    if strike_type == "between":
-        pass
+        prob = 1.0 / (1.0 + math.exp(-z))
+    elif strike_type == "less":
+        prob = 1.0 / (1.0 + math.exp(z))
+    else:
+        prob = 0.5
 
-    return 0.5
+    logger.debug(
+        "Logistic probability: forecast=%.1f threshold=%.1f strike=%s prob=%.4f",
+        forecast_temp, threshold, strike_type, prob,
+    )
+    return prob
 
 
 def _compute_agreement_penalty(consensus_score: float | None) -> float:
@@ -147,6 +146,10 @@ class WeatherSignalEngine(BaseSignalEngine):
             except Exception:
                 logger.exception("Signal computation failed for ticker=%s", ticker)
 
+        logger.info(
+            "compute_signals: %d tickers processed, %d signals generated",
+            len(markets), len(signals),
+        )
         return signals
 
     def _compute_one(self, ticker: str, market: MarketData, fc: CityForecast) -> TradingSignal:
@@ -231,4 +234,5 @@ class WeatherSignalEngine(BaseSignalEngine):
 
         max_error = 10.0
         norm = max(-1.0, min(1.0, stats["mean_error"] / max_error))
+        logger.debug("Bias adjustment for %s: mean_error=%.3f adjustment=%.4f", city, stats["mean_error"], norm)
         return norm

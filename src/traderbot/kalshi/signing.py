@@ -5,11 +5,14 @@ from __future__ import annotations
 import base64
 import gc
 import hashlib
+import logging
 import threading
 import time
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+
+logger = logging.getLogger(__name__)
 
 _KEY_TTL_SECONDS = 300  # 5 minutes
 
@@ -69,15 +72,20 @@ def sign_request(private_key_pem: str, timestamp_ms: int, method: str, path: str
     path_only = path.split("?")[0]
     msg_string = f"{timestamp_ms}{method}{path_only}"
     message = msg_string.encode("utf-8")
-    signature = private_key.sign(
-        message,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.DIGEST_LENGTH,
-        ),
-        hashes.SHA256(),
-    )
-    return base64.b64encode(signature).decode("utf-8")
+    try:
+        signature = private_key.sign(
+            message,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.DIGEST_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+        logger.debug("Signed request: method=%s path=%s ts=%d", method, path_only, timestamp_ms)
+        return base64.b64encode(signature).decode("utf-8")
+    except Exception:
+        logger.error("Signing failed for method=%s path=%s", method, path_only)
+        raise
 
 
 def auth_headers(api_key: str, private_key_pem: str, method: str, path: str) -> dict[str, str]:
@@ -86,7 +94,15 @@ def auth_headers(api_key: str, private_key_pem: str, method: str, path: str) -> 
     Returns dict with KALSHI-ACCESS-KEY, KALSHI-ACCESS-SIGNATURE, KALSHI-ACCESS-TIMESTAMP.
     """
     timestamp_ms = int(time.time() * 1000)
-    signature = sign_request(private_key_pem, timestamp_ms, method, path)
+    key_type = "pem" if private_key_pem else "none"
+    logger.debug("Signing headers: method=%s path=%s key_type=%s nonce=%d", method, path, key_type, timestamp_ms)
+    if not private_key_pem:
+        logger.warning("No private key provided for signing")
+    try:
+        signature = sign_request(private_key_pem, timestamp_ms, method, path)
+    except Exception:
+        logger.error("Failed to generate auth headers for %s %s", method, path)
+        raise
     return {
         "KALSHI-ACCESS-KEY": api_key,
         "KALSHI-ACCESS-SIGNATURE": signature,

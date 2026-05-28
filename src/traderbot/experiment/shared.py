@@ -1,7 +1,10 @@
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

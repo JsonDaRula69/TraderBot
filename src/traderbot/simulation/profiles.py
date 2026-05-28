@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -11,6 +12,8 @@ from traderbot.simulation.engine import BacktestEngine, BacktestResult
 
 if TYPE_CHECKING:
     from datetime import date
+
+logger = logging.getLogger(__name__)
 
 
 class StrategyProfile(BaseModel):

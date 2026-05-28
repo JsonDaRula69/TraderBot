@@ -92,7 +92,10 @@ class NwsClient:
         cache_key = f"{lat:.4f},{lon:.4f}"
         cached = self._cache.get(cache_key)
         if cached is not None:
+            logger.debug("Gridpoint cache HIT for %s", cache_key)
             return cached
+
+        logger.info("Gridpoint cache MISS for %s — resolving via NWS API", cache_key)
 
         url = f"{_NWS_BASE_URL}/points/{lat:.4f},{lon:.4f}"
         try:
@@ -220,8 +223,10 @@ class NwsClient:
                 continue
             try:
                 results[city_name] = await self.get_forecast(*coords)
+                logger.debug("Forecast fetched for %s", city_name)
             except NwsClientError as exc:
                 logger.error("Failed to get NWS forecast for %s: %s", city_name, exc)
+        logger.info("get_forecasts: %d/%d cities successful", len(results), len(cities))
         return results
 
     @staticmethod

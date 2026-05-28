@@ -398,4 +398,5 @@ def reconcile(
             update_status(session_state_path, entry.intent_id, WalStatus.CANCELLED)
             updated.append(entry.model_copy(update={"status": WalStatus.CANCELLED}))
 
+    logger.info("Reconciled %d WAL entries (%d pending processed)", len(updated), len(pending))
     return updated
