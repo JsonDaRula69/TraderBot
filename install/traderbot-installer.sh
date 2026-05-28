@@ -1883,6 +1883,34 @@ interactive_config_flow() {
             done
             [[ -n "$old_tty2" ]] && stty "$old_tty2" 2>/dev/null
             local bind_channel="${CHAN_KEYS[$chan_cur]}"
+
+            if [[ "$bind_channel" == "telegram" ]]; then
+                local telegram_token=""
+                while true; do
+                    read -r -p "  Telegram bot token (from @BotFather): " telegram_token
+                    if [[ -z "$telegram_token" ]]; then
+                        echo "  Skipping Telegram bind — no token provided."
+                        break
+                    fi
+                    if ! _validate_key "$telegram_token" "Telegram bot token" 20; then
+                        telegram_token=""
+                        continue
+                    fi
+                    echo "  Configuring Telegram channel..."
+                    openclaw channels add --channel telegram --token "$telegram_token" 2>&1 || {
+                        echo "  Warning: Telegram channel setup failed. Token may be invalid."
+                        telegram_token=""
+                        continue
+                    }
+                    echo "  Telegram channel configured."
+                    break
+                done
+                if [[ -z "$telegram_token" ]]; then
+                    echo "  Skipping bind — no channel configured."
+                    continue
+                fi
+            fi
+
             echo "    Binding $cat_name to $bind_channel..."
             openclaw agents bind --agent "$cat_name" --bind "${bind_channel}:${cat_name}" 2>&1 || \
                 echo "    Warning: bind failed. Run later: openclaw agents bind --agent $cat_name --bind ${bind_channel}:<id>"
