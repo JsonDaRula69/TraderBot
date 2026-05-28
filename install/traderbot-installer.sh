@@ -857,12 +857,11 @@ install_service_for_agent() {
     local agent_name="$1"
     local profile_token="$2"
     local os_type="$3"
-    local enable_sandbox="${4:-}"
     local script_dir="${INSTALL_DIR}"
     if [[ "$os_type" == "macos" ]]; then
-        bash "${script_dir}/install/services/install-launchd.sh" "$agent_name" "$profile_token" "$enable_sandbox"
+        bash "${script_dir}/install/services/install-launchd.sh" "$agent_name" "$profile_token"
     else
-        bash "${script_dir}/install/services/install-service.sh" "$agent_name" "$profile_token" "$enable_sandbox"
+        bash "${script_dir}/install/services/install-service.sh" "$agent_name" "$profile_token"
     fi
 }
 
@@ -1428,22 +1427,48 @@ setup_master_password() {
     fi
 }
 
-prompt_enable_sandbox() {
+prompt_sandbox_docker() {
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
-        ENABLE_SANDBOX="${TRADERBOT_ENABLE_SANDBOX:-}"
         return
     fi
     echo
-    echo "=== Agent Sandbox ==="
-    echo "Restrict agent filesystem access to only the project directory."
-    read -r -p "Enable agent filesystem sandbox? [Y/n]: " sandbox_choice
-    if [[ -z "$sandbox_choice" ]] || [[ "$sandbox_choice" =~ ^[Yy]$ ]]; then
-        ENABLE_SANDBOX="1"
-        echo "Sandbox enabled (ENABLE_SANDBOX=1)."
-    else
-        ENABLE_SANDBOX=""
-        echo "Sandbox disabled."
+    echo "=== Docker Sandbox for Category Agents ==="
+    echo "OpenClaw's Docker sandbox isolates category agents from the host."
+    echo "Sysadmin (main) is NOT sandboxed."
+    if ! command -v docker &>/dev/null; then
+        echo "Docker is not installed. The sandbox image must be built manually."
+        echo "  Build: bash install/docker/build-sandbox.sh"
+        return
     fi
+    local do_sandbox=""
+    read -r -p "Build sandbox Docker image and configure OpenClaw? (y/n): " do_sandbox
+    if [[ ! "${do_sandbox:-}" =~ ^[Yy]$ ]]; then
+        echo "Sandbox skipped. Configure later:"
+        echo "  bash install/docker/build-sandbox.sh"
+        return
+    fi
+    local docker_dir="${INSTALL_DIR}/install/docker"
+    if [[ -x "$docker_dir/build-sandbox.sh" ]]; then
+        echo "  Building traderbot sandbox image..."
+        bash "$docker_dir/build-sandbox.sh" 2>&1 || {
+            echo "  Warning: sandbox image build failed." >&2
+            return
+        }
+    else
+        echo "  Warning: build-sandbox.sh not found." >&2
+        return
+    fi
+    echo "  Configuring OpenClaw sandbox for category agents..."
+    openclaw config set agents.defaults.sandbox.mode non-main 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.backend docker 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.scope agent 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.workspaceAccess rw 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.docker.image traderbot-sandbox:bookworm-slim 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.docker.network bridge 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.docker.readOnlyRoot true 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.docker.capDrop '["ALL"]' 2>/dev/null || true
+    openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
+    echo "  Sandbox configured. Restart gateway: openclaw gateway restart"
 }
 
 prompt_tls_pinning() {
@@ -1574,7 +1599,7 @@ interactive_config_flow() {
     setup_api_credentials
     prompt_os_keyring
     setup_master_password
-    prompt_enable_sandbox
+    prompt_sandbox_docker
     prompt_tls_pinning
     prompt_sysadmin_setup
 
@@ -1726,32 +1751,10 @@ interactive_config_flow() {
 
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
 
-    # Per-category agent configuration loop
+    # Per-category agent configuration loop — auto-configures names from categories
     local _cat=""
     for _cat in "${selected_cats[@]}"; do
-        local suggested_name=""
-        case "$_cat" in
-            weather) suggested_name="weatherman" ;;
-            economics|politics|sports|crypto) suggested_name="$_cat" ;;
-            science_and_technology) suggested_name="science" ;;
-            commodities) suggested_name="commodities" ;;
-            companies) suggested_name="companies" ;;
-            elections) suggested_name="elections" ;;
-            entertainment) suggested_name="entertainment" ;;
-            financials) suggested_name="financials" ;;
-            health) suggested_name="health" ;;
-            mentions) suggested_name="mentions" ;;
-            social) suggested_name="social" ;;
-            *) suggested_name="${_cat:0:8}" ;;
-        esac
-
-        local cat_name=""
-        read -r -p "Agent name for '$_cat' (Enter for '$suggested_name', or 'skip'): " cat_name
-        if [[ "${cat_name,,}" == "skip" ]]; then
-            echo "  Skipping $_cat."
-            continue
-        fi
-        cat_name="${cat_name:-$suggested_name}"
+        local cat_name="$_cat"
 
         local cat_mode="paper"
         echo "  Select mode for '$cat_name':"
@@ -1800,27 +1803,15 @@ interactive_config_flow() {
             cat_token=$("$tb_cmd" profile get-token "$cat_profile" 2>/dev/null) || true
         fi
         if [[ -n "$cat_token" ]]; then
-            install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE" "${ENABLE_SANDBOX:-}"
+            install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE"
             if [[ -x "$tb_cmd" ]]; then
                 echo "  Registering cron jobs for $cat_name..."
                 "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || true
             fi
         fi
 
-        if command -v openclaw &>/dev/null; then
-            local do_bind=""
-            read -r -p "  Bind '$cat_name' to a chat channel? (y/n): " do_bind
-            if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
-                read -r -p "    Channel (telegram/discord/slack/whatsapp/matrix): " bind_channel
-                if [[ -n "${bind_channel:-}" ]]; then
-                    read -r -p "    Account ID (or * for all) [*]: " bind_account
-                    bind_account="${bind_account:-*}"
-                    openclaw agents bind --agent "$cat_name" --bind "${bind_channel}:${bind_account}" 2>&1 || true
-                fi
-            fi
-        fi
-        echo "  Agent '$cat_name' configured ($cat_mode, $_cat)."
-        _log_info "Agent $cat_name configured: profile=$cat_profile mode=$cat_mode category=$_cat"
+        echo "  Agent '$cat_name' configured (paper, $_cat)."
+        _log_info "Agent $cat_name configured: profile=$cat_profile mode=paper category=$_cat"
     done
     unset _cat
 
@@ -1902,15 +1893,6 @@ main() {
             echo "  (Follow prompts to set up Ollama, OpenAI, or another provider)"
             openclaw configure --section models 2>&1 || \
                 echo "  Warning: LLM config interrupted. Run later: openclaw configure --section models"
-        fi
-
-        # Optional channel setup
-        local do_channel=""
-        read -r -p "Add a chat channel to message agents directly? (Telegram/Discord/etc) (y/n): " do_channel
-        if [[ "${do_channel:-}" =~ ^[Yy]$ ]]; then
-        echo "  Launching channel setup wizard..."
-        openclaw channels add 2>&1 || \
-            echo "  Warning: channel setup interrupted. Run later: openclaw channels add"
         fi
 
         # Optional runtime health check

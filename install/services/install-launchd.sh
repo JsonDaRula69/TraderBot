@@ -1,15 +1,13 @@
 #!/bin/bash
-# Usage: install-launchd.sh <agent_name> <profile_token> [enable_sandbox]
+# Usage: install-launchd.sh <agent_name> <profile_token>
 # Installs a LaunchDaemon (boot-time, no login required) for macOS
-# Token is passed via EnvironmentVariables only — never written to .env.
 set -euo pipefail
 
 AGENT_NAME="$1"
 PROFILE_TOKEN="$2"
-ENABLE_SANDBOX="${3:-}"
 
 if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
-    echo "Usage: install-launchd.sh <agent_name> <profile_token> [enable_sandbox]" >&2
+    echo "Usage: install-launchd.sh <agent_name> <profile_token>" >&2
     exit 1
 fi
 
@@ -41,7 +39,6 @@ USER_NAME="$(whoami)"
 sed -e "s/AGENT_ID/$AGENT_NAME/g" \
     -e "s/USERNAME/$USER_NAME/g" \
     -e "s/TOKEN_PLACEHOLDER/$PROFILE_TOKEN/g" \
-    -e "s/SANDBOX_PLACEHOLDER/${ENABLE_SANDBOX:-}/g" \
     "$TEMPLATE_FILE" > "/tmp/com.traderbot.agent.$AGENT_NAME.plist"
 
 if command -v plutil &>/dev/null; then

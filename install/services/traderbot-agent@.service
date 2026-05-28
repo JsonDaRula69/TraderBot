@@ -24,7 +24,6 @@ WorkingDirectory=/home/%i/traderbot
 EnvironmentFile=%h/.traderbot/.env
 # Token injected by installer: Environment=TRADERBOT_PROFILE_TOKEN=<TOKEN_PLACEHOLDER>
 Environment=TRADERBOT_PROFILE_TOKEN=TOKEN_PLACEHOLDER
-Environment=ENABLE_SANDBOX=SANDBOX_PLACEHOLDER
 Environment=PYTHONUNBUFFERED=1
 Environment=TRADERBOT_AUTO_AUTH_PAPER=1
 Environment=PATH=/home/%i/traderbot/.venv/bin:/usr/local/bin:/usr/bin:/bin

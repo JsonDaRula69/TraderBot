@@ -20,8 +20,6 @@
 	<dict>
 		<key>TRADERBOT_PROFILE_TOKEN</key>
 		<string>TOKEN_PLACEHOLDER</string>
-		<key>ENABLE_SANDBOX</key>
-		<string>SANDBOX_PLACEHOLDER</string>
 	</dict>
 
 	<!-- WorkingDirectory: USERNAME replaced by installer -->

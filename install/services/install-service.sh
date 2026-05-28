@@ -1,14 +1,13 @@
 #!/bin/bash
-# Usage: install-service.sh <agent_name> <profile_token> [enable_sandbox]
+# Usage: install-service.sh <agent_name> <profile_token>
 # Token is passed via Environment= only — never written to .env.
 set -euo pipefail
 
 AGENT_NAME="$1"
 PROFILE_TOKEN="$2"
-ENABLE_SANDBOX="${3:-}"
 
 if [[ -z "$AGENT_NAME" ]] || [[ -z "$PROFILE_TOKEN" ]]; then
-    echo "Usage: install-service.sh <agent_name> <profile_token> [enable_sandbox]" >&2
+    echo "Usage: install-service.sh <agent_name> <profile_token>" >&2
     exit 1
 fi
 
@@ -38,7 +37,6 @@ sed \
     -e "s|/home/%i/|/home/$ACTUAL_USER/|g" \
     -e "s|%h/.traderbot/.env|$ACTUAL_HOME/.traderbot/.env|g" \
     -e "s|TOKEN_PLACEHOLDER|$PROFILE_TOKEN|g" \
-    -e "s|SANDBOX_PLACEHOLDER|${ENABLE_SANDBOX:-}|g" \
     "$TEMPLATE_FILE" > "/tmp/traderbot-agent@$AGENT_NAME.service"
 
 if command -v systemd-analyze &>/dev/null; then
