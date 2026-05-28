@@ -19,7 +19,7 @@ Do not manually reread startup files unless the user asks, context is missing so
 2. `traderbot profile show <my_profile> --json` — confirm risk parameters and enabled categories
 3. `traderbot halt --json` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
 4. `traderbot positions --json` — list open positions. Reconcile with SESSION-STATE.md. **Note: `positions` may return empty between cycles for paper-mode trades. Do NOT rely on positions DB for cross-cycle tracking. Use SESSION-STATE.md as the authoritative record.**
-5. `traderbot data-points weather --json` — check model data availability. If unavailable, log error.
+5. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` — check structured NWS forecast + GFS/ECMWF/GEM ensemble data. If unavailable, fall back to `traderbot data-points weather --json` for historical edge calibration.
 6. `traderbot news-context weather --json` — check for active advisories.
 7. `traderbot performance --json` — check my recent win rate and P&L.
 8. Read `SESSION-STATE.md` for pending actions and tracked markets.

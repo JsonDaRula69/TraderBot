@@ -44,7 +44,7 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 | `traderbot auth set-voyage` | Set Voyage AI API key | |
 | `traderbot auth set-newsapi` | Set NewsAPI key | |
 | `traderbot auth check-kalshi` | Validate Kalshi credentials | |
-| `traderbot cron setup` | Install systemd timers for news + backfill | |
+| `traderbot cron setup-heartbeat-tasks --agent main` | Register fleet cron jobs | Isolated sessions per task |
 
 ### Oversight & Monitoring
 

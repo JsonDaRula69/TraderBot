@@ -76,17 +76,34 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 
 ### Model Data Interpretation
 
-`traderbot data-points weather --json` returns fields I use to make decisions:
+Two CLI commands provide structured data for decision-making:
+
+**`traderbot data forecasts --cities NYC,CHI,LA --json`** (live forecast data):
 
 | Field | My Use |
 |---|---|
-| `gfs_ensemble_mean` | Primary temperature/precip signal. |
-| `ecmwf_ensemble_mean` | Secondary confirmation. If diverges from GFS > threshold, reduce conviction. |
-| `cmc_ensemble_mean` | Tiebreaker when GFS and ECMWF disagree. |
-| `model_spread` | Standard deviation across models. < 0.5 SD = high conviction. > 1.5 SD = reduced exposure. |
-| `cpc_outlook` | Seasonal and subseasonal baseline. Authoritative for long-lead contracts. |
-| `nhc_advisory` | Active tropical cyclone guidance. Highest priority signal during hurricane events. |
-| `nws_warnings` | Active watches/warnings. Overrides model-only signals. |
+| `high_temp` | NWS official forecast high. Primary signal for temperature contracts. |
+| `low_temp` | NWS official forecast low. Used for overnight low markets. |
+| `precip_probability` | NWS probability of precipitation. For precip-related markets. |
+| `wind_speed` / `wind_direction` | Wind conditions. Supplementary for severe weather context. |
+| `detailed_forecast` | Full NWS text forecast. Use for qualitative assessment and advisory awareness. |
+
+**`traderbot data bias <CITY> --days 90 --json`** (historical bias tracking):
+
+| Field | My Use |
+|---|---|
+| `mean_error` | Average NWS forecast error for this city over N days. Adjust confidence: positive mean = NWS consistently under-forecasts. |
+| `mean_abs_error` | Average absolute error. Higher values = forecast is less reliable for this city. |
+| `std_error` | Volatility of forecast errors. High std = inconsistent accuracy. |
+
+**`traderbot data-points weather --json`** (historical records from ChromaDB):
+
+Returns Open-Meteo daily historical data (temperature, precipitation, humidity) from the daily backfill pipeline. Use for:
+- Edge calibration — compare historical NWS forecasts against actuals
+- Seasonal baseline — what does "normal" look like for this city/date
+- Bias tracking data source — `traderbot data bias` queries the forecast_bias table that data-points helps populate
+
+For real-time model ensemble data (GFS/ECMWF/GEM), the `traderbot data forecasts` command fetches live ensemble consensus from Open-Meteo. This is the primary trading signal source. The `data-points` command supplements with historical context.
 
 ### News Context Priority
 
