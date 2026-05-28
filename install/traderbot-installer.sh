@@ -377,7 +377,7 @@ create_openclaw_agent() {
         return 0
     fi
     echo "  Creating OpenClaw agent '$name'..."
-    openclaw agents add "$name" --non-interactive 2>&1 || {
+    openclaw agents add "$name" --non-interactive --workspace "$HOME/.openclaw/workspace" 2>&1 || {
         echo "  Warning: Failed to create agent '$name'. Create manually: openclaw agents add $name" >&2
         return 1
     }
@@ -1804,13 +1804,40 @@ interactive_config_flow() {
         fi
         if [[ -n "$cat_token" ]]; then
             install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE"
-            if [[ -x "$tb_cmd" ]]; then
-                echo "  Registering cron jobs for $cat_name..."
-                "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || true
-            fi
+        if [[ -x "$tb_cmd" ]]; then
+            echo "  Registering cron jobs for $cat_name..."
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || true
         fi
+    fi
 
-        echo "  Agent '$cat_name' configured (paper, $_cat)."
+    if command -v openclaw &>/dev/null; then
+        echo ""
+        local do_bind=""
+        read -r -p "  Bind '$cat_name' to a chat channel? (y/n): " do_bind
+        if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
+            echo "    Select channel:"
+            echo "    1) Telegram"
+            echo "    2) Discord"
+            echo "    3) Slack"
+            echo "    4) WhatsApp"
+            echo "    5) Matrix"
+            local bind_choice=""
+            read -r -p "    Enter number [1]: " bind_choice
+            local bind_channel=""
+            case "${bind_choice:-1}" in
+                2) bind_channel="discord" ;;
+                3) bind_channel="slack" ;;
+                4) bind_channel="whatsapp" ;;
+                5) bind_channel="matrix" ;;
+                *) bind_channel="telegram" ;;
+            esac
+            echo "    Binding $cat_name to $bind_channel..."
+            openclaw agents bind --agent "$cat_name" --bind "${bind_channel}:${cat_name}" 2>&1 || \
+                echo "    Warning: bind failed. Run later: openclaw agents bind --agent $cat_name --bind ${bind_channel}:<id>"
+        fi
+    fi
+
+    echo "  Agent '$cat_name' configured (paper, $_cat)."
         _log_info "Agent $cat_name configured: profile=$cat_profile mode=paper category=$_cat"
     done
     unset _cat
