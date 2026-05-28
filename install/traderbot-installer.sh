@@ -1877,9 +1877,9 @@ interactive_config_flow() {
     done
     unset _cat
 
-    if [[ -x "$SCRIPT_DIR/services/install-data-pipeline.sh" ]]; then
+    if [[ -x "$INSTALL_DIR/services/install-data-pipeline.sh" ]]; then
         echo "Installing data pipeline timers..."
-        bash "$SCRIPT_DIR/services/install-data-pipeline.sh"
+        bash "$INSTALL_DIR/services/install-data-pipeline.sh"
     fi
 
     if [[ -x "$tb_cmd" ]]; then
