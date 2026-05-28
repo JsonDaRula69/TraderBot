@@ -1930,7 +1930,8 @@ main() {
             echo "  Warning: openclaw setup had issues. Run manually: openclaw setup; openclaw onboard"
 
         echo "  Creating default agents..."
-        create_openclaw_agent "main" || true
+        # "main" is auto-created by openclaw setup — creating it manually fails
+        echo "  (agent 'main' already exists after setup)"
 
         echo "  Enabling bundled OpenClaw hooks..."
         enable_openclaw_hooks "command-logger" "session-memory" || true
