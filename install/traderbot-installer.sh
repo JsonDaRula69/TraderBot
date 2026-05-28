@@ -1877,7 +1877,21 @@ main() {
         echo "  Running OpenClaw doctor --fix..."
         openclaw doctor --fix 2>/dev/null || true
 
+        echo "  Validating OpenClaw configuration..."
+        openclaw config validate 2>&1 | head -5 || \
+            echo "  Warning: config validation found issues. Run 'openclaw config validate' to inspect."
+
         echo "  OpenClaw setup complete."
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────┐"
+        echo "│  Next Step: LLM Provider Configuration                  │"
+        echo "│                                                         │"
+        echo "│  Configure an LLM provider so agents can run:           │"
+        echo "│    openclaw configure --section models                  │"
+        echo "│                                                         │"
+        echo "│  Or add a channel so you can message agents directly:   │"
+        echo "│    openclaw channels add --guided                       │"
+        echo "└─────────────────────────────────────────────────────────┘"
     else
         echo "  OpenClaw gateway not available. Agent creation and hooks will be manual."
     fi
