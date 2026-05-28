@@ -41,12 +41,12 @@ def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False
 
     if is_sysadmin:
         template_dir = workspace_root
-    elif hasattr(profile, "categories") and profile.categories:
+    elif hasattr(profile, "enabled_categories") and profile.enabled_categories:
         # Try category-specific template directory for single-category profiles
         from traderbot.kalshi.models import MarketCategory
 
         # Get the single category if there's exactly one, otherwise use generic
-        cat_names = {c.value.lower() for c in profile.categories}
+        cat_names = {c.value.lower() for c in profile.enabled_categories}
         template_dir = workspace_root / "agent"  # default fallback
         for cat_name in cat_names:
             cat_template = workspace_root / cat_name
