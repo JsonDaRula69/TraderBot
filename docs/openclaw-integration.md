@@ -13,18 +13,19 @@ The TraderBot installer (`install/traderbot-installer.sh`) manages the full Open
 4. If not running: prompt to install service (`openclaw gateway install` with error surfacing) and start (`openclaw gateway start`)
 5. Wait for gateway readiness (polls up to 30s)
 
-### Phase 2 — Agent Creation + Hooks + Validation
+### Phase 2 — Agent Creation + Hooks + Validation + Guided Setup
 1. **Create default agent**: `openclaw agents add main`
 2. **Enable bundled hooks**:
-   - `openclaw hooks enable command-logger` — logs every command to `~/.openclaw/logs/commands.log`
-   - `openclaw hooks enable session-memory` — auto-saves last 15 messages to `workspace/memory/YYYY-MM-DD-HHMM.md`
-   - `openclaw hooks enable compaction-notifier` — shows "compacting history..." during session compaction
-   - `openclaw hooks enable agent-bootstrap` — our custom hook (see below)
-3. **Run repair**: `openclaw doctor --fix` — fixes stale config, session keys, migration issues
-4. **Validate config**: `openclaw config validate` — catches malformed config before runtime fails
-5. **Optional baseline setup**: Prompt to run `openclaw setup --workspace ~/.openclaw/workspace` — writes `gateway.mode=local`, initializes defaults
-6. **Optional LLM provider**: Prompt to run `openclaw configure --section models` — launches OpenClaw's interactive wizard for Ollama/OpenAI setup and model allowlist
-7. Display next-step hint for `openclaw channels add --guided` and `openclaw doctor`
+   - `openclaw hooks enable command-logger`
+   - `openclaw hooks enable session-memory`
+   - `openclaw hooks enable compaction-notifier`
+   - `openclaw hooks enable agent-bootstrap`
+3. **Run repair**: `openclaw doctor --fix`
+4. **Validate config**: `openclaw config validate`
+5. **Optional — baseline setup**: `openclaw setup --workspace ~/.openclaw/workspace`
+6. **Optional — LLM provider**: `openclaw configure --section models` (interactive wizard)
+7. **Optional — chat channels**: `openclaw channels add --guided` (interactive wizard)
+8. **Optional — runtime health**: `openclaw doctor`
 
 ### Phase 3 — Profile Assignment
 During the interactive config flow, when the user assigns a profile to an agent:

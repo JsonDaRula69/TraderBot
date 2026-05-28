@@ -1900,17 +1900,25 @@ main() {
                 echo "  Warning: LLM config interrupted. Run later: openclaw configure --section models"
         fi
 
+        # Optional channel setup
+        local do_channel=""
+        read -r -p "Add a chat channel to message agents directly? (Telegram/Discord/etc) (y/n): " do_channel
+        if [[ "${do_channel:-}" =~ ^[Yy]$ ]]; then
+            echo "  Launching channel setup wizard..."
+            openclaw channels add --guided 2>&1 || \
+                echo "  Warning: channel setup interrupted. Run later: openclaw channels add --guided"
+        fi
+
+        # Optional runtime health check
+        local do_health=""
+        read -r -p "Run runtime health check? (verifies LLM endpoint, auth, plugins) (y/n): " do_health
+        if [[ "${do_health:-}" =~ ^[Yy]$ ]]; then
+            echo "  Running OpenClaw health check..."
+            openclaw doctor 2>&1 || \
+                echo "  Warning: health check found issues. Run: openclaw doctor"
+        fi
+
         echo "  OpenClaw setup complete."
-        echo ""
-        echo "┌─────────────────────────────────────────────────────────┐"
-        echo "│  Next Steps (optional):                                 │"
-        echo "│                                                         │"
-        echo "│  Add a chat channel to message agents directly:         │"
-        echo "│    openclaw channels add --guided                       │"
-        echo "│                                                         │"
-        echo "│  Check runtime health:                                  │"
-        echo "│    openclaw doctor                                       │"
-        echo "└─────────────────────────────────────────────────────────┘"
     else
         echo "  OpenClaw gateway not available. Agent creation and hooks will be manual."
     fi
