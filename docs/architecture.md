@@ -2,132 +2,101 @@
 
 TraderBot's architecture is built around one principle: **the toolkit is a dumb pipe with smart guards.** It handles execution correctness and risk enforcement, but the agent decides strategy.
 
-## Three-Loop Autonomous System
+## Isolated Cron Jobs
 
-The agent operates via three independent loops, each with a distinct responsibility and OpenClaw execution mechanism.
+The agent operates via independent isolated cron jobs registered via `openclaw cron add --session isolated`, each with a distinct responsibility. This replaces the old monolithic "three-loop" design (Decision/Heartbeat/News) with isolated, collision-free execution.
 
-### Decision Loop
+### Agent Cron Jobs (8 jobs)
 
-| Attribute | Value |
-|---|---|
-| **Frequency** | Continuous during market hours |
-| **OpenClaw mechanism** | `isolated agentTurn` (autonomous, no human attention needed) |
-| **Responsibility** | Analyze markets → generate signals → risk-check → execute |
+Registered via `traderbot cron setup-heartbeat-tasks`:
 
-**Cycle:**
-1. Fetch market data (WebSocket stream + REST snapshot)
-2. Run statistical analysis (`analysis/indicators`, `analysis/odds`)
-3. Cross-reference with sentiment signals (`analysis/signals`)
-4. Generate buy/sell/hold signals
-5. **Risk gate**: Every signal passes through `risk/limits` before execution
-6. Execute approved orders via `kalshi/trading`
-7. Log decision with full reasoning to `db/decisions`
+| Job Name | Schedule | Command | Purpose |
+|---|---|---|---|
+| `circuit-breaker-check` | `*/30 * * * *` | `traderbot halt --json` | Check circuit breaker state; surface SLOW/CRITICAL alerts |
+| `data-forecast-check` | `*/30 * * * *` | `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` | Verify NWS and ensemble data availability |
+| `news-scan` | `*/30 * * * *` | `traderbot news-context weather --json` | Scan for NHC advisories, NWS warnings, emergency declarations |
+| `position-health` | `0 * * * *` | `traderbot positions --json` | Check positions with settlement < 48h, drawdown > 5% |
+| `settlement-monitor` | `0 * * * *` | `traderbot check-settlements --json` | Check for recently settled markets and update positions DB |
+| `performance-review` | `0 */6 * * *` | `traderbot heartbeat --json` | Review drawdown, win rate, learning promotions |
+| `learning-promotion` | `0 */6 * * *` | `traderbot learnings --promote` | Promote recurring learnings (Recurrence-Count >= 3) |
+| `pipeline-health` | `0 */6 * * *` | `systemctl list-timers --all \| grep traderbot` | Verify data pipeline timers are active and data is fresh |
 
-The Decision Loop runs as an OpenClaw `isolated agentTurn` — a background sub-agent that operates autonomously without requiring the main session's attention. This means trading continues even when the human isn't watching.
+All agent cron jobs use `--session isolated` for collision-free execution. The `settlement-monitor` job is explicitly marked isolated in its job definition.
 
-### Heartbeat Loop
+### Sysadmin Cron Setup (3 jobs)
 
-| Attribute | Value |
-|---|---|
-| **Frequency** | Every 6 hours (configurable via `cron setup --heartbeat-every`) |
-| **OpenClaw mechanism** | `isolated agentTurn` (autonomous background work) |
-| **Responsibility** | Performance review → adapt parameters → log learnings |
+The `traderbot cron setup` command registers legacy-format loops as isolated cron jobs:
 
-**Cycle:**
-1. Review all decisions since last heartbeat (every 6h automatically via cron)
-2. Compare expected vs. actual outcomes for closed markets
-3. Identify patterns (wins, losses, near-misses)
-4. Adjust strategy parameters via Bayesian updating (`simulation/adaptation`)
-5. Promote recurring learnings to `.learnings/LEARNINGS.md`
-6. Check circuit breaker conditions
-7. Update `HEARTBEAT_DATA.md` with status
+| Job Name | Schedule | Session | Purpose |
+|---|---|---|---|
+| `decision_loop` | `*/5 * * * *` | isolated | Agent trading decision cycle |
+| `heartbeat_loop` | `0 */6 * * *` | isolated | Performance review and adaptation |
+| `news_ingest` | `*/30 * * * *` | isolated | News and data point ingestion |
 
-The Heartbeat Loop is the self-improvement mechanism. It doesn't change strategy emotionally — it adjusts mathematical parameters (prior distributions, confidence thresholds) based on observed evidence.
-
-### News Ingestion & Data Backfill (Offline Pipeline)
-
-The pipeline consists of two independent systemd timers, both running outside any agent session:
+### Offline Data Pipelines (systemd timers)
 
 | Timer | Frequency | Command | Purpose |
 |---|---|---|---|
 | `traderbot-news-ingest@.timer` | Every 30 min | `traderbot news-ingest` | Fetch, classify, embed news + data points to ChromaDB |
-| `traderbot-backfill-data@.timer` | Daily (midnight) | `traderbot backfill --months 1` | Incremental historical data enrichment (Open-Meteo, FRED, CoinGecko) to ChromaDB `data_points` |
-
-#### News Ingestion
-
-| Attribute | Value |
-|---|---|
-| **Frequency** | Every 30 minutes (systemd timer) |
-| **Mechanism** | Standalone CLI command (`traderbot news-ingest`), no LLM required |
-| **Responsibility** | Fetch → classify → embed → store news and data points to ChromaDB |
-
-The news ingestion timer (`traderbot-news-ingest@.timer`) runs independently and:
-
-1. Fetches from 9 sources (NewsAPI, Reddit RSS, Open-Meteo, OpenWeatherMap, CoinGecko, TheSportsDB, FRED, Google Trends, Twitter/X stub)
-2. Parallelizes all HTTP calls via `asyncio.gather` for maximum throughput
-3. Classifies each item by Kalshi market category (keyword fast path → Voyage semantic slow path)
-4. Scores sentiment via VADER + TextBlob with optional Voyage rerank uplift
-5. Embeds articles with Voyage AI (`voyage-4-large`, 1024-dim) and stores to ChromaDB `news` collection
-6. Stores DataPoints (weather, economic, sports, crypto) to ChromaDB `data_points` collection
-7. Deduplicates by SHA-256 URL hash
-
-#### Data Backfill
-
-| Attribute | Value |
-|---|---|
-| **Frequency** | Daily (systemd timer) |
-| **Mechanism** | Standalone CLI command (`traderbot backfill`), idempotent |
-| **Responsibility** | Continuously enrich `data_points` with historical weather, economics, and crypto data |
-
-The backfill timer (`traderbot-backfill-data@.timer`) runs once per day and:
-1. Fetches Open-Meteo historical weather (past 92 days max per chunk, chunked for longer windows)
-2. Fetches FRED economic indicator history
-3. Fetches CoinGecko crypto price history
-4. Stores all items to ChromaDB `data_points` collection
-5. Skips already-stored items (idempotent by doc ID)
-
-On first install, `install-data-pipeline.sh` runs a one-shot 6-month backfill to seed the collection. Daily runs thereafter add incremental data.
-
-Agents query accumulated data via `traderbot data-points` and `traderbot news-context` — they do not receive pipeline data inline during trading sessions.
+| `traderbot-backfill-data@.timer` | Daily (midnight) | `traderbot backfill --months 1` | Incremental historical data enrichment (Open-Meteo, FRED, CoinGecko) |
 
 ## Component Map
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      OpenClaw Agent                          │
-│  (strategy decisions, market interpretation, sizing)        │
-└──────────┬──────────────────────────────────────────────────┘
-           │ calls via exec
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  cli.py — CLI entry point                                    │
-│  traderbot scan | analyze | trade | positions | backtest |    │
-│  paper | compare | performance | news | signals |             │
-│  sentiment | heartbeat | learnings | audit | halt | resume |  │
-│  bootstrap | auth | experiment | cron | cache                 │
-└──────┬───────┬───────────┬───────────┬───────────┬───────────┬───────────┐
-       │       │           │           │           │           │
-       ▼       ▼           ▼           ▼           ▼           ▼
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────────┐
-   │ kalshi │ │analysis│ │  risk  │ │ sim    │ │  news  │ │experiment  │
-   │        │ │        │ │        │ │        │ │        │ │            │
-   │ client │ │indic.  │ │limits  │ │engine  │ │sources │ │shared      │
-   │ models │ │odds    │ │sizing  │ │paper   │ │classif.│ │registry    │
-   │ markets│ │signals │ │breaker │ │adapt.  │ │sentim. │ │harness     │
-   │ trading│ │portf.  │ │audit   │ │perf.   │ │impact  │ │results     │
-   │ history│ │        │ │        │ │profiles│ │embed.  │ │populate    │
-   │ ws     │ │        │ │        │ │data_ldr│ │vectors │ │treatments  │
-   └───┬────┘ └────────┘ └────┬───┘ └────────┘ └────────┘ │methodologies│
-       │                      │                                └──────┬─────┘
-       ▼                      ▼                                       │
-   ┌────────┐            ┌────────┐                                   ▼
-   │ Kalshi │            │  db    │                            ┌──────────────┐
-   │   API  │            │positions│                            │ experiment db│
-   │        │            │decisions│                            │  (5 tables)  │
-   └────────┘            │learnings│                            │    + LLM     │
-                         │ chroma  │                            └──────────────┘
-                         │ vectors │
-                         └────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                     OpenClaw Agent                             │
+│  (strategy decisions, market interpretation, sizing)          │
+└───────────────┬───────────────────────────────────────────────┘
+                │ calls via exec
+                ▼
+┌───────────────────────────────────────────────────────────────┐
+│  cli/ — CLI package (9 modules + 2 infrastructure)            │
+│                                                                │
+│  Sub-apps (app.add_typer):                                     │
+│    auth/ • cron/ • sandbox/ • profile/ • data/                 │
+│  Flat commands (register_commands):                            │
+│    trade • market • news • admin                               │
+│  Plus: experiment/ (separate Typer sub-app)                    │
+│  Root: update, update-configure, uninstall                     │
+└──────┬────────┬──────────┬──────────┬──────────┬──────────────┘
+       │        │          │          │          │
+       ▼        ▼          ▼          ▼          ▼
+  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────────┐
+  │ kalshi │ │analysis │ │  risk  │ │  news  │ │experiment   │
+  │        │ │        │ │        │ │        │ │             │
+  │ client │ │indic.  │ │limits  │ │sources │ │shared       │
+  │ models │ │odds    │ │sizing  │ │classif.│ │registry     │
+  │ markets│ │signals │ │breaker │ │sentim. │ │harness      │
+  │ trading│ │        │ │audit   │ │impact  │ │results      │
+  │ history│ │        │ │        │ │embed.  │ │populate     │
+  │ portf. │ │        │ │        │ │vectors │ │treatments   │
+  │ ws     │ │        │ │        │ │ingest  │ │methodologies│
+  └───┬────┘ └────────┘ └────┬───┘ └────────┘ └──────┬─────┘
+      │                      │                           │
+      ▼                      ▼                           ▼
+  ┌────────┐            ┌────────┐              ┌──────────────┐
+  │ Kalshi │            │  db    │              │ experiment db│
+  │   API  │            │positions│              │  (5 tables)  │
+  │        │            │decisions│              │    + LLM     │
+  └────────┘            │learnings│              └──────────────┘
+                        │ chroma  │
+                        │ vectors │     ┌──────────────────┐
+                        │forecast │     │ data/ package    │
+                        │  _bias  │     │                  │
+                        │reconcil │     │ base_provider ABC│
+                        └────────┘     │ base_signals  ABC│
+                                       │ registry         │
+  ┌──────────────────────┐             │ models           │
+  │ data/weather/        │             │ weather/          │
+  │                      │             └──────────────────┘
+  │ nws_client.py        │
+  │ provider.py          │    ┌──────────────────────────┐
+  │ signals.py           │    │ db/reconciliation.py     │
+  │                      │    │                          │
+  │ NWS + Open-Meteo     │    │ reconcile_positions()    │
+  │ ensemble (GFS/ECMWF/ │    │ reconcile_settlements()  │
+  │ GEM)                 │    │ reconcile_all()          │
+  └──────────────────────┘    └──────────────────────────┘
 ```
 
 ## Toolkit vs. Agent Boundary
@@ -142,9 +111,10 @@ The critical design boundary. Crossing it means the toolkit is making decisions 
 | Order lifecycle (place, cancel, track fills) | ✅ | |
 | Risk guard enforcement (position limits, circuit breakers) | ✅ | |
 | Statistical computation (indicators, probability) | ✅ | |
-| Position tracking & P&L sync | ✅ | |
+| Position tracking & PnL sync | ✅ | |
+| Settlement monitoring & reconciliation | ✅ | |
 | Audit trail (logging decisions with context) | ✅ | |
-| **Semantic embedding & similarity computation** | ✅ | |
+| Semantic embedding & similarity computation | ✅ | |
 | **Strategy selection** (what approach to use) | | ✅ |
 | **Market interpretation** (why this market is attractive) | | ✅ |
 | **Position sizing** (how much to risk) | | ✅ (within guard rails) |
@@ -152,6 +122,48 @@ The critical design boundary. Crossing it means the toolkit is making decisions 
 | **Entry/exit timing** | | ✅ |
 
 The toolkit computes, enforces, and executes. The agent decides, interprets, and sizes. Risk guards sit between them — the agent can request any trade, but the toolkit has veto power.
+
+## CLI Package Architecture
+
+The CLI is organized as a Typer package at `cli/` with 9 command modules and 2 infrastructure files:
+
+### Sub-App Registration Pattern
+
+Two registration patterns are used:
+
+1. **Sub-apps** (`app.add_typer`): `auth`, `cron`, `sandbox`, `profile`, `data` — each creates its own `typer.Typer()` instance and is mounted as a named sub-group.
+
+2. **Flat commands** (`register_commands(parent_app)`): `trade`, `market`, `news`, `admin` — each module defines a `register_commands()` function that attaches `@parent_app.command()` handlers directly to the parent app.
+
+3. **External sub-app**: `experiment/` is imported from outside `cli/` and mounted as `app.add_typer(experiment_app, name="experiment")`.
+
+### Module Inventory
+
+| Module | Pattern | Commands |
+|---|---|---|
+| `__init__.py` | Root wiring | `update`, `update-configure`, `uninstall` |
+| `helpers.py` | Infrastructure | Defines root `app`, `_resolve_db_path`, `_with_db`, `_python_version_ok` |
+| `auth/` | Sub-app | `list-keys`, `rotate`, `check`, `setup-master-password`, `change-master-password`, `check-master-password`, `set-kalshi`, `migrate`, `delete-key`, `clear-session` |
+| `cron/` | Sub-app | `setup`, `setup-heartbeat-tasks`, `remove`, `remove-heartbeat-tasks`, `heartbeat-configure` |
+| `sandbox/` | Sub-app | `shell`, `eval` |
+| `profile/` | Sub-app | `create`, `list`, `select`, `show`, `delete` |
+| `data/` | Sub-app | `forecasts`, `signals`, `bias` |
+| `trade/` | Flat | `trade`, `positions`, `audit`, `backtest`, `paper`, `compare`, `analyze`, `performance`, `reconcile`, `check-settlements` |
+| `market/` | Flat | `scan`, `signals`, `sentiment` |
+| `news/` | Flat | `news`, `news-ingest`, `news-context`, `backfill`, `data-points`, `news-summary` |
+| `admin/` | Flat | `bootstrap`, `heartbeat`, `halt`, `resume`, `learnings`, `backfill`, `cache-warm` |
+
+### Experiment CLI
+
+The `experiment/` package provides its own Typer sub-app with commands:
+
+| Command | Purpose |
+|---|---|
+| `populate` | Fetch market data from Kalshi + forecasts from Open-Meteo into experiment DB |
+| `verify` | Validate experiment DB integrity |
+| `run` | Execute a within-subjects experiment |
+| `results` | Score a completed experiment run |
+| `list-treatments` | List available treatment classes |
 
 ## Experiment Infrastructure
 
@@ -233,15 +245,9 @@ Treatments are declared in `experiment/treatments/__init__.py` via `TREATMENT_RE
 | `ControlTreatment` | `experiment/treatments/control` | `True` | Uses market-implied probability; no LLM call |
 | `CalibrationBundleTreatment` | `experiment/treatments/calibration_bundle` | `False` | Full calibration-rich prompt with forecast data, accuracy metrics, technical indicators, and prior decisions |
 
-### LLM Client
+### Populate (Data Fetcher)
 
-`llm/client.py` — `LLMClient(provider, max_retries)` wraps any provider implementing `generate(prompt) -> str` with exponential-backoff retry (1s, 2s, 4s) on transient connection errors.
-
-`llm/ollama.py` — `OllamaProvider(model, base_url, timeout)` implements the `LLMProvider` protocol against a local Ollama server. Raises `OllamaConnectionError` on connectivity, timeout, or HTTP errors, which the client retries.
-
-### Market Stratification
-
-`experiment/methodologies/db_utils.py` — `select_markets(conn, markets_per_cell, seed)` groups markets into strata by `city_prefix` and days-to-expiry bucket (`lt7d`, `7-14d`, `gt14d`). Within each stratum, it randomly samples up to `markets_per_cell` tickers using the provided seed for reproducibility.
+`experiment/populate.py` fetches market data from Kalshi and weather forecasts from Open-Meteo/NWS, populating the experiment DB's `markets`, `forecast_snapshots`, and `market_prices` tables. City mapping follows the KXHIGHT/KXHIGH naming convention for 15 US cities.
 
 ## Data Provider & Signal Engine Architecture
 
@@ -254,7 +260,7 @@ src/traderbot/data/
 ├── __init__.py              # Package exports
 ├── base_provider.py          # BaseDataProvider ABC
 ├── base_signals.py           # BaseSignalEngine ABC
-├── models.py                 # CityForecast, ModelConsensus, BiasReport, TradingSignal
+├── models.py                 # CityForecast, EnsembleRun, ModelConsensus, BiasReport, TradingSignal
 ├── registry.py               # ProviderRegistry — register/discover providers by category
 └── weather/                  # Weather category implementation
     ├── __init__.py
@@ -318,47 +324,110 @@ All commands live under `traderbot data` sub-app in `cli/data.py`:
 | `signals` | `traderbot data signals --category weather --json` | Ticker, direction, est. prob, market prob, edge, confidence |
 | `bias` | `traderbot data bias NYC --days 90 --json` | Mean error, MAE, bias direction, sample size |
 
-## Semantic Layer (Voyage AI + ChromaDB)
-> Model selection rationale and constraints: [ADR-001](decisions/voyage-ai-adoption.md)
+## NWS Alerts Pipeline
 
-The semantic layer provides search-optimized index capabilities. It is NOT the authoritative store — that role belongs to SQLite.
+National Weather Service alerts are integrated as a news source alongside existing sources (NewsAPI, Reddit, Open-Meteo, etc.).
 
-### Role
+### Source Configuration
 
-- Search-optimized index layer for semantic similarity and retrieval
-- Enables pattern matching across decision logs, news, and heartbeat histories
-- ChromaDB stores embeddings; Voyage AI generates them
+- **NewsSource enum**: `NWS_ALERTS = "nws_alerts"` in `news/models.py`
+- **Category mapping**: `NWS_ALERTS → [WEATHER]` — alerts are always weather-category
+- **No API key required**: NWS alerts are publicly accessible
+- **Auto-discovery**: `_fetch_nws_alerts()` is called via the `_SOURCE_PRIORITY` dispatch in `ingest_news()`
 
-### Models
+### Alert Fetching
 
-| Model | Purpose | Dimensions | Use Case |
-|---|---|---|---|
-| `voyage-4-large` | General-purpose embeddings (MoE) | 256/512/1024/2048 | News articles, market commentary, decision logs, heartbeat patterns, strategy fingerprints |
-| ~~`voyage-finance-2`~~ | ~~Financial text embeddings~~ | ~~1024~~ | ~~Retired — replaced by voyage-4-large~~ |
-| `voyage-multimodal-3.5` | Text + image embeddings | 1024 (256/512/2048 configurable) | Chart analysis, visual market patterns |
-| `rerank-2.5` | Reranking ambiguous classification results | N/A | Disambiguating borderline sentiment or category assignments |
+`_fetch_nws_alerts()` in `news/sources.py`:
 
-### ChromaDB
+1. Queries 13 states: `NY, PA, AZ, MN, WA, IL, TX, CA, FL, CO, GA, MA, MI`
+2. For each state, fetches `https://api.weather.gov/alerts/active/area/{state}`
+3. Parallelized with `asyncio.Semaphore(5)` for concurrency control
+4. Deduplicates by alert ID across states
+5. Maps each alert to a `NewsItem` with `source=NewsSource.NWS_ALERTS`
+6. Falls back gracefully on HTTP errors
 
-- Persistent vector store with metadata filtering (ticker, category, date range)
-- No built-in TTL: embeddings persist until manually purged or collection reset
-- Async support: embedding generation and querying run without blocking the hot path
-- Collections: `decisions`, `news`, `market_patterns`, `news_signals`, `market_conditions`, `data_points`
+### Source Priority
 
-### Architecture Constraint
+NWS alerts appear in `_SOURCE_PRIORITY` alongside all other sources:
 
-**SQLite remains the authoritative write store.** ChromaDB is read-optimized index only. Every write goes to SQLite first; ChromaDB is updated asynchronously from the SQLite audit trail. If ChromaDB is unavailable, the system continues operating without semantic search — it is a performance enhancement, not a dependency.
+```python
+_SOURCE_PRIORITY: ClassVar[list[NewsSource]] = [
+    NewsSource.NEWSAPI,      # 1st
+    NewsSource.REDDIT,       # 2nd
+    NewsSource.OPEN_METEO,   # 3rd
+    NewsSource.COINGECKO,    # 4th
+    NewsSource.THESPORTSDB,  # 5th
+    NewsSource.OPENWEATHERMAP,# 6th
+    NewsSource.NWS_ALERTS,   # 7th
+    NewsSource.FRED,         # 8th
+    NewsSource.GOOGLE_TRENDS,# 9th
+]
+```
 
-### Slow-Path Constraint
+## WebSocket Real-Time Market Data
 
-Voyage API calls take ~200–500ms and must never appear on the hot path.
+The `--realtime` flag on `traderbot analyze` enables live orderbook and ticker streaming via WebSocket.
 
-| Path | Mechanism |
+### Architecture
+
+- **`KalshiWebSocket`** (`kalshi/websocket.py`): Async WebSocket client connecting to `wss://api.elections.kalshi.com/trade-api/ws/v2`
+- **Authentication**: RSA-PSS signed headers via `kalshi/signing.py` + TLS cert pinning via `kalshi/pinning.py`
+- **Channels**: `orderbook_delta`, `ticker`, `market_lifecycle_v2`, `fill`, `user_orders`, `market_positions`
+- **30-second timeout**: `asyncio.wait_for(ws.receive(), timeout=30.0)` — graceful disconnect if no data received
+- **Graceful cleanup**: WebSocket connection closed on timeout or error; resources released in `finally` block
+
+### Usage Flow
+
+```
+traderbot analyze <TICKER> --realtime
+    → KalshiWebSocket.connect()
+    → subscribe(channels=["orderbook_delta", "ticker"], market_ticker=<TICKER>)
+    → loop: await ws.receive() with 30s timeout
+        → orderbook_snapshot  → print full book (first only)
+        → orderbook_delta    → print incremental changes
+        → ticker             → print price/volume updates
+    → on timeout: print warning, close connection
+```
+
+## Reconciliation & Settlement
+
+### Position Reconciliation
+
+`db/reconciliation.py` provides three async functions for syncing local DB with Kalshi API:
+
+| Function | Purpose |
 |---|---|
-| Fast path | VADER/TextBlob/keywords (<10ms response) |
-| Slow path | Voyage API calls (~200–500ms), triggered asynchronously after primary response is returned |
+| `reconcile_positions(db_path, kalshi_client)` | Fetch open positions from Kalshi, sync local DB. Close missing positions, update quantities/prices, add new positions. Returns `{updated, closed, added}`. |
+| `reconcile_settlements(db_path, kalshi_client)` | Fetch recent settlements from Kalshi, update local `settlement_result` and `pnl_cents`. Returns `{settled, skipped}`. |
+| `reconcile_all(db_path, kalshi_client)` | Run both reconciliations. Returns `{positions: {...}, settlements: {...}}`. |
 
-Slow-path embeddings are queued and processed in background tasks. The heartbeat loop uses the batch API (33% discount, 12h window) for population-scale pattern analysis.
+### Position DB Schema
+
+`db/positions.py` — `DbPosition` model with `pnl_cents` column:
+
+```python
+class DbPosition(BaseModel):
+    id: int
+    ticker: str
+    quantity: int  # >= 0
+    avg_price: int  # in cents
+    settlement_result: bool | None = None
+    pnl_cents: int = 0
+    updated_at: datetime
+```
+
+Key operations: `upsert()` (preserves existing `pnl_cents`), `update_settlement()`, `mark_closed()`, `get()`, `list_all()`, `delete()`.
+
+### Admin Commands
+
+| Command | Purpose |
+|---|---|
+| `traderbot reconcile` | Run `reconcile_all()` — sync positions and settlements with Kalshi |
+| `traderbot check-settlements` | Run `reconcile_settlements()` — check for recently settled markets |
+
+### Settlement-Monitor Cron
+
+The `settlement-monitor` job (`0 * * * *`, hourly) is registered as an isolated cron session that runs `traderbot check-settlements --json` to detect and process market settlements automatically.
 
 ## Data Flow
 
@@ -366,7 +435,7 @@ Slow-path embeddings are queued and processed in background tasks. The heartbeat
 
 ```
 Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
-   → cli.py parses command
+   → cli/trade parses command
    → risk/limits checks: position size, exposure cap, daily loss, market liquidity
    → risk/sizing validates: does this quantity make sense given edge and bankroll?
    → IF REJECTED → return rejection reason to agent (with audit log entry)
@@ -374,19 +443,6 @@ Agent → "traderbot trade KXBTCD-26MAR31-T55000 yes 10"
    → db/decisions logs: ticker, direction, quantity, signal, risk params, timestamp
    → kalshi/websocket listens for fill notification
    → db/positions updates on fill
-```
-
-### Bootstrap Flow
-
-```
-Agent → "traderbot bootstrap"
-   → cli.py: one-time setup wizard
-   → Check Python version (3.12+)
-   → Verify dependencies installed
-   → Auth check: KALSHI_API_KEY configured
-   → Database schema initialized
-   → Profile creation prompt (interactive)
-   → IF --dry-run → validate only, no writes
 ```
 
 ### Analysis Flow
@@ -404,43 +460,98 @@ Agent → "traderbot analyze KXBTCD-26MAR31-T55000"
    → returns structured analysis to agent
 ```
 
-### Heartbeat Flow
+### Reconciliation Flow
 
 ```
-Cron trigger → "traderbot heartbeat"
-   → simulation/adaptation reviews recent decisions
-   → For each closed market: compare predicted outcome vs. actual
-   → Bayesian update: adjust prior distributions based on evidence
-   → If Recurrence-Count >= 3 for any pattern → promote to .learnings/
-   → Capability gap detection: scan for feature_request patterns
-   → Promote recurring feature_request entries to PENDING_REVIEW status
-   → Check circuit breaker conditions
-   → Query ChromaDB for similar past patterns via `voyage-4-large` embeddings
-   → Update HEARTBEAT_DATA.md
+Cron trigger (hourly) → "traderbot check-settlements --json"
+   → reconcile_settlements() fetches settlements from Kalshi
+   → For each settlement:
+     → Look up local position by ticker
+     → If found: update settlement_result, compute pnl_cents
+     → If not found: log and skip
+   → Returns {settled, skipped} counts
+
+Agent trigger → "traderbot reconcile --json"
+   → reconcile_positions() + reconcile_settlements()
+   → Full sync of both positions and settlements
 ```
+
+## Semantic Layer (Voyage AI + ChromaDB)
+
+The semantic layer provides search-optimized index capabilities. It is NOT the authoritative store — that role belongs to SQLite.
+
+### Role
+
+- Search-optimized index layer for semantic similarity and retrieval
+- Enables pattern matching across decision logs, news, and heartbeat histories
+- ChromaDB stores embeddings; Voyage AI generates them
+
+### Models
+
+| Model | Purpose | Dimensions | Use Case |
+|---|---|---|---|
+| `voyage-4-large` | General-purpose embeddings (MoE) | 256/512/1024/2048 | News articles, market commentary, decision logs, heartbeat patterns, strategy fingerprints |
+| `voyage-multimodal-3.5` | Text + image embeddings | 1024 (256/512/2048 configurable) | Chart analysis, visual market patterns |
+| `rerank-2.5` | Reranking ambiguous classification results | N/A | Disambiguating borderline sentiment or category assignments |
+
+### Architecture Constraint
+
+**SQLite remains the authoritative write store.** ChromaDB is read-optimized index only. Every write goes to SQLite first; ChromaDB is updated asynchronously from the SQLite audit trail. If ChromaDB is unavailable, the system continues operating without semantic search — it is a performance enhancement, not a dependency.
+
+### Slow-Path Constraint
+
+Voyage API calls take ~200–500ms and must never appear on the hot path.
+
+| Path | Mechanism |
+|---|---|
+| Fast path | VADER/TextBlob/keywords (<10ms response) |
+| Slow path | Voyage API calls (~200–500ms), triggered asynchronously after primary response is returned |
 
 ## Data Models
 
 ### MarketCategory Enum
 
-The `MarketCategory` enum is defined in `news/` and used across the analysis, news, and classification layers:
+The `MarketCategory` enum is defined in `kalshi/models.py` and used across the analysis, news, and classification layers:
 
 ```python
-class MarketCategory(str, Enum):
+class MarketCategory(StrEnum):
     ECONOMICS = "economics"
     POLITICS = "politics"
     WEATHER = "weather"
     SPORTS = "sports"
-    CULTURE = "culture"
-    TECHNOLOGY = "technology"
-    SCIENCE = "science"
+    SCIENCE_AND_TECHNOLOGY = "science_and_technology"
+    CRYPTO = "crypto"
+    COMMODITIES = "commodities"
+    COMPANIES = "companies"
+    ELECTIONS = "elections"
+    ENTERTAINMENT = "entertainment"
+    FINANCIALS = "financials"
+    HEALTH = "health"
+    SOCIAL = "social"
+    MENTIONS = "mentions"
 ```
 
-This enum replaces the previous string-based category labels, providing type safety and ensuring consistent category names across the pipeline.
+### NewsSource Enum
+
+```python
+class NewsSource(StrEnum):
+    NEWSAPI = "newsapi"
+    TWITTER = "twitter"
+    REDDIT = "reddit"
+    OPEN_METEO = "open_meteo"
+    COINGECKO = "coingecko"
+    THESPORTSDB = "thesportsdb"
+    OPENWEATHERMAP = "openweathermap"
+    FRED = "fred"
+    GOOGLE_TRENDS = "google_trends"
+    NWS_ALERTS = "nws_alerts"
+```
+
+Sources requiring API keys: `OPENWEATHERMAP`, `FRED`. All others use public endpoints or don't require keys.
 
 ### StrategyProfile Model
 
-Defined in `simulation/profiles.py`:
+Defined in `profiles/injection.py`:
 
 ```python
 class StrategyProfile(BaseModel):
@@ -454,17 +565,6 @@ class StrategyProfile(BaseModel):
 
 The `risk_multiplier` scales risk limits proportionally but NEVER exceeds `HARD_LIMITS`: `effective_limit = risk_multiplier * HARD_LIMITS[key]`.
 
-### AnalysisRegistry
-
-The `AnalysisRegistry` in `news/` provides category-specific analysis dispatch:
-
-```python
-class AnalysisRegistry:
-    def register(category: MarketCategory, analyzer: CategoryAnalyzer) -> None: ...
-    def get(category: MarketCategory) -> CategoryAnalyzer | None: ...
-    def analyze(text: str, source: SourceType) -> CategorySignals: ...
-```
-
 ## Security: Credential Management
 
 ### Dual-Layer Credential Management
@@ -476,48 +576,6 @@ TraderBot uses OS-native keyring as the primary credential store, with `.env` fi
 - **Fallback**: `~/.traderbot/.env` with mode 0600
   - All profiles share the same `.env` file; per-profile isolation requires keyring
 
-- **API keys**: `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY_PEM`, `KALSHI_RATE_LIMIT_RPS`
-- **Profile resolution**: `TRADERBOT_PROFILE_TOKEN` set as an environment variable at agent startup
-
-See [security.md](security.md#credential-storage) for full details on resolution order, keyring namespaces, and per-profile auth.
-
-### `traderbot auth` CLI
-
-The `traderbot auth` command manages credentials via OS keyring with `.env` fallback:
-
-| Subcommand | Description |
-|---|---|
-| `traderbot auth check` | Verify KALSHI_API_KEY is configured |
-| `traderbot auth set-kalshi` | Store Kalshi credentials (keyring or .env) |
-| `traderbot auth list-keys` | List configured credential names (values NOT shown) |
-| `traderbot auth rotate <name>` | Rotate a credential — prompts for new value |
-| `traderbot auth migrate [--service]` | Migrate credentials from .env to keyring |
-| `traderbot auth delete-key <service>` | Delete a stored credential |
-| `traderbot auth setup-master-password` | Set up master password for trade auth |
-| `traderbot auth change-master-password` | Change the master password |
-| `traderbot auth check-master-password` | Verify master password is configured |
-| `traderbot auth clear-session` | Clear session credential cache |
-
-### Credential Resolution
-
-1. **OS keyring** (primary) — macOS Keychain / Windows Credential Locker / Linux Secret Service
-2. **Environment variables** (fallback) — for container deployments
-3. **.env file** (fallback) — `~/.traderbot/.env` when keyring unavailable
-
-All credential fields in Pydantic models use `SecretStr` to prevent accidental logging of secrets.
-
-## Module Dependencies
-
-Internal dependency rules prevent circularity and maintain the enforcement boundary:
-
-- `kalshi/` depends on: nothing (pure I/O)
-- `analysis/` depends on: `kalshi/models` (Pydantic types only)
-- `risk/` depends on: `kalshi/models`, `db/positions` (to check current exposure)
-- `simulation/` depends on: `kalshi/history`, `analysis/`, `risk/`
-- `news/` depends on: `kalshi/models` (for market category mapping), `chromadb` (for storing/querying embeddings), `CategoryAnalyzer` Protocol and `AnalysisRegistry` pattern for category-specific analysis dispatch
-- `db/` depends on: `kalshi/models`
-- `db/vectors` depends on: `kalshi/models` (for metadata), `voyageai` (for embedding generation)
-- `db/vectors` never depends on: `risk/` (search index has no enforcement role)
-- `cli.py` depends on: all modules (orchestration layer)
-
-**Strict rule**: `risk/` never depends on `analysis/` or `news/`. Risk guards must be enforceable without understanding strategy signals. A signal can suggest "buy everything" — the risk module checks exposure regardless of signal quality.
+- **API keys**: Stored in keyring on `traderbot auth set-kalshi`, retrieved at runtime. Never logged, never written to stdout.
+- **Private keys**: RSA-PSS signing keys for Kalshi WebSocket auth, stored in keyring, never on disk in plaintext.
+- **Master password**: Optional keyring encryption key, set via `traderbot auth setup-master-password`.

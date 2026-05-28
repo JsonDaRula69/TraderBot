@@ -258,7 +258,9 @@ check_openclaw() {
     if [[ ! "${install_openclaw:-}" =~ ^[Yy]$ ]]; then
         echo ""
         echo "OpenClaw is required. Install manually:"
-        echo "  npm install -g @openclaw/cli"
+        echo "  npm install -g openclaw"
+        echo "Or use the official installer:"
+        echo "  curl -fsSL https://openclaw.ai/install.sh | bash"
         echo "Then re-run this installer."
         return 1
     fi
@@ -266,10 +268,13 @@ check_openclaw() {
         echo "npm not found. Install Node.js first:"
         echo "  Linux: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs"
         echo "  macOS: brew install node"
+        echo ""
+        echo "Or use OpenClaw's standalone installer (no npm needed):"
+        echo "  curl -fsSL https://openclaw.ai/install.sh | bash"
         return 1
     fi
     echo "  Installing OpenClaw via npm..."
-    npm install -g @openclaw/cli 2>&1 || {
+    npm install -g openclaw 2>&1 || {
         echo "  Failed to install OpenClaw. Install manually and re-run." >&2
         return 1
     }

@@ -12,6 +12,7 @@ This solves the emotional bias problem: the agent can feel "really confident" ab
 
 ```python
 # risk/limits.py — IMMUTABLE without explicit human approval
+# Wrapped in MappingProxyType to prevent runtime modification
 HARD_LIMITS = {
     "max_position_per_market_pct": 0.05,    # Never >5% of portfolio in one market
     "max_daily_loss_pct": 0.02,              # Stop trading if down 2% today
@@ -54,57 +55,227 @@ The agent must identify at least 3% edge (difference between estimated probabili
 
 **Check**: `abs(estimated_prob - market_price) >= 0.03`
 
+## The evaluate_trade() Pipeline
+
+The central risk gate is `evaluate_trade()` in `risk/__init__.py`. It orchestrates the full check sequence and returns either a sized position or a `RiskCheckError`. The companion `evaluate_trade_full()` returns a `TradeResult` preserving both the sized position and the trade direction.
+
+### Pipeline Flow
+
+```
+evaluate_trade(trade_request, portfolio, breaker, profile=None)
+│
+├── 1. Category filter (profile-aware only)
+│   └── If profile.is_category_enabled(market_category) is False → return 0
+│
+├── 2. Circuit breaker state check
+│   ├── Compute daily_loss_pct and drawdown_pct from portfolio
+│   ├── breaker.check(daily_loss_pct, drawdown_pct)
+│   └── If breaker.can_trade is False → return 0
+│
+├── 3. Compute effective limits
+│   ├── With profile: AgentRiskLimits(profile) — min(profile, HARD_LIMITS) for max thresholds
+│   │                   max(profile, HARD_LIMITS) for min thresholds
+│   └── Without profile: dict(HARD_LIMITS) directly
+│
+├── 4. Run all limit checks (run_all_checks)
+│   ├── check_position_limit
+│   ├── check_daily_loss
+│   ├── check_drawdown
+│   ├── check_liquidity
+│   ├── check_max_open_positions
+│   └── If any fail → raise RiskCheckError with details
+│
+├── 5. Kelly sizing (sized_position_for_trade)
+│   ├── Compute odds from price
+│   ├── fractional_kelly(prob, odds, 0.5)
+│   ├── confidence_scaled_size(kelly_fraction, confidence, bankroll)
+│   └── min(sized, max_position_cents)
+│
+└── 6. Apply multipliers
+    ├── × breaker.get_state().position_size_multiplier
+    ├── × profile.risk_multiplier (or 1.0 if no profile)
+    └── Return sized position in cents
+```
+
+### Return Values
+
+| Function | Return Type | Notes |
+|---|---|---|
+| `evaluate_trade()` | `int` | Sized position in cents (0 = rejected) |
+| `evaluate_trade_full()` | `TradeResult` | `sized_position_cents: int` + `direction: "yes"\|"no"` |
+
+On limit check failure, `evaluate_trade_full()` raises `RiskCheckError(ticker, failures)` with details about which check(s) failed and why.
+
 ## Position Sizing
 
-The toolkit provides sizing models, but the **agent chooses** which model and parameters to use (within guard rails).
+### Fractional Kelly Criterion
 
-### Full Kelly Criterion
+Position sizing uses half-Kelly (0.5 × f*) to balance growth against variance:
 
-```
-f* = (bp - q) / b
+```python
+# risk/sizing.py
 
-where:
-  f* = fraction of bankroll to risk
-  b = odds received (net fractional odds)
-  p = probability of winning
-  q = 1 - p
-```
+def kelly_criterion(prob: float, odds: float) -> float:
+    """f* = (b*p - q) / b where q = 1-p"""
+    q = 1 - prob
+    f = (odds * prob - q) / odds
+    return max(0.0, f)
 
-Full Kelly is mathematically optimal for long-run growth but extremely volatile. **Never used directly** — always fractional.
+def fractional_kelly(prob, odds, fraction=0.5) -> float:
+    return max(0.0, kelly_criterion(prob, odds)) * fraction
 
-### Fractional Kelly
+def confidence_scaled_size(kelly_fraction, confidence, bankroll_cents) -> int:
+    return int(kelly_fraction * max(0.0, min(1.0, confidence)) * bankroll_cents)
 
-Default: half-Kelly (0.5 × f*). Reduces variance at the cost of slightly slower growth.
-
-The agent can adjust the Kelly fraction, but the toolkit enforces:
-- Kelly fraction range: [0.1, 0.5] — never below 10% (too timid), never above 50% (too aggressive)
-- Resulting position must still pass per-market limit check
-
-### Confidence Scaling
-
-The agent provides a confidence score (0-1) for each trade signal. This scales the Kelly output:
-
-```
-sized_position = kelly_fraction * confidence * bankroll
+def sized_position_for_trade(prob, odds, confidence, bankroll_cents, max_position_cents) -> int:
+    sized = confidence_scaled_size(fractional_kelly(prob, odds, 0.5), confidence, bankroll_cents)
+    return min(sized, max_position_cents)
 ```
 
-The toolkit caps confidence-scaled positions at the per-market limit regardless of how confident the agent claims to be.
+The sized position is then scaled by the circuit breaker's `position_size_multiplier` and the profile's `risk_multiplier` in `evaluate_trade_full()`.
 
 ## Circuit Breaker Implementation
 
 Three-tier system with increasing severity:
 
-| Level | Trigger | Action | Recovery |
+| Level | Value | Trigger | Effect | Recovery |
 |---|---|---|---|---|
-| **Level 1: Slow** | Daily loss > 1% | Reduce position sizes by 50% | Automatic on next `check()` — resets when loss drops below threshold |
-| **Level 2: Halt** | Daily loss > 2% | No new trades; existing positions held | Automatic on next `check()` — resets when loss drops below threshold |
-| **Level 3: Full Stop** | Drawdown > 10% | All trading halted; `position_size_multiplier=0.0` | **Manual only** — `traderbot resume` or manual `FULL_STOP` flag clear |
+| **NORMAL** | 0 | Daily loss ≤ 1% | Full position sizing | Default state |
+| **SLOW** | 1 | Daily loss > 1% | `position_size_multiplier = 0.5` | Automatic on next `check()` when loss drops below threshold |
+| **HALT** | 2 | Daily loss > 2% | `can_trade = False`, no new trades | Automatic on next `check()` when loss drops below threshold |
+| **FULL_STOP** | 3 | Drawdown > 10% | `position_size_multiplier = 0.0`, `can_trade = False` | **Manual only** — requires `traderbot resume` or manual flag clear |
 
 The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). The state file is protected with an HMAC-SHA256 signature to prevent tampering. Any modification to the state file (e.g., resetting FULL_STOP to NORMAL) will fail verification and raise a `SecurityError`. On restart, the agent verifies the HMAC signature before reading the persisted state.
 
+### Circuit Breaker State Model
+
+```python
+class CircuitBreakerState(BaseModel):
+    level: BreakerLevel = BreakerLevel.NORMAL
+    daily_loss_pct: float = 0.0
+    drawdown_pct: float = 0.0
+    position_size_multiplier: float = 1.0
+    can_trade: bool = True
+    reason: str = ""
+```
+
+## AgentRiskLimits
+
+Per-agent risk limits wrap a `TradingProfile` and enforce `HARD_LIMITS` as an absolute ceiling. For maximum thresholds (position size, daily loss, drawdown, open positions), the effective limit is `min(profile_param, HARD_LIMITS[key])`. For minimum thresholds (liquidity, edge), the effective limit is `max(profile_param, HARD_LIMITS[key])`. The more restrictive value always wins.
+
+```python
+class AgentRiskLimits:
+    def __init__(self, profile: TradingProfile) -> None:
+        self._profile = profile
+
+    @property
+    def max_position_per_market_pct(self) -> float:  # min(profile, HARD_LIMITS)
+    @property
+    def max_daily_loss_pct(self) -> float:            # min(profile, HARD_LIMITS)
+    @property
+    def max_drawdown_pct(self) -> float:              # min(profile, HARD_LIMITS)
+    @property
+    def max_open_positions(self) -> int:                # min(profile, HARD_LIMITS)
+    @property
+    def min_liquidity_threshold(self) -> int:          # max(profile, HARD_LIMITS)
+    @property
+    def min_edge_pct(self) -> float:                   # max(profile, HARD_LIMITS)
+```
+
+The ceiling enforcement is the core security guarantee: an agent cannot exceed `HARD_LIMITS` by setting aggressive profile parameters.
+
+## WAL Protocol (Write-Ahead Log)
+
+The `wal.py` module implements a crash-safe write-ahead log for trade execution. Every trade intent is written to `SESSION-STATE.md` **before** execution, so the system can recover from crashes.
+
+### WalStatus Enum
+
+```python
+class WalStatus(StrEnum):
+    PENDING = "PENDING"       # Intent written, awaiting execution
+    COMPLETED = "COMPLETED"   # Position confirmed on exchange
+    REJECTED = "REJECTED"     # Risk check or exchange rejected
+    EXECUTED = "EXECUTED"      # Order placed on exchange (awaiting fill)
+    CANCELLED = "CANCELLED"    # Intent cancelled before execution
+    EXPIRED = "EXPIRED"        # Intent timed out before execution
+```
+
+### WalAction Enum
+
+```python
+class WalAction(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+```
+
+### WalEntry Model
+
+```python
+class WalEntry(BaseModel):
+    intent_id: str                          # WAL-XXXXXXXX format
+    timestamp: datetime                     # UTC ISO format
+    action: WalAction                       # BUY or SELL
+    ticker: str                             # Market ticker
+    direction: Literal["yes", "no"]         # Contract direction
+    quantity: int (>= 1)                    # Number of contracts
+    price_cents: int (>= 1)                # Price in cents
+    reason: str                             # Trade rationale
+    signal: str = ""                         # Signal source
+    risk_checks: str = ""                    # Risk check summary
+    confidence: float (0.0-1.0) = 0.5      # Confidence score
+    status: WalStatus = WalStatus.PENDING   # Current status
+```
+
+### Core Operations
+
+| Operation | Function | Description |
+|---|---|---|
+| Write intent | `write_intent()` | Creates a PENDING entry in SESSION-STATE.md with exclusive file lock |
+| Update status | `update_status()` | Transitions entry status (PENDING → EXECUTED/REJECTED/CANCELLED) |
+| Scan pending | `scan_pending()` | Recovery: finds all PENDING entries after a crash |
+| Reconcile | `reconcile()` | Matches PENDING intents against actual positions → COMPLETED or CANCELLED |
+
+The WAL uses `portalocker` for exclusive/shared file locking to prevent concurrent write conflicts. If another writer holds the lock, `ConcurrentWriteError` is raised.
+
+### Crash Recovery Flow
+
+1. On startup, call `scan_pending(SESSION-STATE.md)` to find all PENDING entries
+2. For each pending entry, check if the corresponding position exists on the exchange
+3. If position matches intent → `update_status(COMPLETED)`
+4. If position doesn't match → `update_status(CANCELLED)`
+5. Resume normal operations
+
+## Reconciliation Module
+
+The `db/reconciliation.py` module syncs local position data with the Kalshi API:
+
+### `reconcile_positions(db_path, kalshi_client)`
+
+Syncs open positions between local DB and Kalshi:
+- **Position not on Kalshi** → mark as closed (delete from local DB)
+- **Different fill data** → update quantity and avg_price
+- **New position on Kalshi** → insert into local DB
+- **Fill data** → update avg_price with weighted fill prices
+
+Returns: `{"updated": int, "closed": int, "added": int}`
+
+### `reconcile_settlements(db_path, kalshi_client)`
+
+Syncs settlement data from Kalshi:
+- For each settlement, update local position's `settlement_result` and `pnl_cents`
+- Skips tickers not in local DB
+
+Returns: `{"settled": int, "skipped": int}`
+
+### `reconcile_all(db_path, kalshi_client)`
+
+Runs both position and settlement reconciliation:
+
+Returns: `{"positions": {...}, "settlements": {...}}`
+
 ## Audit Trail
 
-Every trade decision — whether executed or rejected — is logged to `db/decisions`:
+Every trade decision — whether executed or rejected — is logged to `db/decisions` as append-only JSONL:
 
 ```python
 class Decision(BaseModel):
@@ -122,7 +293,7 @@ class Decision(BaseModel):
     actual_result: bool | None         # true/false for binary market settlement
 ```
 
-This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, driving the self-learning mechanism.
+The `AuditLogger` writes one JSONL file per day (`YYYY-MM-DD.jsonl`) and supports filtering by ticker, date range, and outcome.
 
 ## Anti-Bias Design Decisions
 
@@ -135,76 +306,6 @@ This enables the Heartbeat Loop to compare predicted edge vs. actual outcomes, d
 | **Gambler's fallacy** | Each market evaluated independently; no "due for a win" logic |
 | **Survivorship bias** | Audit trail includes rejected trades, not just executed ones |
 | **Anchoring** | Odds model computes fresh probability each cycle; doesn't anchor to prior estimate |
-
-## AgentRiskLimits
-
-Per-agent risk limits wrap a `TradingProfile` and enforce `HARD_LIMITS` as an absolute ceiling. For maximum thresholds (position size, daily loss, drawdown, open positions), the effective limit is `min(profile_param, HARD_LIMITS[key])`. For minimum thresholds (liquidity, edge), the effective limit is `max(profile_param, HARD_LIMITS[key])`. The more restrictive value always wins.
-
-```python
-class AgentRiskLimits:
-    def __init__(self, profile: TradingProfile) -> None:
-        self._profile = profile
-
-    @property
-    def max_position_per_market_pct(self) -> float: ...
-    @property
-    def max_daily_loss_pct(self) -> float: ...
-    @property
-    def max_drawdown_pct(self) -> float: ...
-    @property
-    def max_open_positions(self) -> int: ...
-    @property
-    def min_liquidity_threshold(self) -> int: ...
-    @property
-    def min_edge_pct(self) -> float: ...
-```
-
-The ceiling enforcement is the core security guarantee: an agent cannot exceed `HARD_LIMITS` by setting aggressive profile parameters.
-
-## Profile-Aware evaluate_trade()
-
-The central risk gate `evaluate_trade()` accepts an optional `profile: TradingProfile` parameter. When provided, two additional checks are applied before the standard risk checks:
-
-### Category Filtering
-
-```python
-if profile is not None:
-    if trade_request.market_category is not None:
-        if not profile.is_category_enabled(trade_request.market_category):
-            return 0  # Rejected — category not enabled
-```
-
-If the profile's `enabled_categories` list is non-empty and the trade's market category is not in it, the trade is rejected immediately.
-
-### Risk Multiplier and Profile Limits
-
-```python
-if profile is not None:
-    agent_limits = AgentRiskLimits(profile)
-    max_position_pct = agent_limits.max_position_per_market_pct
-    risk_multiplier = profile.risk_multiplier
-else:
-    max_position_pct = float(HARD_LIMITS["max_position_per_market_pct"])
-    risk_multiplier = 1.0
-```
-
-When a profile is active, the effective position limit is the more restrictive of the profile limit and `HARD_LIMITS`. The `risk_multiplier` scales the final position size downward.
-
-### Complete Gate Ordering
-
-```
-evaluate_trade(trade_request, portfolio, breaker, profile=None)
-├── Category filter (profile-aware)
-│   └── Reject if category not in enabled_categories
-├── Circuit breaker check
-│   └── Reject if breaker.can_trade == False
-├── Limit checks (run_all_checks)
-│   └── Reject if any check fails
-├── Profile limits (AgentRiskLimits) — applied after checks
-│   └── Position cap = min(profile_limit, HARD_LIMITS)
-└── Position sizing with risk_multiplier
-    └── final_size = raw_size * breaker.multiplier * profile.risk_multiplier
-```
 
 ## Human Override
 
