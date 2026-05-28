@@ -49,6 +49,47 @@ The `traderbot cron setup` command registers legacy-format loops as isolated cro
 └───────────────┬───────────────────────────────────────────────┘
                 │ calls via exec
                 ▼
+
+## Docker Sandbox for Category Agents
+
+Category agents run inside OpenClaw's Docker-based sandbox for filesystem isolation. The sysadmin agent (`main`) is NOT sandboxed.
+
+### Sandbox Configuration
+
+Configured at `agents.defaults.sandbox` via `openclaw config set`:
+
+| Setting | Value | Effect |
+|---|---|---|
+| `mode` | `non-main` | Only non-sysadmin agents are sandboxed |
+| `backend` | `docker` | Docker container isolation |
+| `scope` | `agent` | Per-agent sandbox lifecycle |
+| `workspaceAccess` | `rw` | Read-write workspace inside container |
+| `docker.image` | `traderbot-sandbox:bookworm-slim` | Custom image with Python 3.12 |
+| `docker.network` | `bridge` | Network access for Kalshi/LLM APIs |
+| `docker.readOnlyRoot` | `true` | Read-only root filesystem |
+| `docker.capDrop` | `["ALL"]` | All Linux capabilities dropped |
+| `docker.memory` | `1g` | 1GB memory limit per container |
+
+Source is bind-mounted read-only at `/traderbot`. Agent data at `~/.traderbot/` is bind-mounted read-write.
+
+### Building the Image
+
+```bash
+bash install/docker/build-sandbox.sh
+```
+
+Uses `install/docker/Dockerfile` — `debian:bookworm-slim` with Python 3.12, git, curl, jq.
+
+### Installer Flow
+
+During install, the user is prompted:
+
+```
+Build sandbox Docker image and configure OpenClaw? (y/n):
+```
+
+Selecting `y` builds the image and runs `openclaw config set` for all sandbox settings. Selecting `n` logs a manual setup reference.
+
 ┌───────────────────────────────────────────────────────────────┐
 │  cli/ — CLI package (9 modules + 2 infrastructure)            │
 │                                                                │
