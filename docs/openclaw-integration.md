@@ -8,18 +8,23 @@ The TraderBot installer (`install/traderbot-installer.sh`) manages the full Open
 
 ### Phase 1 — OpenClaw Bootstrap
 1. **Detect** if `openclaw` CLI is installed
-2. If missing: prompt to install via `npm install -g @openclaw/cli`
+2. If missing: prompt to install via `npm install -g @openclaw/cli`; rehashes PATH if npm global bin is not on PATH
 3. **Detect** if gateway is running
-4. If not running: prompt to install service (`openclaw gateway install`) and start (`openclaw gateway start`)
-5. Wait for gateway readiness (polls up to 20s)
+4. If not running: prompt to install service (`openclaw gateway install` with error surfacing) and start (`openclaw gateway start`)
+5. Wait for gateway readiness (polls up to 30s)
 
-### Phase 2 — Agent Creation + Hooks
+### Phase 2 — Agent Creation + Hooks + Validation
 1. **Create default agent**: `openclaw agents add main`
 2. **Enable bundled hooks**:
    - `openclaw hooks enable command-logger` — logs every command to `~/.openclaw/logs/commands.log`
    - `openclaw hooks enable session-memory` — auto-saves last 15 messages to `workspace/memory/YYYY-MM-DD-HHMM.md`
    - `openclaw hooks enable compaction-notifier` — shows "compacting history..." during session compaction
    - `openclaw hooks enable agent-bootstrap` — our custom hook (see below)
+3. **Run repair**: `openclaw doctor --fix` — fixes stale config, session keys, migration issues
+4. **Validate config**: `openclaw config validate` — catches malformed config before runtime fails
+5. **Optional baseline setup**: Prompt to run `openclaw setup --workspace ~/.openclaw/workspace` — writes `gateway.mode=local`, initializes defaults
+6. **Optional LLM provider**: Prompt to run `openclaw configure --section models` — launches OpenClaw's interactive wizard for Ollama/OpenAI setup and model allowlist
+7. Display next-step hint for `openclaw channels add --guided` and `openclaw doctor`
 
 ### Phase 3 — Profile Assignment
 During the interactive config flow, when the user assigns a profile to an agent:

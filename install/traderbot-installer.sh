@@ -1881,16 +1881,35 @@ main() {
         openclaw config validate 2>&1 | head -5 || \
             echo "  Warning: config validation found issues. Run 'openclaw config validate' to inspect."
 
+        # Optional baseline setup
+        local do_setup=""
+        read -r -p "Run OpenClaw baseline config setup? (writes config defaults, no prompts) (y/n): " do_setup
+        if [[ "${do_setup:-}" =~ ^[Yy]$ ]]; then
+            echo "  Running openclaw setup..."
+            openclaw setup --workspace ~/.openclaw/workspace 2>&1 || \
+                echo "  Warning: openclaw setup had issues. Run manually: openclaw setup; openclaw onboard"
+        fi
+
+        # Optional LLM provider configuration
+        local do_llm=""
+        read -r -p "Configure an LLM provider now? (required for agents to function) (y/n): " do_llm
+        if [[ "${do_llm:-}" =~ ^[Yy]$ ]]; then
+            echo "  Launching LLM provider configuration wizard..."
+            echo "  (Follow prompts to set up Ollama, OpenAI, or another provider)"
+            openclaw configure --section models 2>&1 || \
+                echo "  Warning: LLM config interrupted. Run later: openclaw configure --section models"
+        fi
+
         echo "  OpenClaw setup complete."
         echo ""
         echo "┌─────────────────────────────────────────────────────────┐"
-        echo "│  Next Step: LLM Provider Configuration                  │"
+        echo "│  Next Steps (optional):                                 │"
         echo "│                                                         │"
-        echo "│  Configure an LLM provider so agents can run:           │"
-        echo "│    openclaw configure --section models                  │"
-        echo "│                                                         │"
-        echo "│  Or add a channel so you can message agents directly:   │"
+        echo "│  Add a chat channel to message agents directly:         │"
         echo "│    openclaw channels add --guided                       │"
+        echo "│                                                         │"
+        echo "│  Check runtime health:                                  │"
+        echo "│    openclaw doctor                                       │"
         echo "└─────────────────────────────────────────────────────────┘"
     else
         echo "  OpenClaw gateway not available. Agent creation and hooks will be manual."
