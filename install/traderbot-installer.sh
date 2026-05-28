@@ -1815,22 +1815,52 @@ interactive_config_flow() {
         local do_bind=""
         read -r -p "  Bind '$cat_name' to a chat channel? (y/n): " do_bind
         if [[ "${do_bind:-}" =~ ^[Yy]$ ]]; then
-            echo "    Select channel:"
-            echo "    1) Telegram"
-            echo "    2) Discord"
-            echo "    3) Slack"
-            echo "    4) WhatsApp"
-            echo "    5) Matrix"
-            local bind_choice=""
-            read -r -p "    Enter number [1]: " bind_choice
-            local bind_channel=""
-            case "${bind_choice:-1}" in
-                2) bind_channel="discord" ;;
-                3) bind_channel="slack" ;;
-                4) bind_channel="whatsapp" ;;
-                5) bind_channel="matrix" ;;
-                *) bind_channel="telegram" ;;
-            esac
+            local -a CHAN_KEYS=("telegram" "discord" "slack" "whatsapp" "matrix")
+            local -a CHAN_LABELS=("Telegram" "Discord" "Slack" "WhatsApp" "Matrix")
+            local chan_cur=0
+            local old_tty2
+            old_tty2=$(stty -g 2>/dev/null || true)
+            local prev_exit_trap2
+            [[ -n "$old_tty2" ]] && stty -echo -icanon 2>/dev/null
+            _render_chan_menu() {
+                local ci=0
+                printf "\r\033[J"
+                for clabel in "${CHAN_LABELS[@]}"; do
+                    if [[ "$ci" -eq "$chan_cur" ]]; then
+                        printf "\033[7m  %s\033[0m\n" "$clabel"
+                    else
+                        printf "  %s\n" "$clabel"
+                    fi
+                    ((ci++)) || true
+                done
+                printf "\n  ↑/↓: navigate  ENTER: confirm\n"
+            }
+            _clear_chan_menu() {
+                local ccount=$(( ${#CHAN_LABELS[@]} + 2 ))
+                printf "\r\033[%dA" "$ccount"
+            }
+            _render_chan_menu
+            while true; do
+                local ckey=""
+                IFS= read -rn1 ckey
+                if [[ "$ckey" == $'\x1b' ]]; then
+                    IFS= read -rn1 -t 0.1 ckey
+                    if [[ "$ckey" == '[' ]]; then
+                        IFS= read -rn1 ckey
+                        if [[ "$ckey" == 'A' ]] && ((chan_cur > 0)); then
+                            ((chan_cur--)) || true
+                            _clear_chan_menu; _render_chan_menu
+                        elif [[ "$ckey" == 'B' ]] && ((chan_cur < ${#CHAN_KEYS[@]} - 1)); then
+                            ((chan_cur++)) || true
+                            _clear_chan_menu; _render_chan_menu
+                        fi
+                    fi
+                elif [[ -z "$ckey" || "$ckey" == $'\n' || "$ckey" == $'\r' ]]; then
+                    break
+                fi
+            done
+            [[ -n "$old_tty2" ]] && stty "$old_tty2" 2>/dev/null
+            local bind_channel="${CHAN_KEYS[$chan_cur]}"
             echo "    Binding $cat_name to $bind_channel..."
             openclaw agents bind --agent "$cat_name" --bind "${bind_channel}:${cat_name}" 2>&1 || \
                 echo "    Warning: bind failed. Run later: openclaw agents bind --agent $cat_name --bind ${bind_channel}:<id>"
