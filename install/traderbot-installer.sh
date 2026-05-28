@@ -28,6 +28,13 @@ _log_info()  { _log "INFO" "$1"; }
 _log_warn()  { _log "WARN" "$1"; }
 _log_error() { _log "ERROR" "$1"; }
 
+# Drain leftover stdin so subsequent read -r prompts don't consume stale newlines
+# from piped OpenClaw commands (e.g. config validate | head)
+_flush_stdin() {
+    local _fs_extra=""
+    read -rt 0.01 _fs_extra 2>/dev/null || true
+}
+
 _log_info "Installer started. Log: $TRADERBOT_INSTALL_LOG"
 
 cleanup() {
@@ -1949,6 +1956,7 @@ main() {
             echo "  Warning: config validation found issues. Run 'openclaw config validate' to inspect."
 
         # Optional LLM provider configuration
+        _flush_stdin
         local do_llm=""
         read -r -p "Configure an LLM provider now? (required for agents to function) (y/n): " do_llm
         if [[ "${do_llm:-}" =~ ^[Yy]$ ]]; then
@@ -1959,6 +1967,7 @@ main() {
         fi
 
         # Optional runtime health check
+        _flush_stdin
         local do_health=""
         read -r -p "Run runtime health check? (verifies LLM endpoint, auth, plugins) (y/n): " do_health
         if [[ "${do_health:-}" =~ ^[Yy]$ ]]; then
