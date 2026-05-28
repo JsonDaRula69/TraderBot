@@ -120,20 +120,12 @@ def update_configure(
 
 @app.command()
 def uninstall(
-    remove_data: Annotated[
-        bool,
-        typer.Option("--remove-data", help="Remove all profiles, databases, and user data (~/.traderbot/)"),
-    ] = False,
-    remove_repo: Annotated[
-        bool,
-        typer.Option("--remove-repo", help="Remove the TraderBot repository (~/traderbot/)"),
-    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Output as JSON for machine consumption"),
     ] = False,
 ) -> None:
-    """Uninstall TraderBot — remove services, data, and optionally the repository."""
+    """Uninstall TraderBot — interactively prompts for each removal category."""
     import platform
     import subprocess as _sp
 
@@ -144,6 +136,25 @@ def uninstall(
     data_dir = get_data_dir()
     repo_dir = Path.home() / "traderbot"
     removed: list[str] = []
+
+    remove_data = False
+    remove_repo = False
+
+    # Always prompt for data removal
+    if json_output:
+        remove_data = data_dir.exists()
+        remove_repo = repo_dir.exists()
+    else:
+        if data_dir.exists():
+            remove_data = typer.confirm("  Remove user data and credentials (~/.traderbot)?", default=False)
+        else:
+            console.print("[dim]No user data found.[/dim]")
+        console.print()
+        if repo_dir.exists():
+            remove_repo = typer.confirm("  Remove repository (~/traderbot)?", default=False)
+            console.print()
+        else:
+            console.print("[dim]No repository found.[/dim]")
 
     # Step 1: Stop and remove system services
     if json_output:
@@ -328,6 +339,17 @@ def uninstall(
             removed.append(str(repo_dir))
             if not json_output:
                 console.print(f"  Removed repo: {repo_dir}")
+
+    # Always clean up install logs — disposable, accumulate across installs
+    log_dir = data_dir / "logs"
+    if log_dir.exists():
+        if not json_output:
+            console.print("[bold]Cleaning up install logs[/bold]")
+        for f in log_dir.glob("install-*"):
+            f.unlink()
+            if not json_output:
+                console.print(f"  Removed log: {f.name}")
+            removed.append(str(f))
 
     # Clean up tmp
     tmp_cleaned = []
