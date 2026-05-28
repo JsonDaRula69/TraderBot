@@ -204,6 +204,8 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
         Path.home() / ".openclaw" / "workspace" / agent_id,
         Path.home() / ".openclaw" / "agents" / agent_id,
         Path.cwd() / ".openclaw" / "workspace" / agent_id,
+        # Default agent "main" uses the root workspace directly
+        Path.home() / ".openclaw" / "workspace",
     ]
     for candidate in candidates:
         if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
