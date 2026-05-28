@@ -304,6 +304,9 @@ check_openclaw() {
         echo "  Failed to install OpenClaw. Install manually and re-run." >&2
         return 1
     }
+    # Approve postinstall scripts for bundled plugins (Telegram, Discord, etc.)
+    echo "  Approving OpenClaw plugin scripts..."
+    npm approve-scripts openclaw 2>/dev/null || true
     # Rehash PATH — npm global bin may not be in current shell's PATH
     if ! command -v openclaw &>/dev/null; then
         hash -r 2>/dev/null || true
@@ -1874,6 +1877,10 @@ main() {
 
     echo "Setting up OpenClaw gateway..."
     if ensure_gateway_running; then
+        echo "  Running OpenClaw baseline setup (config defaults, workspace)..."
+        openclaw setup --workspace ~/.openclaw/workspace 2>&1 || \
+            echo "  Warning: openclaw setup had issues. Run manually: openclaw setup; openclaw onboard"
+
         echo "  Creating default agents..."
         create_openclaw_agent "main" || true
 
@@ -1886,15 +1893,6 @@ main() {
         echo "  Validating OpenClaw configuration..."
         openclaw config validate 2>&1 | head -5 || \
             echo "  Warning: config validation found issues. Run 'openclaw config validate' to inspect."
-
-        # Optional baseline setup
-        local do_setup=""
-        read -r -p "Run OpenClaw baseline config setup? (writes config defaults, no prompts) (y/n): " do_setup
-        if [[ "${do_setup:-}" =~ ^[Yy]$ ]]; then
-            echo "  Running openclaw setup..."
-            openclaw setup --workspace ~/.openclaw/workspace 2>&1 || \
-                echo "  Warning: openclaw setup had issues. Run manually: openclaw setup; openclaw onboard"
-        fi
 
         # Optional LLM provider configuration
         local do_llm=""
