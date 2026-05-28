@@ -166,7 +166,6 @@ def uninstall(
                     _sp.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
                     _sp.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                     removed_services.append(str(svc))
-                # Clean up orphaned wants symlinks
                 for wants_dir in [
                     Path("/etc/systemd/system/multi-user.target.wants"),
                     Path("/etc/systemd/system/timers.target.wants"),
@@ -176,6 +175,15 @@ def uninstall(
                             _sp.run([_SUDO, "rm", "-f", str(link)], capture_output=True)
                             removed_services.append(str(link))
                 _sp.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
+            # User-level systemd services (OpenClaw gateway)
+            user_svc_dir = Path.home() / ".config" / "systemd" / "user"
+            if user_svc_dir.exists():
+                for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
+                    unit = svc.name
+                    _sp.run([_SYSTEMCTL, "--user", "stop", unit], capture_output=True)
+                    _sp.run([_SYSTEMCTL, "--user", "disable", unit], capture_output=True)
+                    _sp.run(["rm", "-f", str(svc)], capture_output=True)
+                    removed_services.append(str(svc))
         removed.extend(removed_services)
     else:
         removed_services: list[str] = []
@@ -205,7 +213,6 @@ def uninstall(
                         _sp.run([_SUDO, "rm", "-f", str(svc)], capture_output=True)
                         console.print(f"  Removed: {unit}")
                         removed_services.append(str(svc))
-                # Clean up orphaned wants symlinks
                 for wants_dir in [
                     Path("/etc/systemd/system/multi-user.target.wants"),
                     Path("/etc/systemd/system/timers.target.wants"),
@@ -216,9 +223,43 @@ def uninstall(
                             console.print(f"  Removed symlink: {link.name}")
                             removed_services.append(str(link))
                 _sp.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True)
+            # User-level systemd services (OpenClaw gateway)
+            user_svc_dir = Path.home() / ".config" / "systemd" / "user"
+            if user_svc_dir.exists():
+                user_units = list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*"))
+                if user_units:
+                    console.print("[bold]Step 1c: Remove user-level systemd services[/bold]")
+                    for svc in user_units:
+                        unit = svc.name
+                        _sp.run([_SYSTEMCTL, "--user", "stop", unit], capture_output=True)
+                        _sp.run([_SYSTEMCTL, "--user", "disable", unit], capture_output=True)
+                        _sp.run(["rm", "-f", str(svc)], capture_output=True)
+                        console.print(f"  Removed user service: {unit}")
+                        removed_services.append(str(svc))
         removed.extend(removed_services)
 
-    # Step 1b: Remove OpenClaw cron jobs
+    # Step 1c: Remove user-level systemd services (OpenClaw gateway, TraderBot agent)
+    if platform.system() == "Linux":
+        user_svc_dir = Path.home() / ".config" / "systemd" / "user"
+        if user_svc_dir.exists():
+            if json_output:
+                for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
+                    _sp.run([_SYSTEMCTL, "--user", "stop", svc.name], capture_output=True)
+                    _sp.run([_SYSTEMCTL, "--user", "disable", svc.name], capture_output=True)
+                    _sp.run(["rm", "-f", str(svc)], capture_output=True)
+                    removed.append(str(svc))
+            else:
+                user_units = list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*"))
+                if user_units:
+                    console.print("[bold]Step 1c: Remove user-level systemd services[/bold]")
+                    for svc in user_units:
+                        _sp.run([_SYSTEMCTL, "--user", "stop", svc.name], capture_output=True)
+                        _sp.run([_SYSTEMCTL, "--user", "disable", svc.name], capture_output=True)
+                        _sp.run(["rm", "-f", str(svc)], capture_output=True)
+                        console.print(f"  Removed user service: {svc.name}")
+                        removed.append(str(svc))
+
+    # Step 1d: Remove OpenClaw cron jobs
     if not json_output:
         console.print("[bold]Step 1b: Remove OpenClaw cron jobs[/bold]")
     cron_removed = []

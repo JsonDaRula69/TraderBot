@@ -374,7 +374,7 @@ create_openclaw_agent() {
         return 0
     fi
     echo "  Creating OpenClaw agent '$name'..."
-    openclaw agents add "$name" 2>&1 || {
+    openclaw agents add "$name" --non-interactive 2>&1 || {
         echo "  Warning: Failed to create agent '$name'. Create manually: openclaw agents add $name" >&2
         return 1
     }
@@ -1878,7 +1878,7 @@ main() {
         create_openclaw_agent "main" || true
 
         echo "  Enabling bundled OpenClaw hooks..."
-        enable_openclaw_hooks "command-logger" "session-memory" "compaction-notifier" "agent-bootstrap" || true
+        enable_openclaw_hooks "command-logger" "session-memory" || true
 
         echo "  Running OpenClaw doctor --fix..."
         openclaw doctor --fix 2>/dev/null || true
@@ -1910,9 +1910,9 @@ main() {
         local do_channel=""
         read -r -p "Add a chat channel to message agents directly? (Telegram/Discord/etc) (y/n): " do_channel
         if [[ "${do_channel:-}" =~ ^[Yy]$ ]]; then
-            echo "  Launching channel setup wizard..."
-            openclaw channels add --guided 2>&1 || \
-                echo "  Warning: channel setup interrupted. Run later: openclaw channels add --guided"
+        echo "  Launching channel setup wizard..."
+        openclaw channels add 2>&1 || \
+            echo "  Warning: channel setup interrupted. Run later: openclaw channels add"
         fi
 
         # Optional runtime health check
