@@ -273,6 +273,16 @@ check_openclaw() {
         echo "  Failed to install OpenClaw. Install manually and re-run." >&2
         return 1
     }
+    # Rehash PATH — npm global bin may not be in current shell's PATH
+    if ! command -v openclaw &>/dev/null; then
+        hash -r 2>/dev/null || true
+        local npm_prefix
+        npm_prefix="$(npm config get prefix 2>/dev/null || echo "$HOME/.npm-global")"
+        if [[ -x "$npm_prefix/bin/openclaw" ]]; then
+            export PATH="$npm_prefix/bin:$PATH"
+            echo "  Added $npm_prefix/bin to PATH."
+        fi
+    fi
     echo "  OpenClaw installed successfully."
     return 0
 }
@@ -291,28 +301,36 @@ ensure_gateway_running() {
         return 1
     fi
     echo "  Installing OpenClaw gateway service..."
-    openclaw gateway install 2>&1 || true
+    local gw_install_out
+    gw_install_out=$(openclaw gateway install 2>&1) || {
+        echo "  Gateway install failed:" >&2
+        echo "  $gw_install_out" >&2
+        echo "  Fix the issue then rerun." >&2
+        return 1
+    }
+    echo "  $gw_install_out"
     echo "  Starting OpenClaw gateway..."
     openclaw gateway start 2>&1 || {
         echo "  Failed to start gateway. Start manually: openclaw gateway start" >&2
         return 1
     }
     # Wait for gateway to be ready
-    for i in $(seq 1 10); do
+    for i in $(seq 1 15); do
         if openclaw gateway status &>/dev/null; then
             echo "  Gateway is ready."
             return 0
         fi
         sleep 2
     done
-    echo "  Gateway start timed out. Check: openclaw gateway status" >&2
+    echo "  Gateway start timed out after 30s. Check: openclaw gateway status" >&2
     return 1
 }
 
 agent_exists() {
     local name="$1"
-    openclaw agents list 2>/dev/null | grep -qP "^\s*${name}\s" && return 0
-    openclaw agents list 2>/dev/null | grep -qP "${name}" && return 0
+    local list_out
+    list_out=$(openclaw agents list --json 2>/dev/null) || return 1
+    echo "$list_out" | grep -q "\"id\":\"${name}\"" && return 0
     return 1
 }
 
@@ -1840,6 +1858,10 @@ main() {
 
         echo "  Enabling bundled OpenClaw hooks..."
         enable_openclaw_hooks "command-logger" "session-memory" "compaction-notifier" "agent-bootstrap" || true
+
+        echo "  Running OpenClaw doctor --fix..."
+        openclaw doctor --fix 2>/dev/null || true
+
         echo "  OpenClaw setup complete."
     else
         echo "  OpenClaw gateway not available. Agent creation and hooks will be manual."
