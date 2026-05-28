@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime  # noqa: TC003 — needed at runtime by Pydantic
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -9,6 +11,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.kalshi.models import MarketCategory
+
+logger = logging.getLogger(__name__)
 
 
 class NewsSource(StrEnum):
@@ -50,6 +54,9 @@ class NewsItem(BaseModel):
     category: NewsCategory | None = None
     data_freshness: Literal["realtime", "delayed_24h", "unknown"] = "unknown"
     content_truncated: bool = False
+
+    def model_post_init(self, __context) -> None:
+        logger.debug("NewsItem: source=%s category=%s headline=%.50s", self.source.value, self.category.value if self.category else 'None', self.title)
 
 
 class SentimentResult(BaseModel):

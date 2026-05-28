@@ -1,11 +1,15 @@
 """Pydantic v2 data models for Kalshi API responses and internal domain objects."""
 
+import logging
+
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 class MarketCategory(StrEnum):
@@ -290,6 +294,9 @@ class TradeRequest(BaseModel):
     @property
     def price_dollars(self) -> float:
         return self.price_cents / 100.0
+
+    def model_post_init(self, __context) -> None:
+        logger.debug("TradeRequest: ticker=%s dir=%s qty=%s price=%s", self.ticker, self.direction, self.quantity, self.price_cents)
 
 
 

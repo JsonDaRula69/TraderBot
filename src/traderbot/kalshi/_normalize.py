@@ -1,9 +1,13 @@
 """Internal normalization helpers shared across kalshi modules."""
 
+import logging
+
 from datetime import UTC, datetime
 from typing import Any
 
 from traderbot.kalshi.models import Market, MarketCategory, OrderBookLevel, Trade
+
+logger = logging.getLogger(__name__)
 
 
 def _to_cents(value: str | int | float) -> int:
@@ -89,6 +93,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     else:
         status_val = raw_status
 
+    logger.debug("Normalized market: %s -> status=%s ticker=%s", raw.get("ticker"), status_val, raw.get("ticker"))
     return Market(
         ticker=raw["ticker"],
         question=question,

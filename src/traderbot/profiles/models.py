@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from traderbot.kalshi.models import MarketCategory
+
+logger = logging.getLogger(__name__)
 
 
 class TradingProfile(BaseModel):
@@ -29,6 +33,10 @@ class TradingProfile(BaseModel):
     max_open_positions: Annotated[int, Field(gt=0)]
     min_liquidity_threshold: Annotated[int, Field(gt=0)]
     min_edge_pct: Annotated[float, Field(gt=0)]
+
+    def model_post_init(self, __context) -> None:
+        logger.debug("Profile %s: mode=%s risk_mult=%.2f", self.name, self.mode, self.risk_multiplier)
+
     @computed_field
     @property
     def paper_mode(self) -> bool:

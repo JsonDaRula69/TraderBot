@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import TYPE_CHECKING
 
 from traderbot.risk.limits import HARD_LIMITS

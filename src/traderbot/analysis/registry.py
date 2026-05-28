@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import Annotated, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict, Field
 

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.models import TradingProfile
+
+logger = logging.getLogger(__name__)
 
 
 def create_sysadmin_profile() -> TradingProfile:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from typing import TYPE_CHECKING
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
     from traderbot.news.embeddings import VoyageClient
 
 from traderbot.news.models import ClassifiedNews, NewsCategory, NewsItem
+
+logger = logging.getLogger(__name__)
 
 # ── Confidence thresholds ───────────────────────────────────────────────
 _CONFIDENCE_HIGH = 0.8
@@ -202,6 +205,7 @@ class NewsClassifier:
             category = next(iter(matched))
             # More keyword hits → higher confidence (capped at 0.95)
             confidence = min(0.82 + 0.04 * (hits - 1), 0.95)
+            logger.debug("Keyword classify: text=%.50s -> %s (confidence=%.2f, hits=%d)", text, category.value, confidence, hits)
             return ClassificationResult(
                 category=category,
                 confidence=confidence,
@@ -366,6 +370,7 @@ class NewsClassifier:
             )
 
         # No matches at all — default to Economics with very low confidence
+        logger.info("Default classification: no matches for %.50s -> ECONOMICS", text)
         default_cat = NewsCategory.ECONOMICS
         if category_filter is not None and default_cat not in category_filter:
             return None

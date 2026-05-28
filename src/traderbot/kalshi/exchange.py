@@ -1,10 +1,12 @@
-"""Exchange service — check if the Kalshi exchange is open for trading."""
-
 from __future__ import annotations
+
+import logging
 
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi.models import ExchangeStatus
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
@@ -21,6 +23,8 @@ class ExchangeService:
         response = await self._client.get("/exchange/status")
         response.raise_for_status()
         data = response.json()
+
+        logger.info("Exchange status: %s", "open" if data.get("is_open") else "closed")
 
         return ExchangeStatus(
             is_open=data.get("is_open", False),

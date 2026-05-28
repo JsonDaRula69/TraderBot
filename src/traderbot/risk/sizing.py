@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def kelly_criterion(prob: float, odds: float) -> float:
     if prob <= 0 or prob >= 1 or odds <= 0:
