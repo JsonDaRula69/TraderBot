@@ -340,6 +340,35 @@ def uninstall(
             if not json_output:
                 console.print(f"  Removed repo: {repo_dir}")
 
+    # Step 4: Remove OpenClaw config and state (optional)
+    openclaw_dir = Path.home() / ".openclaw"
+    if openclaw_dir.exists():
+        remove_oc = False
+        if json_output:
+            remove_oc = True
+        else:
+            remove_oc = typer.confirm("  Remove OpenClaw config, cron jobs, agents, workspace (~/.openclaw)?", default=False)
+        if remove_oc:
+            _sp.run(["openclaw", "uninstall", "--state", "--workspace", "--yes", "--non-interactive"], capture_output=True, timeout=30)
+            shutil.rmtree(openclaw_dir, ignore_errors=True)
+            removed.append(str(openclaw_dir))
+            if not json_output:
+                console.print(f"  Removed OpenClaw state: {openclaw_dir}")
+
+    # Step 5: Remove OpenClaw npm package (optional)
+    npm_pkg = shutil.which("openclaw")
+    if npm_pkg and "npm-global" in str(npm_pkg):
+        remove_npm = False
+        if json_output:
+            remove_npm = True
+        else:
+            remove_npm = typer.confirm("  Remove OpenClaw npm package? (npm uninstall -g openclaw)", default=False)
+        if remove_npm:
+            _sp.run(["npm", "uninstall", "-g", "openclaw"], capture_output=True, timeout=30)
+            if not json_output:
+                console.print("  Removed OpenClaw npm package")
+            removed.append("npm:openclaw")
+
     # Always clean up install logs — disposable, accumulate across installs
     log_dir = data_dir / "logs"
     if log_dir.exists():
