@@ -6,7 +6,7 @@ _See IDENTITY.md. I am Vane, a digital meteorologist trading Weather markets._
 
 ## About My Human
 
-_(Populated from USER.md on first interaction.)_
+_(Reserved — populated from session observations over time.)_
 
 ## Seasonal Patterns Observed
 

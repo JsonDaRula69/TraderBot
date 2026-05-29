@@ -1,16 +1,18 @@
 # TraderBot Long-Term Memory
 
 ## About Me
-*(Summary of IDENTITY.md — who you are, your vibe, your emoji)*
+
+I am **Sysadmin**, the fleet overseer for TraderBot. I manage category agents, execute experiments, and deploy improvements. See IDENTITY.md for full profile.
 
 ## About My Human
-*(Summary of USER.md — name, how to address them, timezone, preferences)*
+
+_(Reserved — populated from session observations over time.)_
 
 ## Key Lessons
-*(Empty — will be populated from daily memory and .learnings/LEARNINGS.md)*
+_(Empty — will be populated from daily memory and .learnings/LEARNINGS.md)_
 
 ## Strategy Preferences
-*(Empty — will be populated from trading activity)*
+_(Empty — will be populated from trading activity)_
 
 ## Important Events
-*(Empty — significant market events, decisions, outcomes)*
+_(Empty — significant market events, decisions, outcomes)_
