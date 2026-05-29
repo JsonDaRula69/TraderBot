@@ -841,14 +841,14 @@ update_services() {
     # Re-register sysadmin and agent cron jobs after update
     if [[ -x "$tb_bin" ]]; then
         echo "Re-registering sysadmin cron jobs..."
-        "$tb_bin" cron setup-heartbeat-tasks --agent main --role sysadmin 2>/dev/null || true
+        "$tb_bin" cron setup-heartbeat-tasks --agent main --role sysadmin --replace 2>/dev/null || true
         # Re-register cron for all deployed agents
-        for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weatherman/agent; do
+        for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weather/agent; do
             if [[ -d "$agent_dir" ]]; then
                 local ag_id
                 ag_id="$(basename "$(dirname "$agent_dir")")"
                 echo "Re-registering cron jobs for $ag_id..."
-                "$tb_bin" cron setup-heartbeat-tasks --agent "$ag_id" 2>/dev/null || true
+                "$tb_bin" cron setup-heartbeat-tasks --agent "$ag_id" --replace 2>/dev/null || true
             fi
         done
     fi
@@ -1558,6 +1558,10 @@ prompt_sandbox_docker() {
     openclaw config set agents.defaults.sandbox.docker.readOnlyRoot true 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.capDrop '["ALL"]' 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
+    # Main (sysadmin) runs on host — no sandbox
+    openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
+    # Category agents get bind mounts for CLI access and data persistence
+    openclaw config set 'agents.list[1].sandbox.docker.binds' '["/home/jsondarula/traderbot:/traderbot:ro","/home/jsondarula/.traderbot:/home/traderbot/.traderbot:rw"]' --strict-json 2>/dev/null || true
     echo "  Sandbox configured. Restart gateway: openclaw gateway restart"
 }
 
@@ -1641,7 +1645,7 @@ else:
     if [[ -x "$tb_cmd" ]]; then
         set +e
         local assign_output
-        assign_output=$("$tb_cmd" profile assign sysadmin "$sysadmin_agent" --yes 2>&1)
+        assign_output=$("$tb_cmd" profile assign sysadmin "$sysadmin_agent" --yes --overwrite 2>&1)
         local assign_exit=$?
         set -e
         if [[ $assign_exit -eq 0 ]]; then
@@ -1649,7 +1653,7 @@ else:
             echo "$assign_output"
             # Register sysadmin cron jobs (isolated heartbeat tasks)
             echo "Registering sysadmin heartbeat cron jobs..."
-            "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" --role sysadmin 2>/dev/null || \
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" --role sysadmin --replace 2>/dev/null || \
                 echo "  Warning: sysadmin cron registration skipped."
         else
             echo "Warning: sysadmin assignment failed (exit $assign_exit)." >&2
@@ -1878,7 +1882,7 @@ interactive_config_flow() {
             _log_info "Assigning $cat_profile to $cat_name"
             set +e
             local cat_assign_out=""
-            cat_assign_out=$("$tb_cmd" profile assign "$cat_profile" "$cat_name" --yes 2>&1)
+            cat_assign_out=$("$tb_cmd" profile assign "$cat_profile" "$cat_name" --yes --overwrite 2>&1)
             local assign_exit=$?
             set -e
             if [[ $assign_exit -ne 0 ]]; then
@@ -1896,7 +1900,7 @@ interactive_config_flow() {
             install_service_for_agent "$cat_name" "$cat_token" "$OS_TYPE"
         if [[ -x "$tb_cmd" ]]; then
             echo "  Registering cron jobs for $cat_name..."
-            "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config 2>/dev/null || true
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$cat_name" --skip-heartbeat-config --replace 2>/dev/null || true
         fi
     fi
 
@@ -1997,7 +2001,7 @@ interactive_config_flow() {
 
     if [[ -x "$tb_cmd" ]]; then
         echo "Registering sysadmin heartbeat cron jobs..."
-        "$tb_cmd" cron setup-heartbeat-tasks --agent main --role sysadmin 2>/dev/null || true
+        "$tb_cmd" cron setup-heartbeat-tasks --agent main --role sysadmin --replace 2>/dev/null || true
     fi
 
     if command -v openclaw &>/dev/null && openclaw gateway status &>/dev/null; then

@@ -338,6 +338,9 @@ def cron_setup_heartbeat_tasks(
         bool,
         typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
     ] = False,
+    replace: Annotated[
+        bool, typer.Option("--replace", help="Remove existing heartbeat tasks first, then re-register"),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON"),
     ] = False,
@@ -348,7 +351,9 @@ def cron_setup_heartbeat_tasks(
     trading or other tasks. Use --role sysadmin for fleet oversight agents
     (circuit breaker, experiment management, pipeline health only, no trading
     commands) or --role agent (default) for category trading agents (includes
-    data forecasts, news, positions, learning promotion).
+    data forecasts, news, positions, learning promotion). Pass --replace to
+    remove any existing heartbeat tasks before registering anew — this
+    prevents duplicate cron entries from re-runs of this command.
     """
     console = Console()
     results: list[dict[str, str | bool]] = []
@@ -356,6 +361,20 @@ def cron_setup_heartbeat_tasks(
     if not shutil.which("openclaw"):
         console.print("[red]Error:[/red] openclaw CLI not found in PATH")
         raise typer.Exit(1)
+
+    if replace:
+        import subprocess
+        all_jobs_for_agent = _SYSADMIN_HEARTBEAT_CRON_JOBS + _AGENT_HEARTBEAT_CRON_JOBS
+        _seen: set[str] = set()
+        for job in all_jobs_for_agent:
+            job_name = f"{agent_id}-{job['name']}"
+            if job_name in _seen:
+                continue
+            _seen.add(job_name)
+            try:
+                subprocess.run(["openclaw", "cron", "remove", job_name], capture_output=True, text=True, timeout=15)
+            except Exception:
+                pass
 
     jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
     for job in jobs:
