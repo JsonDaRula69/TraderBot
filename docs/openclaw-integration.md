@@ -108,7 +108,7 @@ Deployed at `~/.openclaw/hooks/traderbot-bootstrap/` and enabled via `openclaw h
 | `IDENTITY.md` | Fenced merge | Prebuilt name, creature, vibe, emoji |
 | `USER.md` | Init if missing | Human preferences (name, pronouns, style) |
 | `HEARTBEAT.md` | Init if missing | Task schedule reference (cron handles execution) |
-| `BOOTSTRAP.md` | Not used | Removed — all agents are prebuilt frozen identities |
+| ~~`BOOTSTRAP.md`~~ | Not used | Removed — all agents are prebuilt frozen identities |
 | `MEMORY.md` | Init if missing | Long-term curated operational memory |
 
 ### Non-Bootstrap Files (explicitly referenced by agents)

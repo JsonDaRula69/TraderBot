@@ -47,10 +47,9 @@ status context so the agent sees its state immediately on wake.
 
 ## Behavior
 
-1. Checks whether BOOTSTRAP.md still exists (first-run setup incomplete).
-2. Scans SESSION-STATE.md for PENDING or ESCALATE entries from a prior session.
-3. Scans HEARTBEAT_DATA.md for circuit breaker state and open alerts.
-4. Injects a structured Pre-Session Status block when any flags are raised.
+1. Scans SESSION-STATE.md for PENDING or ESCALATE entries from a prior session.
+2. Scans HEARTBEAT_DATA.md for circuit breaker state and open alerts.
+3. Injects a structured Pre-Session Status block when any flags are raised.
 """
 
 BOOTSTRAP_HANDLER_TS_CONTENT = r"""import * as fs from 'fs';
@@ -63,13 +62,7 @@ export default {
 
     const context: string[] = [];
 
-    // 1. Check if bootstrap is incomplete
-    const bootstrapPath = path.join(workspace, 'BOOTSTRAP.md');
-    if (fs.existsSync(bootstrapPath)) {
-      context.push('\u26a0\ufe0f BOOTSTRAP INCOMPLETE: BOOTSTRAP.md still exists. Complete first-run setup before normal operations.');
-    }
-
-    // 2. Read SESSION-STATE.md for pending/escalated entries
+    // 1. Read SESSION-STATE.md for pending/escalated entries
     const sessionPath = path.join(workspace, 'SESSION-STATE.md');
     if (fs.existsSync(sessionPath)) {
       const content = fs.readFileSync(sessionPath, 'utf-8');
@@ -85,7 +78,7 @@ export default {
       }
     }
 
-    // 3. Read HEARTBEAT_DATA.md for circuit breaker + alerts
+    // 2. Read HEARTBEAT_DATA.md for circuit breaker + alerts
     const hbPath = path.join(workspace, 'HEARTBEAT_DATA.md');
     if (fs.existsSync(hbPath)) {
       const content = fs.readFileSync(hbPath, 'utf-8');

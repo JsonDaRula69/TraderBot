@@ -127,7 +127,7 @@ Implementation phases, dependencies between them, success criteria, and future e
 | Learnings | `db/learnings.py` | Pattern tracking with recurrence counts, semantic search, clustering |
 | Vector store | `db/vectors.py` | ChromaDB interface for embedding storage and retrieval |
 | WAL protocol | (in Decision Loop) | Write-to-SESSION-STATE before executing |
-| Workspace files | `.openclaw/workspace/` | AGENTS.md, SOUL.md, TOOLS.md, BOOT.md, BOOTSTRAP.md, HEARTBEAT.md, IDENTITY.md, USER.md, MEMORY.md |
+| Workspace files | `.openclaw/workspace/` | AGENTS.md, SOUL.md, TOOLS.md, HEARTBEAT.md, IDENTITY.md, USER.md, MEMORY.md |
 
 **Key enhancements**:
 - **Pattern staleness constraint**: `max_age_days=30` enforced in `learning.py` — patterns older than 30 days from last recurrence are not eligible for promotion.

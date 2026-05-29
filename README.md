@@ -157,8 +157,6 @@ traderbot/
 │   ├── AGENTS.md            # Agent operating rules
 │   ├── SOUL.md              # Persona & behavioral principles
 │   ├── IDENTITY.md          # Agent identity
-│   ├── BOOT.md              # Startup checklist
-│   ├── BOOTSTRAP.md         # One-time identity ritual
 │   ├── TOOLS.md             # Agent CLI reference
 │   ├── HEARTBEAT.md         # Heartbeat instructions
 │   ├── HEARTBEAT_DATA.md    # Heartbeat output data
