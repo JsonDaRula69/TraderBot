@@ -1950,8 +1950,8 @@ interactive_config_flow() {
                         telegram_token=""
                         continue
                     fi
-                    echo "  Configuring Telegram channel..."
-                    openclaw channels add --channel telegram --token "$telegram_token" 2>&1 || {
+                    echo "  Configuring Telegram channel for $cat_name..."
+                    openclaw channels add --channel telegram --account "$cat_name" --token "$telegram_token" 2>&1 || {
                         echo "  Warning: Telegram channel setup failed. Token may be invalid."
                         telegram_token=""
                         continue
@@ -1984,6 +1984,12 @@ interactive_config_flow() {
     if [[ -x "$tb_cmd" ]]; then
         echo "Registering sysadmin heartbeat cron jobs..."
         "$tb_cmd" cron setup-heartbeat-tasks --agent main 2>/dev/null || true
+    fi
+
+    if command -v openclaw &>/dev/null && openclaw gateway status &>/dev/null; then
+        echo "Restarting OpenClaw gateway to apply channel config..."
+        openclaw gateway restart 2>/dev/null || true
+        echo "  Gateway restart issued."
     fi
 
     echo
