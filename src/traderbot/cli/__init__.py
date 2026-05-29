@@ -377,6 +377,36 @@ def uninstall(
                 console.print("  Removed OpenClaw npm package")
             removed.append("npm:openclaw")
 
+    _sbx_name = "traderbot-sandbox:bookworm-slim"
+    try:
+        _containers = _sp.run(["docker", "ps", "-aq", "--filter", "name=openclaw-sbx"], capture_output=True, text=True, timeout=10)
+        if _containers.stdout.strip():
+            _remove_cont = True
+            if not json_output:
+                _remove_cont = typer.confirm("  Remove orphaned OpenClaw sandbox containers?", default=False)
+            if _remove_cont:
+                for _cid in _containers.stdout.strip().splitlines():
+                    _sp.run(["docker", "rm", "-f", _cid], capture_output=True, timeout=15)
+                removed.append("docker:openclaw-sbx-containers")
+                if not json_output:
+                    console.print("  Removed orphaned sandbox containers")
+    except Exception:
+        pass
+
+    try:
+        _img_res = _sp.run(["docker", "images", "-q", _sbx_name], capture_output=True, text=True, timeout=10)
+        if _img_res.stdout.strip():
+            _remove_img = True
+            if not json_output:
+                _remove_img = typer.confirm(f"  Remove Docker sandbox image ({_sbx_name})?", default=False)
+            if _remove_img:
+                _sp.run(["docker", "rmi", "-f", _sbx_name], capture_output=True, timeout=30)
+                removed.append(f"docker:{_sbx_name}")
+                if not json_output:
+                    console.print(f"  Removed Docker image: {_sbx_name}")
+    except Exception:
+        pass
+
     log_dir = data_dir / "logs"
     if log_dir.exists():
         if not json_output:

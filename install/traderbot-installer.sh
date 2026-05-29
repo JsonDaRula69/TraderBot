@@ -804,6 +804,18 @@ uninstall_services() {
         echo "  Removed: ~/.traderbot"
     fi
 
+    local _oc_sbx
+    _oc_sbx="$(docker ps -aq --filter name=openclaw-sbx 2>/dev/null || true)"
+    if [[ -n "$_oc_sbx" ]]; then
+        docker rm -f $_oc_sbx 2>/dev/null || true
+        echo "  Removed orphan sandbox containers"
+    fi
+
+    if docker images -q traderbot-sandbox:bookworm-slim &>/dev/null; then
+        docker rmi -f traderbot-sandbox:bookworm-slim 2>/dev/null || true
+        echo "  Removed Docker image: traderbot-sandbox:bookworm-slim"
+    fi
+
     echo "TraderBot uninstalled."
 }
 
