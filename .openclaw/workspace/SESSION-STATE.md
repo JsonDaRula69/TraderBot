@@ -89,14 +89,7 @@ _Each row is one run through the improvement lifecycle. Experiments are designed
 
 ## Completed Actions
 
-| Date | Action |
-|---|---|---|
-| 2026-05-28 | Workspace audit: fixed stale agent path references (agents/ → workspace/ layout), removed BOOTSTRAP.md/BOOT.md from tree, fixed weather HEARTBEAT.md agent name 'weatherman' → 'weather', removed stale 'profile set-auth' reference from weather TOOLS.md, fixed profile update flag name '--min-liquidity-threshold' → '--min-liquidity' in sysadmin TOOLS.md |
-| 2026-05-24 | Sysadmin workspace fleshed out with autonomous improvement lifecycle. |
-| 2026-05-24 | Deployment bar config added (backtest-only mode). |
-| 2026-05-24 | Category agent workspaces created under weather/ |
-| 2026-05-24 | Test lab scaffolded with full experiment lifecycle. |
-| 2026-05-24 | Sysadmin workspace initialized. |
+_No activity yet._
 
 ---
 

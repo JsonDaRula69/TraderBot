@@ -3,7 +3,7 @@
 > 7-step self-review output for sysadmin oversight. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: 2026-05-24T16:00:00.000000+00:00
+## Last Heartbeat: Never
 
 ### Managed Agents Overview
 - No active category agents assigned yet.
@@ -22,12 +22,12 @@
 - Drawdown: 0.00%
 
 ### System Health
-- API: ok
-- DB: ok
-- Freshness: awaiting_setup
+- API: unchecked
+- DB: unchecked
+- Freshness: first_boot
 
 ### Alerts
 - (no alerts)
 
 ### Test Lab Backlog
-- (empty — start adding proposed tests in `test-lab/backlog.md`)
+- (empty)

@@ -247,16 +247,49 @@ def _remove_news_ingest_timer(
         pass
 
 
-_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
+_SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert.",
+        "message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
+    },
+    {
+        "name": "experiment-check",
+        "cron_expr": "*/30 * * * *",
+        "message": "Read each agent's SESSION-STATE.md via sessions_history. Check Pending Actions for experiment proposals marked DESIGNED or PROPOSED. Acknowledge receipt, add to test-lab/backlog.md, update SESSION-STATE.md with status.",
+    },
+    {
+        "name": "experiment-execution",
+        "cron_expr": "*/30 * * * *",
+        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar. DEPLOY if pass, REJECT with reason. Archive result.",
+    },
+    {
+        "name": "learning-review",
+        "cron_expr": "0 * * * *",
+        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts.",
+    },
+    {
+        "name": "pipeline-health",
+        "cron_expr": "0 */3 * * *",
+        "message": "Check pipeline timers via `systemctl list-timers --all | grep traderbot`. Verify ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`. Run backfill if stale. Surface inactive timers or empty collections to human.",
+    },
+    {
+        "name": "performance-review",
+        "cron_expr": "0 */6 * * *",
+        "message": "Run `traderbot heartbeat --json`. Review fleet P&L, agent win rates, drawdown across all assigned profiles. Check if any agent exceeds risk thresholds. Surface anomalies to human. Do not trade — do not touch order book.",
+    },
+]
+
+_AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
+    {
+        "name": "circuit-breaker-check",
+        "cron_expr": "*/30 * * * *",
+        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
     },
     {
         "name": "data-forecast-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers. Log status.",
+        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. Log status.",
     },
     {
         "name": "news-scan",
@@ -277,7 +310,7 @@ _HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "performance-review",
         "cron_expr": "0 */6 * * *",
-        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Review learning promotions. Surface any issues.",
+        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Surface any issues to sysadmin.",
     },
     {
         "name": "learning-promotion",
@@ -298,6 +331,13 @@ def cron_setup_heartbeat_tasks(
         str,
         typer.Option("--agent", help="OpenClaw agent ID to register heartbeat tasks for"),
     ],
+    role: Annotated[
+        str, typer.Option("--role", help="Agent role: 'sysadmin' for fleet oversight, 'agent' for category trading"),
+    ] = "agent",
+    skip_heartbeat_config: Annotated[
+        bool,
+        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON"),
     ] = False,
@@ -305,7 +345,10 @@ def cron_setup_heartbeat_tasks(
     """Register each heartbeat task as an isolated cron job.
 
     Each task runs in its own isolated cron session — zero collision with
-    trading or other tasks. Replaces the monolithic HEARTBEAT.md tasks: block.
+    trading or other tasks. Use --role sysadmin for fleet oversight agents
+    (circuit breaker, experiment management, pipeline health only, no trading
+    commands) or --role agent (default) for category trading agents (includes
+    data forecasts, news, positions, learning promotion).
     """
     console = Console()
     results: list[dict[str, str | bool]] = []
@@ -314,7 +357,8 @@ def cron_setup_heartbeat_tasks(
         console.print("[red]Error:[/red] openclaw CLI not found in PATH")
         raise typer.Exit(1)
 
-    for job in _HEARTBEAT_CRON_JOBS:
+    jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
+    for job in jobs:
         args = [
             "--name", f"{agent_id}-{job['name']}",
             "--cron", job["cron_expr"],
@@ -357,8 +401,13 @@ def cron_remove_heartbeat_tasks(
     console = Console()
     removed: list[str] = []
 
-    for job in _HEARTBEAT_CRON_JOBS:
+    all_jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS + _AGENT_HEARTBEAT_CRON_JOBS
+    seen: set[str] = set()
+    for job in all_jobs:
         job_name = f"{agent_id}-{job['name']}"
+        if job_name in seen:
+            continue
+        seen.add(job_name)
         try:
             result = subprocess.run(
                 ["openclaw", "cron", "remove", job_name],

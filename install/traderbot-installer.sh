@@ -827,7 +827,7 @@ update_services() {
     # Re-register sysadmin and agent cron jobs after update
     if [[ -x "$tb_bin" ]]; then
         echo "Re-registering sysadmin cron jobs..."
-        "$tb_bin" cron setup-heartbeat-tasks --agent main 2>/dev/null || true
+        "$tb_bin" cron setup-heartbeat-tasks --agent main --role sysadmin 2>/dev/null || true
         # Re-register cron for all deployed agents
         for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weatherman/agent; do
             if [[ -d "$agent_dir" ]]; then
@@ -1635,7 +1635,7 @@ else:
             echo "$assign_output"
             # Register sysadmin cron jobs (isolated heartbeat tasks)
             echo "Registering sysadmin heartbeat cron jobs..."
-            "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" 2>/dev/null || \
+            "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" --role sysadmin 2>/dev/null || \
                 echo "  Warning: sysadmin cron registration skipped."
         else
             echo "Warning: sysadmin assignment failed (exit $assign_exit)." >&2
@@ -1983,7 +1983,7 @@ interactive_config_flow() {
 
     if [[ -x "$tb_cmd" ]]; then
         echo "Registering sysadmin heartbeat cron jobs..."
-        "$tb_cmd" cron setup-heartbeat-tasks --agent main 2>/dev/null || true
+        "$tb_cmd" cron setup-heartbeat-tasks --agent main --role sysadmin 2>/dev/null || true
     fi
 
     if command -v openclaw &>/dev/null && openclaw gateway status &>/dev/null; then
