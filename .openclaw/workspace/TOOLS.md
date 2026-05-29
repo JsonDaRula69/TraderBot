@@ -31,7 +31,7 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 | Command | Purpose | Signature |
 |---|---|---|
 | `traderbot profile create <name>` | Create a new profile | `--mode paper/live --categories ... --risk-multiplier 0.5 --max-position-pct 10 --min-edge-pct 3` |
-| `traderbot profile update <name>` | Update profile parameters | `--risk-multiplier --max-position-pct --max-daily-loss-pct --max-drawdown-pct --max-open-positions --min-liquidity-threshold --min-edge-pct --initial-balance-cents` |
+| `traderbot profile update <name>` | Update profile parameters | `--risk-multiplier --max-position-pct --max-daily-loss-pct --max-drawdown-pct --max-open-positions --min-liquidity --min-edge-pct --initial-balance-cents` |
 | `traderbot profile assign <agent-id> <profile>` | Assign an agent to a profile | No named options |
 | `traderbot profile revoke <profile>` | Revoke an agent's profile | No named options |
 | `traderbot profile list --json` | List all profiles | |
