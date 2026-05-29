@@ -699,6 +699,8 @@ stop_services() {
 
 uninstall_services() {
     local os_type="$1"
+    echo "Stopping and removing TraderBot and OpenClaw services..."
+
     if [[ "$os_type" == "macos" ]]; then
         local daemon_dir="/Library/LaunchDaemons"
         if [[ -d "$daemon_dir" ]]; then
@@ -708,7 +710,7 @@ uninstall_services() {
                 sudo launchctl bootout "system/${label}" 2>/dev/null || \
                     sudo launchctl unload "$plist" 2>/dev/null || true
                 sudo rm -f "$plist"
-                echo "Removed: $plist"
+                echo "  Removed: $plist"
             done
         fi
     else
@@ -722,21 +724,73 @@ uninstall_services() {
                 sudo systemctl disable "$unit" 2>/dev/null || true
                 sudo rm -f "$service"
                 sudo rm -f "$service_dir/$timer" 2>/dev/null || true
-                echo "Removed: $unit"
+                echo "  Removed: $unit"
+            done
+            for wants_dir in "/etc/systemd/system/multi-user.target.wants" "/etc/systemd/system/timers.target.wants"; do
+                if [[ -d "$wants_dir" ]]; then
+                    find "$wants_dir" -maxdepth 1 -name 'traderbot-*' -type l 2>/dev/null | while read -r link; do
+                        sudo rm -f "$link"
+                        echo "  Removed symlink: $(basename "$link")"
+                    done
+                fi
+            done
+            sudo systemctl daemon-reload 2>/dev/null || true
+        fi
+
+        local user_svc_dir="${HOME}/.config/systemd/user"
+        if [[ -d "$user_svc_dir" ]]; then
+            find "$user_svc_dir" -maxdepth 1 \( -name 'openclaw-*gateway*' -o -name 'traderbot-*' \) 2>/dev/null | while read -r svc; do
+                local unit
+                unit="$(basename "$svc")"
+                systemctl --user stop "$unit" 2>/dev/null || true
+                systemctl --user disable "$unit" 2>/dev/null || true
+                rm -f "$svc"
+                echo "  Removed user service: $unit"
             done
         fi
     fi
 
     if [[ -L "/usr/local/bin/traderbot" ]]; then
         sudo rm -f /usr/local/bin/traderbot
-        echo "Removed: /usr/local/bin/traderbot"
+        echo "  Removed: /usr/local/bin/traderbot"
     fi
     if [[ -L "${HOME}/.local/bin/traderbot" ]]; then
         rm -f "${HOME}/.local/bin/traderbot"
-        echo "Removed: ${HOME}/.local/bin/traderbot"
+        echo "  Removed: ${HOME}/.local/bin/traderbot"
     fi
 
-    echo "Services uninstalled. Data preserved at $INSTALL_DIR and ~/.traderbot/"
+    local modified=false
+    if grep -q '.local/bin' "${HOME}/.bashrc" 2>/dev/null; then
+        sed -i.bak '/\.local\/bin/d' "${HOME}/.bashrc" && rm -f "${HOME}/.bashrc.bak"
+        modified=true
+    fi
+    if grep -q '.local/bin' "${HOME}/.profile" 2>/dev/null; then
+        sed -i.bak '/\.local\/bin/d' "${HOME}/.profile" && rm -f "${HOME}/.profile.bak"
+        modified=true
+    fi
+    if [[ "$modified" == "true" ]]; then
+        echo "  Cleaned shell config (.bashrc/.profile PATH additions)"
+    fi
+
+    if [[ -d "${HOME}/.openclaw" ]]; then
+        echo "  Removing OpenClaw state (~/.openclaw)..."
+        rm -rf "${HOME}/.openclaw"
+        echo "  Removed: ~/.openclaw"
+    fi
+
+    if [[ -d "${INSTALL_DIR}" ]]; then
+        echo "  Removing repository (${INSTALL_DIR})..."
+        rm -rf "${INSTALL_DIR}"
+        echo "  Removed: ${INSTALL_DIR}"
+    fi
+
+    if [[ -d "${HOME}/.traderbot" ]]; then
+        echo "  Removing user data (~/.traderbot)..."
+        rm -rf "${HOME}/.traderbot"
+        echo "  Removed: ~/.traderbot"
+    fi
+
+    echo "TraderBot uninstalled."
 }
 
 update_services() {
