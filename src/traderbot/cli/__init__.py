@@ -140,22 +140,7 @@ def uninstall(
     remove_data = False
     remove_repo = False
 
-    # Always prompt for data removal
-    if json_output:
-        remove_data = data_dir.exists()
-        remove_repo = repo_dir.exists()
-    else:
-        if data_dir.exists():
-            remove_data = typer.confirm("  Remove user data and credentials (~/.traderbot)?", default=False)
-        else:
-            console.print("[dim]No user data found.[/dim]")
-        console.print()
-        if repo_dir.exists():
-            remove_repo = typer.confirm("  Remove repository (~/traderbot)?", default=False)
-            console.print()
-        else:
-            console.print("[dim]No repository found.[/dim]")
-
+    
     # Step 1: Stop and remove system services
     if json_output:
         removed_services = []
@@ -249,7 +234,7 @@ def uninstall(
                         removed_services.append(str(svc))
         removed.extend(removed_services)
 
-    # Step 1c: Remove user-level systemd services (OpenClaw gateway, TraderBot agent)
+    # User-level systemd services (OpenClaw gateway, TraderBot agent)
     if platform.system() == "Linux":
         user_svc_dir = Path.home() / ".config" / "systemd" / "user"
         if user_svc_dir.exists():
@@ -282,9 +267,8 @@ def uninstall(
             except Exception:
                 pass
 
-    # Step 1d: Remove OpenClaw cron jobs
     if not json_output:
-        console.print("[bold]Step 1b: Remove OpenClaw cron jobs[/bold]")
+        console.print("[bold]Remove OpenClaw cron jobs[/bold]")
     cron_removed = []
     try:
         cron_output = _sp.run(["openclaw", "cron", "list", "--json"], capture_output=True, text=True, timeout=10)
@@ -352,7 +336,20 @@ def uninstall(
             if not json_output:
                 console.print(f"  Removed repo: {repo_dir}")
 
-    # Step 4: Remove OpenClaw config and state (optional)
+    _shell_files = [Path.home() / ".bashrc", Path.home() / ".profile"]
+    for _sf in _shell_files:
+        if _sf.exists():
+            try:
+                content = _sf.read_text()
+                if ".local/bin" in content:
+                    cleaned = "\n".join(line for line in content.splitlines() if ".local/bin" not in line)
+                    _sf.write_text(cleaned + "\n")
+                    removed.append(f"{_sf}:local-bin-path")
+                    if not json_output:
+                        console.print(f"  Cleaned PATH addition: {_sf}")
+            except Exception:
+                pass
+
     openclaw_dir = Path.home() / ".openclaw"
     if openclaw_dir.exists():
         remove_oc = False
@@ -367,7 +364,6 @@ def uninstall(
             if not json_output:
                 console.print(f"  Removed OpenClaw state: {openclaw_dir}")
 
-    # Step 5: Remove OpenClaw npm package (optional)
     npm_pkg = shutil.which("openclaw")
     if npm_pkg and "npm-global" in str(npm_pkg):
         remove_npm = False
@@ -381,7 +377,6 @@ def uninstall(
                 console.print("  Removed OpenClaw npm package")
             removed.append("npm:openclaw")
 
-    # Always clean up install logs — disposable, accumulate across installs
     log_dir = data_dir / "logs"
     if log_dir.exists():
         if not json_output:
@@ -392,7 +387,6 @@ def uninstall(
                 console.print(f"  Removed log: {f.name}")
             removed.append(str(f))
 
-    # Clean up tmp
     tmp_cleaned = []
     try:
         for p in Path("/tmp").glob("traderbot-news-ingest@*"):

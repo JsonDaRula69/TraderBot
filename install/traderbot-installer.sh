@@ -699,8 +699,27 @@ stop_services() {
 
 uninstall_services() {
     local os_type="$1"
-    echo "Stopping and removing TraderBot and OpenClaw services..."
 
+    local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ -x "$tb_bin" ]]; then
+        echo "Uninstalling via traderbot CLI..."
+        if "$tb_bin" uninstall --json &>/dev/null; then
+            echo "TraderBot uninstalled."
+            return 0
+        fi
+        echo "  Warning: CLI uninstall had issues, falling back to manual cleanup."
+    else
+        tb_bin="$(command -v traderbot 2>/dev/null || true)"
+        if [[ -x "$tb_bin" ]]; then
+            echo "Uninstalling via traderbot CLI..."
+            if "$tb_bin" uninstall --json &>/dev/null; then
+                echo "TraderBot uninstalled."
+                return 0
+            fi
+        fi
+    fi
+
+    echo "Performing manual cleanup..."
     if [[ "$os_type" == "macos" ]]; then
         local daemon_dir="/Library/LaunchDaemons"
         if [[ -d "$daemon_dir" ]]; then
@@ -773,19 +792,14 @@ uninstall_services() {
     fi
 
     if [[ -d "${HOME}/.openclaw" ]]; then
-        echo "  Removing OpenClaw state (~/.openclaw)..."
         rm -rf "${HOME}/.openclaw"
         echo "  Removed: ~/.openclaw"
     fi
-
     if [[ -d "${INSTALL_DIR}" ]]; then
-        echo "  Removing repository (${INSTALL_DIR})..."
         rm -rf "${INSTALL_DIR}"
         echo "  Removed: ${INSTALL_DIR}"
     fi
-
     if [[ -d "${HOME}/.traderbot" ]]; then
-        echo "  Removing user data (~/.traderbot)..."
         rm -rf "${HOME}/.traderbot"
         echo "  Removed: ~/.traderbot"
     fi
