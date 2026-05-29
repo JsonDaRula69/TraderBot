@@ -270,6 +270,18 @@ def uninstall(
                         console.print(f"  Removed user service: {svc.name}")
                         removed.append(str(svc))
 
+    _sl_usrs = [Path("/usr/local/bin/traderbot"), Path.home() / ".local/bin/traderbot"]
+    for _sl in _sl_usrs:
+        if _sl.is_symlink() or _sl.exists():
+            try:
+                cmd = [_SUDO, "rm", "-f", str(_sl)] if str(_sl).startswith("/usr/local") else ["rm", "-f", str(_sl)]
+                _sp.run(cmd, capture_output=True)
+                removed.append(str(_sl))
+                if not json_output:
+                    console.print(f"  Removed symlink: {_sl}")
+            except Exception:
+                pass
+
     # Step 1d: Remove OpenClaw cron jobs
     if not json_output:
         console.print("[bold]Step 1b: Remove OpenClaw cron jobs[/bold]")
