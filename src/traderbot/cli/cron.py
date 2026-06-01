@@ -339,8 +339,41 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     },
 ]
 
+# ── Helper: remove cron jobs by agent prefix ─────────────────────────────
+def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
+    """Remove all cron jobs whose name starts with ``<agent_id>-``.
 
-@cron_app.command("setup-heartbeat-tasks")
+    ``openclaw cron remove`` requires a job ID, not a name.  This helper
+    fetches the full job list by ID, finds matching jobs, and removes by ID.
+    Returns the list of removed job names.
+    """
+    import json as _cjson
+    import subprocess
+
+    removed: list[str] = []
+    try:
+        result = subprocess.run(
+            ["openclaw", "cron", "list", "--json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            return removed
+        jobs = _cjson.loads(result.stdout)
+        if not isinstance(jobs, list):
+            jobs = jobs.get("jobs", []) if isinstance(jobs, dict) else []
+        prefix = f"{agent_id}-"
+        for job in jobs:
+            jname = job.get("name", "")
+            jid = job.get("id", "")
+            if jname.startswith(prefix) and jid:
+                subprocess.run(
+                    ["openclaw", "cron", "remove", jid],
+                    capture_output=True, timeout=10,
+                )
+                removed.append(jname)
+    except Exception:
+        pass
+    return removed
 def cron_setup_heartbeat_tasks(
     agent_id: Annotated[
         str,
@@ -378,18 +411,7 @@ def cron_setup_heartbeat_tasks(
         raise typer.Exit(1)
 
     if replace:
-        import subprocess
-        all_jobs_for_agent = _SYSADMIN_HEARTBEAT_CRON_JOBS + _AGENT_HEARTBEAT_CRON_JOBS
-        _seen: set[str] = set()
-        for job in all_jobs_for_agent:
-            job_name = f"{agent_id}-{job['name']}"
-            if job_name in _seen:
-                continue
-            _seen.add(job_name)
-            try:
-                subprocess.run(["openclaw", "cron", "remove", job_name], capture_output=True, text=True, timeout=15)
-            except Exception:
-                pass
+        _remove_cron_jobs_by_name(agent_id)
 
     jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
     for job in jobs:
@@ -430,32 +452,13 @@ def cron_remove_heartbeat_tasks(
     ] = False,
 ) -> None:
     """Remove all registered heartbeat cron tasks for an agent."""
-    import subprocess
-
-    console = Console()
-    removed: list[str] = []
-
-    all_jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS + _AGENT_HEARTBEAT_CRON_JOBS
-    seen: set[str] = set()
-    for job in all_jobs:
-        job_name = f"{agent_id}-{job['name']}"
-        if job_name in seen:
-            continue
-        seen.add(job_name)
-        try:
-            result = subprocess.run(
-                ["openclaw", "cron", "remove", job_name],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.returncode == 0:
-                removed.append(job["name"])
-        except Exception:
-            pass
+    removed = _remove_cron_jobs_by_name(agent_id)
 
     if json_output:
         json_lib.dump({"removed": removed}, sys.stdout, indent=2)
         return
 
+    console = Console()
     for name in removed:
         console.print(f"  [green]✓[/green] Removed {name}")
     if not removed:
