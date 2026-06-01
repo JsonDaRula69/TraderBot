@@ -75,6 +75,9 @@ async def _seed_from_rest() -> dict[str, str]:
             if cursor:
                 params["cursor"] = cursor
             resp = await client.get("/events", **params)
+            if resp.status_code == 429:
+                logger.warning("REST seed rate limited at cursor=%s — collected %d so far", cursor, len(all_events))
+                break
             if resp.status_code != 200:
                 logger.warning("REST seed failed at cursor=%s: %d", cursor, resp.status_code)
                 break
@@ -90,7 +93,7 @@ async def _seed_from_rest() -> dict[str, str]:
             if not cursor:
                 break
         except Exception as exc:
-            logger.warning("REST seed failed at cursor=%s: %s", cursor, exc)
+            logger.warning("REST seed failed at cursor=%s: %s — collected %d so far", cursor, exc, len(all_events))
             break
     await client.close()
     logger.info("Seeded %d events from REST", len(all_events))
