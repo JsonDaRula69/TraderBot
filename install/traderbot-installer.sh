@@ -857,8 +857,8 @@ update_services() {
     if [[ -x "$tb_bin" ]]; then
         echo "Re-registering sysadmin cron jobs..."
         "$tb_bin" cron setup-heartbeat-tasks --agent main --role sysadmin --replace 2>/dev/null || true
-        # Re-register cron for all deployed agents
-        for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weather/agent; do
+        # Re-register cron for category agents only (not main — that's sysadmin)
+        for agent_dir in "$HOME/.openclaw/agents"/weather/agent; do
             if [[ -d "$agent_dir" ]]; then
                 local ag_id
                 ag_id="$(basename "$(dirname "$agent_dir")")"

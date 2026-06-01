@@ -92,8 +92,9 @@ fi
 # ── Step 6: Re-register cron jobs ────────────────────────────────────────
 if [[ -x "$TRADERBOT_CLI" ]]; then
     echo "  Re-registering cron jobs..."
+    # Sysadmin (main) gets fleet oversight crons; category agents get trading crons
     "$TRADERBOT_CLI" cron setup-heartbeat-tasks --agent main --role sysadmin --replace 2>/dev/null || true
-    for agent_dir in "$HOME/.openclaw/agents"/main/agent "$HOME/.openclaw/agents"/weather/agent; do
+    for agent_dir in "$HOME/.openclaw/agents"/weather/agent; do
         if [[ -d "$agent_dir" ]]; then
             ag_id="$(basename "$(dirname "$agent_dir")")"
             "$TRADERBOT_CLI" cron setup-heartbeat-tasks --agent "$ag_id" --replace 2>/dev/null || true

@@ -506,10 +506,12 @@ def _reregister_cron_jobs(repo_dir: Path) -> None:
              "--agent", "main", "--role", "sysadmin", "--replace"],
             capture_output=True, timeout=30,
         )
-        # Agent cron for each deployed agent directory
+        # Agent cron for category agents only (main is sysadmin, handled above)
         agents_root = Path.home() / ".openclaw" / "agents"
         if agents_root.exists():
             for agent_dir in agents_root.iterdir():
+                if agent_dir.name == "main":
+                    continue
                 if (agent_dir / "agent").is_dir():
                     ag_id = agent_dir.name
                     subprocess.run(
