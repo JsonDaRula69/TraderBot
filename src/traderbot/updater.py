@@ -320,6 +320,21 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         # Re-register cron jobs
         _reregister_cron_jobs(repo_dir)
 
+        try:
+            subprocess.Popen(
+                [_get_traderbot_cli(repo_dir), "ws", "stop"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            daemon_path = repo_dir / "src" / "traderbot" / "kalshi" / "ws_daemon.py"
+            subprocess.Popen(
+                [sys.executable, str(daemon_path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            logger.info("WS daemon restart issued")
+        except Exception as exc:
+            logger.warning("Failed to restart WS daemon: %s", exc)
+
         # Restart gateway (non-blocking)
         try:
             subprocess.Popen(

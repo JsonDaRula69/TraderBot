@@ -28,6 +28,7 @@ from traderbot.cli.helpers import (
     _check_updates_on_startup,
     app,
 )
+from traderbot.cli.ws import ws_app
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +61,7 @@ register_trade(app)
 register_market(app)
 register_news(app)
 register_admin(app)
-
-try:
-    from traderbot.cli.ws import register_commands as register_ws
-    register_ws(app)
-except Exception as exc:
-    logger.debug("Failed to import ws commands: %s", exc)
+app.add_typer(ws_app, name="ws")
 
 # Register experiment sub-app (imported from experiment module)
 try:

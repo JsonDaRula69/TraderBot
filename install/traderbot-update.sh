@@ -99,9 +99,16 @@ if [[ -x "$TRADERBOT_CLI" ]]; then
             "$TRADERBOT_CLI" cron setup-heartbeat-tasks --agent "$ag_id" --replace 2>/dev/null || true
         fi
     done
+    echo "  Crons re-registered."
 fi
 
-# ── Step 7: Restart OpenClaw gateway ─────────────────────────────────────
+# ── Step 7: Restart WS daemon ─────────────────────────────────────────────
+echo "  Restarting WS daemon..."
+"$PYTHON" -m traderbot.kalshi.ws_daemon &
+disown
+echo "  WS daemon started."
+
+# ── Step 8: Restart OpenClaw gateway ──────────────────────────────────────
 if command -v openclaw &>/dev/null; then
     echo "  Restarting OpenClaw gateway..."
     openclaw gateway restart 2>/dev/null || true

@@ -875,11 +875,9 @@ update_services() {
             echo "Rebuilding Docker sandbox image..."
             bash "$docker_dir/build-sandbox.sh" 2>&1 || echo "  Warning: sandbox image rebuild failed." >&2
         fi
-        echo "Re-applying OpenClaw sandbox configuration..."
+echo "Re-applying OpenClaw sandbox configuration..."
         openclaw config set agents.defaults.sandbox.docker.binds "[\"${HOME}/traderbot:/traderbot:ro\",\"${HOME}/.traderbot:/home/traderbot/.traderbot:rw\"]" --strict-json 2>/dev/null || true
-openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
-    # Block direct Kalshi API access — agents must use the traderbot CLI.
-    openclaw config set 'agents.defaults.sandbox.docker.extraHosts' '["api.elections.kalshi.com:127.0.0.1","api.kalshi.com:127.0.0.1","trading-api.kalshi.com:127.0.0.1"]' --strict-json 2>/dev/null || true
+        openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
         openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
     fi
 
