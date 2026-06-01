@@ -52,11 +52,19 @@ def resolve_kalshi_credentials(
         private_key_value = private_key_result.value.get_secret_value()
 
         # If the stored value is a file path (KALSHI_PRIVATE_KEY_PATH),
-        # read the file contents so it works across sandbox environments.
+        # read the file contents. Try the literal path first, then fall
+        # back to the data dir (handles sandbox environments where the
+        # host home path doesn't exist inside the container).
         pem_path = Path(private_key_value)
         if pem_path.exists() and pem_path.is_file():
             logger.info("Kalshi private key references file at %s — reading contents", pem_path)
             private_key_value = pem_path.read_text(encoding="utf-8")
+        else:
+            from traderbot.paths import get_data_dir
+            alt_path = get_data_dir() / pem_path.name
+            if alt_path.exists() and alt_path.is_file():
+                logger.info("Kalshi private key references file at %s (fallback: %s)", alt_path, pem_path)
+                private_key_value = alt_path.read_text(encoding="utf-8")
 
         if profile is not None:
             logger.info(
