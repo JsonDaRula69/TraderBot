@@ -407,6 +407,16 @@ def uninstall(
     except Exception:
         pass
 
+    # Prune Docker build cache (accumulates from repeated sandbox builds)
+    try:
+        _cache_res = _sp.run(["docker", "builder", "prune", "--all", "--force"], capture_output=True, timeout=60)
+        if _cache_res.returncode == 0:
+            removed.append("docker:build-cache")
+            if not json_output:
+                console.print("  Pruned Docker build cache")
+    except Exception:
+        pass
+
     log_dir = data_dir / "logs"
     if log_dir.exists():
         if not json_output:

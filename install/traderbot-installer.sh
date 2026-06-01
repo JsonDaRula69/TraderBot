@@ -816,6 +816,9 @@ uninstall_services() {
         echo "  Removed Docker image: traderbot-sandbox:bookworm-slim"
     fi
 
+    docker builder prune --all --force 2>/dev/null || true
+    echo "  Pruned Docker build cache"
+
     echo "TraderBot uninstalled."
 }
 
