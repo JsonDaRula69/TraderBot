@@ -375,6 +375,7 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
             untracked = [line.strip() for line in git_status.stdout.strip().splitlines() if not line.startswith("??")]
             if untracked:
                 logger.info("Uncommitted changes detected, auto-stashing before update")
+                print("  → Stashing local changes...", flush=True)
                 subprocess.run(
                     ["git", "stash", "--include-untracked"],
                     cwd=repo_dir,
@@ -382,40 +383,54 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
                     timeout=30,
                 )
 
+        print("  → Pulling latest code...", flush=True)
         subprocess.run(["git", "pull", "origin", branch], cwd=repo_dir, check=True, capture_output=True)
+        print("  → Reinstalling traderbot package...", flush=True)
         pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
-        logger.info("Updated successfully from %s branch", branch)
+        print("  → Package reinstalled.", flush=True)
 
-        # Refresh agent workspace files (replace templates, preserve user data)
+        print("  → Refreshing workspace files...", flush=True)
         _refresh_workspace_files(repo_dir)
-
-        # Rebuild Docker sandbox image if Docker is available
+        print("  → Rebuilding sandbox image...", flush=True)
         _rebuild_sandbox_image(repo_dir)
-
-        # Re-apply OpenClaw sandbox config (binds, allow external sources, etc.)
+        print("  → Re-applying OpenClaw config...", flush=True)
         _configure_openclaw_sandbox()
-
-        # Deploy or refresh bootstrap hook
+        print("  → Deploying bootstrap hook...", flush=True)
         _enable_bootstrap_hook()
-
-        # Re-register cron jobs for all deployed agents
+        print("  → Re-registering cron jobs...", flush=True)
         _reregister_cron_jobs(repo_dir)
 
-        # systemd restart can take 30s+; non-blocking so a slow
-        # restart doesn't abort the update command.
+        print("  → Restarting WS daemon...", flush=True)
+        try:
+            subprocess.Popen(
+                [_get_traderbot_cli(repo_dir), "ws", "stop"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            daemon_path = repo_dir / "src" / "traderbot" / "kalshi" / "ws_daemon.py"
+            subprocess.Popen(
+                [sys.executable, str(daemon_path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            logger.warning("Failed to restart WS daemon: %s", exc)
+
+        print("  → Restarting OpenClaw gateway...", flush=True)
         try:
             subprocess.Popen(
                 ["openclaw", "gateway", "restart"],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                close_fds=True,
             )
-            logger.info("OpenClaw gateway restart issued")
         except Exception as exc:
             logger.warning("Failed to issue gateway restart: %s", exc)
 
         if restart:
             os.execv(sys.executable, [sys.executable, *sys.argv])
+        print("  ✓ Update complete.", flush=True)
         return True
     except subprocess.CalledProcessError as exc:
         logger.error("Update failed: %s", exc)
