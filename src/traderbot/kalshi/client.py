@@ -59,7 +59,18 @@ class KalshiConfig(BaseSettings):
         if self.private_key_pem is not None:
             return self.private_key_pem.get_secret_value()
         if self.private_key_path is not None:
-            return self.private_key_path.read_text()
+            try:
+                return self.private_key_path.read_text()
+            except (FileNotFoundError, OSError):
+                # The stored path may reference the host filesystem (e.g.
+                # KALSHI_PRIVATE_KEY_PATH=/home/user/.traderbot/kalshi_key.pem)
+                # which doesn't exist inside a sandbox container. Fall back
+                # to the data directory using the filename only.
+                from traderbot.paths import get_data_dir
+                alt = get_data_dir() / self.private_key_path.name
+                if alt.exists():
+                    return alt.read_text()
+                raise
         raise ConfigurationError(
             "No private key configured. Set KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH."
         )
