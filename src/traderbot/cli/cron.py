@@ -260,8 +260,13 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     },
     {
         "name": "experiment-execution",
-        "cron_expr": "*/30 * * * *",
+        "cron_expr": "15,45 * * * *",
         "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar. DEPLOY if pass, REJECT with reason. Archive result.",
+    },
+    {
+        "name": "auth-check",
+        "cron_expr": "0 * * * *",
+        "message": "Run `traderbot auth check --json`. Verify all API credentials are resolvable. If Kalshi credentials are missing or invalid, surface CRITICAL alert to human — this blocks all trading.",
     },
     {
         "name": "learning-review",
@@ -270,7 +275,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     },
     {
         "name": "pipeline-health",
-        "cron_expr": "0 */3 * * *",
+        "cron_expr": "0 */6 * * *",
         "message": "Check pipeline timers via `systemctl list-timers --all | grep traderbot`. Verify ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`. Run backfill if stale. Surface inactive timers or empty collections to human.",
     },
     {
@@ -287,14 +292,14 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
     },
     {
-        "name": "data-forecast-check",
-        "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. Log status.",
-    },
-    {
         "name": "news-scan",
         "cron_expr": "*/30 * * * *",
         "message": "Run `traderbot news-context weather --json`. Check for NHC advisories, NWS warnings, emergency declarations. If any active, surface alert to sysadmin.",
+    },
+    {
+        "name": "data-forecast-check",
+        "cron_expr": "15,45 * * * *",
+        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. Log status.",
     },
     {
         "name": "position-health",
@@ -306,6 +311,11 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "cron_expr": "0 * * * *",
         "session": "isolated",
         "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`.",
+    },
+    {
+        "name": "auth-check",
+        "cron_expr": "0 * * * *",
+        "message": "Run `traderbot auth check --json`. Verify Kalshi credentials are resolvable. If missing or invalid, surface CRITICAL alert to sysadmin — cannot trade without valid credentials.",
     },
     {
         "name": "performance-review",

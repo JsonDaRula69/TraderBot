@@ -8,12 +8,13 @@ session — so they never collide with other agent work or each other._
 
 | Task | Interval | What It Executes |
 |---|---|---|
-| main-circuit-breaker-check | 30m | Check fleet-wide circuit breaker across all agents |
-| main-experiment-check | 30m | Read agent SESSION-STATE.md for experiment proposals, queue in backlog |
-| main-experiment-execution | 30m | Execute queued experiments from test-lab/backlog.md |
-| main-learning-review | 1h | Cross-reference PENDING_REVIEW learnings against backlog |
-| main-pipeline-health | 3h | Run backfill, verify ChromaDB data_points, check timers |
-| main-performance-review | 6h | Review agent P&L, drawdown, win rate across fleet |
+| main-circuit-breaker-check | 30m | `traderbot halt --json` fleet-wide |
+| main-experiment-check | 30m | Read agent SESSION-STATE.md for proposals, queue in backlog |
+| main-experiment-execution | 15,45 past hour | Execute queued experiments from test-lab/backlog.md |
+| main-auth-check | 1h | `traderbot auth check --json` - verify all API credentials |
+| main-learning-review | 1h | Cross-reference PENDING_REVIEW against backlog |
+| main-pipeline-health | 6h | Pipeline timers, ChromaDB data_points count, backfill if stale |
+| main-performance-review | 6h | Fleet P&L, agent win rates, drawdown |
 
 ## Setup
 
