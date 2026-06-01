@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/traderbot/.venv/bin/python3 %h/traderbot/src/traderbot/kalshi/ws_daemon.py
+ExecStart=%h/traderbot/.venv/bin/python3 -m traderbot.kalshi.ws_daemon
 ExecStop=/bin/kill -SIGTERM $MAINPID
 Restart=on-failure
 RestartSec=10
