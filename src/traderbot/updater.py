@@ -303,8 +303,10 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         try:
             subprocess.Popen(
                 ["openclaw", "gateway", "restart"],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                close_fds=True,
             )
             logger.info("OpenClaw gateway restart issued")
         except Exception as exc:
