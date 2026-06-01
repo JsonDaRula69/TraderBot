@@ -70,6 +70,18 @@ const handler = async (event: any) => {
   const workspace = event.workspace;
   if (!workspace) return;
 
+  // Ensure SESSION-STATE.md and HEARTBEAT_DATA.md are auto-injected
+  // in every session via the mutable bootstrapFiles array.
+  const extraFiles = ['SESSION-STATE.md', 'HEARTBEAT_DATA.md'];
+  if (event.context && Array.isArray(event.context.bootstrapFiles)) {
+    for (const f of extraFiles) {
+      const fp = path.join(workspace, f);
+      if (fs.existsSync(fp) && !event.context.bootstrapFiles.includes(f)) {
+        event.context.bootstrapFiles.push(f);
+      }
+    }
+  }
+
   const context: string[] = [];
 
   // 1. Read SESSION-STATE.md for pending/escalated entries
@@ -84,7 +96,7 @@ const handler = async (event: any) => {
     }
     const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
     if (cbMatch) {
-      context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} \u2014 no new trades allowed.`);
+      context.push('\ud83d\udd34 CIRCUIT BREAKER: ' + cbMatch[1] + ' \u2014 no new trades allowed.');
     }
   }
 
@@ -94,17 +106,17 @@ const handler = async (event: any) => {
     const content = fs.readFileSync(hbPath, 'utf-8');
     const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
     if (cbMatch && !context.some(c => c.includes('CIRCUIT BREAKER'))) {
-      context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} (from heartbeat data)`);
+      context.push('\ud83d\udd34 CIRCUIT BREAKER: ' + cbMatch[1] + ' (from heartbeat data)');
     }
     const alertMatch = content.match(/### Alerts\s*\n([\s\S]*?)(?=\n###|$)/);
     if (alertMatch && alertMatch[1].trim() && alertMatch[1].trim() !== 'None') {
-      context.push(`\ud83d\udccb PENDING ALERTS:\n${alertMatch[1].trim()}`);
+      context.push('\ud83d\udccb PENDING ALERTS:\n' + alertMatch[1].trim());
     }
   }
 
   if (context.length > 0) {
     return {
-      inject: `## Pre-Session Status\n${context.join('\n\n')}\n\n---\n`
+      inject: '## Pre-Session Status\n' + context.join('\n\n') + '\n\n---\n'
     };
   }
 };

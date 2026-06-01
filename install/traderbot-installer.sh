@@ -2096,13 +2096,6 @@ main() {
 
         echo "  Enabling bundled OpenClaw hooks..."
         enable_openclaw_hooks "command-logger" "session-memory" || true
-        # bootstrap-extra-files may not exist in all OpenClaw versions
-        if openclaw hooks list 2>/dev/null | grep -q "bootstrap-extra-files"; then
-            enable_openclaw_hooks "bootstrap-extra-files" || true
-            openclaw config set hooks.internal.entries.bootstrap-extra-files.enabled true 2>/dev/null || true
-            openclaw config set 'hooks.internal.entries.bootstrap-extra-files.paths' '["SESSION-STATE.md","HEARTBEAT_DATA.md"]' --strict-json --merge 2>/dev/null || true
-        fi
-        # traderbot-bootstrap hook is deployed later (after TraderBot CLI is installed)
 
         echo "  Running OpenClaw doctor --fix..."
         openclaw doctor --fix 2>/dev/null || true
