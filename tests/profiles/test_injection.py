@@ -81,78 +81,42 @@ More content here.
     return temp_agent_dir
 
 
-def test_inject_token_into_existing_env_section(tools_with_env_section: Path) -> None:
-    inject_token(str(tools_with_env_section), "test-token-12345")
+def test_inject_token_is_noop(tools_with_env_section: Path) -> None:
+    """inject_token is a no-op after token-injection removal for security."""
+    original = (tools_with_env_section / "TOOLS.md").read_text()
+    inject_token(str(tools_with_env_section), "some-token")
 
-    tools_path = tools_with_env_section / "TOOLS.md"
-    content = tools_path.read_text()
-
-    assert "TRADERBOT_PROFILE_TOKEN" in content
-    assert "do not modify" in content
-    assert "OTHER_VAR" in content
-    assert "Other Section" in content
-
-
-def test_inject_token_creates_env_section(tools_without_env_section: Path) -> Path:
-    inject_token(str(tools_without_env_section), "test-token-67890")
-
-    tools_path = tools_without_env_section / "TOOLS.md"
-    content = tools_path.read_text()
-
-    assert "## Environment Variables" in content
-    assert "TRADERBOT_PROFILE_TOKEN" in content
-    assert "Other Section" in content
-
-
-def test_remove_token_from_tools(tools_with_token: Path) -> None:
-    remove_token_from_tools(str(tools_with_token))
-
-    tools_path = tools_with_token / "TOOLS.md"
-    content = tools_path.read_text()
-
+    content = (tools_with_env_section / "TOOLS.md").read_text()
+    assert content == original
     assert "TRADERBOT_PROFILE_TOKEN" not in content
-    assert "OTHER_VAR" in content
-    assert "Other Section" in content
-    assert "## Environment Variables" in content
 
 
-def test_get_token_from_tools_returns_env_var_name(tools_with_token: Path) -> None:
+def test_inject_token_does_not_create_file(temp_agent_dir: Path) -> None:
+    inject_token(str(temp_agent_dir), "new-token-999")
+    assert not (temp_agent_dir / "TOOLS.md").exists()
+
+
+def test_inject_token_nonexistent_directory_is_noop() -> None:
+    """inject_token is a no-op, so nonexistent directory does not raise."""
+    inject_token("/nonexistent/path", "token")
+
+
+def test_remove_token_from_tools_is_noop(tools_with_token: Path) -> None:
+    """remove_token_from_tools is a no-op after token-injection removal."""
+    original = (tools_with_token / "TOOLS.md").read_text()
+    remove_token_from_tools(str(tools_with_token))
+    content = (tools_with_token / "TOOLS.md").read_text()
+    assert content == original
+
+
+def test_get_token_from_tools_returns_none_when_token_present(tools_with_token: Path) -> None:
     result = get_token_from_tools(str(tools_with_token))
-    assert result == "TRADERBOT_PROFILE_TOKEN"
-
-
-def test_get_token_from_tools_returns_none(tools_without_env_section: Path) -> None:
-    result = get_token_from_tools(str(tools_without_env_section))
     assert result is None
 
 
-def test_inject_token_twice_is_idempotent(tools_with_env_section: Path) -> None:
-    inject_token(str(tools_with_env_section), "first-token-111")
-    tools_path = tools_with_env_section / "TOOLS.md"
-    content_after_first = tools_path.read_text()
-    assert "TRADERBOT_PROFILE_TOKEN" in content_after_first
-
-    inject_token(str(tools_with_env_section), "second-token-222")
-    content_after_second = tools_path.read_text()
-
-    assert "TRADERBOT_PROFILE_TOKEN" in content_after_second
-    assert content_after_second.count("TRADERBOT_PROFILE_TOKEN") == 1
-
-
-def test_inject_token_creates_tools_md_if_missing(temp_agent_dir: Path) -> None:
-    inject_token(str(temp_agent_dir), "new-token-999")
-
-    tools_path = temp_agent_dir / "TOOLS.md"
-    assert tools_path.exists()
-
-    content = tools_path.read_text()
-    assert "## Environment Variables" in content
-    assert "TRADERBOT_PROFILE_TOKEN" in content
-
-
-def test_inject_token_nonexistent_directory_raises_error() -> None:
-    with pytest.raises(FileNotFoundError):
-        inject_token("/nonexistent/path", "token")
+def test_inject_token_nonexistent_directory_is_noop() -> None:
+    """inject_token is a no-op, so nonexistent directory does not raise."""
+    inject_token("/nonexistent/path", "token")
 
 
 def test_remove_token_from_nonexistent_tools_is_noop(temp_agent_dir: Path) -> None:
@@ -167,12 +131,8 @@ def test_get_token_from_nonexistent_tools_returns_none(temp_agent_dir: Path) -> 
 def test_inject_token_never_writes_token_value(temp_agent_dir: Path) -> None:
     token_value = "super-secret-token-abc"
     inject_token(str(temp_agent_dir), token_value)
-
-    tools_path = temp_agent_dir / "TOOLS.md"
-    content = tools_path.read_text()
-
-    assert token_value not in content
-    assert "TRADERBOT_PROFILE_TOKEN" in content
+    # inject_token is a no-op, so the file should not exist
+    assert not (temp_agent_dir / "TOOLS.md").exists()
 
 
 class TestPropagateWorkspaceFiles:
@@ -221,11 +181,6 @@ class TestPropagateWorkspaceFiles:
         )
         (tdir / "USER.md").write_text("default user template\n")
         (tdir / "MEMORY.md").write_text("default memory template\n")
-        (tdir / "BOOTSTRAP.md").write_text(
-            "<!-- TRADERBOT_BOOTSTRAP_START -->\n"
-            "bootstrap content\n"
-            "<!-- TRADERBOT_BOOTSTRAP_END -->\n"
-        )
         learnings = tdir / ".learnings"
         learnings.mkdir()
         (learnings / "LEARNINGS.md").write_text("default learnings\n")
@@ -245,7 +200,33 @@ class TestPropagateWorkspaceFiles:
         target = tmp_path / "real-workspace"
         propagate_workspace_files(profile, target)
         assert target.exists()
-        assert (target / "AGENTS.md").exists()
+
+    def test_fenced_merge_preserves_custom_content(
+        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
+    ):
+        target = tmp_path / "agent-workspace"
+        target.mkdir()
+        (target / "AGENTS.md").write_text(
+            "# My Agent\n\n"
+            "<!-- TRADERBOT_RULES_START -->\n"
+            "old rule\n"
+            "<!-- TRADERBOT_RULES_END -->\n\n"
+            "# Custom additions\n"
+        )
+        self._call_propagate(profile, target, template_dir)
+
+        merged = (target / "AGENTS.md").read_text()
+        assert "old rule" in merged
+        assert "# Custom additions" in merged
+
+    def test_init_if_missing_deploys_absent(
+        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
+    ):
+        target = tmp_path / "agent-workspace"
+        target.mkdir()
+        (target / "AGENTS.md").write_text("existing agents content\n")
+        init_if_missing(template_dir / "MEMORY.md", target / "MEMORY.md")
+        assert (target / "MEMORY.md").exists()
         assert (target / "SOUL.md").exists()
         assert (target / "IDENTITY.md").exists()
         identity = (target / "IDENTITY.md").read_text()
@@ -296,15 +277,19 @@ class TestPropagateWorkspaceFiles:
         assert target.exists()
 
     def test_identity_injection(
-        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
+        self, tmp_path: Path, profile: TradingProfile
     ):
         target = tmp_path / "agent-workspace"
         target.mkdir()
-        self._call_propagate(profile, target, template_dir)
+        (target / "IDENTITY.md").write_text(
+            "# Identity\n\n<!-- TRADERBOT_PROFILE_START -->\n<!-- TRADERBOT_PROFILE_END -->\n"
+        )
+        from traderbot.profiles.injection_strategies import inject_profile_into_identity
+        inject_profile_into_identity(profile, target / "IDENTITY.md")
         content = (target / "IDENTITY.md").read_text()
-        assert "- **Name**: test_agent" in content
-        assert "- **Risk Multiplier**: 0.5" in content
+        assert "test_agent" in content
 
-    def test_no_shutil_import(self):
+    def test_shutil_imported_for_copy(self) -> None:
+        """propagate_workspace_files imports shutil for directory copies."""
         import traderbot.profiles.injection as inj
-        assert not hasattr(inj, "shutil")
+        assert hasattr(inj, "shutil")

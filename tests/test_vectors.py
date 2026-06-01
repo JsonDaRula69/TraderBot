@@ -77,7 +77,7 @@ class TestGetCollection:
             metadata={"hnsw:space": "cosine", "embedding_dimension": EMBEDDING_DIMENSION},
         )
 
-    def test_get_collection_caches(self) -> None:
+    def test_get_collection_caches(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -88,7 +88,7 @@ class TestGetCollection:
         assert col1 is col2
         assert mock_client.get_or_create_collection.call_count == 1
 
-    def test_init_collections_creates_all_defaults(self) -> None:
+    def test_init_collections_creates_all_defaults(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -100,7 +100,7 @@ class TestGetCollection:
 
 
 class TestAddDocument:
-    def test_add_document_without_embedding(self) -> None:
+    def test_add_document_without_embedding(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -114,7 +114,46 @@ class TestAddDocument:
             metadatas=[{"source": "test"}],
         )
 
-    def test_add_document_with_embedding(self) -> None:
+    def test_add_document_with_embedding(self, tmp_path: Path) -> None:
+        mock_client = _make_mock_client()
+        store = VectorStore(persist_dir=tmp_path)
+        store._client = mock_client
+        embedding = _fake_embedding()
+
+        store.add_document("doc1", "test text", {"src": "test"}, embedding=embedding, collection="news")
+
+        col = store._collections["news"]
+        col.upsert.assert_called_once_with(
+            ids=["doc1"],
+            documents=["test text"],
+            metadatas=[{"src": "test"}],
+            embeddings=[embedding],
+        )
+
+    def test_add_document_uses_upsert(self, tmp_path: Path) -> None:
+        store = VectorStore(persist_dir=tmp_path)
+        store._client = _make_mock_client()
+
+        store.add_document("doc1", "text", {}, collection="news")
+
+        col = store._collections["news"]
+        col.upsert.assert_called_once()
+
+    def test_add_document_different_collections(self, tmp_path: Path) -> None:
+        mock_client = _make_mock_client()
+        store = VectorStore(persist_dir=tmp_path)
+        store._client = mock_client
+
+        store.add_document("doc1", "test text", {"source": "test"}, collection="decisions")
+
+        col = store._collections["decisions"]
+        col.upsert.assert_called_once_with(
+            ids=["doc1"],
+            documents=["test text"],
+            metadatas=[{"source": "test"}],
+        )
+
+    def test_add_document_with_embedding_full(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -130,7 +169,7 @@ class TestAddDocument:
             embeddings=[emb],
         )
 
-    def test_add_document_uses_upsert(self) -> None:
+    def test_upsert_idempotent(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -141,7 +180,7 @@ class TestAddDocument:
         col = store._collections["decisions"]
         assert col.upsert.call_count == 2
 
-    def test_add_document_different_collections(self) -> None:
+    def test_multiple_collections_add(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -156,7 +195,7 @@ class TestAddDocument:
 
 
 class TestSearch:
-    def test_search_returns_results(self) -> None:
+    def test_search_returns_results(self, tmp_path: Path) -> None:
         col = _make_mock_collection()
         col.query.return_value = {
             "ids": [["doc1", "doc2"]],
@@ -175,13 +214,13 @@ class TestSearch:
         assert results[0] == ("doc1", "text1", {"source": "a"}, 0.1)
         assert results[1] == ("doc2", "text2", {"source": "b"}, 0.5)
 
-    def test_search_with_metadata_filter(self) -> None:
+    def test_search_with_metadata_filter(self, tmp_path: Path) -> None:
         col = _make_mock_collection()
         col.query.return_value = {
             "ids": [["doc1"]],
-            "documents": [["text1"]],
+            "documents": [["matched doc"]],
             "metadatas": [[{"category": "economics"}]],
-            "distances": [[0.2]],
+            "distances": [[0.3]],
         }
         mock_client = _make_mock_client({"decisions": col})
         store = VectorStore(persist_dir=tmp_path)
@@ -200,23 +239,16 @@ class TestSearch:
         )
         assert len(results) == 1
 
-    def test_search_empty_results(self) -> None:
-        col = _make_mock_collection()
-        col.query.return_value = {
-            "ids": [[]],
-            "documents": [[]],
-            "metadatas": [[]],
-            "distances": [[]],
-        }
-        mock_client = _make_mock_client({"decisions": col})
+    def test_search_empty_results(self, tmp_path: Path) -> None:
+        mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
-        store._collections = {"decisions": col}
+        store._collections = {"decisions": _make_mock_collection()}
 
         results = store.search(_fake_embedding(), n=10, collection="decisions")
         assert results == []
 
-    def test_search_result_tuple_format(self) -> None:
+    def test_search_result_tuple_format(self, tmp_path: Path) -> None:
         col = _make_mock_collection()
         col.query.return_value = {
             "ids": [["id1"]],
@@ -240,7 +272,7 @@ class TestSearch:
 
 
 class TestDeleteDocument:
-    def test_delete_document(self) -> None:
+    def test_delete_document(self, tmp_path: Path) -> None:
         col = _make_mock_collection()
         mock_client = _make_mock_client({"decisions": col})
         store = VectorStore(persist_dir=tmp_path)
@@ -251,7 +283,7 @@ class TestDeleteDocument:
 
         col.delete.assert_called_once_with(ids=["doc1"])
 
-    def test_delete_from_different_collection(self) -> None:
+    def test_delete_from_different_collection(self, tmp_path: Path) -> None:
         col = _make_mock_collection()
         mock_client = _make_mock_client({"news": col})
         store = VectorStore(persist_dir=tmp_path)
@@ -263,7 +295,7 @@ class TestDeleteDocument:
 
 
 class TestChromadbOptional:
-    def test_operations_require_chromadb(self) -> None:
+    def test_operations_require_chromadb(self, tmp_path: Path) -> None:
         store = VectorStore(persist_dir=tmp_path)
         store._client = None
         store._collections = {}
@@ -281,7 +313,7 @@ class TestChromadbOptional:
             with pytest.raises(ImportError):
                 store.delete_document("id")
 
-    def test_helpful_error_message(self) -> None:
+    def test_helpful_error_message(self, tmp_path: Path) -> None:
         store = VectorStore(persist_dir=tmp_path)
         store._client = None
         store._collections = {}
@@ -294,7 +326,7 @@ class TestEmbeddingDimension:
     def test_dimension_is_1024(self) -> None:
         assert EMBEDDING_DIMENSION == 1024
 
-    def test_collection_metadata_includes_dimension(self) -> None:
+    def test_collection_metadata_includes_dimension(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
@@ -310,7 +342,7 @@ class TestDefaultCollections:
     def test_default_collections_tuple(self) -> None:
         assert DEFAULT_COLLECTIONS == ("decisions", "news", "market_patterns", "news_signals", "market_conditions", "data_points")
 
-    def test_init_collections_creates_six(self) -> None:
+    def test_init_collections_creates_six(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
         store = VectorStore(persist_dir=tmp_path)
         store._client = mock_client
