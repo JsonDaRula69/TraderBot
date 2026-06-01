@@ -67,9 +67,6 @@ async def _seed_from_rest() -> dict[str, str]:
     all_events: dict[str, str] = {}
     cursor: str | None = None
     for _ in range(20):
-        params: dict[str, object] = {"limit": 500}
-        if cursor:
-            params["cursor"] = cursor
         try:
             params: dict[str, object] = {"limit": 200}
             if cursor:
@@ -87,8 +84,8 @@ async def _seed_from_rest() -> dict[str, str]:
                 for ev in raw:
                     ticker = ev.get("ticker") or ev.get("event_ticker", "")
                     category = ev.get("category", "")
-                    if ticker and cat:
-                        all_events[ticker] = cat
+                    if ticker and category:
+                        all_events[ticker] = category
             cursor = data.get("cursor")
             if not cursor:
                 break
