@@ -295,12 +295,17 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         # Re-register cron jobs for all deployed agents
         _reregister_cron_jobs(repo_dir)
 
-        # Restart OpenClaw gateway to pick up config changes
-        subprocess.run(
-            ["openclaw", "gateway", "restart"],
-            capture_output=True,
-            timeout=30,
-        )
+        # systemd restart can take 30s+; non-blocking so a slow
+        # restart doesn't abort the update command.
+        try:
+            subprocess.Popen(
+                ["openclaw", "gateway", "restart"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info("OpenClaw gateway restart issued")
+        except Exception as exc:
+            logger.warning("Failed to issue gateway restart: %s", exc)
 
         if restart:
             os.execv(sys.executable, [sys.executable, *sys.argv])
