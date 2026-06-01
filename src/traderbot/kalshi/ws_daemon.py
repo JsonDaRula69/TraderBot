@@ -33,7 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger("ws-daemon")
 
 CACHE_PATH = get_data_dir() / "event_category_cache.json"
-REST_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 WS_URL = "wss://api.elections.kalshi.com/trade-api/ws/v2"
 RECONNECT_DELAY = 5.0
 MAX_RECONNECT_DELAY = 60.0
@@ -72,9 +71,9 @@ async def _seed_from_rest() -> dict[str, str]:
         if cursor:
             params["cursor"] = cursor
         try:
-            resp = await client._client.get(
-                f"{REST_BASE}/events",
-                params=params,
+            resp = await client.get(
+                "/events",
+                limit=500, cursor=cursor,
             )
             if resp.status_code != 200:
                 logger.warning("REST seed failed at cursor=%s: %d", cursor, resp.status_code)
@@ -93,7 +92,7 @@ async def _seed_from_rest() -> dict[str, str]:
         except Exception as exc:
             logger.warning("REST seed failed at cursor=%s: %s", cursor, exc)
             break
-    await client.aclose()
+    await client.close()
     logger.info("Seeded %d events from REST", len(all_events))
     return all_events
 
