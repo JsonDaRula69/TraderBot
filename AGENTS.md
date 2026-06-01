@@ -23,13 +23,14 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## Git Discipline
 
-- **Commit early and often** — every code change gets its own commit and push
+- **Commit early and often** — every code change gets its own commit and push. Never ask to commit.
 - **One concern per commit** — no mixing features, fixes, and docs in one commit
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`
 - **Always tag**: `git tag v0.00.0N` after every commit
-- **Always push**: commit + tag + push in one step: `git add . && git commit -m "type: msg" && git tag v0.00.0N && git push && git push --tags`
+- **Always push**: commit + tag + push in one step: `git add VERSION <files> && git commit -m "type: msg" && git tag v0.00.0N && git push && git push --tags`
 - **Never commit** `.env`, credentials, or API keys
 - **Traceability**: every change is recoverable; rollback is always one `git revert` away
+- **Version increment**: update `VERSION` (increment PATCH by 1) as part of the commit — never as a separate step
 
 ## Source of Truth
 
@@ -198,14 +199,55 @@ Maintain `CHANGELOG.md` at repo root using Keep a Changelog format.
 - Update alongside the VERSION bump on every commit.
 - Each entry is a one-liner describing the user-visible impact.
 
-## API Verification Protocol
+## Dep_Docs Verification Rule
 
-Before making any code changes that involve OpenClaw, Kalshi, or any other external API/service:
+Before implementing anything that touches external APIs (Kalshi, OpenClaw, FRED, NewsAPI, Voyage, CoinGecko):
 
-1. **Verify your assumptions first** — do not assume you know the correct function names, parameters, or behavior
-2. Use the **context7 MCP** to find first-party documentation for the API or library
-3. Use the **grep_app tool** to find real-world usage examples in open-source code
-4. **Do NOT spawn a librarian subagent** for this — that is for deep/broad research across multiple sources. For targeted API verification, use context7 + grep_app directly
-5. Only proceed with implementation once you've confirmed the correct API surface
+1. **Check `Dep_Docs/` first** — this directory contains pre-fetched authoritative API documentation. It is the primary source.
+2. **Search existing source code** for usage patterns matching the target API
+3. Only then use **context7 MCP** or **grep_app** if `Dep_Docs/` is missing coverage or the API version has changed
+4. Do NOT spawn a librarian subagent for targeted API verification — that's for deep/broad multi-source research
 
-This prevents recurring issues from implementing against assumed APIs that don't match reality.
+This prevents implementing against stale assumptions.
+
+## Sandbox Container Architecture
+
+TraderBot agents run inside OpenClaw's Docker sandbox. Key design:
+
+- **Base image**: `python:3.12-slim-bookworm` (not `debian:bookworm-slim` which only has Python 3.11)
+- **Bind mounts** are set via `agents.defaults.sandbox.docker.binds` (not `agents.list[N]`)
+- **Bind sources outside workspace** require `dangerouslyAllowExternalBindSources: true`
+- **traderbot CLI** lives at `/traderbot/.venv/bin` inside the container (not pip-installed in the image)
+- **Agent data** is preserved across image rebuilds — data lives on host:
+  - `~/.traderbot/` → bind-mounted at `/home/traderbot/.traderbot:rw` (credentials, ChromaDB, positions)
+  - `~/.openclaw/workspace/` → bind-mounted at `/workspace:rw` (AGENTS.md, SESSION-STATE.md, MEMORY.md, .learnings/)
+  - `~/.openclaw/agents/` → on host only (session logs, cron state)
+- **Docker image rebuild** only compiles a fresh base layer — containers are recreated on next agent connection, host bind mounts remain intact
+- **Sysadmin (main) runs on host** — `agents.list[0].sandbox.mode: off`
+
+## Update Pipeline Contract
+
+`traderbot update` (Python CLI) and `traderbot-installer.sh --update` both execute this pipeline in order:
+
+1. **git pull** from origin (main or dev)
+2. **pip install -e .** (reinstall package)
+3. **Refresh workspace files** (replace templates, preserve user data)
+4. **Rebuild Docker sandbox image** (if Docker available)
+5. **Re-apply OpenClaw sandbox config** (binds, dangerouslyAllowExternalBindSources, mode)
+6. **Re-register cron jobs** for all deployed agents
+7. **Restart OpenClaw gateway** (picks up config changes)
+
+If you add a new OpenClaw config key in the installer, mirror it in `_configure_openclaw_sandbox()` in `src/traderbot/updater.py`.
+
+## Data Source Rate Limiting
+
+External data sources have free-tier rate limits. Current policy:
+
+- **FRED**: 120 req/min free tier. `_backfill_fred()` uses 3-attempt retry with `Retry-After` header backoff. New data sources should follow this pattern.
+- **Open-Meteo**: Free, no API key needed. No rate limit issues.
+- **CoinGecko**: Tier-dependent (demo/pro). Validated on credential setup.
+
+Harmless errors to ignore:
+- `Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given` — ChromaDB telemetry noise, not a data error
+- `HTTP 429` on FRED during initial backfill — retries automatically with backoff
+- `ChromaDB telemetry errors` during `data-points` / `news-context` — harmless, data is still queried correctly

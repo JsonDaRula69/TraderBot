@@ -69,8 +69,11 @@ Configured at `agents.defaults.sandbox` via `openclaw config set`:
 | `docker.readOnlyRoot` | `true` | Read-only root filesystem |
 | `docker.capDrop` | `["ALL"]` | All Linux capabilities dropped |
 | `docker.memory` | `1g` | 1GB memory limit per container |
+| `docker.binds` | `["~/traderbot:/traderbot:ro", "~/.traderbot:/home/traderbot/.traderbot:rw"]` | Source code (ro) + agent data (rw) mounted via bind |
+| `docker.dangerouslyAllowExternalBindSources` | `true` | Required — bind sources are outside workspace directory |
+| `agents.list[0].sandbox.mode` | `off` | Main/sysadmin excluded from sandbox |
 
-Source is bind-mounted read-only at `/traderbot`. Agent data at `~/.traderbot/` is bind-mounted read-write.
+Bind mounts use `agents.defaults.sandbox` (not `agents.list[N]`) so all sandboxed agents inherit them. The `dangerouslyAllowExternalBindSources` flag is required because `/home/user/traderbot` and `/home/user/.traderbot` are outside the allowed root (`/home/user/.openclaw/workspace/`).
 
 ### Building the Image
 
@@ -78,7 +81,32 @@ Source is bind-mounted read-only at `/traderbot`. Agent data at `~/.traderbot/` 
 bash install/docker/build-sandbox.sh
 ```
 
-Uses `install/docker/Dockerfile` — `debian:bookworm-slim` with Python 3.12, git, curl, jq.
+Uses `install/docker/Dockerfile` — `python:3.12-slim-bookworm` with git, curl, jq. The `debian:bookworm-slim` base is NOT used because it only provides Python 3.11 (traderbot requires `>=3.12`).
+
+### Data Persistence
+
+Rebuilding the sandbox image is always safe — agent activity data lives on the host filesystem and is bind-mounted into the container:
+
+| Host path | Container mount | Content |
+|---|---|---|
+| `~/traderbot` | `/traderbot:ro` | Source code (read-only) |
+| `~/.traderbot` | `/home/traderbot/.traderbot:rw` | Credentials, ChromaDB, traderbot.db, WAL |
+| `~/.openclaw/workspace/` | `/workspace:rw` | AGENTS.md, SESSION-STATE.md, HEARTBEAT_DATA.md, MEMORY.md, .learnings/ |
+| `~/.openclaw/agents/` | (host only) | Session logs, cron state |
+
+The `traderbot` CLI binary is available inside the container at `/traderbot/.venv/bin/traderbot` (via `ENV PATH` in Dockerfile). It is NOT pip-installed inside the image — it runs from the bind-mounted venv on the host.
+
+### Update Pipeline
+
+`traderbot update` (Python CLI) and `traderbot-installer.sh --update` execute the same pipeline:
+
+1. **git pull** from origin
+2. **pip install -e .** (reinstall the package)
+3. **Refresh workspace files** (overwrite templates, preserve USER.md/MEMORY.md/SESSION-STATE.md/.learnings/)
+4. **Rebuild Docker sandbox image** (if Docker available)
+5. **Re-apply OpenClaw sandbox config keys** (binds, dangerouslyAllowExternalBindSources, mode)
+6. **Re-register cron jobs** for all deployed agents (with `--replace` to avoid duplicates)
+7. **Restart OpenClaw gateway** (picks up config changes)
 
 ### Installer Flow
 

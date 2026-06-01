@@ -55,6 +55,14 @@ Config at `agents.defaults.sandbox`:
 | `docker.readOnlyRoot` | `true` |
 | `docker.capDrop` | `["ALL"]` |
 | `docker.memory` | `1g` |
+| `docker.binds` | `["~/traderbot:/traderbot:ro", "~/.traderbot:/home/traderbot/.traderbot:rw"]` |
+| `docker.dangerouslyAllowExternalBindSources` | `true` (required — host paths are outside workspace) |
+
+Bind mounts use `agents.defaults.sandbox` so all sandboxed agents inherit them. Main is excluded via `agents.list[0].sandbox.mode: off`.
+
+**Update safety**: `traderbot update` and `traderbot-installer.sh --update` both rebuild the sandbox image and re-apply OpenClaw config. Agent activity data (credentials, ChromaDB, SESSION-STATE.md, MEMORY.md, .learnings/) is preserved — it lives on the host filesystem bound into the container.
+
+**traderbot CLI in sandbox**: The CLI binary lives at `/traderbot/.venv/bin/traderbot` inside the container. The Dockerfile sets `ENV PATH="/traderbot/.venv/bin:${PATH}"` so it's available without qualification. The base image is `python:3.12-slim-bookworm` (not `debian:bookworm-slim` which only provides Python 3.11).
 
 Build image: `bash install/docker/build-sandbox.sh`
 

@@ -28,14 +28,13 @@ The installers run four phases:
 
 ### Prerequisites
 
-**Optional: OpenClaw Integration**
+**OpenClaw Required**
 
-If you plan to use TraderBot with OpenClaw AI agents, ensure OpenClaw is installed:
+TraderBot agents run as OpenClaw agents. The installer will install OpenClaw via `npm install -g openclaw` if not found:
 
-- `~/.openclaw/` directory must exist
-- `openclaw` binary must be in PATH
-
-If OpenClaw is not found, the installer will prompt whether to continue with standalone mode. TraderBot works fully without OpenClaw — the agent assignment step is skipped, and you use TraderBot via CLI only.
+- `~/.openclaw/` directory created by `openclaw setup`
+- `openclaw` binary installed globally and in PATH
+- OpenClaw gateway runs as a systemd user service
 
 ## Ubuntu Installation
 
@@ -47,58 +46,48 @@ bash install/traderbot-installer.sh
 
 The installer will:
 - Detect `linux-debian` (Ubuntu/Debian) or `linux-other`
-- Install dependencies: `build-essential`, `python3-dev`, `python3-venv`
-- Download and install TraderBot
-- Launch interactive config
+- Check/install OpenClaw via `npm install -g openclaw` if not found
+- Start OpenClaw gateway service (systemd user service)
+- Run `openclaw setup --workspace ~/.openclaw/workspace`
+- Install dependencies: `build-essential`, `python3.12-dev`, `python3.12-venv`, Docker (optional)
+- Clone TraderBot from GitHub
+- Create Python venv and install package
+- Launch interactive config: API credentials, sysadmin profile, category agents
 
-### 2. Create a profile
+### 2. Docker sandbox (optional, interactive prompt)
 
-```bash
-traderbot profile create paper-aggressive --mode paper \
-    --categories Economics,Politics \
-    --risk-multiplier 0.8 \
-    --max-daily-loss-pct 1.5
-```
-
-### 3. Assign an agent
+If Docker is available, the installer prompts to build and configure the sandbox:
 
 ```bash
-traderbot profile discover-agents
-# Returns: [{"agent_id": "molty", "name": "Molty the Trader", "path": ".openclaw/workspace/molty"}]
-
-traderbot profile assign molty paper-aggressive
-# Token: xK9mQ2pL7nR4
-# Token passed to agent via secure launcher (not written to any agent-readable files)
+bash install/docker/build-sandbox.sh
 ```
 
-### 4. Set API credentials
+This builds `traderbot-sandbox:bookworm-slim` (Python 3.12 base) and applies OpenClaw config:
+
+| Setting | Value |
+|---|---|
+| `agents.defaults.sandbox.mode` | `non-main` |
+| `agents.defaults.sandbox.backend` | `docker` |
+| `agents.defaults.sandbox.docker.binds` | `["~/traderbot:/traderbot:ro", "~/.traderbot:/home/traderbot/.traderbot:rw"]` |
+| `agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources` | `true` |
+| `agents.list[0].sandbox.mode` | `off` (main/sysadmin runs on host) |
+
+Agent activity data (credentials, ChromaDB, SESSION-STATE.md, MEMORY.md, .learnings/) is **preserved** across sandbox image rebuilds — it lives on the host filesystem and is bind-mounted into the container.
+
+### 3. Update
+
+Two update paths execute the full pipeline:
 
 ```bash
-traderbot auth set-kalshi
-# Prompts for API key ID and secret; stores in keyring or .env
+# CLI update (Python)
+traderbot update            # git pull → pip install → workspace refresh → sandbox rebuild → config reapply → cron re-register → gateway restart
+traderbot update --force    # Apply even if versions match
+
+# Installer update (bash)
+bash install/traderbot-installer.sh --update
 ```
 
-### 5. Enable persistence
-
-For each assigned agent, the installer calls `install/services/install-service.sh`:
-
-```bash
-bash install/services/install-service.sh molty xK9mQ2pL7nR4
-```
-
-This:
-- Generates a systemd service instance: `traderbot-agent@molty.service`
-- Sets `TRADERBOT_PROFILE_TOKEN=xK9mQ2pL7nR4` in the service environment
-- Enables linger for the user (allows services to start at boot without login)
-- Starts the service
-
-```bash
-# Check status
-systemctl --user status traderbot-agent@molty.service
-
-# View logs
-journalctl --user -u traderbot-agent@molty.service -f
-```
+Both rebuild the Docker sandbox image and re-apply OpenClaw config keys.
 
 ### 6. Install data pipeline timers
 
