@@ -23,6 +23,9 @@ VENV_BIN="${REPO_DIR}/.venv/bin"
 PYTHON="${VENV_BIN}/python3"
 TRADERBOT_CLI="${VENV_BIN}/traderbot"
 
+# Ensure openclaw CLI is on PATH (npm global bin not inherited by subprocesses)
+export PATH="${HOME}/.npm-global/bin:/usr/local/bin:${PATH}"
+
 # ── Step 1: git pull ─────────────────────────────────────────────────────
 cd "$REPO_DIR"
 echo "  Pulling latest code from $_BRANCH..."
