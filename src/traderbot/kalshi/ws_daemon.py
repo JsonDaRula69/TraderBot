@@ -71,10 +71,10 @@ async def _seed_from_rest() -> dict[str, str]:
         if cursor:
             params["cursor"] = cursor
         try:
-            resp = await client.get(
-                "/events",
-                limit=500, cursor=cursor,
-            )
+            params: dict[str, object] = {"limit": 500, "status": "open"}
+            if cursor:
+                params["cursor"] = cursor
+            resp = await client.get("/events", **params)
             if resp.status_code != 200:
                 logger.warning("REST seed failed at cursor=%s: %d", cursor, resp.status_code)
                 break
