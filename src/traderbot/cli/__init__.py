@@ -61,6 +61,12 @@ register_market(app)
 register_news(app)
 register_admin(app)
 
+try:
+    from traderbot.cli.ws import register_commands as register_ws
+    register_ws(app)
+except Exception as exc:
+    logger.debug("Failed to import ws commands: %s", exc)
+
 # Register experiment sub-app (imported from experiment module)
 try:
     from traderbot.experiment.cli import experiment_app
