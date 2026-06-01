@@ -36,10 +36,17 @@ BOOTSTRAP_HOOK_DIRNAME = "traderbot-bootstrap"
 # Embedded hook files — deployed to ~/.openclaw/hooks/traderbot-bootstrap/
 # ---------------------------------------------------------------------------
 
-BOOTSTRAP_HOOK_MD_CONTENT = """# TraderBot Bootstrap Hook
+BOOTSTRAP_HOOK_MD_CONTENT = """---
+name: traderbot-bootstrap
+description: "Injects pre-session status from SESSION-STATE.md and HEARTBEAT_DATA.md"
+metadata:
+  { "openclaw": { "emoji": "🔗", "events": ["agent:bootstrap"], "requires": { "bins": ["node"] } } }
+---
 
-Validates agent workspace state before each session and injects pre-session
-status context so the agent sees its state immediately on wake.
+# TraderBot Bootstrap Hook
+
+Injects pre-session status context before every agent session so the agent
+immediately sees circuit breaker state, pending actions, and active alerts.
 
 ## Events
 
@@ -55,52 +62,54 @@ status context so the agent sees its state immediately on wake.
 BOOTSTRAP_HANDLER_TS_CONTENT = r"""import * as fs from 'fs';
 import * as path from 'path';
 
-export default {
-  'agent:bootstrap': async (event: any) => {
-    const workspace = event.workspace;
-    if (!workspace) return {};
+const handler = async (event: any) => {
+  if (event.type !== 'agent' || event.action !== 'bootstrap') {
+    return;
+  }
 
-    const context: string[] = [];
+  const workspace = event.workspace;
+  if (!workspace) return;
 
-    // 1. Read SESSION-STATE.md for pending/escalated entries
-    const sessionPath = path.join(workspace, 'SESSION-STATE.md');
-    if (fs.existsSync(sessionPath)) {
-      const content = fs.readFileSync(sessionPath, 'utf-8');
-      if (content.includes('**ESCALATE**') || content.includes('Status: ESCALATE')) {
-        context.push('\u26a0\ufe0f ESCALATED ITEMS: SESSION-STATE.md has unresolved escalated items requiring human attention.');
-      }
-      if (content.includes('**PENDING**') || content.includes('Status: PENDING')) {
-        context.push('\u23f3 PENDING ACTIONS: SESSION-STATE.md has incomplete actions from a previous session.');
-      }
-      const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
-      if (cbMatch) {
-        context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} \u2014 no new trades allowed.`);
-      }
+  const context: string[] = [];
+
+  // 1. Read SESSION-STATE.md for pending/escalated entries
+  const sessionPath = path.join(workspace, 'SESSION-STATE.md');
+  if (fs.existsSync(sessionPath)) {
+    const content = fs.readFileSync(sessionPath, 'utf-8');
+    if (content.includes('**ESCALATE**') || content.includes('Status: ESCALATE')) {
+      context.push('\u26a0\ufe0f ESCALATED ITEMS: SESSION-STATE.md has unresolved escalated items requiring human attention.');
     }
-
-    // 2. Read HEARTBEAT_DATA.md for circuit breaker + alerts
-    const hbPath = path.join(workspace, 'HEARTBEAT_DATA.md');
-    if (fs.existsSync(hbPath)) {
-      const content = fs.readFileSync(hbPath, 'utf-8');
-      const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
-      if (cbMatch && !context.some(c => c.includes('CIRCUIT BREAKER'))) {
-        context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} (from heartbeat data)`);
-      }
-      const alertMatch = content.match(/### Alerts\s*\n([\s\S]*?)(?=\n###|$)/);
-      if (alertMatch && alertMatch[1].trim() && alertMatch[1].trim() !== 'None') {
-        context.push(`\ud83d\udccb PENDING ALERTS:\n${alertMatch[1].trim()}`);
-      }
+    if (content.includes('**PENDING**') || content.includes('Status: PENDING')) {
+      context.push('\u23f3 PENDING ACTIONS: SESSION-STATE.md has incomplete actions from a previous session.');
     }
-
-    if (context.length > 0) {
-      return {
-        inject: `## Pre-Session Status\n${context.join('\n\n')}\n\n---\n`
-      };
+    const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
+    if (cbMatch) {
+      context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} \u2014 no new trades allowed.`);
     }
+  }
 
-    return {};
+  // 2. Read HEARTBEAT_DATA.md for circuit breaker + alerts
+  const hbPath = path.join(workspace, 'HEARTBEAT_DATA.md');
+  if (fs.existsSync(hbPath)) {
+    const content = fs.readFileSync(hbPath, 'utf-8');
+    const cbMatch = content.match(/Level:\s*(HALT|FULL_STOP)/);
+    if (cbMatch && !context.some(c => c.includes('CIRCUIT BREAKER'))) {
+      context.push(`\ud83d\udd34 CIRCUIT BREAKER: ${cbMatch[1]} (from heartbeat data)`);
+    }
+    const alertMatch = content.match(/### Alerts\s*\n([\s\S]*?)(?=\n###|$)/);
+    if (alertMatch && alertMatch[1].trim() && alertMatch[1].trim() !== 'None') {
+      context.push(`\ud83d\udccb PENDING ALERTS:\n${alertMatch[1].trim()}`);
+    }
+  }
+
+  if (context.length > 0) {
+    return {
+      inject: `## Pre-Session Status\n${context.join('\n\n')}\n\n---\n`
+    };
   }
 };
+
+export default handler;
 """
 
 
@@ -177,26 +186,60 @@ def enable_session_memory_hook() -> bool:
 
 
 def ensure_agent_bootstrap_hook() -> bool:
-    """Deploy bootstrap hook files to the filesystem.
+    """Deploy bootstrap hook files to the filesystem and enable the hook.
 
-    Hook registration is left to the OpenClaw CLI (``openclaw hooks enable``).
-    We no longer write to ``openclaw.json`` directly to avoid schema drift.
-    Idempotent.
+    Deploys HOOK.md and handler.ts then enables the hook via CLI.
+    Also enables the bundled bootstrap-extra-files hook and configures
+    SESSION-STATE.md and HEARTBEAT_DATA.md as extra bootstrap files so
+    agents see them every session without explicit reads.
     """
+    import json
+
     hook_dir = _HOOKS_DIR / BOOTSTRAP_HOOK_DIRNAME
     hook_dir.mkdir(parents=True, exist_ok=True)
 
     hook_md = hook_dir / "HOOK.md"
-    if not hook_md.exists():
-        hook_md.write_text(BOOTSTRAP_HOOK_MD_CONTENT)
-        logger.info("Created %s", hook_md)
+    hook_md.write_text(BOOTSTRAP_HOOK_MD_CONTENT)
 
-    handler = hook_dir / "handler.ts"
-    if not handler.exists():
-        handler.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
-        logger.info("Created %s", handler)
+    handler_ts = hook_dir / "handler.ts"
+    handler_ts.write_text(BOOTSTRAP_HANDLER_TS_CONTENT)
 
-    logger.info("Bootstrap hook files deployed to %s", hook_dir)
+    logger.info("Deployed bootstrap hook files to %s", hook_dir)
+
+    # Enable our custom agent:bootstrap hook
+    _openclaw_cli("hooks", "enable", "traderbot-bootstrap")
+
+    # Enable bundled bootstrap-extra-files hook (auto-injects extra files per session)
+    _openclaw_cli("hooks", "enable", "bootstrap-extra-files")
+
+    extra_paths = ["SESSION-STATE.md", "HEARTBEAT_DATA.md"]
+    try:
+        import subprocess
+        current = subprocess.run(
+            ["openclaw", "config", "get", "hooks.internal.entries.bootstrap-extra-files.paths", "--json"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if current.returncode == 0:
+            existing = json.loads(current.stdout)
+            if isinstance(existing, list):
+                for p in extra_paths:
+                    if p not in existing:
+                        existing.append(p)
+            subprocess.run(
+                ["openclaw", "config", "set", "hooks.internal.entries.bootstrap-extra-files.paths",
+                 json.dumps(existing), "--strict-json", "--merge"],
+                capture_output=True, timeout=10,
+            )
+        else:
+            subprocess.run(
+                ["openclaw", "config", "set", "hooks.internal.entries.bootstrap-extra-files.paths",
+                 json.dumps(extra_paths), "--strict-json"],
+                capture_output=True, timeout=10,
+            )
+        logger.info("Configured bootstrap-extra-files paths: %s", extra_paths)
+    except Exception as exc:
+        logger.warning("Could not configure bootstrap-extra-files paths: %s", exc)
+
     return True
 
 

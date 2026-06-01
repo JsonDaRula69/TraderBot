@@ -302,6 +302,11 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. Log status.",
     },
     {
+        "name": "decision-loop",
+        "cron_expr": "*/5 * * * *",
+        "message": "Run the full trading decision cycle: 1) `traderbot scan`, 2) filter by horizon, 3) `traderbot data forecasts`, 4) model consensus check, 5) compute edge, 6) bias check, 7) analyze candidates, 8) news check, 9) trade if edge >= threshold. Log all activity in SESSION-STATE.md.",
+    },
+    {
         "name": "position-health",
         "cron_expr": "0 * * * *",
         "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. Surface any at-risk positions to sysadmin.",

@@ -10,6 +10,7 @@ session — so they never collide with trading or each other._
 |---|---|---|
 | circuit-breaker-check | 30m | `traderbot halt --json` |
 | news-scan | 30m | `traderbot news-context weather --json` |
+| decision-loop | 5m | Full 10-step trading decision cycle (scan, filter, forecast, model consensus, bias, analyze, news, trade, log) |
 | data-forecast-check | 15,45 past hour | `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` |
 | position-health | 1h | `traderbot positions --json` |
 | settlement-monitor | 1h | Check recently settled markets, update local positions with PnL |

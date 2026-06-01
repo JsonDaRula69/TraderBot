@@ -2095,7 +2095,17 @@ main() {
         echo "  (agent 'main' already exists after setup)"
 
         echo "  Enabling bundled OpenClaw hooks..."
-        enable_openclaw_hooks "command-logger" "session-memory" || true
+        enable_openclaw_hooks "command-logger" "session-memory" "bootstrap-extra-files" || true
+        echo "  Deploying and enabling traderbot-bootstrap hook..."
+        if [[ -x "$tb_cmd" ]]; then
+            "$tb_cmd" hooks deploy-bootstrap 2>/dev/null || echo "  Warning: bootstrap hook deploy failed. Run later: traderbot auth check"
+        fi
+        if openclaw hooks list 2>/dev/null | grep -q "traderbot-bootstrap"; then
+            openclaw hooks enable "traderbot-bootstrap" 2>/dev/null || true
+        fi
+        # Configure bootstrap-extra-files to inject SESSION-STATE.md + HEARTBEAT_DATA.md
+        openclaw config set hooks.internal.entries.bootstrap-extra-files.enabled true 2>/dev/null || true
+        openclaw config set 'hooks.internal.entries.bootstrap-extra-files.paths' '["SESSION-STATE.md","HEARTBEAT_DATA.md"]' --strict-json --merge 2>/dev/null || true
 
         echo "  Running OpenClaw doctor --fix..."
         openclaw doctor --fix 2>/dev/null || true
