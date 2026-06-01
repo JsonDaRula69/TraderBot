@@ -11,14 +11,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import logging
-import os
-import signal
-import sys
-import time
-from pathlib import Path
-
-import httpx
 import websockets
 
 from traderbot.auth import get_credential
@@ -62,17 +54,21 @@ def _save_cache(entries: dict[str, str]) -> None:
     CACHE_PATH.write_text(json.dumps(payload, indent=2))
 
 
-async def _seed_from_rest(api_key: str, private_key: str) -> dict[str, str]:
+async def _seed_from_rest() -> dict[str, str]:
     logger.info("Seeding event cache from REST...")
-    headers = auth_headers(api_key, private_key, "GET", "/trade-api/v2/events")
+    from traderbot.kalshi.client import KalshiClient
+    client = KalshiClient()
     all_events: dict[str, str] = {}
     cursor: str | None = None
-    async with httpx.AsyncClient() as client:
-        for _ in range(20):
-            params: dict[str, object] = {"limit": 500}
-            if cursor:
-                params["cursor"] = cursor
-            resp = await client.get(f"{REST_BASE}/events", headers=headers, params=params)
+    for _ in range(20):
+        params: dict[str, object] = {"limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        try:
+            resp = await client._session.get(
+                f"{REST_BASE}/events",
+                params=params,
+            )
             if resp.status_code != 200:
                 logger.warning("REST seed failed at cursor=%s: %d", cursor, resp.status_code)
                 break
@@ -87,6 +83,9 @@ async def _seed_from_rest(api_key: str, private_key: str) -> dict[str, str]:
             cursor = data.get("cursor")
             if not cursor:
                 break
+        except Exception as exc:
+            logger.warning("REST seed failed at cursor=%s: %s", cursor, exc)
+            break
     logger.info("Seeded %d events from REST", len(all_events))
     return all_events
 
@@ -97,7 +96,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
     current_map = _load_cache()
     logger.info("Loaded %d events from existing cache", len(current_map))
     if not current_map:
-        current_map = await _seed_from_rest(api_key, private_key)
+        current_map = await _seed_from_rest()
         _save_cache(current_map)
     _write_status(connected=False, cache_size=len(current_map))
 
