@@ -501,35 +501,24 @@ def _refresh_workspace_files(repo_dir: Path) -> None:
 
 
 def _enable_bootstrap_hook() -> None:
-    """Deploy bootstrap hook files and enable bootstrap-extra-files."""
+    """Deploy bootstrap hook files and enable the traderbot-bootstrap hook.
+
+    The custom bootstrap hook (at ~/.openclaw/hooks/traderbot-bootstrap/)
+    mutates context.bootstrapFiles to auto-inject SESSION-STATE.md and
+    HEARTBEAT_DATA.md into every agent session, plus injects a Pre-Session
+    Status block when pending/escalated items or circuit breaker flags exist.
+    """
     import subprocess
-    import json
 
     try:
         repo_dir = Path(__file__).resolve().parent.parent.parent
         hook_src = repo_dir / "src" / "traderbot" / "profiles" / "openclaw_config.py"
         if hook_src.exists():
-            # Deploy hook files via the Python module
             from traderbot.profiles.openclaw_config import ensure_agent_bootstrap_hook
             ensure_agent_bootstrap_hook()
         else:
-            # Direct CLI fallback
-            # Enable bundled bootstrap-extra-files hook and configure paths
-            subprocess.run(
-                ["openclaw", "hooks", "enable", "bootstrap-extra-files"],
-                capture_output=True, timeout=15,
-            )
             subprocess.run(
                 ["openclaw", "hooks", "enable", "traderbot-bootstrap"],
-                capture_output=True, timeout=15,
-            )
-            subprocess.run(
-                [
-                    "openclaw", "config", "set",
-                    "hooks.internal.entries.bootstrap-extra-files.paths",
-                    '["SESSION-STATE.md","HEARTBEAT_DATA.md"]',
-                    "--strict-json", "--merge",
-                ],
                 capture_output=True, timeout=15,
             )
         logger.info("Bootstrap hooks configured")
