@@ -71,7 +71,7 @@ async def _seed_from_rest() -> dict[str, str]:
         if cursor:
             params["cursor"] = cursor
         try:
-            params: dict[str, object] = {"limit": 500, "status": "open"}
+            params: dict[str, object] = {"limit": 200}
             if cursor:
                 params["cursor"] = cursor
             resp = await client.get("/events", **params)
