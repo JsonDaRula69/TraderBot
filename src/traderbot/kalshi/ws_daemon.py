@@ -95,9 +95,11 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
     delay = RECONNECT_DELAY
 
     current_map = _load_cache()
+    logger.info("Loaded %d events from existing cache", len(current_map))
     if not current_map:
         current_map = await _seed_from_rest(api_key, private_key)
         _save_cache(current_map)
+    _write_status(connected=False, cache_size=len(current_map))
 
     while True:
         try:
