@@ -374,6 +374,8 @@ def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
     except Exception:
         pass
     return removed
+
+@cron_app.command("setup-heartbeat-tasks")
 def cron_setup_heartbeat_tasks(
     agent_id: Annotated[
         str,
