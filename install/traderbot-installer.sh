@@ -2039,6 +2039,12 @@ interactive_config_flow() {
         echo "  Gateway restart issued."
     fi
 
+    # Install WS daemon (maintains event category cache from Kalshi WebSocket)
+    if [[ -x "$INSTALL_DIR/install/services/install-ws-daemon.sh" ]]; then
+        echo "Installing WS daemon..."
+        bash "$INSTALL_DIR/install/services/install-ws-daemon.sh"
+    fi
+
     echo
     echo "=== Configuration Complete ==="
 }
