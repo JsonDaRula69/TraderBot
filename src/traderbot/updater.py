@@ -236,30 +236,41 @@ def _fetch_release_signature(tag_name: str, timeout: float = 10.0) -> str | None
 
 
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
-    """Apply update by running git pull + pip install. Returns True on success.
+    """Apply update by running the standalone bootstrap update script.
 
-    Post-update steps: refresh workspace files, rebuild Docker sandbox image,
-    re-configure OpenClaw sandbox settings, re-register cron jobs, restart gateway.
+    Delegates to ``install/traderbot-update.sh`` — a bash script that runs
+    the full update pipeline (git pull → pip install → workspace refresh →
+    sandbox rebuild → config reapply → cron reregister → gateway restart)
+    independently of any Python package state.  This ensures the update
+    pipeline works even when a broken Python module blocks imports.
 
-    If the Python module itself is broken (import error), the update pipeline
-    is delegated to the standalone shell script at ``install/traderbot-update.sh``
-    which runs independently of the Python package.
+    Falls back to in-process Python update only when the shell script
+    is not available.
     """
     import subprocess
 
     repo_dir = Path(__file__).resolve().parent.parent.parent
     branch = "dev" if dev else "main"
 
+    # Prefer the standalone bootstrap script (immune to Python import errors)
+    bootstrap = repo_dir / "install" / "traderbot-update.sh"
+    if bootstrap.exists():
+        try:
+            flag = "--dev" if dev else ""
+            result = subprocess.run(
+                ["bash", str(bootstrap), flag],
+                capture_output=True, timeout=600,
+            )
+            if result.returncode == 0:
+                logger.info("Bootstrap update script completed successfully")
+                return True
+        except Exception as exc:
+            logger.warning("Bootstrap update script failed: %s — falling back to Python updater", exc)
+
+    # Fallback: in-process Python update
     try:
         if not (repo_dir / ".git").exists():
-            # If the git repo doesn't exist but we're being called, try the
-            # standalone update script as a fallback.
-            fallback = repo_dir / "install" / "traderbot-update.sh"
-            if fallback.exists():
-                flag = "--dev" if dev else ""
-                subprocess.run(["bash", str(fallback), flag], capture_output=True, timeout=600)
-                return True
-            logger.error("Cannot update: not a git repository. Reinstall with installer.")
+            logger.error("Cannot update: not a git repository.")
             return False
 
         if verify_signature and not dev:
@@ -294,23 +305,22 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
         logger.info("Updated successfully from %s branch", branch)
 
-        # Refresh agent workspace files (replace templates, preserve user data)
+        # Refresh agent workspace files
         _refresh_workspace_files(repo_dir)
 
         # Rebuild Docker sandbox image if Docker is available
         _rebuild_sandbox_image(repo_dir)
 
-        # Re-apply OpenClaw sandbox config (binds, allow external sources, etc.)
+        # Re-apply OpenClaw sandbox config
         _configure_openclaw_sandbox()
 
         # Deploy or refresh bootstrap hook
         _enable_bootstrap_hook()
 
-        # Re-register cron jobs for all deployed agents
+        # Re-register cron jobs
         _reregister_cron_jobs(repo_dir)
 
-        # systemd restart can take 30s+; non-blocking so a slow
-        # restart doesn't abort the update command.
+        # Restart gateway (non-blocking)
         try:
             subprocess.Popen(
                 ["openclaw", "gateway", "restart"],
