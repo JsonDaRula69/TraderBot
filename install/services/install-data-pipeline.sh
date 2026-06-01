@@ -36,7 +36,8 @@ fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SERVICE_DIR="$SCRIPT_DIR/services"
+# Script lives in install/services/ alongside the .service/.timer templates
+SERVICE_DIR="$SCRIPT_DIR"
 
 if [[ "$TARGET_USER" == "$(whoami)" ]] || [[ "$(whoami)" == "root" ]]; then
     TRADERBOT_HOME=$(eval echo "~${TARGET_USER}")/traderbot
