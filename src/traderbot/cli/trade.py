@@ -282,17 +282,28 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         async def _execute():
             market = await market_svc.get_market(ticker)
-            balance_data = await portfolio_svc.get_balance()
-            balance_cents = balance_data.get("balance", 0) if isinstance(balance_data, dict) else 0
-            portfolio = PortfolioState(
-                portfolio_value_cents=balance_cents,
-                peak_value_cents=balance_cents,
-                current_positions_value_cents=0,
-                today_realized_loss_cents=0,
-                today_unrealized_loss_cents=0,
-                open_positions_count=0,
-            )
-            return market, portfolio
+            if profile.paper_mode:
+                balance_cents = profile.initial_balance_cents or 10_000
+                folio = PortfolioState(
+                    portfolio_value_cents=balance_cents,
+                    peak_value_cents=balance_cents,
+                    current_positions_value_cents=0,
+                    today_realized_loss_cents=0,
+                    today_unrealized_loss_cents=0,
+                    open_positions_count=0,
+                )
+            else:
+                balance_data = await portfolio_svc.get_balance()
+                balance_cents_val = balance_data.get("balance", 0) if isinstance(balance_data, dict) else 0
+                folio = PortfolioState(
+                    portfolio_value_cents=balance_cents_val,
+                    peak_value_cents=balance_cents_val,
+                    current_positions_value_cents=0,
+                    today_realized_loss_cents=0,
+                    today_unrealized_loss_cents=0,
+                    open_positions_count=0,
+                )
+            return market, folio
 
         market, portfolio = asyncio.run(_execute())
 
