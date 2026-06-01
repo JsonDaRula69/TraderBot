@@ -60,7 +60,7 @@ class TestPlaceOrder:
             "ts_ms": 1745150400000,
         }
         cfg = _make_config()
-        respx.post(f"{cfg.base_url}/portfolio/events/orders").mock(
+        respx.post(f"{cfg.base_url}/portfolio/events/orders/v2").mock(
             return_value=httpx.Response(200, json=v2_create_response)
         )
         async with KalshiClient(cfg) as client:

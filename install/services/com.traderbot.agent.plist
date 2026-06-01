@@ -15,7 +15,7 @@
 		<string>set -a; source /Users/USERNAME/.traderbot/.env; set +a; exec /Users/USERNAME/traderbot/.venv/bin/traderbot scan --continuous</string>
 	</array>
 
-	<!-- EnvironmentVariables: placeholders replaced by installer -->
+	<!-- EnvironmentVariables: placeholders replaced by installer (TOKEN_PLACEHOLDER replaced by installer) -->
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>TRADERBOT_PROFILE_TOKEN</key>

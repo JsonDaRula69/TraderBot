@@ -21,12 +21,12 @@ def test_cli_paper_imports() -> None:
     assert MarketDataCache is not None
     assert SettlementVerifier is not None
     assert PaperTrader is not None
-    assert DEFAULT_INITIAL_BALANCE_CENTS == 1_000_00
+    assert DEFAULT_INITIAL_BALANCE_CENTS == 10_000
 
 
 def test_cli_paper_help_shows_flags() -> None:
     result = subprocess.run(
-        ["python", "-m", "traderbot.cli", "paper", "--help"],
+        ["uv", "run", "traderbot", "paper", "--help"],
         capture_output=True,
         text=True,
         timeout=10,

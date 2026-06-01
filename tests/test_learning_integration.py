@@ -483,7 +483,7 @@ class TestCLILearningsIntegration:
 
         result = runner.invoke(app, ["learnings", "--db", str(db_file)])
         assert result.exit_code == 0
-        assert "No learnings found" in result.output
+        assert "No patterns found" in result.output
 
     def test_learnings_list_with_patterns(self, tmp_path: Path) -> None:
         """learnings CLI lists recorded patterns."""

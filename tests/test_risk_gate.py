@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from traderbot.kalshi.models import PortfolioState, TradeRequest
-from traderbot.risk import evaluate_trade, evaluate_trade_full
+from traderbot.risk import RiskCheckError, evaluate_trade, evaluate_trade_full
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
 if TYPE_CHECKING:
@@ -63,8 +64,8 @@ class TestEvaluateTrade:
         breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
         trade = _make_trade(quantity=100_000)
         portfolio = _make_portfolio(open_positions_count=100)
-        size = evaluate_trade(trade, portfolio, breaker)
-        assert size == 0
+        with pytest.raises(RiskCheckError):
+            evaluate_trade(trade, portfolio, breaker)
 
     def test_slow_level_reduces_position_size(self, tmp_path: Path) -> None:
         breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
@@ -150,10 +151,12 @@ class TestDirectionPreserved:
         assert result.sized_position_cents > 0
 
     def test_direction_preserved_when_rejected(self, tmp_path: Path) -> None:
-        """Direction is preserved even when the trade is rejected."""
+        """Direction is preserved when the breaker halts trading (returns 0 size)."""
         breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
-        trade = _make_trade(direction="no", quantity=100_000)
-        portfolio = _make_portfolio(open_positions_count=100)
+        trade = _make_trade(direction="no")
+        # Trip the breaker so it halts trading
+        portfolio = _make_portfolio(today_realized_loss_cents=90_000_00)
+        breaker.check(daily_loss_pct=0.9, drawdown_pct=0.1)
         result = evaluate_trade_full(trade, portfolio, breaker)
         assert result.direction == "no"
         assert result.sized_position_cents == 0

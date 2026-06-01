@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from typing import TYPE_CHECKING
 
 from traderbot.kalshi.models import MarketCategory, PortfolioState, TradeRequest
 from traderbot.profiles.models import TradingProfile
-from traderbot.risk import evaluate_trade
+from traderbot.risk import RiskCheckError, evaluate_trade
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
 if TYPE_CHECKING:
@@ -191,8 +192,8 @@ class TestProfileWithOtherRiskChecks:
         trade = _make_trade(market_open_interest=500)  # Below 1000 threshold
         portfolio = _make_portfolio()
 
-        size = evaluate_trade(trade, portfolio, breaker, profile=profile)
-        assert size == 0
+        with pytest.raises(RiskCheckError):
+            evaluate_trade(trade, portfolio, breaker, profile=profile)
 
 
 # Made with Bob

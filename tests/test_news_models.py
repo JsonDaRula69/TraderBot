@@ -81,8 +81,8 @@ class TestNewsCategory:
     def test_all_categories_present(self):
         names = {c.name for c in NewsCategory}
         assert names == {
-            "ECONOMICS", "POLITICS", "SCIENCE", "SPORTS", "CRYPTO",
-            "CULTURE", "WEATHER", "TECHNOLOGY",
+            "ECONOMICS", "POLITICS", "SCIENCE_AND_TECHNOLOGY", "SPORTS", "CRYPTO",
+            "WEATHER",
             "COMMODITIES", "COMPANIES", "ELECTIONS", "ENTERTAINMENT",
             "FINANCIALS", "HEALTH", "MENTIONS", "SOCIAL",
         }

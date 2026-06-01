@@ -1,33 +1,33 @@
-# TraderBot Sysadmin Heartbeat Data
+# TraderBot Heartbeat Data
 
-> 7-step self-review output for sysadmin oversight. Written by `traderbot heartbeat`.
+> 7-step self-review output. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: Never
+## Last Heartbeat: 2026-06-01T02:02:19.190569+00:00
 
-### Managed Agents Overview
-- No active category agents assigned yet.
-- Status: AWAITING_AGENT_ASSIGNMENT
+### Performance
+- Win rate: 0% (0 trades)
+- Daily P&L: +0.00 USD
+- Avg confidence: 0.00
+- Open positions: 0
 
-### Agent Health
-- No agents to monitor.
+### Adaptation
+- No update (no decisions to adapt from)
 
 ### Learnings
-- No learnings to review yet.
+- No promotions this cycle
 
 ### Circuit Breaker
-- Level: N/A (no trading agents)
-- Can trade: False (sysadmin does not trade)
+- Level: FULL_STOP
+- Can trade: False
 - Daily loss: 0.00%
 - Drawdown: 0.00%
 
 ### System Health
-- API: unchecked
-- DB: unchecked
-- Freshness: first_boot
+- API: degraded
+- DB: ok
+- Freshness: no_decisions_yet
 
 ### Alerts
-- (no alerts)
+- ⚠️ Circuit breaker: FULL_STOP — State file unsigned — manual clearance required
 
-### Test Lab Backlog
-- (empty)

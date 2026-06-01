@@ -80,6 +80,7 @@ class TestNewsSource:
             NewsSource.COINGECKO,
             NewsSource.THESPORTSDB,
             NewsSource.OPENWEATHERMAP,
+            NewsSource.NWS_ALERTS,
             NewsSource.FRED,
             NewsSource.GOOGLE_TRENDS,
         }
@@ -142,6 +143,7 @@ class TestNewsAggregatorInit:
             NewsSource.COINGECKO,
             NewsSource.THESPORTSDB,
             NewsSource.OPENWEATHERMAP,
+            NewsSource.NWS_ALERTS,
             NewsSource.FRED,
             NewsSource.GOOGLE_TRENDS,
         ]

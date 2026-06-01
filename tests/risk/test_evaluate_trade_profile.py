@@ -61,10 +61,11 @@ def _make_profile(**overrides) -> TradingProfile:
 class TestEvaluateTradeProfile:
     def test_profile_stricter_than_hard_limits(self, tmp_path: Path) -> None:
         breaker = CircuitBreaker(state_file=tmp_path / "cb.json")
-        # Profile with lower risk limit
+        # Profile with lower risk limit (1% vs 5% hard limit)
         profile = _make_profile(max_position_per_market_pct=0.01)
         trade = _make_trade()
-        portfolio = _make_portfolio()
+        # Use zero existing position so position limit check passes for both
+        portfolio = _make_portfolio(current_positions_value_cents=0, open_positions_count=0)
 
         # Evaluate with profile (stricter limits)
         profile_size = evaluate_trade(trade, portfolio, breaker, profile=profile)

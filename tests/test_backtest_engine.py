@@ -13,6 +13,7 @@ from traderbot.kalshi.models import (
     PortfolioState,
     Trade,
 )
+from traderbot.risk import RiskCheckError
 from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.simulation.data_loader import DataLoader
 from traderbot.simulation.engine import (
@@ -406,9 +407,10 @@ class TestBacktestEngine:
         )
 
         from datetime import date
-        result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
-        # The oversized trade should be rejected
-        assert result.trade_count == 0 or result.total_pnl_cents == 0
+        # evaluate_trade raises RiskCheckError for oversized positions;
+        # the engine propagates it since it doesn't catch risk rejections.
+        with pytest.raises(RiskCheckError):
+            await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
 
     async def test_risk_limits_reject_insufficient_edge(
         self, mock_loader: AsyncMock, tmp_path: Path
@@ -459,8 +461,10 @@ class TestBacktestEngine:
         )
 
         from datetime import date
-        result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
-        assert result.trade_count == 0
+        # evaluate_trade raises RiskCheckError for insufficient edge;
+        # the engine propagates it since it doesn't catch risk rejections.
+        with pytest.raises(RiskCheckError):
+            await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
 
     async def test_zero_trades_returns_none_metrics(
         self, mock_loader: AsyncMock, tmp_path: Path
@@ -653,9 +657,11 @@ class TestBacktestEngine:
         )
 
         from datetime import date
-        result = await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
-        # With very small bankroll, position limit (5%) = 50 cents, can't buy much
-        assert isinstance(result, BacktestResult)
+        # evaluate_trade raises RiskCheckError because the 5% position limit
+        # on a $10 bankroll is only 50 cents, far below the 550-cent order;
+        # the engine propagates it.
+        with pytest.raises(RiskCheckError):
+            await engine.run(start=date(2026, 1, 1), end=date(2026, 3, 31))
 
 
 class TestBacktestError:

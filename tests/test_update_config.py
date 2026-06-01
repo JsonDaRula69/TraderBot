@@ -22,9 +22,9 @@ class TestUpdateConfigDefaults:
         config = UpdateConfig()
         assert config.check_on_startup is True
 
-    def test_default_check_interval_is_6(self) -> None:
+    def test_default_check_interval_is_30(self) -> None:
         config = UpdateConfig()
-        assert config.check_interval_hours == 6
+        assert config.check_interval_minutes == 30
 
     def test_default_auto_apply_is_false(self) -> None:
         config = UpdateConfig()
@@ -40,19 +40,19 @@ class TestUpdateConfigValidation:
 
     def test_check_interval_minimum_1(self) -> None:
         with pytest.raises(ValidationError):
-            UpdateConfig(check_interval_hours=0)
+            UpdateConfig(check_interval_minutes=0)
 
-    def test_check_interval_maximum_720(self) -> None:
+    def test_check_interval_maximum_10080(self) -> None:
         with pytest.raises(ValidationError):
-            UpdateConfig(check_interval_hours=721)
+            UpdateConfig(check_interval_minutes=10081)
 
     def test_check_interval_boundary_1(self) -> None:
-        config = UpdateConfig(check_interval_hours=1)
-        assert config.check_interval_hours == 1
+        config = UpdateConfig(check_interval_minutes=1)
+        assert config.check_interval_minutes == 1
 
-    def test_check_interval_boundary_720(self) -> None:
-        config = UpdateConfig(check_interval_hours=720)
-        assert config.check_interval_hours == 720
+    def test_check_interval_boundary_10080(self) -> None:
+        config = UpdateConfig(check_interval_minutes=10080)
+        assert config.check_interval_minutes == 10080
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
@@ -67,7 +67,7 @@ class TestUpdateConfigLoad:
         monkeypatch.setattr("traderbot.update_config.CONFIG_PATH", tmp_path / "nonexistent.json")
         config = UpdateConfig.load()
         assert config.enabled is True
-        assert config.check_interval_hours == 6
+        assert config.check_interval_minutes == 30
 
     def test_load_reads_valid_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Load reads and validates config from disk."""
@@ -75,7 +75,7 @@ class TestUpdateConfigLoad:
         config_file.write_text(json.dumps({
             "enabled": False,
             "check_on_startup": False,
-            "check_interval_hours": 24,
+            "check_interval_minutes": 1440,
             "auto_apply": True,
             "include_prerelease": True,
         }))
@@ -83,7 +83,7 @@ class TestUpdateConfigLoad:
         config = UpdateConfig.load()
         assert config.enabled is False
         assert config.check_on_startup is False
-        assert config.check_interval_hours == 24
+        assert config.check_interval_minutes == 1440
         assert config.auto_apply is True
         assert config.include_prerelease is True
 
@@ -94,15 +94,15 @@ class TestUpdateConfigLoad:
         monkeypatch.setattr("traderbot.update_config.CONFIG_PATH", config_file)
         config = UpdateConfig.load()
         assert config.enabled is True
-        assert config.check_interval_hours == 6
+        assert config.check_interval_minutes == 30
 
     def test_load_returns_defaults_for_invalid_values(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Load returns defaults when config file has invalid field values."""
         config_file = tmp_path / "update_config.json"
-        config_file.write_text(json.dumps({"check_interval_hours": 9999}))
+        config_file.write_text(json.dumps({"check_interval_minutes": 99999}))
         monkeypatch.setattr("traderbot.update_config.CONFIG_PATH", config_file)
         config = UpdateConfig.load()
-        assert config.check_interval_hours == 6
+        assert config.check_interval_minutes == 30
 
 
 class TestUpdateConfigSave:
@@ -123,7 +123,7 @@ class TestUpdateConfigSave:
         original = UpdateConfig(
             enabled=False,
             check_on_startup=False,
-            check_interval_hours=24,
+            check_interval_minutes=1440,
             auto_apply=True,
             include_prerelease=True,
         )
@@ -131,7 +131,7 @@ class TestUpdateConfigSave:
         loaded = UpdateConfig.load()
         assert loaded.enabled is False
         assert loaded.check_on_startup is False
-        assert loaded.check_interval_hours == 24
+        assert loaded.check_interval_minutes == 1440
         assert loaded.auto_apply is True
         assert loaded.include_prerelease is True
 
@@ -143,4 +143,4 @@ class TestUpdateConfigSave:
         config.save()
         data = json.loads(config_path.read_text())
         assert "enabled" in data
-        assert "check_interval_hours" in data
+        assert "check_interval_minutes" in data

@@ -15,6 +15,7 @@ from rich.console import Console
 from rich.table import Table
 
 from traderbot.cli.helpers import _resolve_db_path, _with_db, _get_strategy
+from traderbot.risk.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,6 @@ async def _analyze_realtime(
 
 def _print_orderbook_snapshot(console: Console, data: dict) -> None:
     """Pretty-print an orderbook snapshot from WebSocket data."""
-    from traderbot.analysis.odds import implied_probability
 
     sides: dict[str, list[dict]] = {"yes": [], "no": []}
     for entry in data.get("book", []):
@@ -114,12 +114,12 @@ def _print_orderbook_snapshot(console: Console, data: dict) -> None:
     for entry in yes_entries:
         p = entry.get("price", 0)
         s = entry.get("size", 0)
-        console.print(f"  YES   {p:>5}¢ {s:>5}  {implied_probability(p):.1%}")
+        console.print(f"  YES   {p:>5}¢ {s:>5}  {p / 100:.1%}")
 
     for entry in no_entries:
         p = entry.get("price", 0)
         s = entry.get("size", 0)
-        console.print(f"  NO    {p:>5}¢ {s:>5}  {implied_probability(p):.1%}")
+        console.print(f"  NO    {p:>5}¢ {s:>5}  {p / 100:.1%}")
 
 
 def register_commands(parent_app: typer.Typer) -> None:
@@ -174,23 +174,17 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         console.print(f"\n[bold cyan]{ticker}[/bold cyan] — {market.question}")
         console.print(f"  Status: {market.status}  Volume: {market.volume}")
-        console.print(f"  Close: {market.close_time}  Open: {market.open_time}")
+        console.print(f"  Close: {market.close_time}  Open: {getattr(market, 'open_time', 'N/A')}")
 
         if orderbook:
             console.print("\n[bold]Order Book[/bold]")
-            yes_bids = orderbook.bids.get("yes", [])
-            yes_asks = orderbook.asks.get("yes", [])
-            no_bids = orderbook.bids.get("no", [])
-            no_asks = orderbook.asks.get("no", [])
+            yes_bids = orderbook.yes_bids if orderbook.yes_bids else []
+            no_bids = orderbook.no_bids if orderbook.no_bids else []
 
             if yes_bids:
                 from traderbot.analysis.odds import implied_probability
-                best_bid = yes_bids[0].price if yes_bids else None
-                best_ask = yes_asks[0].price if yes_asks else None
-                if best_bid is not None:
-                    console.print(f"  YES Best Bid: {best_bid}¢ (implied {implied_probability(best_bid):.1%})")
-                if best_ask is not None:
-                    console.print(f"  YES Best Ask: {best_ask}¢ (implied {implied_probability(best_ask):.1%})")
+                ip = implied_probability(orderbook)
+                console.print(f"  YES Best Bid: {yes_bids[0].price}¢ (implied {ip.yes_prob:.1%})")
 
     @parent_app.command()
     def trade(
@@ -228,7 +222,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.master_password import require_auth
         require_auth()
 
-        from traderbot.analysis.odds import implied_probability
         from traderbot.kalshi.client import KalshiClient
         from traderbot.kalshi.markets import MarketService
         from traderbot.kalshi.models import (
@@ -290,32 +283,28 @@ def register_commands(parent_app: typer.Typer) -> None:
             return market, portfolio
 
         market, portfolio = asyncio.run(_execute())
-        portfolio_state = PortfolioState(
-            balance_cents=portfolio.balance_cents,
-            positions=[],  # positions managed by WAL, not real portfolio for now
-        )
 
-        prob = implied_probability(price, is_yes=direction == "yes")
+        prob = price / 100.0
 
         trade_req = TradeRequest(
             ticker=ticker,
             direction=direction,
             quantity=quantity,
-            limit_price_cents=price,
+            price_cents=price,
             market_price_cents=price,
-            implied_prob=prob,
-            estimated_prob=estimated_prob,
-            confidence=confidence,
+            estimated_prob=prob,
+            confidence=0.5,
+            edge_estimate=0.0,
+            market_open_interest=market.open_interest if market else 0,
         )
 
         breaker = CircuitBreaker()
-        breaker_state = breaker.get_state()
 
         try:
             result = evaluate_trade_full(
-                trade_req=trade_req,
-                portfolio=portfolio_state,
-                breaker=breaker_state,
+                trade_request=trade_req,
+                portfolio=portfolio,
+                breaker=breaker,
                 profile=profile,
             )
         except RiskCheckError as e:
@@ -369,7 +358,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 return
         else:
             if json_output:
-                json_lib.dump({"status": "approved", "ticker": ticker, **result}, sys.stdout, default=str)
+                json_lib.dump({"status": "approved", "ticker": ticker, **result.model_dump()}, sys.stdout, default=str)
             else:
                 console.print(f"[green]Trade approved (paper)[/green]: {ticker} {direction} x{adj_qty} @ {adj_price}¢")
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
@@ -453,7 +442,7 @@ def register_commands(parent_app: typer.Typer) -> None:
     ) -> None:
         """Audit trail of all trade decisions."""
         from datetime import datetime as dt
-        from traderbot.db.decisions import list_all, list_by_outcome, list_by_date_range, list_by_ticker
+        from traderbot.db.decisions import list_by_outcome, list_by_date_range, list_by_ticker
 
         def _query_decisions(conn):
             start_dt = dt.fromisoformat(start) if start else None
@@ -547,7 +536,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 trades = asyncio.run(engine.run(start, end))
                 progress.update(task, completed=True)
 
-        metrics = compute_metrics(trades, initial_bankroll=bankroll)
+        metrics = compute_metrics(trades, initial_bankroll_cents=bankroll)
 
         if json_output:
             json_lib.dump({
@@ -765,7 +754,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
             profile_results = asyncio.run(run_profiles(engine, selected_profiles, start, end))
 
-        comparisons = compare_profiles(profile_results, initial_bankroll=bankroll)
+        comparisons = compare_profiles(profile_results, initial_bankroll_cents=bankroll)
 
         if json_output:
             json_lib.dump(comparisons, sys.stdout, default=str)

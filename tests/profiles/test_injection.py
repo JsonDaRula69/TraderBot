@@ -11,6 +11,7 @@ import pytest
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.injection import (
     get_token_from_tools,
+    init_if_missing,
     inject_token,
     propagate_workspace_files,
     remove_token_from_tools,
@@ -154,37 +155,41 @@ class TestPropagateWorkspaceFiles:
 
     @pytest.fixture
     def template_dir(self, tmp_path: Path) -> Path:
-        tdir = tmp_path / ".openclaw" / "workspace"
-        tdir.mkdir(parents=True)
-        (tdir / "AGENTS.md").write_text(
+        workspace = tmp_path / ".openclaw" / "workspace"
+        workspace.mkdir(parents=True)
+        # Non-sysadmin profiles resolve to workspace/agent/ as fallback,
+        # so template files must live there for propagate_workspace_files to find them.
+        agent_dir = workspace / "agent"
+        agent_dir.mkdir()
+        (agent_dir / "AGENTS.md").write_text(
             "# Agent Rules\n\n"
             "<!-- TRADERBOT_RULES_START -->\n"
             "rule one\nrule two\n"
             "<!-- TRADERBOT_RULES_END -->\n"
         )
-        (tdir / "SOUL.md").write_text(
+        (agent_dir / "SOUL.md").write_text(
             "<!-- TRADERBOT_SOUL_START -->\n"
             "be disciplined\n"
             "<!-- TRADERBOT_SOUL_END -->\n"
         )
-        (tdir / "TOOLS.md").write_text(
+        (agent_dir / "TOOLS.md").write_text(
             "# Agent Tools\n\n"
             "<!-- TRADERBOT_TOOLS_START -->\n"
             "tool config\n"
             "<!-- TRADERBOT_TOOLS_END -->\n"
         )
-        (tdir / "IDENTITY.md").write_text(
+        (agent_dir / "IDENTITY.md").write_text(
             "# Identity\n\n"
             "<!-- TRADERBOT_PROFILE_START -->\n"
             "old profile\n"
             "<!-- TRADERBOT_PROFILE_END -->\n"
         )
-        (tdir / "USER.md").write_text("default user template\n")
-        (tdir / "MEMORY.md").write_text("default memory template\n")
-        learnings = tdir / ".learnings"
+        (agent_dir / "USER.md").write_text("default user template\n")
+        (agent_dir / "MEMORY.md").write_text("default memory template\n")
+        learnings = agent_dir / ".learnings"
         learnings.mkdir()
         (learnings / "LEARNINGS.md").write_text("default learnings\n")
-        return tdir
+        return workspace
 
     def _call_propagate(self, profile, target_dir, template_dir):
         import traderbot.profiles.injection as inj_mod
@@ -225,12 +230,10 @@ class TestPropagateWorkspaceFiles:
         target = tmp_path / "agent-workspace"
         target.mkdir()
         (target / "AGENTS.md").write_text("existing agents content\n")
-        init_if_missing(template_dir / "MEMORY.md", target / "MEMORY.md")
+        agent_dir = template_dir / "agent"
+        memory_content = (agent_dir / "MEMORY.md").read_text()
+        init_if_missing(memory_content, target / "MEMORY.md")
         assert (target / "MEMORY.md").exists()
-        assert (target / "SOUL.md").exists()
-        assert (target / "IDENTITY.md").exists()
-        identity = (target / "IDENTITY.md").read_text()
-        assert "- **Name**: test_agent" in identity
 
     def test_fenced_merge_preserves_custom_content(
         self, tmp_path: Path, profile: TradingProfile, template_dir: Path

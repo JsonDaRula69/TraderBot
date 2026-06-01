@@ -63,10 +63,9 @@ class TestFetchLatestVersion:
         """fetch_latest_version returns (version, url) on 200 response."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "tag_name": "v0.09.00",
-            "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00",
-        }
+        mock_response.json.return_value = [
+            {"name": "v0.09.00", "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00"},
+        ]
         with patch("traderbot.updater.httpx.get", return_value=mock_response):
             result = fetch_latest_version()
         assert result is not None
@@ -103,13 +102,13 @@ class TestFetchLatestVersion:
         assert result is None
 
     def test_missing_tag_name_returns_none(self) -> None:
-        """fetch_latest_version returns None when tag_name is missing."""
+        """fetch_latest_version returns empty-string version when tag name is missing."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"html_url": "https://example.com"}
+        mock_response.json.return_value = [{"html_url": "https://example.com"}]
         with patch("traderbot.updater.httpx.get", return_value=mock_response):
             result = fetch_latest_version()
-        # Empty tag_name stripped = empty string, should still return
+        # Empty tag name stripped = empty string, should still return
         assert result is not None
         assert result[0] == ""
 
@@ -211,8 +210,10 @@ class TestCheckForUpdates:
         monkeypatch.setattr("traderbot.updater.CACHE_FILE", cache_file)
         monkeypatch.setattr("traderbot.updater.CACHE_DIR", tmp_path)
 
-        with patch("traderbot.updater.get_current_version", return_value="0.08.50"):
-            result = check_for_updates(check_interval_hours=6)
+        mock_fetch = MagicMock(return_value=("0.08.50", "https://example.com"))
+        with patch("traderbot.updater.get_current_version", return_value="0.08.50"), \
+             patch("traderbot.updater.fetch_latest_version", mock_fetch):
+            result = check_for_updates(check_interval_minutes=360)
         assert result is None
 
     def test_cache_hit_with_newer_version(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -227,7 +228,7 @@ class TestCheckForUpdates:
         monkeypatch.setattr("traderbot.updater.CACHE_DIR", tmp_path)
 
         with patch("traderbot.updater.get_current_version", return_value="0.08.50"):
-            result = check_for_updates(check_interval_hours=6)
+            result = check_for_updates(check_interval_minutes=360)
         assert result is not None
         assert result["current"] == "0.08.50"
         assert result["latest"] == "0.09.00"
@@ -246,13 +247,12 @@ class TestCheckForUpdates:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "tag_name": "v0.09.00",
-            "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00",
-        }
+        mock_response.json.return_value = [
+            {"name": "v0.09.00", "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00"},
+        ]
         with patch.object(Path, "read_text", return_value="0.08.50\n"), \
              patch("traderbot.updater.httpx.get", return_value=mock_response):
-            result = check_for_updates(check_interval_hours=6)
+            result = check_for_updates(check_interval_minutes=360)
         assert result is not None
         assert result["latest"] == "0.09.00"
 
@@ -269,10 +269,9 @@ class TestCheckForUpdates:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "tag_name": "v0.09.00",
-            "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00",
-        }
+        mock_response.json.return_value = [
+            {"name": "v0.09.00", "html_url": "https://github.com/JsonDaRula69/TraderBot/releases/tag/v0.09.00"},
+        ]
         with patch.object(Path, "read_text", return_value="0.08.50\n"), \
              patch("traderbot.updater.httpx.get", return_value=mock_response):
             result = check_for_updates(force=True)
@@ -306,16 +305,17 @@ class TestApplyUpdate:
             result = apply_update(restart=False)
         assert result is False
 
-    def test_uncommitted_changes_returns_false(self) -> None:
-        """apply_update returns False when there are uncommitted changes."""
+    def test_uncommitted_changes_stashes_and_proceeds(self) -> None:
+        """apply_update auto-stashes uncommitted changes and proceeds."""
         import subprocess
 
         mock_status = MagicMock()
         mock_status.stdout = "M src/traderbot/cli.py\n"
 
-        with patch("subprocess.run", return_value=mock_status):
-            result = apply_update(restart=False)
-        assert result is False
+        with patch("subprocess.run", return_value=mock_status), \
+             patch("traderbot.updater.fetch_latest_version", return_value=None):
+            result = apply_update(restart=False, verify_signature=False)
+        assert result is True
 
     def test_untracked_only_does_not_block(self) -> None:
         """apply_update proceeds when only untracked files exist (?? prefix)."""

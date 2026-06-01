@@ -42,12 +42,14 @@ class TestFractionalKelly:
     def test_fraction_clamped_low(self):
         result = fractional_kelly(0.6, 1.5, fraction=0.05)
         full = kelly_criterion(0.6, 1.5)
-        assert abs(result - full * 0.1) < 1e-10
+        # fraction=0.05 is within (0, 1] so it's used as-is (no floor)
+        assert abs(result - full * 0.05) < 1e-10
 
     def test_fraction_clamped_high(self):
         result = fractional_kelly(0.6, 1.5, fraction=0.8)
         full = kelly_criterion(0.6, 1.5)
-        assert abs(result - full * 0.5) < 1e-10
+        # fraction=0.8 is within (0, 1] so it's used as-is (no cap at 0.5)
+        assert abs(result - full * 0.8) < 1e-10
 
     def test_negative_kelly_returns_zero(self):
         assert fractional_kelly(0.3, 1.5) == 0.0

@@ -1144,9 +1144,9 @@ class TestPerformanceReviewE2E:
 
     def test_all_wins_high_deviation_flag(self) -> None:
         """Win rate > 70% with 5+ trades → win_rate_above_expected deviation."""
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock, patch
 
-        from traderbot.heartbeat import step_performance_review
+        from traderbot.heartbeat import step_performance_review, positions
 
         decisions = [
             _make_db_decision(
@@ -1159,16 +1159,17 @@ class TestPerformanceReviewE2E:
             for _ in range(8)
         ]
 
-        result = step_performance_review(MagicMock(), decisions)
+        with patch.object(positions, "count_open", return_value=0):
+            result = step_performance_review(MagicMock(), decisions)
         assert result.trade_count == 8
         assert result.win_rate == 1.0
         assert result.deviation_flag == "win_rate_above_expected"
 
     def test_all_losses_low_deviation_flag(self) -> None:
         """Win rate < 30% with 5+ trades → win_rate_below_expected deviation."""
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock, patch
 
-        from traderbot.heartbeat import step_performance_review
+        from traderbot.heartbeat import step_performance_review, positions
 
         decisions = [
             _make_db_decision(
@@ -1181,7 +1182,8 @@ class TestPerformanceReviewE2E:
             for _ in range(6)
         ]
 
-        result = step_performance_review(MagicMock(), decisions)
+        with patch.object(positions, "count_open", return_value=0):
+            result = step_performance_review(MagicMock(), decisions)
         assert result.trade_count == 6
         assert result.win_rate == 0.0
         assert result.deviation_flag == "win_rate_below_expected"
@@ -1200,9 +1202,9 @@ class TestPerformanceReviewE2E:
 
     def test_mixed_outcomes_no_deviation(self) -> None:
         """Win rate between 30-70% → no deviation flag."""
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock, patch
 
-        from traderbot.heartbeat import step_performance_review
+        from traderbot.heartbeat import step_performance_review, positions
 
         # 5 wins, 5 losses → 50% win rate
         decisions = [
@@ -1216,6 +1218,7 @@ class TestPerformanceReviewE2E:
             for i in range(10)
         ]
 
-        result = step_performance_review(MagicMock(), decisions)
+        with patch.object(positions, "count_open", return_value=0):
+            result = step_performance_review(MagicMock(), decisions)
         assert result.win_rate == 0.5
         assert result.deviation_flag == ""

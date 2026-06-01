@@ -197,20 +197,19 @@ def register_commands(parent_app: typer.Typer) -> None:
         if perf.deviation_flag:
             console.print(f"  [yellow]⚠ Performance deviation detected[/yellow]")
 
-        if decision.decisions_today >= 0:
-            console.print(f"\n[bold]Decisions[/bold] — {decision.decisions_today} today, "
-                          f"{decision.rejections_today} rejected")
+        if decision.closed_count >= 0:
+            console.print(f"\n[bold]Decisions[/bold] — {decision.open_count} open, "
+                          f"{decision.closed_count} closed")
 
-        if lrn.promoted > 0:
-            console.print(f"\n[bold]Learning Promotion[/bold] — {lrn.promoted} promoted, "
-                          f"{lrn.deprecated_if_unused} deprecated")
+        if len(lrn.promoted) > 0:
+            console.print(f"\n[bold]Learning Promotion[/bold] — {lrn.promoted_count} promoted")
 
         if cb.level != "NORMAL":
             console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
 
         logger.info("Heartbeat complete — steps=%s trades=%d win_rate=%.0f%% pnl=%s promoted=%d cb=%s",
                      ", ".join(result.steps_completed), perf.trade_count,
-                     perf.win_rate * 100, pnl_str, lrn.promoted, cb.level)
+                     perf.win_rate * 100, pnl_str, lrn.promoted_count, cb.level)
 
     @parent_app.command()
     def halt(
@@ -390,20 +389,18 @@ def register_commands(parent_app: typer.Typer) -> None:
 
             table = Table(title="Learned Patterns")
             table.add_column("ID", justify="right")
-            table.add_column("Key", style="cyan")
             table.add_column("Category", style="green")
             table.add_column("Status")
-            table.add_column("Strength", justify="right")
-            table.add_column("Description")
+            table.add_column("Confidence", justify="right")
+            table.add_column("Summary")
 
             for p in patterns:
                 table.add_row(
                     str(p.id),
-                    p.pattern_key,
                     p.category.value if p.category else "",
                     p.status.value,
-                    f"{p.strength:.1f}" if p.strength is not None else "—",
-                    p.description or "",
+                    f"{p.confidence:.2f}",
+                    p.summary or "",
                 )
             console.print(table)
 

@@ -89,7 +89,7 @@ def test_template_uses_instance_variable(template_content: str) -> None:
 def test_template_has_profile_token_placeholder(template_content: str) -> None:
     """Template has TRADERBOT_PROFILE_TOKEN placeholder."""
     assert "TRADERBOT_PROFILE_TOKEN" in template_content, "Must have TRADERBOT_PROFILE_TOKEN environment variable"
-    assert "<PROFILE_TOKEN>" in template_content, "Must have <PROFILE_TOKEN> placeholder for installer"
+    assert "TOKEN_PLACEHOLDER" in template_content, "Must have TOKEN_PLACEHOLDER placeholder for installer"
 
 
 def test_template_has_proper_restart_policy(template_content: str) -> None:

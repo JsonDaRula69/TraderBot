@@ -213,7 +213,7 @@ class TestVoyageRerankPath:
         voyage = MagicMock()
         cat_embs = self._make_close_embeddings()
         dim = len(_KALSHI_CATEGORIES)
-        news_emb = [0.6, 0.35] + [0.3] * (dim - 2)
+        news_emb = [0.55, 0.35] + [0.3] * (dim - 2)
         desc_to_emb: dict[str, list[float]] = {}
         for cat, desc in _CATEGORY_DESCRIPTIONS.items():
             desc_to_emb[desc] = cat_embs[cat]

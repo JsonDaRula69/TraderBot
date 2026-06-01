@@ -445,6 +445,9 @@ def cron_remove_heartbeat_tasks(
         console.print(f"  [green]✓[/green] Removed {name}")
     if not removed:
         console.print("[yellow]No heartbeat tasks found to remove.[/yellow]")
+
+
+@cron_app.command("setup")
 def cron_setup(
     agent_id: Annotated[
         str,

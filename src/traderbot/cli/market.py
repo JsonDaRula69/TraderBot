@@ -250,11 +250,10 @@ def register_commands(parent_app: typer.Typer) -> None:
             if category_filter is not None and classified.category not in category_filter:
                 continue
             sentiment = scorer.score(item.title, item.source, item.id)
-            impact = assessor.assess(classified)
+            impact = assessor.assess(item, classified, sentiment)
             classified_items.append({
                 "news_item": item,
                 "category": classified.category,
-                "keywords": classified.keywords,
                 "sentiment_score": sentiment.score,
                 "sentiment_confidence": sentiment.confidence,
                 "sentiment_model": sentiment.model,
@@ -272,7 +271,6 @@ def register_commands(parent_app: typer.Typer) -> None:
                     "title": item.title,
                     "source": item.source.value,
                     "category": entry["category"].value,
-                    "keywords": entry["keywords"],
                     "sentiment_score": entry["sentiment_score"],
                     "sentiment_confidence": entry["sentiment_confidence"],
                     "sentiment_model": entry["sentiment_model"],

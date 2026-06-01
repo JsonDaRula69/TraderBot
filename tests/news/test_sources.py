@@ -301,6 +301,7 @@ def test_source_coverage_all_sources_have_entries() -> None:
         NewsSource.NEWSAPI, NewsSource.REDDIT, NewsSource.TWITTER,
         NewsSource.OPEN_METEO, NewsSource.COINGECKO, NewsSource.THESPORTSDB,
         NewsSource.OPENWEATHERMAP, NewsSource.FRED, NewsSource.GOOGLE_TRENDS,
+        NewsSource.NWS_ALERTS,
     }
     assert set(SOURCE_CATEGORY_COVERAGE.keys()) == expected_sources
 
