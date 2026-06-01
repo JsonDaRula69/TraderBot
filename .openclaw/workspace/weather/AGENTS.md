@@ -19,6 +19,22 @@ Do not manually reread startup files unless the user asks, context is missing so
 - **If `traderbot` CLI fails** (command not found, auth error, empty output): Log the error in ERRORS.md with full command + output, surface to sysadmin via message tool, and STOP. Do NOT attempt workarounds.
 - **Never modify `/workspace/traderbot` or create wrapper scripts.** The CLI is on PATH at `/usr/local/bin/traderbot`. If it's missing, surface to sysadmin.
 - **Never store credentials or create alternate `.env` files.** All credentials live at `/home/traderbot/.traderbot/.env` (bind-mounted from host). Creating a workspace-level `.env` will be ignored.
+- **If scan fails** (returns empty or errors): Retry once after 30s. If still failing, skip trade cycle, log in ERRORS.md, surface to sysadmin. Do not invent market data.
+
+## Position Sizing
+
+```
+base_size = profile_risk_multiplier * conviction_score * available_balance
+final_size = min(base_size, max_position_pct * available_balance)
+```
+
+Where:
+- `conviction_score`: 0.0–1.0 derived from model consensus spread (< 2°F → 0.9, 2–5°F → 0.6, > 5°F → 0.3)
+- `available_balance`: profile initial_balance_cents minus current position exposure
+- `max_position_pct`: from profile (default 0.05 = 5%)
+- `risk_multiplier`: from profile (default 1.0)
+
+For known-lower-confidence situations (e.g. seasonal transition near solstice), cap conviction at 0.7.
 
 ### Quick Boot Sequence
 

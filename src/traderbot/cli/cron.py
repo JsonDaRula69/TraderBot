@@ -261,7 +261,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "experiment-execution",
         "cron_expr": "15,45 * * * *",
-        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar. DEPLOY if pass, REJECT with reason. Archive result.",
+        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar. DEPLOY if pass, REJECT with reason. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/.",
     },
     {
         "name": "auth-check",
@@ -304,7 +304,7 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "decision-loop",
         "cron_expr": "*/5 * * * *",
-        "message": "Run the full trading decision cycle: 1) `traderbot scan`, 2) filter by horizon, 3) `traderbot data forecasts`, 4) model consensus check, 5) compute edge, 6) bias check, 7) analyze candidates, 8) news check, 9) trade if edge >= threshold. Log all activity in SESSION-STATE.md.",
+        "message": "Run the full trading decision cycle: 1) `traderbot scan --category weather --limit 200 --json` — if empty, retry once after 30s, if still empty log in ERRORS.md and skip to step 10. 2) Filter by horizon (0-7 day). 3) `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. 4) Model consensus check (spread < 2°F = high conviction, > 5°F = halve position). 5) Compute edge for top 5 contracts by volume near NWS forecast values. 6) `traderbot data bias <CITY> --days 90 --json` for bias adjustment. 7) `traderbot analyze <TICKER> --json` on the 3 most promising candidates. 8) `traderbot news-context weather --json` for advisories. 9) If risk pipeline passes and edge >= profile threshold: trade. Position sizing = profile risk_multiplier * conviction_score * available_balance, capped at max-position-pct. 10) Log every decision in SESSION-STATE.md — whether traded or skipped with reason.",
     },
     {
         "name": "position-health",
@@ -330,7 +330,7 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "learning-promotion",
         "cron_expr": "0 */6 * * *",
-        "message": "Read `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3. Promote each to PENDING_REVIEW via `traderbot learnings --promote <key>` if not already. For each newly promoted, follow Experiment Design Flow in AGENTS.md.",
+        "message": "Read `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. For each newly promoted entry, spawn an experiment-design sub-agent via `sessions_spawn` with the full pattern details, context, profile params, and SESSION-STATE.md. The sub-agent should return a complete experiment design (hypothesis, target parameter, current/proposed values, backtest params, success criteria). Log the design in SESSION-STATE.md Pending Actions.",
     },
     {
         "name": "pipeline-health",
