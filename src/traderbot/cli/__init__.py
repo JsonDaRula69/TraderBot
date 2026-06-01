@@ -285,7 +285,17 @@ def uninstall(
     if cron_removed and not json_output:
         console.print(f"  Removed {len(cron_removed)} cron jobs")
 
-    # Step 2: Remove user data
+    # Step 2: Remove user data (~/.traderbot/)
+    if data_dir.exists():
+        if json_output:
+            remove_data = True
+        else:
+            console.print(f"\n[bold]Step 2: Remove user data[/bold]")
+            console.print(f"[dim]Data directory: {data_dir}[/dim]")
+            console.print("[dim]This will delete all credentials (API keys, PEM keys), ChromaDB (market data, news, signals), "
+                          "profile tokens, logs, and cached data.[/dim]")
+            remove_data = typer.confirm("  Remove all user data?", default=False)
+
     if remove_data and data_dir.exists():
         if json_output:
             data_paths = list_all_data_paths()
@@ -372,6 +382,8 @@ def uninstall(
         else:
             remove_npm = typer.confirm("  Remove OpenClaw npm package? (npm uninstall -g openclaw)", default=False)
         if remove_npm:
+            # Stop gateway before removing the binary
+            _sp.run(["openclaw", "gateway", "stop"], capture_output=True, timeout=30)
             _sp.run(["npm", "uninstall", "-g", "openclaw"], capture_output=True, timeout=30)
             if not json_output:
                 console.print("  Removed OpenClaw npm package")
