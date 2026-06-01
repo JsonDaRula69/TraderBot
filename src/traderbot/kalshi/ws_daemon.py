@@ -72,7 +72,7 @@ async def _seed_from_rest() -> dict[str, str]:
         if cursor:
             params["cursor"] = cursor
         try:
-            resp = await client._session.get(
+            resp = await client._client.get(
                 f"{REST_BASE}/events",
                 params=params,
             )
@@ -93,6 +93,7 @@ async def _seed_from_rest() -> dict[str, str]:
         except Exception as exc:
             logger.warning("REST seed failed at cursor=%s: %s", cursor, exc)
             break
+    await client.aclose()
     logger.info("Seeded %d events from REST", len(all_events))
     return all_events
 
@@ -122,7 +123,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                 delay = RECONNECT_DELAY
                 _write_status(connected=True)
 
-                sub = {"type": "subscribe", "channels": ["market_lifecycle_v2"]}
+                sub = {"id": 1, "cmd": "subscribe", "params": {"channels": ["market_lifecycle_v2"]}}
                 await ws.send(json.dumps(sub))
                 ack = await ws.recv()
                 logger.info("Subscription ack: %s", ack[:200])
