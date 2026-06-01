@@ -13,17 +13,21 @@ Use runtime-provided startup context first. That context includes: `AGENTS.md`, 
 
 Do not manually reread startup files unless the user asks, context is missing something, or you need a deeper follow-up read.
 
+### ⚠️ Hard Rules — Never Violate These
+
+- **ALWAYS use `traderbot` CLI for all Kalshi operations.** Direct HTTP/curl calls to `api.elections.kalshi.com`, `api.kalshi.com`, or `trading-api.kalshi.com` are blocked at the Docker level. If DNS were not blocked, direct calls bypass credential resolution, rate limiting, and audit logging — this is forbidden.
+- **If `traderbot` CLI fails** (command not found, auth error, empty output): Log the error in ERRORS.md with full command + output, surface to sysadmin via message tool, and STOP. Do NOT attempt workarounds.
+- **Never modify `/workspace/traderbot` or create wrapper scripts.** The CLI is on PATH at `/usr/local/bin/traderbot`. If it's missing, surface to sysadmin.
+- **Never store credentials or create alternate `.env` files.** All credentials live at `/home/traderbot/.traderbot/.env` (bind-mounted from host). Creating a workspace-level `.env` will be ignored.
+
 ### Quick Boot Sequence
 
-1. `traderbot profile assignments --json` — verify my profile is assigned
-2. `traderbot profile show <my_profile> --json` — confirm risk parameters and enabled categories
-3. `traderbot halt --json` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
-4. `traderbot positions --json` — list open positions. Reconcile with SESSION-STATE.md. **Note: `positions` may return empty between cycles for paper-mode trades. Do NOT rely on positions DB for cross-cycle tracking. Use SESSION-STATE.md as the authoritative record.**
-4.5. `traderbot reconcile --json` — sync local positions with Kalshi.
-5. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` — check structured NWS forecast + GFS/ECMWF/GEM ensemble data. If unavailable, fall back to `traderbot data-points weather --json` for historical edge calibration.
-6. `traderbot news-context weather --json` — check for active advisories.
-7. `traderbot performance --json` — check my recent win rate and P&L.
-8. Read `SESSION-STATE.md` for pending actions and tracked markets.
+1. `traderbot profile assignments --json` — verify my profile is assigned. If empty or errored, STOP, log in ERRORS.md, surface to sysadmin.
+2. `traderbot halt --json` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
+3. `traderbot positions --json` — list open positions. Reconcile with SESSION-STATE.md.
+4. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` — check structured NWS forecast + ensemble data.
+5. `traderbot performance --json` — check recent win rate and P&L.
+6. Read `SESSION-STATE.md` for pending actions and tracked markets.
 
 ## Responsibilities
 

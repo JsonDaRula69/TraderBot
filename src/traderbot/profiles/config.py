@@ -27,7 +27,14 @@ def resolve_kalshi_credentials(
     3. Global keyring (traderbot.kalshi)
     4. Global env vars / .env
     5. raise ValueError
+
+    If the resolved private key value references a file path (e.g.
+    KALSHI_PRIVATE_KEY_PATH=/path/to/key.pem), the file is read in-line
+    so the credential is portable across sandbox environments where host
+    paths differ.
     """
+    from pathlib import Path
+
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
         profile_auth = ProfileAuthStore(profile)
@@ -41,6 +48,16 @@ def resolve_kalshi_credentials(
     private_key_result = global_auth.get_credential("kalshi", "private_key_pem")
 
     if key_result is not None and private_key_result is not None:
+        api_key = key_result.value.get_secret_value()
+        private_key_value = private_key_result.value.get_secret_value()
+
+        # If the stored value is a file path (KALSHI_PRIVATE_KEY_PATH),
+        # read the file contents so it works across sandbox environments.
+        pem_path = Path(private_key_value)
+        if pem_path.exists() and pem_path.is_file():
+            logger.info("Kalshi private key references file at %s — reading contents", pem_path)
+            private_key_value = pem_path.read_text(encoding="utf-8")
+
         if profile is not None:
             logger.info(
                 "Profile '%s' has no Kalshi credentials, using global credentials",
@@ -48,7 +65,7 @@ def resolve_kalshi_credentials(
             )
         else:
             logger.info("Using global Kalshi credentials")
-        return (key_result.value.get_secret_value(), private_key_result.value.get_secret_value())
+        return (api_key, private_key_value)
 
     raise ValueError(
         "No Kalshi credentials configured. "
