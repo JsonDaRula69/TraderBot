@@ -6,20 +6,20 @@ This file defines conventions for AI-assisted development of this project. All A
 
 - **Name**: TraderBot
 - **Language**: Python 3.12+
-- **Package manager**: uv (preferred) or pip
+- **Package manager**: uv
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.11.55
+- **Current version**: v0.13.50
 
 ## Versioning Scheme
 
-- **Format**: `MAJOR.MINOR.PATCH` (zero-padded: `0.00.01`)
-- **Every commit** increments the patch version by 1 (0.00.01 → 0.00.02 → 0.00.03 …)
-- **Milestone releases** increment the minor version and reset patch to 00 (0.00.99 → 0.01.00)
-- **Major releases** increment the major version and reset minor/patch (1.00.00)
+- **Format**: `MAJOR.MINOR.PATCH` (zero-padded: `v0.00.01`)
+- **Every commit** increments the patch version by 1 (v0.00.01 → v0.00.02 → v0.00.03 …)
+- **Milestone releases** increment the minor version and reset patch to 00 (v0.00.99 → v0.01.00)
+- **Major releases** increment the major version and reset minor/patch (v1.00.00)
 - **Tags**: Every commit must be tagged with its version (`git tag v0.00.0N`)
-- **Version file**: `VERSION` file at repo root contains the current version string
+- **Version file**: `VERSION` at repo root is the single source of truth — update it before every commit
 
 ## Git Discipline
 
@@ -60,7 +60,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Prompt before fixing discovered issues** — If you discover bugs, inconsistencies, or improvement opportunities while working on a task — even if they're unrelated to the current task — always ask the user before fixing them. Don't fix silently or assume permission.
 - **Always use the questions tool** — When prompting the user or asking questions, always use the `question` tool. Do not ask questions inline or in plain text.
 - **Always maintain a todo list** — Use `todowrite` for every task, even simple ones. If the user interrupts you mid-task, evaluate the priority of the new request and insert it into the todo list in the appropriate order. Never leave tasks with `in_progress` status unfinished.
-- **Update VERSION on every commit** — Before every `git commit`, increment the patch version in `VERSION` (repo root). The format is `vMAJOR.MINOR.PATCH` (e.g., `v0.13.23`). The VERSION file is the single source of truth — `traderbot/__init__.py` reads it with `importlib.metadata` as fallback.
+- **Update VERSION on every commit** — Before every `git commit`, increment the patch version in `VERSION` (repo root). The format is `vMAJOR.MINOR.PATCH` (e.g., `v0.13.23`). The VERSION file is the single source of truth — `traderbot/__init__.py` reads it as primary, with `importlib.metadata` as fallback.
 
 ## Code Style
 
@@ -79,6 +79,87 @@ This file defines conventions for AI-assisted development of this project. All A
 - `src/traderbot/news/` — external data pipeline
 - `src/traderbot/db/` — persistence layer
 - `src/traderbot/profiles/` — multi-agent profile system
+- `src/traderbot/cli/` — CLI entry point and sub-command modules
+- `src/traderbot/experiment/` — experiment design, harness, and evaluation framework
+- `src/traderbot/data/` — external data providers (weather, registry)
+
+## Testing Discipline
+
+- **Run before commit**: execute `uv run pytest -m "not live"` before every commit. All tests must pass.
+- **Markers**: use the standard marker taxonomy defined in `pyproject.toml`:
+  - `unit` — pure unit tests with no external dependencies (fastest)
+  - `integration` — tests with mocked external services
+  - `live` — tests that hit real API endpoints (skipped in CI, requires credentials)
+  - `slow` — tests excluded from fast runs
+- **Coverage**: new code should maintain or improve module-level coverage. Existing gaps don't justify widening them.
+- **Fixtures**: use shared fixtures from `tests/conftest.py` and `tests/news/conftest.py`. Don't duplicate fixture setup across test files.
+- **Parity**: bug fixes must include a regression test. New features must include tests for the public API surface.
+- **Pattern**: prefer `MockDataProvider` over monkeypatching HTTP calls. Use `respx` (available in dev deps) for HTTP-level mocking when needed.
+
+## Idempotency
+
+All setup and registration operations MUST be idempotent — safe to run twice without side effects or duplication.
+
+- Before creating a resource (cron job, service, agent, profile), remove or replace any existing one with the same name.
+- Use `--replace` semantics for cron job registration. If the tooling doesn't support it, add the guard yourself.
+- Use existence checks before installing files, creating directories, or adding PATH entries.
+- Idempotency failures (duplicate cron jobs, duplicate services) are treated as bugs.
+
+## Resource Lifecycle
+
+Every resource that can be created MUST have a corresponding cleanup path in the uninstall flow.
+
+- **Concrete lifecycle checks before installation**:
+  - Docker images: `docker build` → `docker rmi` → `docker builder prune --all`
+  - System services: `systemctl enable` → `systemctl disable` + remove unit file
+  - Agent workspace files: `propagate_workspace_files` → deleted with `~/.openclaw`
+  - Cron jobs: `openclaw cron add` → `openclaw cron remove` (use `--replace`)
+  - Symlinks: created at `/usr/local/bin/` and `~/.local/bin/` → removed via `rm -f`
+- **Single source of truth**: `traderbot uninstall` (Python CLI) is the canonical teardown. Bash `--uninstall` delegates to it.
+- If you add a new resource type, verify the uninstall path handles it before merging.
+
+## Error Handling
+
+- **Custom exceptions**: define domain-specific exceptions in `traderbot/exceptions.py`. Prefer typed exceptions over `Exception` or string returns.
+- **CLI commands**: use `typer.Exit(1)` with a descriptive `[red]Error:[/red]` rich message. Never let unhandled exceptions bubble to the user raw.
+- **No silent swallows**: never `except Exception: pass`. At minimum log the error. Use broad catches only at module boundaries (e.g., subprocess calls to external tools).
+- **Retry policy**: transient errors (network, rate limits) retry with exponential backoff before failing. Auth/config errors fail immediately.
+- **Error context**: include relevant state information in exception messages (file paths, IDs, return codes). Avoid leaking secrets (tokens, API keys).
+- **Chain of trust**: library code raises typed exceptions. CLI code catches and formats them. Never print raw tracebacks to end users.
+
+## Configuration Loading
+
+- **Pattern**: use `pydantic-settings` `BaseSettings` for all configuration classes. Define them in module-level `config.py` files.
+- **Entry point**: call `load_dotenv()` exactly once, at the CLI entry point (`traderbot/cli/__init__.py`). Library modules assume env vars are already loaded.
+- **Fallback chain**: all credential values resolve via: env var → `.env` file → interactive prompt. Never hard-code defaults for credentials.
+- **Validation**: use Pydantic validators on settings fields. Invalid config should fail fast at startup, not silently at runtime.
+
+## Dependencies
+
+- **Adding deps**: `uv add <package>` — this updates both `pyproject.toml` and the lockfile. Commit the lockfile changes.
+- **Version policy**: pin minimum versions with `>=`. Avoid ranges wider than minor version unless the API is known unstable.
+- **Dev deps**: go in `[dependency-groups] dev` in `pyproject.toml`. Test-only deps don't belong in `[project.dependencies]`.
+- **Justification**: before adding a new dependency, consider if stdlib or existing deps can solve the problem. Each new dependency is a maintenance liability.
+
+## Decision Records
+
+Create an ADR in `docs/decisions/` when:
+
+- Choosing between multiple architecture approaches (database, provider, model)
+- Making a tradeoff with visible downsides (cost vs latency vs accuracy vs complexity)
+- Changing a previously established pattern documented in ADR or AGENTS.md
+- Adding a new external dependency with security, permissions, or data impact
+
+Keep ADRs short and factual: Context → Decision → Consequences.
+
+## Changelog
+
+Maintain `CHANGELOG.md` at repo root using Keep a Changelog format.
+
+- Entries grouped by release version, newest first.
+- Categories: **Added**, **Changed**, **Fixed**, **Removed**, **Deprecated**.
+- Update alongside the VERSION bump on every commit.
+- Each entry is a one-liner describing the user-visible impact.
 
 ## API Verification Protocol
 
@@ -91,10 +172,3 @@ Before making any code changes that involve OpenClaw, Kalshi, or any other exter
 5. Only proceed with implementation once you've confirmed the correct API surface
 
 This prevents recurring issues from implementing against assumed APIs that don't match reality.
-
-## Decision Records
-
-Record non-obvious decisions in `docs/decisions/` as ADRs when:
-- Choosing between multiple approaches
-- Making a tradeoff with visible downsides
-- Deviating from established patterns
