@@ -236,7 +236,11 @@ def _fetch_release_signature(tag_name: str, timeout: float = 10.0) -> str | None
 
 
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
-    """Apply update by running git pull + pip install. Returns True on success."""
+    """Apply update by running git pull + pip install. Returns True on success.
+
+    Post-update steps: refresh workspace files, rebuild Docker sandbox image,
+    re-configure OpenClaw sandbox settings, re-register cron jobs, restart gateway.
+    """
     import subprocess
 
     repo_dir = Path(__file__).resolve().parent.parent.parent
@@ -282,12 +286,133 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         # Refresh agent workspace files (replace templates, preserve user data)
         _refresh_workspace_files(repo_dir)
 
+        # Rebuild Docker sandbox image if Docker is available
+        _rebuild_sandbox_image(repo_dir)
+
+        # Re-apply OpenClaw sandbox config (binds, allow external sources, etc.)
+        _configure_openclaw_sandbox()
+
+        # Re-register cron jobs for all deployed agents
+        _reregister_cron_jobs(repo_dir)
+
+        # Restart OpenClaw gateway to pick up config changes
+        subprocess.run(
+            ["openclaw", "gateway", "restart"],
+            capture_output=True,
+            timeout=30,
+        )
+
         if restart:
             os.execv(sys.executable, [sys.executable, *sys.argv])
         return True
     except subprocess.CalledProcessError as exc:
         logger.error("Update failed: %s", exc)
         return False
+
+
+def _rebuild_sandbox_image(repo_dir: Path) -> None:
+    """Rebuild the Docker sandbox image if Docker is available."""
+    build_script = repo_dir / "install" / "docker" / "build-sandbox.sh"
+    if not build_script.exists():
+        logger.debug("Sandbox build script not found at %s, skipping rebuild", build_script)
+        return
+    try:
+        import subprocess
+        subprocess.run(["bash", str(build_script)], capture_output=True, timeout=300)
+        logger.info("Docker sandbox image rebuilt")
+    except Exception as exc:
+        logger.warning("Sandbox image rebuild failed (Docker may not be available): %s", exc)
+
+
+def _configure_openclaw_sandbox() -> None:
+    """Re-apply OpenClaw sandbox config keys that the installer sets."""
+    import subprocess
+    import os
+
+    try:
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.mode", "non-main"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.backend", "docker"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.scope", "agent"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.workspaceAccess", "rw"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.image", "traderbot-sandbox:bookworm-slim"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.network", "bridge"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.readOnlyRoot", "true"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.capDrop", '["ALL"]'],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.memory", "1g"],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources", "true"],
+            capture_output=True, timeout=15,
+        )
+        home = os.environ.get("HOME", "/root")
+        subprocess.run(
+            [
+                "openclaw", "config", "set",
+                "agents.defaults.sandbox.docker.binds",
+                f'["{home}/traderbot:/traderbot:ro","{home}/.traderbot:/home/traderbot/.traderbot:rw"]',
+                "--strict-json",
+            ],
+            capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", 'agents.list[0].sandbox.mode', 'off'],
+            capture_output=True, timeout=15,
+        )
+        logger.info("OpenClaw sandbox configuration re-applied")
+    except Exception as exc:
+        logger.warning("Failed to re-apply sandbox config (openclaw CLI may not be on PATH): %s", exc)
+
+
+def _reregister_cron_jobs(repo_dir: Path) -> None:
+    """Re-register heartbeat cron jobs for all deployed agents."""
+    import subprocess
+    try:
+        # Sysadmin cron
+        subprocess.run(
+            [sys.executable, "-m", "traderbot", "cron", "setup-heartbeat-tasks",
+             "--agent", "main", "--role", "sysadmin", "--replace"],
+            capture_output=True, timeout=30,
+        )
+        # Agent cron for each deployed agent directory
+        agents_root = Path.home() / ".openclaw" / "agents"
+        if agents_root.exists():
+            for agent_dir in agents_root.iterdir():
+                if (agent_dir / "agent").is_dir():
+                    ag_id = agent_dir.name
+                    subprocess.run(
+                        [sys.executable, "-m", "traderbot", "cron", "setup-heartbeat-tasks",
+                         "--agent", ag_id, "--replace"],
+                        capture_output=True, timeout=30,
+                    )
+        logger.info("Cron jobs re-registered for all deployed agents")
+    except Exception as exc:
+        logger.warning("Cron re-registration failed: %s", exc)
 
 
 def _refresh_workspace_files(repo_dir: Path) -> None:

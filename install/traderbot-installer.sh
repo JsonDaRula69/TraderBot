@@ -868,6 +868,19 @@ update_services() {
         done
     fi
 
+    # Rebuild Docker sandbox image (new image tags, Python version bumps)
+    if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+        local docker_dir="$INSTALL_DIR/install/docker"
+        if [[ -x "$docker_dir/build-sandbox.sh" ]]; then
+            echo "Rebuilding Docker sandbox image..."
+            bash "$docker_dir/build-sandbox.sh" 2>&1 || echo "  Warning: sandbox image rebuild failed." >&2
+        fi
+        echo "Re-applying OpenClaw sandbox configuration..."
+        openclaw config set agents.defaults.sandbox.docker.binds "[\"${HOME}/traderbot:/traderbot:ro\",\"${HOME}/.traderbot:/home/traderbot/.traderbot:rw\"]" --strict-json 2>/dev/null || true
+        openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
+        openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
+    fi
+
     # Refresh agent workspace files (replace templates, preserve user data)
     echo "Refreshing agent workspace files..."
     local ws_root="$HOME/.openclaw/workspace"

@@ -1099,20 +1099,27 @@ class NewsAggregator:
         ) -> list[DataPoint]:
             async with sem:
                 try:
-                    response = await self._client.get(
-                        "https://api.stlouisfed.org/fred/series/observations",
-                        params={
-                            "series_id": sid,
-                            "api_key": key,
-                            "file_type": "json",
-                            "observation_start": observation_start,
-                            "sort_order": "asc",
-                            "limit": 500,
-                        },
-                    )
-                    if response.status_code != 200:
-                        logger.warning("FRED hist series %s HTTP %d", sid, response.status_code)
-                        return []
+                    for attempt in range(3):
+                        response = await self._client.get(
+                            "https://api.stlouisfed.org/fred/series/observations",
+                            params={
+                                "series_id": sid,
+                                "api_key": key,
+                                "file_type": "json",
+                                "observation_start": observation_start,
+                                "sort_order": "asc",
+                                "limit": 500,
+                            },
+                        )
+                        if response.status_code == 429:
+                            retry_after = int(response.headers.get("Retry-After", 5))
+                            logger.warning("FRED rate limited for %s — retrying after %ds (attempt %d/3)", sid, retry_after, attempt + 1)
+                            await asyncio.sleep(retry_after)
+                            continue
+                        if response.status_code != 200:
+                            logger.warning("FRED hist series %s HTTP %d", sid, response.status_code)
+                            return []
+                        break
 
                     data = response.json()
                     observations = data.get("observations", [])
