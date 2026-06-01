@@ -2095,17 +2095,14 @@ main() {
         echo "  (agent 'main' already exists after setup)"
 
         echo "  Enabling bundled OpenClaw hooks..."
-        enable_openclaw_hooks "command-logger" "session-memory" "bootstrap-extra-files" || true
-        echo "  Deploying and enabling traderbot-bootstrap hook..."
-        if [[ -x "$tb_cmd" ]]; then
-            "$tb_cmd" hooks deploy-bootstrap 2>/dev/null || echo "  Warning: bootstrap hook deploy failed. Run later: traderbot auth check"
+        enable_openclaw_hooks "command-logger" "session-memory" || true
+        # bootstrap-extra-files may not exist in all OpenClaw versions
+        if openclaw hooks list 2>/dev/null | grep -q "bootstrap-extra-files"; then
+            enable_openclaw_hooks "bootstrap-extra-files" || true
+            openclaw config set hooks.internal.entries.bootstrap-extra-files.enabled true 2>/dev/null || true
+            openclaw config set 'hooks.internal.entries.bootstrap-extra-files.paths' '["SESSION-STATE.md","HEARTBEAT_DATA.md"]' --strict-json --merge 2>/dev/null || true
         fi
-        if openclaw hooks list 2>/dev/null | grep -q "traderbot-bootstrap"; then
-            openclaw hooks enable "traderbot-bootstrap" 2>/dev/null || true
-        fi
-        # Configure bootstrap-extra-files to inject SESSION-STATE.md + HEARTBEAT_DATA.md
-        openclaw config set hooks.internal.entries.bootstrap-extra-files.enabled true 2>/dev/null || true
-        openclaw config set 'hooks.internal.entries.bootstrap-extra-files.paths' '["SESSION-STATE.md","HEARTBEAT_DATA.md"]' --strict-json --merge 2>/dev/null || true
+        # traderbot-bootstrap hook is deployed later (after TraderBot CLI is installed)
 
         echo "  Running OpenClaw doctor --fix..."
         openclaw doctor --fix 2>/dev/null || true
@@ -2155,6 +2152,15 @@ main() {
 
     echo "Installing TraderBot..."
     install_traderbot
+
+    # Deploy bootstrap hook (requires traderbot CLI which was just installed)
+    local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
+    if [[ -x "$tb_bin" ]]; then
+        if openclaw hooks list 2>/dev/null | grep -q "traderbot-bootstrap"; then
+            echo "  Enabling traderbot-bootstrap hook..."
+            openclaw hooks enable "traderbot-bootstrap" 2>/dev/null || true
+        fi
+    fi
 
     echo "Running interactive configuration..."
     interactive_config_flow
