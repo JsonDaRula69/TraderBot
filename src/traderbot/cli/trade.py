@@ -227,6 +227,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.kalshi.models import (
             OrderRequest, OrderSideV2, PortfolioState, TradeRequest,
         )
+        from traderbot.kalshi.portfolio import PortfolioService
         from traderbot.kalshi.trading import TradingService
         from traderbot.profiles.runtime import get_current_profile
         from traderbot.risk import evaluate_trade_full, RiskCheckError
@@ -277,9 +278,20 @@ def register_commands(parent_app: typer.Typer) -> None:
         )
         intent_id = entry.intent_id
 
+        portfolio_svc = PortfolioService(client)
+
         async def _execute():
             market = await market_svc.get_market(ticker)
-            portfolio = await market_svc.get_portfolio()
+            balance_data = await portfolio_svc.get_balance()
+            balance_cents = balance_data.get("balance", 0) if isinstance(balance_data, dict) else 0
+            portfolio = PortfolioState(
+                portfolio_value_cents=balance_cents,
+                peak_value_cents=balance_cents,
+                current_positions_value_cents=0,
+                today_realized_loss_cents=0,
+                today_unrealized_loss_cents=0,
+                open_positions_count=0,
+            )
             return market, portfolio
 
         market, portfolio = asyncio.run(_execute())

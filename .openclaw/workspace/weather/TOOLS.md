@@ -74,6 +74,21 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 
 ## Weather-Specific CLI Notes
 
+### Kalshi WebSocket (Real-Time Data)
+
+A Kalshi WebSocket client exists at `traderbot.kalshi.websocket.KalshiWebSocket` and can stream real-time market data without REST polling. Available channels:
+
+| Channel | Data | Auth Required | Use Case |
+|---|---|---|---|
+| `ticker` | Price, volume, open interest updates | Yes | Monitor active position markets between cycles |
+| `orderbook_delta` | Orderbook price level changes | Yes | Live orderbook during `analyze --realtime` |
+| `market_lifecycle_v2` | New/closed/settled markets | Yes | Detect new weather contract issuance in real-time |
+| `public_trades` | Trade notifications | Yes | See when your target market fills |
+| `user_fills` | Your order fill confirmations | Yes | Execution confirmation |
+| `user_orders` | Order status updates | Yes | Track order lifecycle |
+
+Currently, the WebSocket is only wired into `traderbot analyze TICKER --realtime`. If you discover a pattern where REST polling misses ticks or new contracts appear faster than the 5-min cycle can catch them, surface a feature request to sysadmin to integrate WebSocket into the decision loop. The `market_lifecycle_v2` channel is particularly relevant for weather markets that may be issued intra-cycle.
+
 ### Model Data Interpretation
 
 Two CLI commands provide structured data for decision-making:
