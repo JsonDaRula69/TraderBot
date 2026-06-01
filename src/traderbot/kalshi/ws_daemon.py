@@ -12,6 +12,12 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
 import websockets
 
 from traderbot.auth import get_credential
