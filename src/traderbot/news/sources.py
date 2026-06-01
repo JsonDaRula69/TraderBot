@@ -1092,7 +1092,8 @@ class NewsAggregator:
             if info["category"] in allowed_categories
         }
 
-        sem = asyncio.Semaphore(5)
+        sem = asyncio.Semaphore(1)  # FRED free tier: 120 req/min — one at a time
+        all_failed: list[str] = []  # track series that exhausted retries
 
         async def _fetch_series_range(
             sid: str, info: dict[str, str],
@@ -1120,6 +1121,17 @@ class NewsAggregator:
                             logger.warning("FRED hist series %s HTTP %d", sid, response.status_code)
                             return []
                         break
+                    else:
+                        # All 3 retries exhausted
+                        all_failed.append(sid)
+                        logger.warning("FRED backfill permanent failure for %s after 3 retries", sid)
+                        return []
+
+                    data = response.json()
+                    observations = data.get("observations", [])
+
+                    if not observations:
+                        return []
 
                     data = response.json()
                     observations = data.get("observations", [])
@@ -1174,6 +1186,27 @@ class NewsAggregator:
             elif isinstance(result, BaseException):
                 logger.warning("FRED backfill gather exception: %s", result)
 
+        # If any series permanently failed, schedule a partial retry later
+        if all_failed:
+            logger.warning(
+                "FRED backfill: %d series permanently rate-limited (%s). "
+                "Will retry on next data pipeline cycle.",
+                len(all_failed), ", ".join(all_failed),
+            )
+            # Write a marker so caller knows retry is needed
+            all_points.append(DataPoint(
+                id=f"fred-retry-needed-{int(__import__('time').time())}",
+                source=NewsSource.FRED,
+                category=NewsCategory.ECONOMICS,
+                title=f"Partial FRED backfill — {len(all_failed)} series rate-limited",
+                data={"retry_series": all_failed},
+                timestamp=datetime.now(UTC),
+            ))
+
+        logger.info(
+            "FRED backfill complete: %d points from %d series, %d permanently failed",
+            len(all_points), len(filtered_series), len(all_failed),
+        )
         return all_points
 
     async def _fetch_openweathermap(
