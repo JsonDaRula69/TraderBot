@@ -85,8 +85,8 @@ async def _seed_from_rest() -> dict[str, str]:
             raw = data.get("events", data.get("event", []))
             if isinstance(raw, list):
                 for ev in raw:
-                    ticker = ev.get("ticker", "")
-                    cat = ev.get("category", "")
+                    ticker = ev.get("ticker") or ev.get("event_ticker", "")
+                    category = ev.get("category", "")
                     if ticker and cat:
                         all_events[ticker] = cat
             cursor = data.get("cursor")
