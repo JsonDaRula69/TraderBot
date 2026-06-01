@@ -481,16 +481,6 @@ def _configure_openclaw_sandbox() -> None:
             ["openclaw", "config", "set", 'agents.list[0].sandbox.mode', 'off'],
             capture_output=True, timeout=15,
         )
-        # Block direct Kalshi API access — agents must use the traderbot CLI
-        subprocess.run(
-            [
-                "openclaw", "config", "set",
-                "agents.defaults.sandbox.docker.extraHosts",
-                '["api.elections.kalshi.com:127.0.0.1","api.kalshi.com:127.0.0.1","trading-api.kalshi.com:127.0.0.1"]',
-                "--strict-json",
-            ],
-            capture_output=True, timeout=15,
-        )
         logger.info("OpenClaw sandbox configuration re-applied")
     except Exception as exc:
         logger.warning("Failed to re-apply sandbox config (openclaw CLI may not be on PATH): %s", exc)

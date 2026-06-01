@@ -1587,11 +1587,9 @@ prompt_sandbox_docker() {
     openclaw config set agents.defaults.sandbox.docker.network bridge 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.readOnlyRoot true 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.capDrop '["ALL"]' 2>/dev/null || true
-    openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
-    # Bind mounts pierce sandbox filesystem — allow sources outside workspace
-    openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
-    # Main (sysadmin) runs on host — no sandbox
-    openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
+openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
+        openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
+        openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
     # Category agents get bind mounts for CLI access and data persistence
     # Use defaults.sandbox so all sandboxed agents inherit (main has mode:off)
     openclaw config set 'agents.defaults.sandbox.docker.binds' "[\"${HOME}/traderbot:/traderbot:ro\",\"${HOME}/.traderbot:/home/traderbot/.traderbot:rw\"]" --strict-json 2>/dev/null || true
