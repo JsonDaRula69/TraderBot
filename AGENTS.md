@@ -10,7 +10,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.13.50
+- **Current version**: v0.13.52
 
 ## Versioning Scheme
 
@@ -95,6 +95,43 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Fixtures**: use shared fixtures from `tests/conftest.py` and `tests/news/conftest.py`. Don't duplicate fixture setup across test files.
 - **Parity**: bug fixes must include a regression test. New features must include tests for the public API surface.
 - **Pattern**: prefer `MockDataProvider` over monkeypatching HTTP calls. Use `respx` (available in dev deps) for HTTP-level mocking when needed.
+
+### Test File Naming
+
+- **Root-level modules**: `tests/test_<module>.py` (e.g., `src/traderbot/paths.py` → `tests/test_paths.py`)
+- **Subpackage modules**: `tests/<subpackage>/test_<module>.py` (e.g., `src/traderbot/kalshi/config.py` → `tests/kalshi/test_config.py`)
+- Match the source tree structure one-to-one.
+
+### CLI Test Pattern
+
+Use `CliRunner` from `typer.testing` for all CLI command tests:
+
+```python
+from typer.testing import CliRunner
+from traderbot.cli import app
+
+runner = CliRunner()
+
+def test_command_help():
+    result = runner.invoke(app, ["command", "--help"])
+    assert result.exit_code == 0
+```
+
+Use `CliRunner.invoke()` for command parsing tests and `subprocess.run()` for end-to-end process tests.
+
+### Live / Integration Tests
+
+Credentials for live API tests are loaded from `.env` at project root (gitignored). Tests that require credentials MUST use the `live` pytest marker:
+
+```python
+@pytest.mark.live
+def test_kalshi_config_loads_from_env():
+    ...
+```
+
+- `live` tests are skipped by default in CI (`-m "not live"`)
+- Always test the credential-gated path gracefully: if `.env` is missing a key, the test should `pytest.skip("KALSHI_API_KEY not set")` rather than fail
+- The `integration_conftest.py` at `tests/integration_conftest.py` provides session-scoped fixtures (`temp_traderbot_env`) that parse credentials and set up a temporary environment — use it for tests that need real Kalshi API access
 
 ## Idempotency
 

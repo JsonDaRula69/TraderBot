@@ -11,6 +11,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from traderbot.cli.helpers import _mask_token, _write_token_to_env, err_console
 
