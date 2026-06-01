@@ -2115,6 +2115,13 @@ main() {
                 echo "  Warning: LLM config interrupted. Run later: openclaw configure --section models"
         fi
 
+        # Set the default model for all agents to one that supports tools.
+        # The LLM provider wizard above adds models to the provider list but
+        # does NOT set agents.defaults.model — agents default to the first
+        # model in the list which may not support tool calls (e.g. kimi-k2.5).
+        openclaw config set agents.defaults.model ollama/deepseek-v4-flash 2>/dev/null || \
+            echo "  Warning: could not set default model. Run: openclaw config set agents.defaults.model ollama/deepseek-v4-flash"
+
         # Optional runtime health check
         _flush_stdin
         local do_health=""

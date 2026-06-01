@@ -377,32 +377,29 @@ def cron_setup_heartbeat_tasks(
         console.print("[red]Error:[/red] openclaw CLI not found in PATH")
         raise typer.Exit(1)
 
-if replace:
-                _sp.run(
-                    ["openclaw", "cron", "remove", existing_job["id"]],
-                    capture_output=True, timeout=10,
-                )
+    if replace:
+        import subprocess
+        all_jobs_for_agent = _SYSADMIN_HEARTBEAT_CRON_JOBS + _AGENT_HEARTBEAT_CRON_JOBS
+        _seen: set[str] = set()
+        for job in all_jobs_for_agent:
+            job_name = f"{agent_id}-{job['name']}"
+            if job_name in _seen:
+                continue
+            _seen.add(job_name)
+            try:
+                subprocess.run(["openclaw", "cron", "remove", job_name], capture_output=True, text=True, timeout=15)
+            except Exception:
+                pass
 
-            add_args = [
-                "--name", f"{agent_id}-{job['name']}",
-                "--cron", job["cron_expr"],
-                "--session", job.get("session", "isolated"),
-                "--agent", agent_id,
-                "--message", job["message"],
-                "--announce",
-                "--channel", "telegram",
-                "--to", chat_id,
-            ]
-            # Main agent (sysadmin) runs as main-session cron to get full tools
-            # (isolated cron sessions create sandboxed non-main session keys)
-            if agent_id == "main":
-                add_args[add_args.index("--session") + 1] = "main"
-            # Ensure tool profile is set for agents that need exec/fs access
-            if agent_id == "main":
-                _sp.run(
-                    ["openclaw", "config", "set", f"agents.list[{agent_idx}].tools.profile", "coding"],
-                    capture_output=True, timeout=10,
-                )
+    jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
+    for job in jobs:
+        args = [
+            "--name", f"{agent_id}-{job['name']}",
+            "--cron", job["cron_expr"],
+            "--session", "isolated",
+            "--message", job["message"],
+            "--agent", agent_id,
+        ]
         exit_code, output = _run_openclaw_cron_add(args)
         success = exit_code == 0
         results.append({
