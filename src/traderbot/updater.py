@@ -292,6 +292,9 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         # Re-apply OpenClaw sandbox config (binds, allow external sources, etc.)
         _configure_openclaw_sandbox()
 
+        # Deploy or refresh bootstrap hook
+        _enable_bootstrap_hook()
+
         # Re-register cron jobs for all deployed agents
         _reregister_cron_jobs(repo_dir)
 
@@ -495,3 +498,40 @@ def _refresh_workspace_files(repo_dir: Path) -> None:
             "Workspace refresh for %s: %d files replaced, %d preserved",
             agent_name, replaced, preserved,
         )
+
+
+def _enable_bootstrap_hook() -> None:
+    """Deploy bootstrap hook files and enable bootstrap-extra-files."""
+    import subprocess
+    import json
+
+    try:
+        repo_dir = Path(__file__).resolve().parent.parent.parent
+        hook_src = repo_dir / "src" / "traderbot" / "profiles" / "openclaw_config.py"
+        if hook_src.exists():
+            # Deploy hook files via the Python module
+            from traderbot.profiles.openclaw_config import ensure_agent_bootstrap_hook
+            ensure_agent_bootstrap_hook()
+        else:
+            # Direct CLI fallback
+            # Enable bundled bootstrap-extra-files hook and configure paths
+            subprocess.run(
+                ["openclaw", "hooks", "enable", "bootstrap-extra-files"],
+                capture_output=True, timeout=15,
+            )
+            subprocess.run(
+                ["openclaw", "hooks", "enable", "traderbot-bootstrap"],
+                capture_output=True, timeout=15,
+            )
+            subprocess.run(
+                [
+                    "openclaw", "config", "set",
+                    "hooks.internal.entries.bootstrap-extra-files.paths",
+                    '["SESSION-STATE.md","HEARTBEAT_DATA.md"]',
+                    "--strict-json", "--merge",
+                ],
+                capture_output=True, timeout=15,
+            )
+        logger.info("Bootstrap hooks configured")
+    except Exception as exc:
+        logger.warning("Failed to enable bootstrap hooks: %s", exc)
