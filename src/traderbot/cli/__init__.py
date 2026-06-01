@@ -1,7 +1,9 @@
 """CLI entry point — imports all sub-apps and registers them on the main typer app."""
 from __future__ import annotations
 
+import importlib
 import json as json_lib
+import logging
 import shutil
 import subprocess as _subprocess
 import sys
@@ -12,7 +14,6 @@ import typer
 from rich.console import Console
 
 from traderbot.cli.auth import auth_app
-from traderbot.cli.cron import cron_app
 from traderbot.cli.sandbox import sandbox_app
 from traderbot.cli.profile import profile_app
 from traderbot.cli.trade import register_commands as register_trade
@@ -28,9 +29,28 @@ from traderbot.cli.helpers import (
     app,
 )
 
+logger = logging.getLogger(__name__)
+
+# Lazy import for modules that may fail to compile — the update command
+# must remain reachable even if one of these modules is broken, so that
+# a stale deployment can self-heal via git pull + reinstall.
+_cron_app = None
+
+def _get_cron_app():
+    """Lazy-import cron_app to keep the update command reachable."""
+    global _cron_app
+    if _cron_app is None:
+        try:
+            from traderbot.cli.cron import cron_app
+            _cron_app = cron_app
+        except Exception as exc:
+            logger.warning("Failed to import cron_app (update may be needed): %s", exc)
+            return None
+    return _cron_app
+
 # Register sub-apps
 app.add_typer(auth_app, name="auth")
-app.add_typer(cron_app, name="cron")
+# cron_app is registered inline below
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(profile_app, name="profile")
 app.add_typer(data_app, name="data")
@@ -42,8 +62,16 @@ register_news(app)
 register_admin(app)
 
 # Register experiment sub-app (imported from experiment module)
-from traderbot.experiment.cli import experiment_app  # type: ignore[import-untyped]
-app.add_typer(experiment_app, name="experiment")
+try:
+    from traderbot.experiment.cli import experiment_app
+    app.add_typer(experiment_app, name="experiment")
+except Exception as exc:
+    logger.debug("Failed to import experiment_app: %s", exc)
+
+# Register cron_app after initializing the app to keep update reachable
+_ca = _get_cron_app()
+if _ca is not None:
+    app.add_typer(_ca, name="cron")
 
 
 @app.command()
