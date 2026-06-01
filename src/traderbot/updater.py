@@ -240,6 +240,10 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
 
     Post-update steps: refresh workspace files, rebuild Docker sandbox image,
     re-configure OpenClaw sandbox settings, re-register cron jobs, restart gateway.
+
+    If the Python module itself is broken (import error), the update pipeline
+    is delegated to the standalone shell script at ``install/traderbot-update.sh``
+    which runs independently of the Python package.
     """
     import subprocess
 
@@ -248,8 +252,83 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
 
     try:
         if not (repo_dir / ".git").exists():
-            logger.error("Cannot update: not a git repository (installed via ZIP?). Reinstall with: curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh -o /tmp/traderbot-installer.sh && bash /tmp/traderbot-installer.sh")
+            # If the git repo doesn't exist but we're being called, try the
+            # standalone update script as a fallback.
+            fallback = repo_dir / "install" / "traderbot-update.sh"
+            if fallback.exists():
+                flag = "--dev" if dev else ""
+                subprocess.run(["bash", str(fallback), flag], capture_output=True, timeout=600)
+                return True
+            logger.error("Cannot update: not a git repository. Reinstall with installer.")
             return False
+
+        if verify_signature and not dev:
+            latest_result = fetch_latest_version()
+            if latest_result is not None:
+                tag_ver, _ = latest_result
+                tag_name = f"v{tag_ver}"
+                sig = _fetch_release_signature(tag_name)
+                if sig is not None and not verify_release_signature(tag_name, sig):
+                    logger.error("Update aborted: Ed25519 signature verification failed")
+                    return False
+
+        git_status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+        if git_status.stdout.strip():
+            untracked = [line.strip() for line in git_status.stdout.strip().splitlines() if not line.startswith("??")]
+            if untracked:
+                logger.info("Uncommitted changes detected, auto-stashing before update")
+                subprocess.run(
+                    ["git", "stash", "--include-untracked"],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+        subprocess.run(["git", "pull", "origin", branch], cwd=repo_dir, check=True, capture_output=True)
+        pip_args = [sys.executable, "-m", "pip", "install", "-e", "."]
+        subprocess.run(pip_args, cwd=repo_dir, check=True, capture_output=True)
+        logger.info("Updated successfully from %s branch", branch)
+
+        # Refresh agent workspace files (replace templates, preserve user data)
+        _refresh_workspace_files(repo_dir)
+
+        # Rebuild Docker sandbox image if Docker is available
+        _rebuild_sandbox_image(repo_dir)
+
+        # Re-apply OpenClaw sandbox config (binds, allow external sources, etc.)
+        _configure_openclaw_sandbox()
+
+        # Deploy or refresh bootstrap hook
+        _enable_bootstrap_hook()
+
+        # Re-register cron jobs for all deployed agents
+        _reregister_cron_jobs(repo_dir)
+
+        # systemd restart can take 30s+; non-blocking so a slow
+        # restart doesn't abort the update command.
+        try:
+            subprocess.Popen(
+                ["openclaw", "gateway", "restart"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+            logger.info("OpenClaw gateway restart issued")
+        except Exception as exc:
+            logger.warning("Failed to issue gateway restart: %s", exc)
+
+        if restart:
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        return True
+    except subprocess.CalledProcessError as exc:
+        logger.error("Update failed: %s", exc)
+        return False
 
         if verify_signature and not dev:
             latest_result = fetch_latest_version()
