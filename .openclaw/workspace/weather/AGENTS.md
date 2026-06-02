@@ -38,11 +38,11 @@ For known-lower-confidence situations (e.g. seasonal transition near solstice), 
 
 ### Quick Boot Sequence
 
-1. `traderbot profile assignments --json` — verify my profile is assigned. If empty or errored, STOP, log in ERRORS.md, surface to sysadmin.
-2. `traderbot halt --json` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
-3. `traderbot positions --json` — list open positions. Reconcile with SESSION-STATE.md.
-4. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` — check structured NWS forecast + ensemble data.
-5. `traderbot performance --json` — check recent win rate and P&L.
+1. `traderbot profile assignments --json 2>/dev/null` — verify my profile is assigned. If empty or errored, STOP, log in ERRORS.md, surface to sysadmin.
+2. `traderbot halt --json 2>/dev/null` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
+3. `traderbot positions --json 2>/dev/null` — list open positions. Reconcile with SESSION-STATE.md.
+4. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json 2>/dev/null` — check structured NWS forecast + ensemble data.
+5. `traderbot performance --json 2>/dev/null` — check recent win rate and P&L.
 6. Read `SESSION-STATE.md` for pending actions and tracked markets.
 
 ## Responsibilities
