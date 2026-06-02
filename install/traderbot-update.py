@@ -173,12 +173,17 @@ def _reregister_cron_jobs() -> None:
 def _restart_ws_daemon() -> None:
     daemon = REPO_DIR / "src" / "traderbot" / "kalshi" / "ws_daemon.py"
     if daemon.is_file():
-        _run([str(PYTHON), str(daemon)], capture_output=True, stdin=subprocess.DEVNULL)
+        # Non-blocking Popen — daemon manages its own lifecycle
+        subprocess.Popen([str(PYTHON), str(daemon)],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL)
 
 
 def _restart_gateway() -> None:
     if shutil.which("openclaw"):
-        _run(["openclaw", "gateway", "restart"], capture_output=True, stdin=subprocess.DEVNULL)
+        subprocess.Popen(["openclaw", "gateway", "restart"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL)
 
 
 def _backup_databases() -> None:
