@@ -200,7 +200,7 @@ def main() -> None:
     api_key_str, priv_str = creds
 
     async def _amain() -> None:
-        task = asyncio.create_task(_run(api_key.get_secret_value(), priv, WS_URL))
+        task = asyncio.create_task(_run(api_key_str, priv_str, WS_URL))
         await asyncio.wait(
             [task, asyncio.create_task(stop.wait())],
             return_when=asyncio.FIRST_COMPLETED,
