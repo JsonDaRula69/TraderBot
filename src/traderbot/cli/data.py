@@ -34,7 +34,7 @@ def forecasts_cmd(
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """List recent weather forecasts for one or more cities."""
+    """List recent weather forecasts with NWS + GFS/ECMWF/GEM ensemble data."""
     from traderbot.data.weather.provider import WeatherDataProvider
 
     console = Console()
@@ -43,6 +43,20 @@ def forecasts_cmd(
     try:
         provider = WeatherDataProvider()
         forecasts = asyncio.run(provider.get_forecasts(city_list))
+        # Fetch ensemble consensus for each city
+        consensus_map: dict[str, dict] = {}
+        for city in forecasts:
+            try:
+                cons = asyncio.run(provider.get_model_consensus(city))
+                consensus_map[city] = {
+                    "models_used": cons.models_used,
+                    "mean_temp": cons.mean_temp,
+                    "std_dev": cons.std_dev,
+                    "spread": cons.spread,
+                    "agreement_score": cons.agreement_score,
+                }
+            except Exception as exc:
+                logger.debug("No ensemble data for %s: %s", city, exc)
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
@@ -51,7 +65,13 @@ def forecasts_cmd(
         raise typer.Exit(code=1) from None
 
     if json_output:
-        json_lib.dump(forecasts, sys.stdout, default=str)
+        result: dict[str, dict] = {}
+        for city, fc in forecasts.items():
+            entry = fc.model_dump(mode="json")
+            if city in consensus_map:
+                entry["ensemble"] = consensus_map[city]
+            result[city] = entry
+        json_lib.dump(result, sys.stdout, default=str)
         return
 
     table = Table(title="Weather Forecasts")
@@ -61,14 +81,21 @@ def forecasts_cmd(
     table.add_column("ECMWF High (°F)", justify="right")
     table.add_column("GEM High (°F)", justify="right")
     table.add_column("Spread (°F)", justify="right")
-    for f in forecasts:
+    table.add_column("Agreement", justify="right")
+    for city, fc in forecasts.items():
+        ens = consensus_map.get(city, {})
+        models = ens.get("models_used", [])
+        gfs = fc.temperature_high if "gfs_seamless" in models else "N/A"
+        ecmwf = fc.temperature_high if "ecmwf_ifens" in models else "N/A"
+        gem = fc.temperature_high if "gem_global" in models else "N/A"
         table.add_row(
-            f.get("city", "?"),
-            str(f.get("nws_high", "N/A")),
-            str(f.get("gfs_high", "N/A")),
-            str(f.get("ecmwf_high", "N/A")),
-            str(f.get("gem_high", "N/A")),
-            str(f.get("spread", "N/A")),
+            city,
+            str(fc.temperature_high),
+            str(gfs),
+            str(ecmwf),
+            str(gem),
+            str(ens.get("spread", "N/A")),
+            f"{ens.get('agreement_score', 'N/A'):.2f}" if isinstance(ens.get("agreement_score"), float) else "N/A",
         )
     console.print(table)
 
