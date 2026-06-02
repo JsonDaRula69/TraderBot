@@ -222,9 +222,9 @@ def _remove_news_ingest_timer(
         from traderbot.windows_service import uninstall_news_ingest_task
         try:
             uninstall_news_ingest_task(agent_user)
-        except Exception:
-            pass
-        return
+        except Exception as exc:
+            logger.error("Failed to remove cron jobs for %s: %s", agent_user, exc)
+            return
     if sys.platform != "linux":
         return
     if not _systemd_available():
