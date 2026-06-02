@@ -87,8 +87,8 @@ This is the core loop. No human gates. The cycle runs automatically:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    AGENT LAYER                          │
-│  Category agent spots pattern → logs to LEARNINGS.md    │
-│  (or error → ERRORS.md, capability gap → FEATURE.md)    │
+│  Category agent spots pattern → logs to `.learnings/LEARNINGS.md`    │
+│  (or error → `.learnings/ERRORS.md`, capability gap → `.learnings/FEATURE_REQUESTS.md`)    │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼

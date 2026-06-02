@@ -104,7 +104,7 @@ The WS daemon is always on (systemd service). You never need to start or stop it
 **Special rules:**
 - Daily record contracts: Higher conviction — baseline climatology is well-established
 - Monthly/seasonal records: Lower conviction — extended-range models degrade rapidly
-- Urban heat island effect: Major cities (NYC, LA, Chicago, Houston) run 2-5°F above surrounding rural areas. Adjust model interpretation accordingly. Log observed deltas in LEARNINGS.md.
+- Urban heat island effect: Major cities (NYC, LA, Chicago, Houston) run 2-5°F above surrounding rural areas. Adjust model interpretation accordingly. Log observed deltas in `.learnings/LEARNINGS.md`.
 
 ### Precipitation Contracts
 
@@ -206,7 +206,7 @@ RS.md — Failures
 **Examples:** "NWS gridpoint API returned garbage for Las Vegas", "Kalshi rate limited on /market
 s", "ChromaDB telemetry error on data-points query".
 
-**Do NOT log here:** Missing data that never existed (e.g. "no ensemble data" or "no bias data" — these are expected conditions, not failures). File these in FEATURE_REQUESTS.md.
+**Do NOT log here:** Missing data that never existed (e.g. "no ensemble data" or "no bias data" — these are expected conditions, not failures). File these in `.learnings/FEATURE_REQUESTS.md`.
 
 ### LEARNINGS.md — Market Patterns
 
@@ -230,9 +230,9 @@ s", "ChromaDB telemetry error on data-points query".
 - ✅ "No bias historical data for this city — pipeline too young, need settled trades"
 - ❌ _Incorrect: "Pipeline timer systemctl unavailable in container"_ — this is expected behavior (containers don't have systemd). Don't log expected constraints.
 - ❌ _Incorrect: "openclaw CLI not in PATH for cron setup"_ — this is expected (agent uses traderbot CLI, not openclaw CLI). Don't log expected constraints.
-- ❌ _Incorrect: "Ensemble data not available"_ — this is a capability gap, log it in FEATURE_REQUESTS.md. But "0 data-points returned" is an expected condition for CLI commands that may return empty — only log if the command itself crashes.
+- ❌ _Incorrect: "Ensemble data not available"_ — this is a capability gap, log it in `.learnings/FEATURE_REQUESTS.md`. But "0 data-points returned" is an expected condition for CLI commands that may return empty — only log if the command itself crashes.
 
-**If unsure:** Default to ERRORS.md for crashes and FEATURE_REQUESTS.md for capability gaps. LEARNINGS.md is strictly for patterns with measurable edge.
+**If unsure:** Default to `.learnings/ERRORS.md` for crashes and `.learnings/FEATURE_REQUESTS.md` for capability gaps. `.learnings/LEARNINGS.md` is strictly for patterns with measurable edge.
 
 ---
 
@@ -246,7 +246,7 @@ I use `sessions_spawn` (OpenClaw's built-in sub-agent tool) to delegate experime
 
 ```
 sessions_spawn(
-  task: "Design experiment for weather pattern: [full pattern from LEARNINGS.md]
+  task: "Design experiment for weather pattern: [full pattern from `.learnings/LEARNINGS.md`]
 
   Context:
   - Identity: I am Vane, weather category agent
@@ -320,7 +320,7 @@ The sysadmin monitors agent heartbeats every 30m. My experiment proposal will be
 - After spawning, call `sessions_yield` to end my turn and let the completion arrive as the next message. Do NOT poll `subagents list`, `sessions_list`, or `sessions_history` in a loop waiting for it.
 - The sub-agent is read-only for analysis. Its return text is a proposal for me to review and own.
 - After the sub-agent returns, I review and adjust the experiment design for domain accuracy. The sub-agent has minimal system context and may lack real-time market state — I fill that in.
-- If the sub-agent's design is clearly wrong (invalid date range, wrong parameter, bad hypothesis), I redesign myself and note the correction in LEARNINGS.md.
+- If the sub-agent's design is clearly wrong (invalid date range, wrong parameter, bad hypothesis), I redesign myself and note the correction in `.learnings/LEARNINGS.md`.
 - `maxSpawnDepth: 1` by default means sub-agents cannot spawn further sub-agents. This is correct for our case — the experiment designer is a leaf task.
 
 ### Cold Start: First Experiment
