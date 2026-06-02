@@ -396,7 +396,7 @@ async def step_system_health(
 
         client = KalshiClient()  # auto-resolve auth from profile/env
         try:
-            response = await asyncio.wait_for(client.get("/platform/status"), timeout=5.0)
+            response = await asyncio.wait_for(client.get("/events", params={"limit": 1}), timeout=5.0)
             status = response.json() if hasattr(response, "json") else response
             api_ok = isinstance(status, dict) and status.get("status") == "alive"
             if api_ok:

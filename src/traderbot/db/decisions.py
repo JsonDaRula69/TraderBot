@@ -158,6 +158,8 @@ def _row_to_model(row: sqlite3.Row) -> DbDecision:
     if isinstance(data.get("timestamp"), str):
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
     data["risk_checks"] = json.loads(data["risk_checks"])
+    if isinstance(data.get("risk_checks"), dict):
+        data["risk_checks"] = {k: v if isinstance(v, bool) else v == "pass" for k, v in data["risk_checks"].items()}
     if data.get("actual_result") is not None:
         data["actual_result"] = bool(data["actual_result"])
     return DbDecision.model_validate(data)
