@@ -57,6 +57,20 @@ The NWS gridpoint API (`api.weather.gov/points/{lat},{lon}`) returns data for sp
 - **DO NOT use**: The NWS gridpoint API endpoints for city temperature forecasts
 - The gridpoint API is safe for general weather context (wind, precip, alerts) but NOT for the actual high/low temperature numbers used in edge calculations.
 - Verify forecasts at the start of each cycle using web_fetch of the official NWS page. wttr.in and Open-Meteo are secondary cross-checks only.
+
+## Kalshi WebSocket Daemon (Live Data Feed)
+
+A persistent `ws-daemon` process runs as a systemd service on the host. It subscribes to `market_lifecycle_v2` and writes new events directly into `event_category_cache.json` — the same cache your scan reads from. Always prefer WS-backed data over REST polling:
+
+| Feature | How to use | Benefit |
+|---|---|---|
+| **Market discovery** | `traderbot scan --category weather --json` reads WS-maintained cache | Faster scans, fewer REST calls |
+| **Event cache stats** | `traderbot ws cache` shows cached events by category | Verify new weather markets being picked up |
+| **Live orderbook** | `traderbot analyze TICKER --realtime --json` | WS-streamed orderbook deltas instead of REST polling — more accurate edge calculation |
+| **Daemon health** | `traderbot ws status` shows connection + cache size | Quick health check |
+
+The WS daemon is always on (systemd service). You never need to start or stop it.
+
 4. **Design Experiments (via Sub-Agent)** — When patterns reach PENDING_REVIEW, spawn a dedicated sub-agent instance of myself to formulate the hypothesis, design the experiment, and specify success criteria. The sub-agent runs isolated so I can continue trading uninterrupted.
 5. **Logging & Auditability** — Every trade decision logged with full reasoning in SESSION-STATE.md. Every pattern, error, and feature request logged in `.learnings/`.
 5. **Report to Sysadmin** — Update HEARTBEAT_DATA.md via `traderbot heartbeat --json`. Escalate anomalies: data failures, model divergence > 6h, circuit breaker changes.
