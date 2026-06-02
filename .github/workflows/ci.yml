@@ -117,8 +117,10 @@ jobs:
   live:
     name: Live API tests
     needs: unit
-    if: github.event_name == 'schedule'
+    # Run on push to main and weekly schedule — NOT on PR (fork PRs lack secrets)
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4

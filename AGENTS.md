@@ -108,7 +108,8 @@ This file defines conventions for AI-assisted development of this project. All A
   6. `build`: builds wheel + verifies `pip install` works
 - **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
 - **Push to main** runs the same pipeline. Doc-only changes are skipped via `paths-ignore`.
-- **Weekly schedule** (Mondays 06:00 UTC) runs the full pipeline + live tests + CodeQL.
+- **Weekly schedule** (Mondays 06:00 UTC) runs the full pipeline + CodeQL.
+- **Live tests** (`-m "live"`) run on push to main and weekly schedule — skipped on PRs because fork PRs can't access repository secrets (GitHub security restriction).
 - **Concurrency**: in-progress runs are automatically cancelled when a new push arrives.
 - **Coverage**: new code should maintain or improve module-level coverage. Uploaded to Codecov on Linux.
 
