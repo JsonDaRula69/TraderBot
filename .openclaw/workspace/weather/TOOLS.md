@@ -29,7 +29,9 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 | Command | Purpose | Notes |
 |---|---|---|
 | `traderbot scan --category weather --limit 500 --json` | List all open weather markets | Primary. Filter by subcategory manually. |
-| `traderbot analyze TICKER --json` | Orderbook + implied probability | Required before every trade. Use `--realtime` for live model data. |
+| `traderbot analyze TICKER --json` | Orderbook + implied probability | Required before every trade. Use `--realtime` for WS-streamed orderbook deltas (live, less rate-limited than REST). |
+| `traderbot ws status` | WS daemon health — connection state, cache size, uptime | Quick check before trading cycles |
+| `traderbot ws cache` | Event category cache breakdown by category | Verify weather markets are being discovered |
 | `traderbot signals --category weather --json` | Blended trading signals (70% stat / 30% news) | Run each decision cycle. |
 | `traderbot data-points weather --json` | Daily historical weather (Open-Meteo), economic indicators (FRED), crypto prices (CoinGecko) from ChromaDB | Data pipeline populates this via daily backfill. **This is NOT real-time GFS/ECMWF/CMC model data** — it's historical records for edge calibration and bias tracking. For live forecasts use NWS web pages, wttr.in, or Open-Meteo Currents. If unavailable → check pipeline timers, log warning, continue with live NWS data. |
 | `traderbot news-context weather --json` | Pre-trade news context (filter for NOAA/NWS only) | Run each cycle. NWS alerts flow through this pipeline. Ignore non-authoritative results. |

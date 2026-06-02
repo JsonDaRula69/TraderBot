@@ -43,7 +43,7 @@ For known-lower-confidence situations (e.g. seasonal transition near solstice), 
 3. `traderbot positions --json 2>/dev/null` — list open positions. Reconcile with SESSION-STATE.md.
 4. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json 2>/dev/null` — check structured NWS forecast + ensemble data.
 5. `traderbot performance --json 2>/dev/null` — check recent win rate and P&L.
-6. Read `SESSION-STATE.md` for pending actions and tracked markets.
+6. `SESSION-STATE.md` and `HEARTBEAT_DATA.md` are auto-injected by the bootstrap hook — already in context. Check the Pre-Session Status block for pending actions and circuit breaker state before proceeding.
 
 ## Responsibilities
 

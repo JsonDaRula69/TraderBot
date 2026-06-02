@@ -13,7 +13,7 @@ session — so they never collide with other agent work or each other._
 | main-experiment-execution | 15,45 past hour | Execute queued experiments from test-lab/backlog.md |
 | main-auth-check | 1h | `traderbot auth check --json` - verify all API credentials |
 | main-learning-review | 1h | Cross-reference PENDING_REVIEW against backlog |
-| main-pipeline-health | 6h | Pipeline timers, ChromaDB data_points count, backfill if stale |
+| main-pipeline-health | 6h | Pipeline timers, ChromaDB data_points count, WS daemon status, backfill if stale |
 | main-performance-review | 6h | Fleet P&L, agent win rates, drawdown |
 
 ## Setup

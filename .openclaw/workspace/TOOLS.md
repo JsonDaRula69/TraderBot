@@ -56,6 +56,8 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 | `traderbot halt --json` | Check circuit breaker status |
 | `traderbot audit --json` | Decision history (`--ticker`, `--start`, `--end`, `--outcome`) |
 | `traderbot reconcile --json` | Sync local positions with Kalshi |
+| `traderbot ws status` | WS daemon health — connection state, cache size, uptime |
+| `traderbot ws cache` | Event category cache breakdown by category |
 
 ### Test Lab (Experiments & Backtesting)
 
