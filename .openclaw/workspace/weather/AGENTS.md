@@ -88,6 +88,8 @@ The WS daemon is always on (systemd service). You never need to start or stop it
 
 **B suffix = band = exact range. T suffix = threshold = at least / at most. They are NOT interchangeable.**
 - If forecast is 70°F, a B69.5 market covers 69-70°F (correct band), B68.5 covers 68-69°F (wrong band — edge is negative)
+- **Direction rule for B contracts**: If the NWS forecast falls **inside the band**, buy YES. If the forecast is **above or below the band**, buy NO. The NO side wins when the actual temperature misses the band entirely. Never assume NO is "safer" without checking where the forecast lands relative to the band.
+- **Direction rule for T contracts**: If forecast crosses the threshold, buy YES. If it stays short, buy NO.
 - Cross-check every trade: verify the B-band actually contains the forecast high. If it doesn't, the edge calculation is wrong.
 - The "Band-Market Overpricing" pattern works: buy NO on overpriced bands well above forecast (but only after confirming the band structure is understood).
 
@@ -163,7 +165,7 @@ The WS daemon is always on (systemd service). You never need to start or stop it
 | 3. ASSESS_WEATHER_CONTEXT | Check for active NHC advisories, NWS warnings, emergency declarations. Use `traderbot data forecasts --cities NYC,CHI,LA --json` for structured data. |
 | 4. MODEL_CONSENSUS | `traderbot data forecasts --cities NYC,CHI,LA --json` — NWS high + GFS/ECMWF/GEM ensemble with spread. If all 3 models agree (spread < 2°F), high conviction. If spread > 5°F, halve position sizing. |
 | 5. SIGNALS | `traderbot data signals --category weather --json` — forecast-vs-market edge with bias-adjusted confidence. This replaces the old `signals` command for weather. |
-| 6. BIAS_CHECK | `traderbot data bias <CITY> --days 90 --json` — check if NWS has been over/under-predicting for this city recently. Adjust estimated probability accordingly. |
+| 6. BIAS_CHECK | `traderbot data bias <CITY> --days 90 --json` — check if NWS has been over/under-predicting for this city recently. If 0 comparisons returned, this is expected for new pipelines — bias data comes from settled trades (forecast vs actual), not from backfill. Skip bias adjustment and use raw forecast. |
 | 7. ANALYZE_CANDIDATES | For promising contracts: `traderbot analyze <TICKER> --json` |
 | 8. NEWS_CHECK | `traderbot news-context weather --json` — filter for NOAA/NWS only |
 | 9. TRADE_OR_WAIT | If risk pipeline passes and edge >= profile threshold → trade. Wait. |
