@@ -535,6 +535,22 @@ install_traderbot() {
 
     if [[ "$install_type" == "update" ]] || [[ "$update_mode" == "true" ]]; then
         echo "Updating TraderBot..."
+        # Try pip upgrade first (preferred for pip-installed packages)
+        if command -v traderbot &>/dev/null; then
+            local is_pip
+            is_pip="$(which traderbot 2>/dev/null | grep -v '.venv' || true)"
+            if [[ -n "$is_pip" ]]; then
+                echo "  pip-installed version detected — upgrading via pip..."
+                if command -v uv &>/dev/null; then
+                    uv pip install --upgrade traderbot 2>&1 || true
+                fi
+                pip install --upgrade traderbot 2>&1 && {
+                    echo "  TraderBot updated via pip."
+                    return 0
+                }
+            fi
+        fi
+        # Fall back to git pull (git-installed or .venv)
         if [[ ! -d "$INSTALL_DIR/.git" ]]; then
             echo "Error: $INSTALL_DIR is not a git repository. Cannot update." >&2
             exit 1
@@ -545,6 +561,20 @@ install_traderbot() {
             exit 1
         fi
     else
+        # ── pip-install path (clean install, no git repo needed) ─────────
+        if ! command -v traderbot &>/dev/null && ! [[ -d "$INSTALL_DIR" ]]; then
+            echo "Installing TraderBot via pip from PyPI..."
+            install_uv
+            if command -v uv &>/dev/null; then
+                uv pip install traderbot 2>&1 || true
+            fi
+            pip install traderbot 2>&1 && {
+                echo "TraderBot installed via pip."
+                return 0
+            }
+            echo "pip install failed — falling back to git clone."
+        fi
+
         if [[ -d "$INSTALL_DIR" ]]; then
             if command -v traderbot &>/dev/null; then
                 echo "TraderBot is already installed at $INSTALL_DIR"

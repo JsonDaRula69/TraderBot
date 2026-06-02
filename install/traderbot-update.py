@@ -215,11 +215,25 @@ def main() -> None:
     print("  → Backing up databases...")
     _backup_databases()
 
-    print("  → Pulling latest code...")
-    _git_pull(branch)
+    # Detect install mode: pip vs git
+    try:
+        import traderbot
+        traderbot_dir = Path(traderbot.__file__).resolve().parent.parent.parent
+        is_git = (traderbot_dir / ".git").is_dir()
+    except Exception:
+        is_git = REPO_DIR.is_dir() and (REPO_DIR / ".git").is_dir()
 
-    print("  → Reinstalling package...")
-    _pip_install()
+    if is_git:
+        print("  → Pulling latest code...")
+        _git_pull(branch)
+        print("  → Reinstalling package...")
+        _pip_install()
+    else:
+        print("  → Upgrading via pip...")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "traderbot"],
+            check=False,
+        )
 
     print("  → Refreshing workspace files...")
     _refresh_workspace_files()

@@ -264,26 +264,34 @@ def uninstall(
                         removed_services.append(str(svc))
         removed.extend(removed_services)
 
-    # User-level systemd services (OpenClaw gateway, TraderBot agent)
+# User-level systemd services (OpenClaw gateway, TraderBot agent)
     if platform.system() == "Linux":
         user_svc_dir = Path.home() / ".config" / "systemd" / "user"
         if user_svc_dir.exists():
+            for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
+                unit = svc.name
+                _sp.run([_SYSTEMCTL, "--user", "stop", unit], capture_output=True)
+                _sp.run([_SYSTEMCTL, "--user", "disable", unit], capture_output=True)
+                _sp.run(["rm", "-f", str(svc)], capture_output=True)
+                console.print(f"  Removed user service: {unit}")
+                removed_services.append(str(svc))
+    removed.extend(removed_services)
+
+    # Uninstall pip package if installed (not .venv local install)
+    try:
+        import traderbot as _tb_mod
+        _tb_path = Path(_tb_mod.__file__).resolve()
+        if "site-packages" in str(_tb_path):
             if json_output:
-                for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
-                    _sp.run([_SYSTEMCTL, "--user", "stop", svc.name], capture_output=True)
-                    _sp.run([_SYSTEMCTL, "--user", "disable", svc.name], capture_output=True)
-                    _sp.run(["rm", "-f", str(svc)], capture_output=True)
-                    removed.append(str(svc))
+                _sp.run([sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"], capture_output=True, timeout=30)
+                removed.append("pip:traderbot")
             else:
-                user_units = list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*"))
-                if user_units:
-                    console.print("[bold]Step 1c: Remove user-level systemd services[/bold]")
-                    for svc in user_units:
-                        _sp.run([_SYSTEMCTL, "--user", "stop", svc.name], capture_output=True)
-                        _sp.run([_SYSTEMCTL, "--user", "disable", svc.name], capture_output=True)
-                        _sp.run(["rm", "-f", str(svc)], capture_output=True)
-                        console.print(f"  Removed user service: {svc.name}")
-                        removed.append(str(svc))
+                if typer.confirm("  Uninstall pip package 'traderbot'?", default=True):
+                    _sp.run([sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"], capture_output=True, timeout=30)
+                    console.print("  Uninstalled pip package: traderbot")
+                    removed.append("pip:traderbot")
+    except Exception:
+        pass
 
     _sl_usrs = [Path("/usr/local/bin/traderbot"), Path.home() / ".local/bin/traderbot"]
     for _sl in _sl_usrs:
