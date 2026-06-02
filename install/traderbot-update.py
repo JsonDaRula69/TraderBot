@@ -185,12 +185,13 @@ def _backup_databases() -> None:
     data_dir = Path.home() / ".traderbot"
     backup_dir = data_dir / ".update_backup"
     for f in data_dir.rglob("*.db"):
+        if ".update_backup" in str(f) or ".manual_update_backup" in str(f):
+            continue
         rel = f.relative_to(data_dir)
         dest = backup_dir / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(f, dest)
         logger.info("  Backed up: %s", f)
-    # Clean backups older than 30 days
     cutoff = time.time() - 2592000
     for f in backup_dir.rglob("*"):
         if f.is_file() and f.stat().st_mtime < cutoff:
