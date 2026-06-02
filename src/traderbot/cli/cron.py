@@ -401,10 +401,15 @@ def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
             return removed
         raw = result.stdout.strip()
         # Strip any "Update available: ..." banner that breaks JSON parse
-        for line in raw.splitlines():
-            if line.startswith("{"):
-                raw = line
-                break
+        brace = raw.find("\n{")
+        if brace >= 0:
+            raw = raw[brace + 1:]
+        elif raw.startswith("{"):
+            pass
+        else:
+            brace = raw.find("{")
+            if brace >= 0:
+                raw = raw[brace:]
         jobs = _cjson.loads(raw)
         if not isinstance(jobs, list):
             jobs = jobs.get("jobs", []) if isinstance(jobs, dict) else []
