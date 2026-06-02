@@ -33,6 +33,17 @@ logger = logging.getLogger(__name__)
 
 
 def _default_heartbeat_path() -> Path:
+    """Return the path to HEARTBEAT_DATA.md.
+
+    Inside the Docker sandbox, CWD is /workspace which IS the workspace root.
+    get_workspace_dir() returns CWD/.openclaw/workspace which would double-nest.
+    Check if HEARTBEAT_DATA.md exists at CWD first — if yes, use that directly.
+    """
+    from pathlib import Path as _Path
+    cwd = _Path.cwd()
+    if (cwd / "HEARTBEAT_DATA.md").exists() and not (cwd / "AGENTS.md").exists():
+        # We're inside the sandbox workspace — the workspace root IS CWD
+        return cwd / "HEARTBEAT_DATA.md"
     return get_workspace_dir() / "HEARTBEAT_DATA.md"
 
 
