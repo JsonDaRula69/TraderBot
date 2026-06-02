@@ -36,8 +36,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         console = Console()
 
-        def _scan_once() -> list[dict[str, object]]:
-            import time as _time
+        async def _scan_once() -> list[dict[str, object]]:
             for attempt in range(3):
                 try:
                     from traderbot.kalshi.client import KalshiClient
@@ -45,31 +44,32 @@ def register_commands(parent_app: typer.Typer) -> None:
                     client = KalshiClient()
                     service = MarketService(client)
                     if category is not None:
-                        result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+                        result = await service.list_markets_by_category(category=category, limit=limit)
                     else:
-                        result = asyncio.run(service.list_markets(limit=limit))
+                        result = await service.list_markets(limit=limit)
                     if result.markets or attempt == 2:
                         return [m.model_dump(mode="json") for m in result.markets]
                     logger.warning("Scan returned empty, retrying (attempt %d/3)", attempt + 1)
-                    _time.sleep(5)
+                    await asyncio.sleep(5)
                 except Exception:
                     if attempt == 2:
                         return []
-                    _time.sleep(5)
+                    await asyncio.sleep(5)
             return []
 
         if continuous:
             import time
             while True:
-                markets = _scan_once()
+                markets = asyncio.run(_scan_once())
                 if json_output:
                     json_lib.dump(markets, sys.stdout, default=str)
                     sys.stdout.flush()
                 else:
                     console.print(f"[{datetime.now(UTC).isoformat()}] Scan complete: {len(markets)} markets")
+                # time.sleep() is safe here — this runs in a dedicated sync thread from typer
                 time.sleep(300)  # 5-minute polling interval to match decision loop cadence
 
-        markets = _scan_once()
+        markets = asyncio.run(_scan_once())
 
         if json_output:
             json_lib.dump(markets, sys.stdout, default=str)

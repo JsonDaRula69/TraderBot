@@ -104,7 +104,7 @@ class MarketService:
         if max_close_ts is not None:
             params["max_close_ts"] = max_close_ts
 
-        response = await self._client.get("/markets", **params)
+        response = await self._client.get("/markets", timeout=30, **params)
         response.raise_for_status()
         data = response.json()
         markets = [_normalize_market(m) for m in data.get("markets", [])]
@@ -125,14 +125,14 @@ class MarketService:
         return MarketListResponse(markets=markets, cursor=data.get("cursor"))
 
     async def get_market(self, ticker: str) -> Market:
-        response = await self._client.get(f"/markets/{ticker}")
+        response = await self._client.get(f"/markets/{ticker}", timeout=30)
         response.raise_for_status()
         data = response.json()
         market_raw = data.get("market", data)
         return _normalize_market(market_raw)
 
     async def get_orderbook(self, ticker: str, depth: int = 10) -> OrderBook:
-        response = await self._client.get(f"/markets/{ticker}/orderbook", depth=depth)
+        response = await self._client.get(f"/markets/{ticker}/orderbook", timeout=30, depth=depth)
         response.raise_for_status()
         data = response.json()
 
@@ -156,7 +156,7 @@ class MarketService:
         if cursor is not None:
             params["cursor"] = cursor
 
-        response = await self._client.get("/markets/trades", ticker=ticker, **params)
+        response = await self._client.get("/markets/trades", timeout=30, ticker=ticker, **params)
         response.raise_for_status()
         data = response.json()
         trades = [_normalize_trade(t) for t in data.get("trades", [])]

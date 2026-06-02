@@ -69,7 +69,7 @@ class AdapterStateStore:
             os.write(fd, payload.encode("utf-8"))
             os.close(fd)
             os.rename(tmp_path, str(path))
-        except BaseException:
+        except Exception:
             with contextlib.suppress(OSError):
                 os.close(fd)
             with contextlib.suppress(OSError):

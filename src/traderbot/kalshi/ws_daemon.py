@@ -163,32 +163,41 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TraderBot WebSocket event cache daemon")
-    parser.parse_args()
-
-    private_key_pem = get_credential("kalshi", "private_key_pem")
-    if not private_key_pem:
-        logger.error("Kalshi credentials not found.")
-        sys.exit(1)
-    api_key = get_credential("kalshi", "api_key")
-    if not api_key:
-        logger.error("Kalshi API key not found.")
-        sys.exit(1)
-
-    priv = private_key_pem.get_secret_value()
-    pem_path = Path(priv)
-    if pem_path.exists():
-        priv = pem_path.read_text().strip()
+    args = parser.parse_args()
 
     stop = asyncio.Event()
 
     def _handle_sigterm() -> None:
         logger.info("SIGTERM received, shutting down...")
+        _write_status(connected=False, shutdown="SIGTERM")
         stop.set()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.add_signal_handler(signal.SIGTERM, _handle_sigterm)
     loop.add_signal_handler(signal.SIGINT, _handle_sigterm)
+
+    # Run credential check inside the asyncio loop with graceful fallback
+    async def _resolve_creds() -> tuple[str, str] | None:
+        private_key_pem = get_credential("kalshi", "private_key_pem")
+        if not private_key_pem:
+            logger.error("Kalshi credentials not found — will retry on reconnect")
+            return None
+        api_key = get_credential("kalshi", "api_key")
+        if not api_key:
+            logger.error("Kalshi API key not found — will retry on reconnect")
+            return None
+        priv = private_key_pem.get_secret_value()
+        pem_path = Path(priv)
+        if pem_path.exists():
+            priv = pem_path.read_text().strip()
+        return (api_key.get_secret_value(), priv)
+
+    creds = loop.run_until_complete(_resolve_creds())
+    if not creds:
+        loop.close()
+        sys.exit(1)
+    api_key_str, priv_str = creds
 
     async def _amain() -> None:
         task = asyncio.create_task(_run(api_key.get_secret_value(), priv, WS_URL))

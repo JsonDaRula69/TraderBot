@@ -167,6 +167,7 @@ class KalshiClient:
         self,
         method: str,
         path: str,
+        timeout: float = 30,
         **params: Any,
     ) -> httpx.Response:
         """Core request handler with rate limiting, retry, and RSA-PSS auth.
@@ -183,11 +184,11 @@ class KalshiClient:
             try:
                 if method.upper() in ("GET", "DELETE"):
                     response = await self._client.request(
-                        method, path, params=params, headers=headers
+                        method, path, params=params, headers=headers, timeout=timeout
                     )
                 else:
                     response = await self._client.request(
-                        method, path, json=params, headers=headers
+                        method, path, json=params, headers=headers, timeout=timeout
                     )
 
                 logger.info("API %s %s -> %d", method, path, response.status_code)
@@ -229,14 +230,14 @@ class KalshiClient:
         msg = "Max retries exceeded"
         raise RuntimeError(msg)
 
-    async def get(self, path: str, **params: Any) -> httpx.Response:
-        return await self._request("GET", path, **params)
+    async def get(self, path: str, timeout: float = 30, **params: Any) -> httpx.Response:
+        return await self._request("GET", path, timeout=timeout, **params)
 
-    async def post(self, path: str, **body: Any) -> httpx.Response:
-        return await self._request("POST", path, **body)
+    async def post(self, path: str, timeout: float = 30, **body: Any) -> httpx.Response:
+        return await self._request("POST", path, timeout=timeout, **body)
 
-    async def delete(self, path: str, **params: Any) -> httpx.Response:
-        return await self._request("DELETE", path, **params)
+    async def delete(self, path: str, timeout: float = 30, **params: Any) -> httpx.Response:
+        return await self._request("DELETE", path, timeout=timeout, **params)
 
     async def close(self) -> None:
         await self._client.aclose()

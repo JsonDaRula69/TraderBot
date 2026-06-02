@@ -230,7 +230,7 @@ class NewsAggregator:
         self._openweather_key = config.openweather_key
         self._fred_key = config.fred_key
         self._reddit_subreddits = reddit_subreddits if reddit_subreddits is not None else (config.reddit_subreddits or ["politics", "economics", "weather"])
-        self._client = http_client or httpx.AsyncClient()
+        self._client = http_client or httpx.AsyncClient(timeout=30.0)
         self._newsapi_base = "https://newsapi.org/v2"
         self.rate_limit_limit: int | None = None
         self.rate_limit_remaining: int | None = None
@@ -376,6 +376,7 @@ class NewsAggregator:
                     f"{self._newsapi_base}/top-headlines",
                     params=params,
                     headers=headers,
+                    timeout=30.0,
                 )
                 self._capture_rate_limits(response)
 
@@ -525,6 +526,7 @@ class NewsAggregator:
                     f"{self._newsapi_base}/everything",
                     params=params,
                     headers=headers,
+                    timeout=30.0,
                 )
                 self._capture_rate_limits(response)
 
@@ -532,8 +534,10 @@ class NewsAggregator:
                     if attempt < max_retries:
                         delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
                         logger.warning(
-                            "NewsAPI everything rate limited (429), retry %d/%d in %.1fs",
-                            attempt + 1, max_retries, delay,
+                            "NewsAPI /everything rate limited (429), retry %d/%d in %.1fs",
+                            attempt + 1,
+                            max_retries,
+                            delay,
                         )
                         await asyncio.sleep(delay)
                         continue
@@ -665,6 +669,7 @@ class NewsAggregator:
                     f"{self._newsapi_base}/everything",
                     params=params,
                     headers=headers,
+                    timeout=30.0,
                 )
                 self._capture_rate_limits(response)
 
@@ -797,7 +802,7 @@ class NewsAggregator:
             try:
                 params = {**params_template, "latitude": lat, "longitude": lon}
                 response = await self._client.get(
-                    "https://api.open-meteo.com/v1/forecast", params=params
+                    "https://api.open-meteo.com/v1/forecast", params=params, timeout=30.0
                 )
                 if response.status_code != 200:
                     logger.warning(
@@ -893,7 +898,7 @@ class NewsAggregator:
             async with sem:
                 url = f"https://api.weather.gov/alerts/active/area/{state}"
                 try:
-                    resp = await self._client.get(url)
+                    resp = await self._client.get(url, timeout=30.0)
                     resp.raise_for_status()
                     data: dict[str, Any] = resp.json()
                     return data.get("features", [])
@@ -999,7 +1004,7 @@ class NewsAggregator:
                 try:
                     params = {**params_template, "latitude": lat, "longitude": lon}
                     response = await self._client.get(
-                        "https://api.open-meteo.com/v1/forecast", params=params
+                        "https://api.open-meteo.com/v1/forecast", params=params, timeout=30.0
                     )
                     if response.status_code != 200:
                         logger.warning(
@@ -1111,6 +1116,7 @@ class NewsAggregator:
                                 "sort_order": "asc",
                                 "limit": 500,
                             },
+                            timeout=30.0,
                         )
                         if response.status_code == 429:
                             retry_after = int(response.headers.get("Retry-After", 5))
@@ -1240,6 +1246,7 @@ class NewsAggregator:
             response = await self._client.get(
                 "https://api.openweathermap.org/data/2.5/group",
                 params={"id": ",".join(city_ids), "appid": key, "units": "imperial"},
+                timeout=30.0,
             )
             if response.status_code == 200:
                 data = response.json()
@@ -1317,6 +1324,7 @@ class NewsAggregator:
                 response = await self._client.get(
                     "https://api.openweathermap.org/data/2.5/weather",
                     params={"q": city_name, "appid": key, "units": "imperial"},
+                    timeout=30.0,
                 )
                 self._owm_daily_count += 1
                 if response.status_code != 200:
@@ -1376,7 +1384,7 @@ class NewsAggregator:
             try:
                 feed_url = f"https://www.reddit.com/r/{sub}/.rss"
                 response = await self._client.get(
-                    feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"}
+                    feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"}, timeout=30.0
                 )
                 if response.status_code != 200:
                     logger.warning(
@@ -1480,6 +1488,7 @@ class NewsAggregator:
                         f"{cg_base}/coins/markets",
                         params=params,
                         headers=headers,
+                        timeout=30.0,
                     )
 
                     if response.status_code == 429:
@@ -1577,6 +1586,7 @@ class NewsAggregator:
                         trending_resp = await self._client.get(
                             f"{cg_base}/search/trending",
                             headers=headers,
+                            timeout=30.0,
                         )
                         if trending_resp.status_code == 429:
                             if attempt < max_retries:
@@ -1652,6 +1662,7 @@ class NewsAggregator:
                 response = await self._client.get(
                     "https://www.thesportsdb.com/api/v1/json/3/eventsday.php",
                     params={"d": today, "s": sport},
+                    timeout=30.0,
                 )
                 if response.status_code != 200:
                     logger.warning(
@@ -1762,6 +1773,7 @@ class NewsAggregator:
                         response = await self._client.get(
                             "https://www.thesportsdb.com/api/v1/json/3/eventsday.php",
                             params={"d": day_str, "s": sport},
+                            timeout=30.0,
                         )
                         if response.status_code != 200:
                             return []
@@ -1844,6 +1856,7 @@ class NewsAggregator:
                 f"{cg_base}/coins/markets",
                 params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 30, "page": 1, "sparkline": "false"},
                 headers=headers,
+                timeout=30.0,
             )
             if response.status_code != 200:
                 logger.warning("CoinGecko /coins/markets returned HTTP %d, cannot backfill", response.status_code)
@@ -1865,6 +1878,7 @@ class NewsAggregator:
                         f"{cg_base}/coins/{coin_id}/market_chart/range",
                         params={"vs_currency": "usd", "from": str(from_timestamp), "to": str(end_ts)},
                         headers=headers,
+                        timeout=30.0,
                     )
                     if response.status_code == 429:
                         logger.warning("CoinGecko rate limited on %s, skipping", coin_id)
@@ -1951,6 +1965,7 @@ class NewsAggregator:
                             "pageSize": 100,
                         },
                         headers=headers,
+                        timeout=30.0,
                     )
                     self._capture_rate_limits(response)
                     if response.status_code != 200:
@@ -2046,6 +2061,7 @@ class NewsAggregator:
                         "sort_order": "desc",
                         "limit": 1,
                     },
+                    timeout=30.0,
                 )
                 if response.status_code != 200:
                     logger.warning(

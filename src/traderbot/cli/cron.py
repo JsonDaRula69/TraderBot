@@ -260,7 +260,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     },
     {
         "name": "experiment-execution",
-        "cron_expr": "15,45 * * * *",
+        "cron_expr": "0 */6 * * *",
         "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar. DEPLOY if pass, REJECT with reason. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/.",
     },
     {

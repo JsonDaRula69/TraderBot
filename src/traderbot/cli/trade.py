@@ -284,10 +284,21 @@ def register_commands(parent_app: typer.Typer) -> None:
             market = await market_svc.get_market(ticker)
             if profile.paper_mode:
                 balance_cents = profile.initial_balance_cents or 10_000
+                # Deduct open position costs from available balance
+                from traderbot.db.positions import list_all as list_positions
+                from traderbot.db import get_connection as _get_conn
+                try:
+                    pos_db = _resolve_db_path(None)
+                    with _get_conn(pos_db) as conn:
+                        open_pos = list_positions(conn)
+                        cost_at_risk = sum(p.avg_price * p.quantity for p in open_pos if p.settlement_result is None)
+                except Exception:
+                    cost_at_risk = 0
+                net_balance = balance_cents - cost_at_risk
                 folio = PortfolioState(
-                    portfolio_value_cents=balance_cents,
+                    portfolio_value_cents=net_balance,
                     peak_value_cents=balance_cents,
-                    current_positions_value_cents=0,
+                    current_positions_value_cents=cost_at_risk,
                     today_realized_loss_cents=0,
                     today_unrealized_loss_cents=0,
                     open_positions_count=0,
@@ -696,7 +707,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                                 f"{'✓' if r.get('approved') else '✗'}[/{'green' if r.get('approved') else 'red'}] "
                                 f"{r['ticker']} {r.get('direction','')} x{r.get('quantity',0)} @ {r.get('price',0)}¢"
                             )
-                time.sleep(60)  # 1 minute between cycles
+                asyncio.run(asyncio.sleep(60))  # 1 minute between cycles
         except KeyboardInterrupt:
             console.print("\n[yellow]Session interrupted.[/yellow]")
 
