@@ -53,17 +53,21 @@ def fetch_latest_version() -> tuple[str, str] | None:
         return None
 
 
-def check_for_updates(silent: bool = False) -> str | None:
+def check_for_updates(
+    silent: bool = False,
+    force: bool = False,
+    check_interval_minutes: int = 60,
+    dev: bool = False,
+) -> dict | None:
     current = get_current_version()
     latest = fetch_latest_version()
     if latest is None:
         return None
-    latest_ver, _ = latest
-    if _version_tuple(latest_ver) > _version_tuple(current):
-        msg = f"v{current} → v{latest_ver}"
+    latest_ver, url = latest
+    if _version_tuple(latest_ver) > _version_tuple(current) or force:
         if not silent:
-            print(f"Update available: {msg}. Run 'traderbot update' to update.")
-        return latest_ver
+            print(f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update.")
+        return {"current": current, "latest": latest_ver, "url": url}
     return None
 
 
