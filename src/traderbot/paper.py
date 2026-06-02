@@ -14,7 +14,7 @@ from pathlib import Path
 from traderbot.cli.helpers import _resolve_db_path
 from traderbot.db import get_connection
 from traderbot.db.positions import list_all
-from traderbot.profiles import Profile
+from traderbot.profiles.models import TradingProfile as Profile
 
 logger = logging.getLogger(__name__)
 
