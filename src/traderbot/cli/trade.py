@@ -315,7 +315,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             quantity=quantity,
             price_cents=price,
             market_price_cents=price,
-            estimated_prob=prob,
+            estimated_prob=estimated_prob if estimated_prob is not None else prob,
             confidence=0.5,
             edge_estimate=0.0,
             market_open_interest=market.open_interest if market else 0,
