@@ -59,6 +59,47 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
 
+  frozen-check:
+    name: Frozen lockfile check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Check lockfile is fresh
+        run: uv sync --frozen
+
+  lint:
+    name: Lint & format
+    needs: frozen-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Lint with ruff
+        run: uvx --with ruff ruff check src/ --exit-zero
+
+      - name: Check formatting with ruff
+        run: uvx --with ruff ruff format src/traderbot --check
+
+  unit:
+    name: Unit tests
+    needs: lint
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -72,7 +113,7 @@ jobs:
         run: uv sync --dev
 
       - name: Run unit tests
-        run: python -m pytest -m "unit" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen pytest -m "unit" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -102,7 +143,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests (not live)
-        run: uv run pytest -m "not live" --cov=src/traderbot --cov-report=xml
+        run: .venv/bin/python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -132,7 +173,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run live tests
-        run: uv run pytest -m "live" --timeout=60 -x
+        run: .venv/bin/python -m pytest -m "live" --timeout=60 -x
         env:
           KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
           KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
