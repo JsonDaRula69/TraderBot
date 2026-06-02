@@ -335,7 +335,22 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "pipeline-health",
         "cron_expr": "0 */6 * * *",
-        "message": "Check pipeline timers via `systemctl list-timers --all | grep traderbot`. Verify data_points count > 0. Surface any inactive timers or stale data to sysadmin.",
+        "message": "Check: (1) systemd timers — `systemctl list-timers --all | grep traderbot`, (2) ChromaDB — `traderbot data-points weather --json --count`, (3) WS daemon — `traderbot ws status`. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. Surface summary to sysadmin.",
+    },
+    {
+        "name": "performance-review",
+        "cron_expr": "0 */6 * * *",
+        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Surface any issues to sysadmin.",
+    },
+    {
+        "name": "learning-promotion",
+        "cron_expr": "0 */6 * * *",
+        "message": "Read `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. For each newly promoted entry, spawn an experiment-design sub-agent via `sessions_spawn` with the full pattern details, context, profile params, and SESSION-STATE.md. The sub-agent should return a complete experiment design (hypothesis, target parameter, current/proposed values, backtest params, success criteria). Log the design in SESSION-STATE.md Pending Actions.",
+    },
+    {
+        "name": "pipeline-health",
+        "cron_expr": "0 */6 * * *",
+        "message": "Check: (1) systemd timers — `systemctl list-timers --all | grep traderbot`, (2) data_points count > 0, (3) WS daemon — `traderbot ws status`, (4) profiles — `traderbot profile assignments --json`. Write each issue to `.learnings/ERRORS.md` (failures), `.learnings/FEATURE_REQUESTS.md` (gaps), or `.learnings/LEARNINGS.md` (patterns). Surface summary to sysadmin.",
     },
 ]
 
