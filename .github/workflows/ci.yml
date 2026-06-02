@@ -31,6 +31,9 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check --output-format=github
 
+      - name: Check formatting with ruff
+        run: uv run ruff format --check
+
       - name: Run tests
         run: uv run pytest -m "not live" --cov=src/traderbot --cov-report=xml
 
