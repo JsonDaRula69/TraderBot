@@ -179,21 +179,38 @@ def main() -> None:
 
     # Run credential check inside the asyncio loop with graceful fallback
     async def _resolve_creds() -> tuple[str, str] | None:
-        private_key_pem = get_credential("kalshi", "private_key_pem")
-        if not private_key_pem:
-            logger.error("Kalshi credentials not found — will retry on reconnect")
-            return None
-        api_key = get_credential("kalshi", "api_key")
-        if not api_key:
+        api_key_str = get_credential("kalshi", "api_key")
+        if not api_key_str:
             logger.error("Kalshi API key not found — will retry on reconnect")
             return None
-        priv = private_key_pem.get_secret_value()
-        pem_path = Path(priv)
-        if pem_path.exists():
-            priv = pem_path.read_text().strip()
-        else:
-            priv = priv.replace("\\n", "\n").strip()
-        return (api_key.get_secret_value(), priv)
+        api_key = api_key_str.get_secret_value()
+
+        # Try private_key_pem first, then private_key_path
+        private_key_pem = get_credential("kalshi", "private_key_pem")
+        priv: str | None = None
+        if private_key_pem:
+            priv = private_key_pem.get_secret_value()
+            pem_path = Path(priv)
+            if pem_path.exists():
+                priv = pem_path.read_text().strip()
+            else:
+                priv = priv.replace("\\n", "\n").strip()
+
+        if not priv:
+            key_path = get_credential("kalshi", "private_key_path")
+            if key_path:
+                kp = key_path.get_secret_value()
+                kp_path = Path(kp)
+                if not kp_path.exists():
+                    kp_path = get_data_dir() / kp_path.name
+                if kp_path.exists():
+                    priv = kp_path.read_text().strip()
+
+        if not priv:
+            logger.error("Kalshi private key not found — will retry on reconnect")
+            return None
+
+        return (api_key, priv)
 
     creds = loop.run_until_complete(_resolve_creds())
     if not creds:
