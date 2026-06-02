@@ -22,6 +22,8 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 |---|---|---|
 | `sessions_spawn` | Spawn isolated sub-agent for experiment design | Non-blocking. Returns `runId` + `childSessionKey`. |
 | `sessions_yield` | End current turn, wait for sub-agent completion | Use AFTER `sessions_spawn`. Do NOT poll for completion. |
+| `sessions_list` | List active sessions across all agents | Cross-agent session discovery. Accepts optional `filter` and `agentId`. |
+| `sessions_send` | Send message to any agent session by session key | Cross-agent cross-session. Use for: notifying sysadmin of experiment proposals, alerting agents of deployment updates. Format: `sessions_send(sessionKey: "...", message: "text")`. |
 | `subagents` | List spawned sub-agent status (on-demand only) | Debug/status only. Do not poll in a loop. |
 
 ### Market Analysis (Weather-Specific)

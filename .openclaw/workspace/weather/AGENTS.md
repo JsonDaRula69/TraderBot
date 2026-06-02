@@ -256,9 +256,11 @@ sessions_spawn(
 
   Your ONLY job: Return a complete experiment design. Do NOT trade. Do NOT execute traderbot commands.
 
-  Return format:
+  Return format (match the backlog.md column spec):
   ## Experiment Proposal
   - Hypothesis: What change and why?
+  - Target agent: vane (weather)
+  - Strategy variant: [current strategy name]
   - Target parameter: Which profile field to adjust
   - Current value
   - Proposed value
@@ -268,7 +270,10 @@ sessions_spawn(
     - Category: weather
     - Date range covering similar conditions
     - Control profile name
-  - Success criteria (per deployment bar in SESSION-STATE.md)
+  - Success criteria (per backlog.md deployment bar):
+    - Sharpe >= 1.0
+    - Win rate improvement >= 5pp
+    - Sample size >= 30 trades
   - Weather-specific notes (season, model regime)
   - Risk assessment",
 
