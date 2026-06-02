@@ -59,7 +59,7 @@ def check_for_updates(
     check_interval_minutes: int = 60,
     dev: bool = False,
 ) -> dict | None:
-    current = get_current_version()
+    current = get_current_version().lstrip("v")
     latest = fetch_latest_version()
     if latest is None:
         return None
