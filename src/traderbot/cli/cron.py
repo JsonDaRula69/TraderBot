@@ -251,12 +251,37 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
+"message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
     },
     {
         "name": "experiment-check",
-        "cron_expr": "*/30 * * * *",
+        "cron_expr": "0 */6 * * *",
         "message": "Read each agent's SESSION-STATE.md via sessions_history. Check Pending Actions for experiment proposals marked DESIGNED or PROPOSED. Acknowledge receipt, add to test-lab/backlog.md, update SESSION-STATE.md with status.",
+    },
+    {
+        "name": "experiment-execution",
+        "cron_expr": "0 */6 * * *",
+        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30 trades per backlog.md). DEPLOY via `traderbot profile update` if pass, REJECT with reason in backlog.md if fail. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
+    },
+    {
+        "name": "auth-check",
+        "cron_expr": "0 * * * *",
+        "message": "Run `traderbot auth check --json`. Verify all API credentials are resolvable. If Kalshi credentials are missing or invalid, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human — this blocks all trading.",
+    },
+    {
+        "name": "learning-review",
+        "cron_expr": "0 */6 * * *",
+        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts.",
+    },
+    {
+        "name": "pipeline-health",
+        "cron_expr": "0 */6 * * *",
+        "message": "Check: (1) systemd timers via `systemctl list-timers --all | grep traderbot`, (2) ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`, (3) WS daemon via `traderbot ws status`. Run backfill if stale. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. Surface summary to sysadmin.",
+    },
+    {
+        "name": "performance-review",
+        "cron_expr": "0 */6 * * *",
+        "message": "Run `traderbot heartbeat --json`. Review fleet P&L, agent win rates, drawdown across all assigned profiles. Check if any agent exceeds risk thresholds. If anomalies found, write to `.learnings/ERRORS.md` with details. Surface anomalies to human. Do not trade — do not touch order book.",
     },
     {
         "name": "experiment-execution",
@@ -289,17 +314,17 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
+        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
     },
     {
         "name": "news-scan",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot news-context weather --json`. Check for NHC advisories, NWS warnings, emergency declarations. If any active, surface alert to sysadmin.",
+        "message": "Run `traderbot news-context weather --json`. Check for NHC advisories, NWS warnings, emergency declarations. If any active, write to `.learnings/ERRORS.md` and surface alert to sysadmin.",
     },
     {
         "name": "data-forecast-check",
         "cron_expr": "15,45 * * * *",
-        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. Log status.",
+        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. If fallback also fails, write to `.learnings/ERRORS.md`. Log status.",
     },
     {
         "name": "decision-loop",
@@ -309,23 +334,23 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "position-health",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. Surface any at-risk positions to sysadmin.",
+        "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. If any at-risk positions found, write to `.learnings/ERRORS.md` with ticker and risk detail. Surface to sysadmin.",
     },
     {
         "name": "settlement-monitor",
         "cron_expr": "0 * * * *",
         "session": "isolated",
-        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`.",
+        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`. If settlement check fails (e.g. 401), write to `.learnings/ERRORS.md`.",
     },
     {
         "name": "auth-check",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot auth check --json`. Verify Kalshi credentials are resolvable. If missing or invalid, surface CRITICAL alert to sysadmin — cannot trade without valid credentials.",
+        "message": "Run `traderbot auth check --json`. Verify Kalshi credentials are resolvable. If missing or invalid, write to `.learnings/ERRORS.md` and surface CRITICAL alert to sysadmin — cannot trade without valid credentials.",
     },
     {
         "name": "performance-review",
         "cron_expr": "0 */6 * * *",
-        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. Surface any issues to sysadmin.",
+        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. If anomalies found, write to `.learnings/ERRORS.md` with details. Surface any issues to sysadmin.",
     },
     {
         "name": "learning-promotion",
