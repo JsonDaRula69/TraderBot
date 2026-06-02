@@ -21,4 +21,3 @@ __all__ = [
     "load_profile_config",
     "resolve_kalshi_credentials",
 ]
-

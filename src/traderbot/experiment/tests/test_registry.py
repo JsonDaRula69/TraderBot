@@ -1,5 +1,6 @@
 """Tests for traderbot.experiment.registry."""
 
+
 from traderbot.experiment.registry import (
     _registry,
     discover_treatments,
@@ -8,7 +9,6 @@ from traderbot.experiment.registry import (
     register_treatment,
 )
 from traderbot.experiment.shared import TreatmentContext, TreatmentInterface, ValidatedDecision
-from datetime import datetime
 
 
 class _FakeTreatment(TreatmentInterface):

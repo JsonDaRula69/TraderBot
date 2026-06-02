@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from typing import TYPE_CHECKING
 
 from traderbot.risk.limits import HARD_LIMITS
@@ -94,4 +92,3 @@ class AgentRiskLimits:
             self._profile.min_edge_pct,
             float(HARD_LIMITS["min_edge_pct"]),
         )
-

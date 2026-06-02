@@ -25,14 +25,19 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_DIMENSION: int = 1024
 DEFAULT_PERSIST_DIR: Path = get_chromadb_dir()
-DEFAULT_COLLECTIONS: tuple[str, ...] = ("decisions", "news", "market_patterns", "news_signals", "market_conditions", "data_points")
+DEFAULT_COLLECTIONS: tuple[str, ...] = (
+    "decisions",
+    "news",
+    "market_patterns",
+    "news_signals",
+    "market_conditions",
+    "data_points",
+)
 
 SearchResult = tuple[str, str, dict[str, str], float]
 """(doc_id, text, metadata, distance)"""
 
-_CHROMADB_MISSING_MSG = (
-    "chromadb is not installed. Install it with: pip install traderbot[vectors] or pip install chromadb"
-)
+_CHROMADB_MISSING_MSG = "chromadb is not installed. Install it with: pip install traderbot[vectors] or pip install chromadb"
 
 
 class VectorStore(BaseModel):

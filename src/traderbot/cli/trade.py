@@ -1,4 +1,5 @@
 """Trade-related commands: trade, positions, audit, backtest, paper, compare, analyze, performance."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,16 +15,14 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import _resolve_db_path, _with_db, _get_strategy
+from traderbot.cli.helpers import _get_strategy, _resolve_db_path, _with_db
 from traderbot.paper import compute_paper_balance
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
 
-async def _analyze_realtime(
-    ticker: str, console: Console, json_output: bool
-) -> None:
+async def _analyze_realtime(ticker: str, console: Console, json_output: bool) -> None:
     """Stream real-time orderbook via WebSocket and display updates."""
     from traderbot.kalshi.websocket import KalshiWebSocket
 
@@ -58,11 +57,17 @@ async def _analyze_realtime(
                 if snapshot_printed:
                     continue
                 snapshot_printed = True
-                console.print(f"\n[bold cyan]📡 {ticker}[/bold cyan] — Real-time Orderbook (WebSocket)")
+                console.print(
+                    f"\n[bold cyan]📡 {ticker}[/bold cyan] — Real-time Orderbook (WebSocket)"
+                )
                 data = msg.get("msg", {})
 
                 if json_output:
-                    json_lib.dump({"ticker": ticker, "type": "snapshot", "data": data}, sys.stdout, default=str)
+                    json_lib.dump(
+                        {"ticker": ticker, "type": "snapshot", "data": data},
+                        sys.stdout,
+                        default=str,
+                    )
                 else:
                     _print_orderbook_snapshot(console, data)
 
@@ -71,7 +76,11 @@ async def _analyze_realtime(
                     continue
                 changes = msg.get("msg", {}).get("changes", [])
                 if json_output:
-                    json_lib.dump({"ticker": ticker, "type": "delta", "changes": changes}, sys.stdout, default=str)
+                    json_lib.dump(
+                        {"ticker": ticker, "type": "delta", "changes": changes},
+                        sys.stdout,
+                        default=str,
+                    )
                 else:
                     ts = msg.get("ts", "")
                     console.print(f"\n[yellow]Δ {ts}[/yellow]")
@@ -80,13 +89,15 @@ async def _analyze_realtime(
                         price = change.get("price", "?")
                         size = change.get("size", "?")
                         direction = change.get("direction", "?")
-                        console.print(
-                            f"  {side} {direction} @ {price}¢ × {size}"
-                        )
+                        console.print(f"  {side} {direction} @ {price}¢ × {size}")
 
             elif msg_type == "ticker":
                 if json_output:
-                    json_lib.dump({"ticker": ticker, "type": "ticker", "data": msg.get("msg", {})}, sys.stdout, default=str)
+                    json_lib.dump(
+                        {"ticker": ticker, "type": "ticker", "data": msg.get("msg", {})},
+                        sys.stdout,
+                        default=str,
+                    )
 
     except KeyboardInterrupt:
         console.print("\n[dim]Disconnecting...[/dim]")
@@ -166,11 +177,15 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         if json_output:
-            json_lib.dump({
-                "ticker": ticker,
-                "market": market.model_dump(mode="json"),
-                "orderbook": orderbook.model_dump(mode="json") if orderbook else None,
-            }, sys.stdout, default=str)
+            json_lib.dump(
+                {
+                    "ticker": ticker,
+                    "market": market.model_dump(mode="json"),
+                    "orderbook": orderbook.model_dump(mode="json") if orderbook else None,
+                },
+                sys.stdout,
+                default=str,
+            )
             return
 
         console.print(f"\n[bold cyan]{ticker}[/bold cyan] — {market.question}")
@@ -184,6 +199,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
             if yes_bids:
                 from traderbot.analysis.odds import implied_probability
+
                 ip = implied_probability(orderbook)
                 console.print(f"  YES Best Bid: {yes_bids[0].price}¢ (implied {ip.yes_prob:.1%})")
 
@@ -197,17 +213,27 @@ def register_commands(parent_app: typer.Typer) -> None:
         price: Annotated[int, typer.Option("--price", help="Limit price in cents")] = 50,
         estimated_prob: Annotated[
             float | None,
-            typer.Option("--estimated-prob", help="Agent's estimated probability (0.0-1.0). Overrides market-implied."),
+            typer.Option(
+                "--estimated-prob",
+                help="Agent's estimated probability (0.0-1.0). Overrides market-implied.",
+            ),
         ] = None,
         confidence: Annotated[
             float | None,
-            typer.Option("--confidence", help="Agent's confidence in the estimate (0.0-1.0). Default 0.5 if not set."),
+            typer.Option(
+                "--confidence",
+                help="Agent's confidence in the estimate (0.0-1.0). Default 0.5 if not set.",
+            ),
         ] = None,
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
         ] = False,
         no_confirm: Annotated[
-            bool, typer.Option("--no-confirm", help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.")
+            bool,
+            typer.Option(
+                "--no-confirm",
+                help="Skip confirmation prompt (for automation). Also skipped when TRADERBOT_CONFIRM_TRADES=false.",
+            ),
         ] = False,
     ) -> None:
         """Place a trade through risk checks.
@@ -221,17 +247,21 @@ def register_commands(parent_app: typer.Typer) -> None:
         - Live profile: submits order to Kalshi exchange after risk check passes
         """
         from traderbot.master_password import require_auth
+
         require_auth()
 
         from traderbot.kalshi.client import KalshiClient
         from traderbot.kalshi.markets import MarketService
         from traderbot.kalshi.models import (
-            OrderRequest, OrderSideV2, PortfolioState, TradeRequest,
+            OrderRequest,
+            OrderSideV2,
+            PortfolioState,
+            TradeRequest,
         )
         from traderbot.kalshi.portfolio import PortfolioService
         from traderbot.kalshi.trading import TradingService
         from traderbot.profiles.runtime import get_current_profile
-        from traderbot.risk import evaluate_trade_full, RiskCheckError
+        from traderbot.risk import RiskCheckError, evaluate_trade_full
         from traderbot.wal import (
             DEFAULT_SESSION_STATE_PATH,
             WalAction,
@@ -306,7 +336,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                     )
             else:
                 balance_data = await portfolio_svc.get_balance()
-                balance_cents_val = balance_data.get("balance", 0) if isinstance(balance_data, dict) else 0
+                balance_cents_val = (
+                    balance_data.get("balance", 0) if isinstance(balance_data, dict) else 0
+                )
                 folio = PortfolioState(
                     portfolio_value_cents=balance_cents_val,
                     peak_value_cents=balance_cents_val,
@@ -344,7 +376,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             )
         except RiskCheckError as e:
             if json_output:
-                json_lib.dump({"status": "rejected", "ticker": ticker, "reason": str(e)}, sys.stdout)
+                json_lib.dump(
+                    {"status": "rejected", "ticker": ticker, "reason": str(e)}, sys.stdout
+                )
             else:
                 console.print(f"[red]Trade rejected[/red]: {ticker} — {e}")
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
@@ -352,9 +386,18 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         if result.sized_position_cents <= 0:
             if json_output:
-                json_lib.dump({"status": "rejected", "ticker": ticker, "reason": "Risk check returned zero position"}, sys.stdout)
+                json_lib.dump(
+                    {
+                        "status": "rejected",
+                        "ticker": ticker,
+                        "reason": "Risk check returned zero position",
+                    },
+                    sys.stdout,
+                )
             else:
-                console.print(f"[red]Trade rejected[/red]: {ticker} — risk check returned zero position")
+                console.print(
+                    f"[red]Trade rejected[/red]: {ticker} — risk check returned zero position"
+                )
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.REJECTED)
             return
 
@@ -369,48 +412,69 @@ def register_commands(parent_app: typer.Typer) -> None:
             # V2 uses dollar-based prices: e.g. 65¢ → "0.65"
             dollar_price = f"{adj_price / 100:.2f}"
             order_req = OrderRequest(
-                ticker=ticker, side=side,
-                count=str(adj_qty), price=dollar_price,
+                ticker=ticker,
+                side=side,
+                count=str(adj_qty),
+                price=dollar_price,
             )
             trading_svc = TradingService(client)
             try:
                 order_result = asyncio.run(trading_svc.place_order(order_req))
                 if json_output:
-                    json_lib.dump({
-                        "status": "submitted", "ticker": ticker,
-                        "order_id": order_result.order_id,
-                        "fill_count": order_result.fill_count,
-                    }, sys.stdout, default=str)
+                    json_lib.dump(
+                        {
+                            "status": "submitted",
+                            "ticker": ticker,
+                            "order_id": order_result.order_id,
+                            "fill_count": order_result.fill_count,
+                        },
+                        sys.stdout,
+                        default=str,
+                    )
                 else:
-                    console.print(f"[green]Order submitted[/green]: ID {order_result.order_id}, "
-                                  f"fill count {order_result.fill_count}")
+                    console.print(
+                        f"[green]Order submitted[/green]: ID {order_result.order_id}, "
+                        f"fill count {order_result.fill_count}"
+                    )
                 update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
             except Exception as e:
                 console.print(f"[red]Order submission failed[/red]: {e}")
                 update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.CANCELLED)
                 if json_output:
-                    json_lib.dump({"status": "failed", "ticker": ticker, "error": str(e)}, sys.stdout)
+                    json_lib.dump(
+                        {"status": "failed", "ticker": ticker, "error": str(e)}, sys.stdout
+                    )
                 return
         else:
             if json_output:
-                json_lib.dump({"status": "approved", "ticker": ticker, **result.model_dump()}, sys.stdout, default=str)
+                json_lib.dump(
+                    {"status": "approved", "ticker": ticker, **result.model_dump()},
+                    sys.stdout,
+                    default=str,
+                )
             else:
-                console.print(f"[green]Trade approved (paper)[/green]: {ticker} {direction} x{adj_qty} @ {adj_price}¢")
+                console.print(
+                    f"[green]Trade approved (paper)[/green]: {ticker} {direction} x{adj_qty} @ {adj_price}¢"
+                )
             update_status(DEFAULT_SESSION_STATE_PATH, intent_id, WalStatus.EXECUTED)
 
         # Record position in SQLite for persistence across sessions
-        from traderbot.db.positions import upsert as upsert_position
         from traderbot.db import get_connection
+        from traderbot.db.positions import upsert as upsert_position
         from traderbot.kalshi.models import Position as KalshiPosition
+
         try:
             pos_db = _resolve_db_path(None)
             with get_connection(pos_db) as conn:
-                upsert_position(conn, KalshiPosition(
-                    ticker=ticker,
-                    quantity=adj_qty,
-                    avg_price=adj_price,
-                    settlement_result=None,
-                ))
+                upsert_position(
+                    conn,
+                    KalshiPosition(
+                        ticker=ticker,
+                        quantity=adj_qty,
+                        avg_price=adj_price,
+                        settlement_result=None,
+                    ),
+                )
         except Exception as exc:
             logger.warning("Failed to persist position to DB: %s", exc)
 
@@ -469,8 +533,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             rest_tickers = [t for t in tickers_to_fetch if t not in price_map]
             if rest_tickers:
                 try:
-                    from traderbot.kalshi.client import KalshiClient
                     import asyncio
+
+                    from traderbot.kalshi.client import KalshiClient
 
                     async def _fetch_prices() -> dict[str, int]:
                         client = KalshiClient()
@@ -505,7 +570,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                     if p.direction == "yes":
                         entry["unrealized_pnl"] = (price_map[p.ticker] - p.avg_price) * p.quantity
                     elif p.direction == "no":
-                        entry["unrealized_pnl"] = ((100 - price_map[p.ticker]) - p.avg_price) * p.quantity
+                        entry["unrealized_pnl"] = (
+                            (100 - price_map[p.ticker]) - p.avg_price
+                        ) * p.quantity
                     else:
                         entry["unrealized_pnl"] = (price_map[p.ticker] - p.avg_price) * p.quantity
                 else:
@@ -544,13 +611,17 @@ def register_commands(parent_app: typer.Typer) -> None:
                 pnl_str = "\u2014"
             side = p.direction if hasattr(p, "direction") and p.direction else ""
             settled = "\u2014" if p.settlement_result is None else str(p.settlement_result)
-            table.add_row(p.ticker, side, str(p.quantity), f"{p.avg_price}¢", current, pnl_str, settled)
+            table.add_row(
+                p.ticker, side, str(p.quantity), f"{p.avg_price}¢", current, pnl_str, settled
+            )
         console.print(table)
 
     @parent_app.command()
     def audit(
         ticker: Annotated[str | None, typer.Option("--ticker", help="Filter by ticker")] = None,
-        start: Annotated[str | None, typer.Option("--start", help="Start date (ISO format)")] = None,
+        start: Annotated[
+            str | None, typer.Option("--start", help="Start date (ISO format)")
+        ] = None,
         end: Annotated[str | None, typer.Option("--end", help="End date (ISO format)")] = None,
         outcome: Annotated[str | None, typer.Option("--outcome", help="Filter by outcome")] = None,
         db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
@@ -560,7 +631,8 @@ def register_commands(parent_app: typer.Typer) -> None:
     ) -> None:
         """Audit trail of all trade decisions."""
         from datetime import datetime as dt
-        from traderbot.db.decisions import list_by_outcome, list_by_date_range, list_by_ticker
+
+        from traderbot.db.decisions import list_by_date_range, list_by_outcome, list_by_ticker
 
         def _query_decisions(conn):
             start_dt = dt.fromisoformat(start) if start else None
@@ -611,7 +683,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             str, typer.Option("--from", help="Start date (YYYY-MM-DD)")
         ] = "2025-01-01",
         to_date: Annotated[str, typer.Option("--to", help="End date (YYYY-MM-DD)")] = "2025-03-01",
-        bankroll: Annotated[int, typer.Option("--bankroll", help="Initial bankroll in cents")] = 100000,
+        bankroll: Annotated[
+            int, typer.Option("--bankroll", help="Initial bankroll in cents")
+        ] = 100000,
         db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
@@ -647,7 +721,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             init_schema(conn)
             init_cache_tables(conn)
             loader = DataLoader(conn, history)
-            engine = BacktestEngine(loader, _get_strategy(strategy), initial_bankroll_cents=bankroll)
+            engine = BacktestEngine(
+                loader, _get_strategy(strategy), initial_bankroll_cents=bankroll
+            )
 
             with Progress() as progress:
                 task = progress.add_task("[cyan]Running backtest...", total=None)
@@ -657,11 +733,15 @@ def register_commands(parent_app: typer.Typer) -> None:
         metrics = compute_metrics(trades, initial_bankroll_cents=bankroll)
 
         if json_output:
-            json_lib.dump({
-                "strategy": strategy,
-                "date_range": {"from": from_date, "to": to_date},
-                "metrics": metrics,
-            }, sys.stdout, default=str)
+            json_lib.dump(
+                {
+                    "strategy": strategy,
+                    "date_range": {"from": from_date, "to": to_date},
+                    "metrics": metrics,
+                },
+                sys.stdout,
+                default=str,
+            )
             return
 
         table = Table(title=f"Backtest: {strategy}")
@@ -673,9 +753,24 @@ def register_commands(parent_app: typer.Typer) -> None:
         table.add_row("Total P&L", f"${total_pnl / 100:+.2f}")
         roi = (total_pnl / bankroll * 100) if bankroll > 0 else 0
         table.add_row("ROI", f"{roi:.2f}%")
-        table.add_row("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}" if metrics.get("sharpe_ratio") is not None else "\u2014")
-        table.add_row("Max Drawdown", f"{metrics.get('max_drawdown_pct', 0):.1%}" if metrics.get("max_drawdown_pct") is not None else "\u2014")
-        table.add_row("Win Rate", f"{metrics.get('win_rate', 0):.1%}" if metrics.get("win_rate") is not None else "\u2014")
+        table.add_row(
+            "Sharpe",
+            f"{metrics.get('sharpe_ratio', 0):.2f}"
+            if metrics.get("sharpe_ratio") is not None
+            else "\u2014",
+        )
+        table.add_row(
+            "Max Drawdown",
+            f"{metrics.get('max_drawdown_pct', 0):.1%}"
+            if metrics.get("max_drawdown_pct") is not None
+            else "\u2014",
+        )
+        table.add_row(
+            "Win Rate",
+            f"{metrics.get('win_rate', 0):.1%}"
+            if metrics.get("win_rate") is not None
+            else "\u2014",
+        )
         table.add_row(
             "Edge Capture",
             f"{metrics['edge_capture']:.1%}" if metrics["edge_capture"] is not None else "\u2014",
@@ -710,6 +805,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         Press Ctrl+C to stop early and see final results.
         """
         from traderbot.master_password import require_auth
+
         require_auth()
 
         import asyncio
@@ -728,7 +824,6 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         strat = get_strategy(strategy)
 
-        from traderbot.db import get_connection, init_schema
         from traderbot.profiles import get_current_profile
 
         profile = get_current_profile()
@@ -739,7 +834,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             client = KalshiClient()
         except Exception:
             if json_output:
-                json_lib.dump({"error": "Kalshi API connection required for paper trading"}, sys.stdout)
+                json_lib.dump(
+                    {"error": "Kalshi API connection required for paper trading"}, sys.stdout
+                )
             else:
                 console.print("[red]Kalshi API connection required for paper trading.[/red]")
             return
@@ -767,8 +864,12 @@ def register_commands(parent_app: typer.Typer) -> None:
             settlements = asyncio.run(verifier.verify(provider))
             if settlements:
                 for s in settlements:
-                    status = "[green]SETTLED[/green]" if s.settled else "[yellow]UNRESOLVED[/yellow]"
-                    console.print(f"  {s.ticker} — {s.position_direction} x{s.quantity} @ {s.entry_price}¢ — {status}")
+                    status = (
+                        "[green]SETTLED[/green]" if s.settled else "[yellow]UNRESOLVED[/yellow]"
+                    )
+                    console.print(
+                        f"  {s.ticker} — {s.position_direction} x{s.quantity} @ {s.entry_price}¢ — {status}"
+                    )
             else:
                 console.print("  No positions to reconcile.")
 
@@ -789,7 +890,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                             console.print(
                                 f"  [{'green' if r.get('approved') else 'red'}]"
                                 f"{'✓' if r.get('approved') else '✗'}[/{'green' if r.get('approved') else 'red'}] "
-                                f"{r['ticker']} {r.get('direction','')} x{r.get('quantity',0)} @ {r.get('price',0)}¢"
+                                f"{r['ticker']} {r.get('direction', '')} x{r.get('quantity', 0)} @ {r.get('price', 0)}¢"
                             )
                 asyncio.run(asyncio.sleep(60))  # 1 minute between cycles
         except KeyboardInterrupt:
@@ -799,19 +900,31 @@ def register_commands(parent_app: typer.Typer) -> None:
         elapsed = time.time() - start_time
 
         if json_output:
-            json_lib.dump({
-                "strategy": strategy,
-                "duration_minutes": int(elapsed / 60),
-                **summary,
-            }, sys.stdout, default=str)
+            json_lib.dump(
+                {
+                    "strategy": strategy,
+                    "duration_minutes": int(elapsed / 60),
+                    **summary,
+                },
+                sys.stdout,
+                default=str,
+            )
             return
 
-        console.print(f"\n[bold]Paper Session Summary[/bold] ({int(elapsed / 60)}m {int(elapsed % 60)}s)")
-        pnl_str = f"${summary['total_pnl_cents'] / 100:+.2f}" if summary.get('total_pnl_cents') is not None else "$0.00"
-        console.print(f"  Final balance: ${summary.get('final_balance_cents', initial_balance_cents) / 100:.2f}")
+        console.print(
+            f"\n[bold]Paper Session Summary[/bold] ({int(elapsed / 60)}m {int(elapsed % 60)}s)"
+        )
+        pnl_str = (
+            f"${summary['total_pnl_cents'] / 100:+.2f}"
+            if summary.get("total_pnl_cents") is not None
+            else "$0.00"
+        )
+        console.print(
+            f"  Final balance: ${summary.get('final_balance_cents', initial_balance_cents) / 100:.2f}"
+        )
         console.print(f"  Total P&L:     {pnl_str}")
         console.print(f"  Trades:        {summary.get('trade_count', 0)}")
-        wr = summary.get('win_rate')
+        wr = summary.get("win_rate")
         console.print(f"  Win rate:      {wr:.1%}" if wr is not None else "  Win rate:      —")
 
     @parent_app.command()
@@ -825,7 +938,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             str, typer.Option("--from", help="Start date (YYYY-MM-DD)")
         ] = "2025-01-01",
         to_date: Annotated[str, typer.Option("--to", help="End date (YYYY-MM-DD)")] = "2025-03-01",
-        bankroll: Annotated[int, typer.Option("--bankroll", help="Initial bankroll in cents")] = 100000,
+        bankroll: Annotated[
+            int, typer.Option("--bankroll", help="Initial bankroll in cents")
+        ] = 100000,
         db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
@@ -868,7 +983,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             init_schema(conn)
             init_cache_tables(conn)
             loader = DataLoader(conn, history)
-            engine = BacktestEngine(loader, _get_strategy(strategy), initial_bankroll_cents=bankroll)
+            engine = BacktestEngine(
+                loader, _get_strategy(strategy), initial_bankroll_cents=bankroll
+            )
 
             profile_results = asyncio.run(run_profiles(engine, selected_profiles, start, end))
 
@@ -887,22 +1004,31 @@ def register_commands(parent_app: typer.Typer) -> None:
         table.add_column("Sharpe", justify="right")
 
         for c in comparisons:
-            pnl_str = f"${c['total_pnl_cents'] / 100:+.2f}" if c.get("total_pnl_cents") is not None else "$0.00"
+            pnl_str = (
+                f"${c['total_pnl_cents'] / 100:+.2f}"
+                if c.get("total_pnl_cents") is not None
+                else "$0.00"
+            )
             wr_str = f"{c['win_rate']:.1%}" if c.get("win_rate") is not None else "—"
-            dd_str = f"{c['max_drawdown_pct']:.1%}" if c.get("max_drawdown_pct") is not None else "—"
+            dd_str = (
+                f"{c['max_drawdown_pct']:.1%}" if c.get("max_drawdown_pct") is not None else "—"
+            )
             sharpe = f"{c['sharpe_ratio']:.2f}" if c.get("sharpe_ratio") is not None else "—"
-            table.add_row(c["profile_name"], str(c.get("trade_count", 0)), pnl_str, wr_str, dd_str, sharpe)
+            table.add_row(
+                c["profile_name"], str(c.get("trade_count", 0)), pnl_str, wr_str, dd_str, sharpe
+            )
         console.print(table)
 
     @parent_app.command()
     def performance(
         db_path: Annotated[Path | None, typer.Option("--db", help="Override database path")] = None,
-        from_date: Annotated[str | None, typer.Option("--from", help="Start date (YYYY-MM-DD)")] = None,
+        from_date: Annotated[
+            str | None, typer.Option("--from", help="Start date (YYYY-MM-DD)")
+        ] = None,
         to_date: Annotated[str | None, typer.Option("--to", help="End date (YYYY-MM-DD)")] = None,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
         """Show performance metrics and P&L."""
-        from datetime import datetime
 
         from traderbot.db.decisions import list_by_date_range
 
@@ -911,7 +1037,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         start_dt = datetime.fromisoformat(from_date) if from_date else None
         end_dt = datetime.fromisoformat(to_date) if to_date else None
 
-        decisions = _with_db(_resolve_db_path(db_path), lambda conn: list_by_date_range(conn, start=start_dt, end=end_dt))
+        decisions = _with_db(
+            _resolve_db_path(db_path),
+            lambda conn: list_by_date_range(conn, start=start_dt, end=end_dt),
+        )
 
         executed = [d for d in decisions if d.outcome == "executed"]
 

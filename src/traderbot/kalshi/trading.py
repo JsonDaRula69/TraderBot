@@ -33,7 +33,10 @@ class TradingService:
         body = order_request.to_v2_body()
         logger.info(
             "Placing order: ticker=%s side=%s count=%s price=%s",
-            order_request.ticker, order_request.side, order_request.count, order_request.price,
+            order_request.ticker,
+            order_request.side,
+            order_request.count,
+            order_request.price,
         )
         response = await self._client.post("/portfolio/events/orders/v2", **body)
         response.raise_for_status()
@@ -43,10 +46,14 @@ class TradingService:
         remaining_count = data.get("remaining_count", "0")
         logger.info(
             "Order placed: order_id=%s fill_count=%s remaining_count=%s",
-            order_id, fill_count, remaining_count,
+            order_id,
+            fill_count,
+            remaining_count,
         )
         if int(fill_count) == 0 and int(remaining_count) > 0:
-            logger.warning("Partial fill for order %s: %s/%s filled", order_id, fill_count, remaining_count)
+            logger.warning(
+                "Partial fill for order %s: %s/%s filled", order_id, fill_count, remaining_count
+            )
         return OrderResult(
             order_id=order_id,
             client_order_id=data.get("client_order_id"),
@@ -62,7 +69,9 @@ class TradingService:
         response = await self._client.delete(f"/portfolio/events/orders/{order_id}")
         response.raise_for_status()
         data = response.json()
-        logger.info("Order cancelled: order_id=%s reduced_by=%s", data["order_id"], data.get("reduced_by"))
+        logger.info(
+            "Order cancelled: order_id=%s reduced_by=%s", data["order_id"], data.get("reduced_by")
+        )
         return CancelResponse(
             order_id=data["order_id"],
             status=None,
@@ -125,7 +134,9 @@ class TradingService:
 
         # Legacy fill count: fill_count_fp (string) or filled_quantity (int)
         fill_count_fp = raw.get("fill_count_fp")
-        filled_quantity = int(fill_count_fp) if fill_count_fp is not None else int(raw.get("filled_quantity", 0))
+        filled_quantity = (
+            int(fill_count_fp) if fill_count_fp is not None else int(raw.get("filled_quantity", 0))
+        )
 
         return TradingOrder(
             order_id=raw["order_id"],

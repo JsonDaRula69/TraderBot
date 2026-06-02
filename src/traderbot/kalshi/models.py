@@ -1,7 +1,6 @@
 """Pydantic v2 data models for Kalshi API responses and internal domain objects."""
 
 import logging
-
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -296,10 +295,13 @@ class TradeRequest(BaseModel):
         return self.price_cents / 100.0
 
     def model_post_init(self, __context) -> None:
-        logger.debug("TradeRequest: ticker=%s dir=%s qty=%s price=%s", self.ticker, self.direction, self.quantity, self.price_cents)
-
-
-
+        logger.debug(
+            "TradeRequest: ticker=%s dir=%s qty=%s price=%s",
+            self.ticker,
+            self.direction,
+            self.quantity,
+            self.price_cents,
+        )
 
 
 class TradingOrder(BaseModel):

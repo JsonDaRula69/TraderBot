@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 from traderbot.paths import get_data_dir
 

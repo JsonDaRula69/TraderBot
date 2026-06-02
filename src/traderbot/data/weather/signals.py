@@ -41,7 +41,9 @@ _TICKER_TO_CITY: dict[str, str] = {
 }
 
 
-def _estimate_prob_from_threshold(forecast_temp: float, threshold: float, strike_type: str) -> float:
+def _estimate_prob_from_threshold(
+    forecast_temp: float, threshold: float, strike_type: str
+) -> float:
     import math
 
     sigma = 5.0
@@ -56,7 +58,10 @@ def _estimate_prob_from_threshold(forecast_temp: float, threshold: float, strike
 
     logger.debug(
         "Logistic probability: forecast=%.1f threshold=%.1f strike=%s prob=%.4f",
-        forecast_temp, threshold, strike_type, prob,
+        forecast_temp,
+        threshold,
+        strike_type,
+        prob,
     )
     return prob
 
@@ -148,7 +153,8 @@ class WeatherSignalEngine(BaseSignalEngine):
 
         logger.info(
             "compute_signals: %d tickers processed, %d signals generated",
-            len(markets), len(signals),
+            len(markets),
+            len(signals),
         )
         return signals
 
@@ -234,5 +240,10 @@ class WeatherSignalEngine(BaseSignalEngine):
 
         max_error = 10.0
         norm = max(-1.0, min(1.0, stats["mean_error"] / max_error))
-        logger.debug("Bias adjustment for %s: mean_error=%.3f adjustment=%.4f", city, stats["mean_error"], norm)
+        logger.debug(
+            "Bias adjustment for %s: mean_error=%.3f adjustment=%.4f",
+            city,
+            stats["mean_error"],
+            norm,
+        )
         return norm

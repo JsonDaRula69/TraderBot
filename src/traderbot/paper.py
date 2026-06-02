@@ -32,7 +32,9 @@ class PaperBalance:
         return self.settled_payout_cents - (self.initial_cents - self.remaining_cents)
 
 
-def compute_paper_balance(profile: Profile | None, db_path: Path | None = None) -> PaperBalance | None:
+def compute_paper_balance(
+    profile: Profile | None, db_path: Path | None = None
+) -> PaperBalance | None:
     """Compute paper portfolio balance from SQLite positions.
 
     Formula: remaining = initial_balance - cost(at open) + settlement_payouts

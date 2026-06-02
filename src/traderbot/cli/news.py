@@ -1,6 +1,9 @@
 """News commands: news, news-ingest, news-context, backfill, data-points, news-summary."""
+
 from __future__ import annotations
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import asyncio
@@ -31,7 +34,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         limit: Annotated[int, typer.Option("--limit", help="Max items to fetch")] = 10,
         source: Annotated[
             str | None,
-            typer.Option("--source", help="Filter by source: newsapi, twitter, reddit, open-meteo, coingecko, thesportsdb, openweathermap, fred, google-trends, all"),
+            typer.Option(
+                "--source",
+                help="Filter by source: newsapi, twitter, reddit, open-meteo, coingecko, thesportsdb, openweathermap, fred, google-trends, all",
+            ),
         ] = None,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
@@ -40,7 +46,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.news.classifier import NewsClassifier
         from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
         from traderbot.news.sentiment_scorer import SentimentScorer
-        from traderbot.news.sources import DataSourcesConfig, NewsAggregator
+        from traderbot.news.sources import NewsAggregator
         from traderbot.profiles.config import (
             resolve_fred_key,
             resolve_newsapi_key,
@@ -268,7 +274,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         if profile:
             voyage_key = os.environ.get(
                 f"VOYAGE_API_KEY_PROFILE_{profile.name.upper()}",
-                os.environ.get("VOYAGE_API_KEY", "")
+                os.environ.get("VOYAGE_API_KEY", ""),
             )
             if voyage_key:
                 os.environ["VOYAGE_API_KEY"] = voyage_key
@@ -284,26 +290,38 @@ def register_commands(parent_app: typer.Typer) -> None:
             json_lib.dump(report.to_dict(), sys.stdout, default=str)
             return
 
-        console.print(f"[green]✓[/green] Ingest report — "
-                      f"[bold]{report.new}[/bold] new, "
-                      f"{report.duplicates} duplicates, "
-                      f"{report.skipped} skipped, "
-                      f"{report.signals} signals, "
-                      f"{report.errors} errors "
-                      f"({report.elapsed_seconds:.1f}s)")
+        console.print(
+            f"[green]✓[/green] Ingest report — "
+            f"[bold]{report.new}[/bold] new, "
+            f"{report.duplicates} duplicates, "
+            f"{report.skipped} skipped, "
+            f"{report.signals} signals, "
+            f"{report.errors} errors "
+            f"({report.elapsed_seconds:.1f}s)"
+        )
         console.print(f"  News collection: {report.collection_sizes.get('news', 0)} items")
-        console.print(f"  Signals collection: {report.collection_sizes.get('news_signals', 0)} items")
+        console.print(
+            f"  Signals collection: {report.collection_sizes.get('news_signals', 0)} items"
+        )
         dp_count = report.collection_sizes.get("data_points", 0)
         if dp_count:
             console.print(f"  Data points collection: {dp_count} items")
 
     @parent_app.command()
     def news_context(
-        category: Annotated[str, typer.Argument(help="News/market category (economics, weather, politics, ...)")],
+        category: Annotated[
+            str, typer.Argument(help="News/market category (economics, weather, politics, ...)")
+        ],
         hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 24,
         limit: Annotated[int, typer.Option("--limit", "-l", help="Max articles to return")] = 10,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
-        include_data: Annotated[bool, typer.Option("--include-data", help="Also include data point readings (weather, economic indicators, etc.)")] = False,
+        include_data: Annotated[
+            bool,
+            typer.Option(
+                "--include-data",
+                help="Also include data point readings (weather, economic indicators, etc.)",
+            ),
+        ] = False,
     ) -> None:
         """Get news context for a market category — aggregated sentiment + top articles.
 
@@ -317,19 +335,28 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.news.ingest import get_news_context
 
         console = Console()
-        ctx = get_news_context(category=category, since_hours=hours, max_articles=limit, include_data_points=include_data)
+        ctx = get_news_context(
+            category=category,
+            since_hours=hours,
+            max_articles=limit,
+            include_data_points=include_data,
+        )
 
         if json_output:
             json_lib.dump(ctx, sys.stdout, default=str)
             return
 
         if ctx["article_count"] == 0:
-            console.print(f"[yellow]No news articles found for '{category}' in the last {hours}h.[/yellow]")
+            console.print(
+                f"[yellow]No news articles found for '{category}' in the last {hours}h.[/yellow]"
+            )
         else:
             console.print(f"[bold]News Context:[/bold] {category} — last {hours}h")
             console.print(f"  Articles: {ctx['article_count']}")
-            console.print(f"  Sentiment: [bold]{ctx['sentiment']}[/bold] "
-                          f"(+{ctx['positive_count']}/-{ctx['negative_count']}/{ctx['neutral_count']})")
+            console.print(
+                f"  Sentiment: [bold]{ctx['sentiment']}[/bold] "
+                f"(+{ctx['positive_count']}/-{ctx['negative_count']}/{ctx['neutral_count']})"
+            )
             console.print()
 
             table = Table(title="Top Articles")
@@ -337,7 +364,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             table.add_column("Sentiment", justify="right")
             table.add_column("Title", style="white")
             for a in ctx["articles"]:
-                sent_str = f"{a['sentiment_score']:.2f}" if a["sentiment_score"] is not None else "—"
+                sent_str = (
+                    f"{a['sentiment_score']:.2f}" if a["sentiment_score"] is not None else "—"
+                )
                 table.add_row(a["source"], sent_str, a["title"][:80])
             console.print(table)
 
@@ -350,13 +379,15 @@ def register_commands(parent_app: typer.Typer) -> None:
                 title = dp.get("title", "")[:80]
                 data_str = "; ".join(f"{k}={v}" for k, v in dp.get("data", {}).items())
                 if data_str:
-                    console.print(f"  [dim]{dp.get('source','')}[/dim] — {title}: {data_str}")
+                    console.print(f"  [dim]{dp.get('source', '')}[/dim] — {title}: {data_str}")
                 else:
-                    console.print(f"  [dim]{dp.get('source','')}[/dim] — {title}")
+                    console.print(f"  [dim]{dp.get('source', '')}[/dim] — {title}")
 
     @parent_app.command()
     def backfill(
-        months: Annotated[int, typer.Option("--months", "-m", help="Months of history to backfill")] = 6,
+        months: Annotated[
+            int, typer.Option("--months", "-m", help="Months of history to backfill")
+        ] = 6,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
         """One-time historical data backfill for weather and economic indicators.
@@ -389,7 +420,9 @@ def register_commands(parent_app: typer.Typer) -> None:
 
     @parent_app.command()
     def data_points(
-        category: Annotated[str, typer.Argument(help="Market category (weather, economics, politics, ...)")],
+        category: Annotated[
+            str, typer.Argument(help="Market category (weather, economics, politics, ...)")
+        ],
         hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 48,
         limit: Annotated[int, typer.Option("--limit", "-l", help="Max data points to return")] = 10,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
@@ -408,11 +441,14 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         if json_output:
             import json as _json
+
             _json.dump(ctx, sys.stdout, default=str)
             return
 
         if ctx["count"] == 0:
-            console.print(f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]")
+            console.print(
+                f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]"
+            )
             return
 
         console.print(f"[bold]Data Points:[/bold] {category} — last {hours}h")
@@ -433,7 +469,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = None,
         category: Annotated[
             str | None,
-            typer.Option("--category", help="Filter by category (Economics, Politics, Weather, ...)"),
+            typer.Option(
+                "--category", help="Filter by category (Economics, Politics, Weather, ...)"
+            ),
         ] = None,
         source: Annotated[
             str | None,

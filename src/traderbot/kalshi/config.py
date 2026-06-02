@@ -51,10 +51,8 @@ class EnvKalshiConfig(BaseSettings):
                 return SecretStr(pem)
             except (FileNotFoundError, OSError):
                 from traderbot.paths import get_data_dir
+
                 alt = get_data_dir() / self.private_key_path.name
                 if alt.exists():
                     return SecretStr(alt.read_text())
         return None
-
-
-

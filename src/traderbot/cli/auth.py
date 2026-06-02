@@ -1,6 +1,9 @@
 """Auth command group — API credential management."""
+
 from __future__ import annotations
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import json as json_lib
@@ -13,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import _mask_token, _write_token_to_env, err_console
+from traderbot.cli.helpers import err_console
 
 auth_app = typer.Typer(
     name="auth",
@@ -69,7 +72,11 @@ def auth_rotate(
         env_path = get_data_dir() / ".env"
         env_path.parent.mkdir(parents=True, exist_ok=True)
         existing = env_path.read_text() if env_path.exists() else ""
-        existing_lines = [l for l in existing.splitlines() if not any(l.startswith(ek.split("=")[0]) for ek in env_lines)]
+        existing_lines = [
+            l
+            for l in existing.splitlines()
+            if not any(l.startswith(ek.split("=")[0]) for ek in env_lines)
+        ]
         new_content = "\n".join(existing_lines).rstrip() + "\n" + "\n".join(env_lines) + "\n"
         env_path.write_text(new_content)
         os.chmod(env_path, 0o600)
@@ -90,6 +97,7 @@ def auth_check(
     """
     console = Console()
     from traderbot.auth import AuthManager
+
     mgr = AuthManager()
     result = mgr.get_credential("kalshi", "api_key")
     if result is not None:
@@ -130,8 +138,12 @@ def auth_check(
             if output.get("api_valid"):
                 console.print("[green]Kalshi API: credentials valid[/green]")
             else:
-                console.print(f"[red]Kalshi API: credentials invalid — {output.get('error', 'unknown error')}[/red]")
-                console.print("[yellow]Regenerate your API key from the Kalshi dashboard with trade and portfolio:read scopes.[/yellow]")
+                console.print(
+                    f"[red]Kalshi API: credentials invalid — {output.get('error', 'unknown error')}[/red]"
+                )
+                console.print(
+                    "[yellow]Regenerate your API key from the Kalshi dashboard with trade and portfolio:read scopes.[/yellow]"
+                )
     else:
         console.print("[red]Missing: KALSHI_API_KEY not found in .env or environment[/red]")
         console.print("[dim]Add KALSHI_API_KEY to your .env file in the data directory.[/dim]")
@@ -150,7 +162,9 @@ def auth_setup_master_password() -> None:
     password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
     try:
         setup_master_password(password)
-        Console().print("[green]Master password created. Session authenticated for 30 minutes.[/green]")
+        Console().print(
+            "[green]Master password created. Session authenticated for 30 minutes.[/green]"
+        )
     except ValueError as e:
         err_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)
@@ -170,7 +184,9 @@ def auth_change_master_password() -> None:
     new_password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
     try:
         change_master_password(old_password, new_password)
-        Console().print("[green]Master password changed. Session authenticated for 30 minutes.[/green]")
+        Console().print(
+            "[green]Master password changed. Session authenticated for 30 minutes.[/green]"
+        )
     except (ValueError, FileNotFoundError) as e:
         err_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)
@@ -210,7 +226,6 @@ def auth_check_master_password(
 @auth_app.command("set-kalshi")
 def auth_set_kalshi() -> None:
     """Store Kalshi credentials in OS keyring (or .env fallback)."""
-    from pathlib import Path
     from traderbot.auth import AuthManager
     from traderbot.paths import get_data_dir
 
@@ -239,7 +254,9 @@ def auth_set_kalshi() -> None:
         api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
     if not private_key_pem:
         # Write PEM to file instead of inline in .env
-        console.print("[dim]Enter the full multi-line PEM key (paste entire block, Ctrl+D when done):[/dim]")
+        console.print(
+            "[dim]Enter the full multi-line PEM key (paste entire block, Ctrl+D when done):[/dim]"
+        )
         private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM (paste block)", hide_input=True)
         pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
@@ -249,7 +266,7 @@ def auth_set_kalshi() -> None:
         with env_path.open("a", encoding="utf-8") as f:
             f.write(f"\nKALSHI_PRIVATE_KEY_PATH={pem_file}\n")
         console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
-        console.print(f"[green]✓[/green] KALSHI_PRIVATE_KEY_PATH added to .env")
+        console.print("[green]✓[/green] KALSHI_PRIVATE_KEY_PATH added to .env")
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
@@ -280,7 +297,9 @@ def auth_migrate(
     elif result["migrated"] > 0:
         console.print(f"[green]Migrated {result['migrated']} credential(s) to keyring.[/green]")
         if result["skipped"] > 0:
-            console.print(f"[dim]Skipped {result['skipped']} (already in keyring or not found).[/dim]")
+            console.print(
+                f"[dim]Skipped {result['skipped']} (already in keyring or not found).[/dim]"
+            )
     else:
         console.print("[dim]No new credentials to migrate.[/dim]")
 
@@ -298,7 +317,9 @@ def auth_delete_key(
     if mgr.delete_credential(service, key):
         console.print(f"[green]Deleted {service}.{key} from keyring.[/green]")
     else:
-        console.print(f"[yellow]{service}.{key} not found in keyring or keyring unavailable.[/yellow]")
+        console.print(
+            f"[yellow]{service}.{key} not found in keyring or keyring unavailable.[/yellow]"
+        )
 
 
 @auth_app.command("clear-session")
@@ -312,4 +333,6 @@ def auth_clear_session(
     if json_output:
         json_lib.dump({"status": "session_cleared"}, sys.stdout)
     else:
-        Console().print("[green]Session token cleared. Authentication will be required for next trade/simulate.[/green]")
+        Console().print(
+            "[green]Session token cleared. Authentication will be required for next trade/simulate.[/green]"
+        )

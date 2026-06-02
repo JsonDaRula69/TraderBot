@@ -54,22 +54,29 @@ _CITY_MAP: dict[str, tuple[float, float]] = {
 
 # Short-code aliases for CLI convenience
 _CITY_ALIASES: dict[str, str] = {
-    "NYC": "New York", "NY": "New York",
-    "PHIL": "Philadelphia", "PHL": "Philadelphia",
+    "NYC": "New York",
+    "NY": "New York",
+    "PHIL": "Philadelphia",
+    "PHL": "Philadelphia",
     "PHX": "Phoenix",
-    "MIN": "Minneapolis", "MSP": "Minneapolis",
+    "MIN": "Minneapolis",
+    "MSP": "Minneapolis",
     "SEA": "Seattle",
     "CHI": "Chicago",
     "HOU": "Houston",
-    "LA": "Los Angeles", "LAX": "Los Angeles",
+    "LA": "Los Angeles",
+    "LAX": "Los Angeles",
     "MIA": "Miami",
     "DEN": "Denver",
     "ATL": "Atlanta",
     "BOS": "Boston",
-    "DAL": "Dallas", "DFW": "Dallas",
+    "DAL": "Dallas",
+    "DFW": "Dallas",
     "DET": "Detroit",
-    "SF": "San Francisco", "SFO": "San Francisco",
+    "SF": "San Francisco",
+    "SFO": "San Francisco",
 }
+
 
 def _resolve_city(city_input: str) -> str | None:
     """Resolve a city input (full name, short code, or ticker prefix) to a full city name."""
@@ -82,6 +89,7 @@ def _resolve_city(city_input: str) -> str | None:
         if prefix == city_input:
             return name
     return None
+
 
 # Kalshi ticker → (city_name, lat, lon, timezone)
 _KALSHI_CITY_MAP: dict[str, tuple[str, float, float, str]] = {
@@ -173,13 +181,10 @@ class WeatherDataProvider(BaseDataProvider):
             return {}
 
         # Launch NWS forecast fetches for every resolved city.
-        nws_tasks = [
-            self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
-        ]
+        nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
-            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1])
-            for c in resolved
+            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
         ]
 
         nws_results = await asyncio.gather(*nws_tasks, return_exceptions=True)
@@ -274,7 +279,13 @@ class WeatherDataProvider(BaseDataProvider):
         with get_connection() as conn:
             stats = _query_bias(conn, city, model, days)
 
-        logger.info("get_historical_bias: city=%s model=%s mean_error=%.3f count=%d", city, model, stats["mean_error"], stats["count"])
+        logger.info(
+            "get_historical_bias: city=%s model=%s mean_error=%.3f count=%d",
+            city,
+            model,
+            stats["mean_error"],
+            stats["count"],
+        )
 
         return BiasReport(
             city=city,
@@ -290,9 +301,7 @@ class WeatherDataProvider(BaseDataProvider):
     #  Internal helpers
     # ------------------------------------------------------------------
 
-    async def _fetch_open_meteo_ensemble(
-        self, lat: float, lon: float
-    ) -> dict[str, Any]:
+    async def _fetch_open_meteo_ensemble(self, lat: float, lon: float) -> dict[str, Any]:
         """Hit the Open-Meteo ensemble endpoint for GFS, ECMWF, GEM daily max temps.
 
         Returns the raw JSON response keyed by model name.
@@ -311,8 +320,7 @@ class WeatherDataProvider(BaseDataProvider):
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(
-                f"Open-Meteo returned HTTP {exc.response.status_code} "
-                f"for {lat:.4f},{lon:.4f}"
+                f"Open-Meteo returned HTTP {exc.response.status_code} for {lat:.4f},{lon:.4f}"
             ) from exc
         except httpx.RequestError as exc:
             raise RuntimeError(

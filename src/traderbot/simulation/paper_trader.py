@@ -89,10 +89,7 @@ class PaperSlippageModel:
 
 
 def _migrate_add_status_column(conn: sqlite3.Connection) -> None:
-    columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(paper_positions)").fetchall()
-    }
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(paper_positions)").fetchall()}
     if "status" not in columns:
         conn.execute("ALTER TABLE paper_positions ADD COLUMN status TEXT NOT NULL DEFAULT 'open'")
         conn.commit()
@@ -127,6 +124,7 @@ class PaperTrader:
     ) -> None:
         if breaker is None:
             from traderbot.risk.circuit_breaker import CircuitBreaker as _CircuitBreaker
+
             breaker = _CircuitBreaker()
         self._provider = provider
         self._conn = db_conn
@@ -227,10 +225,24 @@ class PaperTrader:
 
         if fill.quantity < 0:
             self._close_position(fill, now)
-            logger.info("Paper fill: CLOSE %s %s qty=%d price=%d slippage=%d", fill.ticker, fill.side, abs(fill.quantity), fill.price_cents, fill.slippage_cents)
+            logger.info(
+                "Paper fill: CLOSE %s %s qty=%d price=%d slippage=%d",
+                fill.ticker,
+                fill.side,
+                abs(fill.quantity),
+                fill.price_cents,
+                fill.slippage_cents,
+            )
         else:
             self._open_or_add_position(fill, now)
-            logger.info("Paper fill: OPEN %s %s qty=%d price=%d slippage=%d", fill.ticker, fill.side, fill.quantity, fill.price_cents, fill.slippage_cents)
+            logger.info(
+                "Paper fill: OPEN %s %s qty=%d price=%d slippage=%d",
+                fill.ticker,
+                fill.side,
+                fill.quantity,
+                fill.price_cents,
+                fill.slippage_cents,
+            )
 
         self._log_decision(fill)
 
@@ -243,7 +255,9 @@ class PaperTrader:
         edge_estimate: float = 0.05,
     ) -> PaperFill | None:
         if quantity <= 0:
-            logger.warning("Rejected zero/negative quantity order: ticker=%s qty=%d", ticker, quantity)
+            logger.warning(
+                "Rejected zero/negative quantity order: ticker=%s qty=%d", ticker, quantity
+            )
             return None
 
         from traderbot.kalshi.models import PortfolioState, TradeRequest
@@ -305,7 +319,9 @@ class PaperTrader:
 
         risk_adjusted_qty = min(quantity, sized // max(price_cents, 1))
         if risk_adjusted_qty <= 0:
-            logger.info("Paper trade sized to zero: ticker=%s sized=%d price=%d", ticker, sized, price_cents)
+            logger.info(
+                "Paper trade sized to zero: ticker=%s sized=%d price=%d", ticker, sized, price_cents
+            )
             return None
 
         # 4. Get orderbook from provider for slippage calculation
@@ -322,7 +338,12 @@ class PaperTrader:
             risk_adjusted_qty = self._cash_cents // max(fill_price, 1)
 
         if risk_adjusted_qty <= 0:
-            logger.warning("Insufficient cash for order: ticker=%s need=%d have=%d", ticker, max_cost, self._cash_cents)
+            logger.warning(
+                "Insufficient cash for order: ticker=%s need=%d have=%d",
+                ticker,
+                max_cost,
+                self._cash_cents,
+            )
             return None
 
         fill = PaperFill(
@@ -395,6 +416,7 @@ class PaperTrader:
     def _log_decision(self, fill: PaperFill) -> None:
         try:
             from traderbot.db.decisions import init_table as init_decisions
+
             init_decisions(self._conn)
 
             now_iso = datetime.now(UTC).isoformat()

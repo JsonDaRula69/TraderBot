@@ -46,9 +46,7 @@ def _load_key(private_key_pem: str) -> object:
             key, _ = _key_cache[cache_key]
             _key_cache[cache_key] = (key, time.time())
             return key
-        key = serialization.load_pem_private_key(
-            private_key_pem.encode(), password=None
-        )
+        key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
         _key_cache[cache_key] = (key, time.time())
         return key
 
@@ -95,7 +93,13 @@ def auth_headers(api_key: str, private_key_pem: str, method: str, path: str) -> 
     """
     timestamp_ms = int(time.time() * 1000)
     key_type = "pem" if private_key_pem else "none"
-    logger.debug("Signing headers: method=%s path=%s key_type=%s nonce=%d", method, path, key_type, timestamp_ms)
+    logger.debug(
+        "Signing headers: method=%s path=%s key_type=%s nonce=%d",
+        method,
+        path,
+        key_type,
+        timestamp_ms,
+    )
     if not private_key_pem:
         logger.warning("No private key provided for signing")
     try:

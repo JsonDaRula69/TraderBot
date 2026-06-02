@@ -173,9 +173,7 @@ def _get_db_recurrence_count(conn: sqlite3.Connection, learning_id: int) -> int:
 
 def get_db_pattern_key(conn: sqlite3.Connection, learning_id: int) -> str | None:
     """Read pattern_key directly from the DB row."""
-    row = conn.execute(
-        "SELECT pattern_key FROM learnings WHERE id = ?", (learning_id,)
-    ).fetchone()
+    row = conn.execute("SELECT pattern_key FROM learnings WHERE id = ?", (learning_id,)).fetchone()
     if row is None or row["pattern_key"] is None:
         return None
     return row["pattern_key"]
@@ -279,7 +277,9 @@ def write_promoted_entry(
         content = header + entry_text + "\n"
 
     learnings_path.write_text(content)
-    logger.info("Wrote promoted entry for learning #%d to %s", candidate.learning.id, learnings_path)
+    logger.info(
+        "Wrote promoted entry for learning #%d to %s", candidate.learning.id, learnings_path
+    )
     return learnings_path
 
 
@@ -294,17 +294,30 @@ def promote_learning(
         logger.warning("Learning #%d not found, skipping promotion", learning_id)
         return None
     if learning.status != LearningStatus.ACTIVE:
-        logger.warning("Learning #%d is not active (status=%s), skipping promotion", learning_id, learning.status)
+        logger.warning(
+            "Learning #%d is not active (status=%s), skipping promotion",
+            learning_id,
+            learning.status,
+        )
         return None
 
     _, task_cnt, first_obs, _ = _get_task_observation_stats(conn, learning_id)
     recurrence = _get_db_recurrence_count(conn, learning_id)
 
     if recurrence < PROMOTION_THRESHOLD:
-        logger.warning("Learning #%d has insufficient recurrences (%d < %d), skipping promotion", learning_id, recurrence, PROMOTION_THRESHOLD)
+        logger.warning(
+            "Learning #%d has insufficient recurrences (%d < %d), skipping promotion",
+            learning_id,
+            recurrence,
+            PROMOTION_THRESHOLD,
+        )
         return None
     if task_cnt < 2:
-        logger.warning("Learning #%d seen in only %d task(s) (need 2+), skipping promotion", learning_id, task_cnt)
+        logger.warning(
+            "Learning #%d seen in only %d task(s) (need 2+), skipping promotion",
+            learning_id,
+            task_cnt,
+        )
         return None
 
     cutoff = datetime.now(UTC) - timedelta(days=MAX_AGE_DAYS)
@@ -327,7 +340,9 @@ def promote_learning(
         last_observed=first_obs,
     )
 
-    return write_promoted_entry(candidate, learnings_dir, pattern_key=get_db_pattern_key(conn, learning_id))
+    return write_promoted_entry(
+        candidate, learnings_dir, pattern_key=get_db_pattern_key(conn, learning_id)
+    )
 
 
 def run_promotion_cycle(
@@ -342,5 +357,9 @@ def run_promotion_cycle(
         result = promote_learning(conn, candidate.learning.id, learnings_dir)
         if result is not None:
             promoted_paths.append(result)
-    logger.info("Promotion cycle complete: %d of %d candidates promoted", len(promoted_paths), len(candidates))
+    logger.info(
+        "Promotion cycle complete: %d of %d candidates promoted",
+        len(promoted_paths),
+        len(candidates),
+    )
     return promoted_paths

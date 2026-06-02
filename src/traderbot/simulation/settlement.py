@@ -56,7 +56,9 @@ class SettlementVerifier:
             try:
                 results: dict[str, SettlementResult | None] = await batch_fn(tickers)  # type: ignore[operator]
             except Exception:
-                logger.warning("Batch settlement fetch failed, falling back to individual calls", exc_info=True)
+                logger.warning(
+                    "Batch settlement fetch failed, falling back to individual calls", exc_info=True
+                )
                 results = await self._gather_settlements(tickers)
         else:
             results = await self._gather_settlements(tickers)
@@ -120,12 +122,16 @@ class SettlementVerifier:
                     logger.info("Order blocked: %s is settled", ticker)
                     return True
             except Exception:
-                logger.warning("Cache lookup failed for %s, falling back to provider", ticker, exc_info=True)
+                logger.warning(
+                    "Cache lookup failed for %s, falling back to provider", ticker, exc_info=True
+                )
 
         try:
             result = await self._provider.get_settlement(ticker)
         except Exception:
-            logger.warning("Provider settlement check failed for %s, allowing order", ticker, exc_info=True)
+            logger.warning(
+                "Provider settlement check failed for %s, allowing order", ticker, exc_info=True
+            )
             return False
 
         if result is not None:
@@ -150,7 +156,9 @@ class SettlementVerifier:
         try:
             real_positions = await self._portfolio_service.get_positions()
         except Exception:
-            logger.warning("Portfolio service get_positions failed during reconciliation", exc_info=True)
+            logger.warning(
+                "Portfolio service get_positions failed during reconciliation", exc_info=True
+            )
             return
 
         real_by_ticker: dict[str, Any] = {rp.ticker: rp for rp in real_positions}

@@ -31,7 +31,11 @@ class RiskCheckError(Exception):
     def __init__(self, ticker: str, failures: list) -> None:
         self.ticker = ticker
         self.failures = failures
-        details = "; ".join(f.rejection_reason or f"{f.limit_name} failed (value={f.current_value}, limit={f.limit_value})" for f in failures)
+        details = "; ".join(
+            f.rejection_reason
+            or f"{f.limit_name} failed (value={f.current_value}, limit={f.limit_value})"
+            for f in failures
+        )
         super().__init__(f"Risk check rejected {ticker}: {details}")
         self.detail = details
 
@@ -80,7 +84,11 @@ def evaluate_trade_full(
     this returns a TradeResult preserving the original trade direction.
     """
     # Category filtering (profile-aware only)
-    if profile is not None and trade_request.market_category is not None and not profile.is_category_enabled(trade_request.market_category):
+    if (
+        profile is not None
+        and trade_request.market_category is not None
+        and not profile.is_category_enabled(trade_request.market_category)
+    ):
         return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
     total_today_loss_cents = (
@@ -122,7 +130,10 @@ def evaluate_trade_full(
     failed = [r for r in results if not r.passed]
     if failed:
         for r in failed:
-            msg = r.rejection_reason or f"{r.limit_name} check failed (value={r.current_value}, limit={r.limit_value})"
+            msg = (
+                r.rejection_reason
+                or f"{r.limit_name} check failed (value={r.current_value}, limit={r.limit_value})"
+            )
             logger.warning("Trade rejected: %s — %s", trade_request.ticker, msg)
         raise RiskCheckError(trade_request.ticker, failed)
 

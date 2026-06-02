@@ -37,6 +37,7 @@ def resolve_kalshi_credentials(
 
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
+
         profile_auth = ProfileAuthStore(profile)
         profile_creds = profile_auth.get_credentials("kalshi")
         if profile_creds is not None:
@@ -61,9 +62,12 @@ def resolve_kalshi_credentials(
             private_key_value = pem_path.read_text(encoding="utf-8")
         else:
             from traderbot.paths import get_data_dir
+
             alt_path = get_data_dir() / pem_path.name
             if alt_path.exists() and alt_path.is_file():
-                logger.info("Kalshi private key references file at %s (fallback: %s)", alt_path, pem_path)
+                logger.info(
+                    "Kalshi private key references file at %s (fallback: %s)", alt_path, pem_path
+                )
                 private_key_value = alt_path.read_text(encoding="utf-8")
 
         if profile is not None:
@@ -88,6 +92,7 @@ def resolve_newsapi_key(
     """Resolve NewsAPI key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
+
         profile_auth = ProfileAuthStore(profile)
         profile_creds = profile_auth.get_credentials("newsapi")
         if profile_creds is not None:
@@ -132,6 +137,7 @@ def resolve_openweather_key(
     """Resolve OpenWeather API key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
+
         profile_auth = ProfileAuthStore(profile)
         profile_creds = profile_auth.get_credentials("openweathermap")
         if profile_creds is not None:
@@ -174,6 +180,7 @@ def resolve_fred_key(
     """Resolve FRED API key using keyring-first fallback chain."""
     if profile is not None:
         from traderbot.profiles.auth import ProfileAuthStore
+
         profile_auth = ProfileAuthStore(profile)
         profile_creds = profile_auth.get_credentials("fred")
         if profile_creds is not None:
@@ -220,7 +227,9 @@ def _check_env_permissions(env_path: Path) -> None:
             logger.warning(
                 "SECURITY: %s has overly permissive mode %o — "
                 "credentials may be readable by other users. Run: chmod 600 %s",
-                env_path, mode & 0o777, env_path,
+                env_path,
+                mode & 0o777,
+                env_path,
             )
     except OSError:
         pass

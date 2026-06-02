@@ -1,25 +1,15 @@
 """Shared CLI utilities — app, console, and common helpers."""
+
 from __future__ import annotations
 
-import asyncio
-import json as json_lib
 import logging
-import os
 import shutil
 import sys
-import time
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.table import Table
-
-if TYPE_CHECKING:
-    from traderbot.profiles.models import TradingProfile
-
-from traderbot.profiles.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +96,7 @@ def _resolve_db_path(db_path: Path | None = None) -> Path:
         return db_path
 
     from traderbot.profiles.runtime import get_current_profile
+
     profile = get_current_profile()
     if profile is not None:
         return get_profile_db_path(profile, "decisions.db")
@@ -208,6 +199,10 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
         Path.home() / ".openclaw" / "workspace",
     ]
     for candidate in candidates:
-        if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
+        if (
+            candidate.exists()
+            and candidate.is_dir()
+            and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists())
+        ):
             return candidate
     return None

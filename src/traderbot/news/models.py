@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from datetime import datetime  # noqa: TC003 — needed at runtime by Pydantic
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -56,7 +55,12 @@ class NewsItem(BaseModel):
     content_truncated: bool = False
 
     def model_post_init(self, __context) -> None:
-        logger.debug("NewsItem: source=%s category=%s headline=%.50s", self.source.value, self.category.value if self.category else 'None', self.title)
+        logger.debug(
+            "NewsItem: source=%s category=%s headline=%.50s",
+            self.source.value,
+            self.category.value if self.category else "None",
+            self.title,
+        )
 
 
 class SentimentResult(BaseModel):

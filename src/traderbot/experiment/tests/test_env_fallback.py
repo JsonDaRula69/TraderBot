@@ -7,12 +7,10 @@ These tests mock the filesystem and environment to test the logic paths
 without requiring actual .env files or API keys.
 """
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 
 # ------------------------------------------------------------------
 #  VoyageClient .env fallback tests
@@ -28,6 +26,7 @@ class TestVoyageClientEnvFallback:
         # Remove any leftover .env file interference
         with patch.object(Path, "exists", return_value=False):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is True
 
@@ -40,6 +39,7 @@ class TestVoyageClientEnvFallback:
 
         with patch("traderbot.paths.get_data_dir", return_value=tmp_path):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is True
 
@@ -53,6 +53,7 @@ class TestVoyageClientEnvFallback:
 
         with patch("traderbot.paths.get_data_dir", return_value=tmp_path):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is False
 
@@ -66,6 +67,7 @@ class TestVoyageClientEnvFallback:
 
         with patch("traderbot.paths.get_data_dir", return_value=tmp_path):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is True
 
@@ -79,6 +81,7 @@ class TestVoyageClientEnvFallback:
 
         with patch("traderbot.paths.get_data_dir", return_value=tmp_path):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is True
 
@@ -92,6 +95,7 @@ class TestVoyageClientEnvFallback:
 
         with patch("traderbot.paths.get_data_dir", return_value=tmp_path):
             from traderbot.news.embeddings import VoyageClient
+
             client = VoyageClient()
             assert client._key_available is True
 
@@ -109,6 +113,7 @@ class TestNewsAPIEnvFallback:
         monkeypatch.setenv("NEWSAPI_API_KEY", "newsapi-key-from-env")
         # Simulate the fallback path by importing the logic directly
         import os as _os
+
         key = _os.environ.get("NEWSAPI_API_KEY")
         assert key == "newsapi-key-from-env"
         # Verify the fallback path won't be entered because key is set
@@ -125,6 +130,7 @@ class TestNewsAPIEnvFallback:
 
         # Simulate the ingest.py fallback logic
         import os as _os
+
         newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
         assert newsapi_key is None
 
@@ -147,6 +153,7 @@ class TestNewsAPIEnvFallback:
         (tmp_path / ".env").write_text("")
 
         import os as _os
+
         newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
         assert newsapi_key is None
 
@@ -160,19 +167,14 @@ class TestNewsAPIEnvFallback:
 
         assert newsapi_key is None
 
-    def test_dotenv_multiple_lines(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dotenv_multiple_lines(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Only the NEWSAPI_API_KEY line is extracted from a multi-line .env."""
         monkeypatch.delenv("NEWSAPI_API_KEY", raising=False)
-        env_content = (
-            "VOYAGE_API_KEY=vk-123\n"
-            'NEWSAPI_API_KEY="newsapi-key"\n'
-            "OTHER_VAR=other\n"
-        )
+        env_content = 'VOYAGE_API_KEY=vk-123\nNEWSAPI_API_KEY="newsapi-key"\nOTHER_VAR=other\n'
         (tmp_path / ".env").write_text(env_content)
 
         import os as _os
+
         newsapi_key = _os.environ.get("NEWSAPI_API_KEY")
         assert newsapi_key is None
 

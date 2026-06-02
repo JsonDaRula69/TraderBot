@@ -123,12 +123,14 @@ async def _fetch_forecast(lat: float, lon: float) -> list[dict]:
             continue
         days_before = (now.date() - ts.date()).days
         if days_before >= 0 and 12 <= ts.hour <= 13:
-            snapshots.append({
-                "forecast_temp_f": round(float(temp_val), 1),
-                "source": "open-meteo-previous-runs",
-                "days_before": days_before,
-                "snapshot_date": today_str,
-            })
+            snapshots.append(
+                {
+                    "forecast_temp_f": round(float(temp_val), 1),
+                    "source": "open-meteo-previous-runs",
+                    "days_before": days_before,
+                    "snapshot_date": today_str,
+                }
+            )
 
     return snapshots
 
@@ -149,14 +151,18 @@ async def _populate_async(db_path: str, max_markets: int, category: str | None) 
         prefix = _city_prefix_from_ticker(market.ticker)
         city_info = _CITY_MAP.get(prefix) if prefix else None
         if city_info is None:
-            logger.debug("Skipping market %s — no city mapping for prefix %s", market.ticker, prefix)
+            logger.debug(
+                "Skipping market %s — no city mapping for prefix %s", market.ticker, prefix
+            )
             continue
 
         city_name, lat, lon, tz = city_info
         strike_value = _parse_strike_value(market.question)
         strike_type = market.strike_type or _parse_strike_type(market.question)
         yes_price = _yes_price_dollars(market)
-        resolution_date = market.close_time.strftime("%Y-%m-%d") if market.close_time else "2099-12-31"
+        resolution_date = (
+            market.close_time.strftime("%Y-%m-%d") if market.close_time else "2099-12-31"
+        )
         close_time_str = market.close_time.isoformat() if market.close_time else ""
 
         try:

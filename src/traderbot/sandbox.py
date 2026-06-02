@@ -239,7 +239,9 @@ def get_active_sandbox() -> FilesystemSandbox | None:
         return None
 
     try:
-        with portalocker.Lock(str(lock_path), portalocker.LockFlags.SHARED | portalocker.LockFlags.NON_BLOCKING):
+        with portalocker.Lock(
+            str(lock_path), portalocker.LockFlags.SHARED | portalocker.LockFlags.NON_BLOCKING
+        ):
             return FilesystemSandbox(
                 src_root=get_source_root(),
                 workspace_dir=get_agent_workspace_dir(),

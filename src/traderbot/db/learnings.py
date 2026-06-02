@@ -141,7 +141,12 @@ def record_pattern(
         ),
     )
     conn.commit()
-    logger.info("Recorded learning pattern: category=%s summary='%s' confidence=%.2f", category.value, summary, confidence)
+    logger.info(
+        "Recorded learning pattern: category=%s summary='%s' confidence=%.2f",
+        category.value,
+        summary,
+        confidence,
+    )
     return cursor.lastrowid
 
 
@@ -159,7 +164,11 @@ def get_patterns(
     min_confidence: float = 0.0,
 ) -> list[LearningRecord]:
     """Query patterns with optional filters."""
-    logger.debug("Querying patterns: category=%s min_confidence=%.2f", category.value if category else None, min_confidence)
+    logger.debug(
+        "Querying patterns: category=%s min_confidence=%.2f",
+        category.value if category else None,
+        min_confidence,
+    )
     if category is not None:
         rows = conn.execute(
             "SELECT * FROM learnings WHERE category = ? AND confidence >= ? ORDER BY confidence DESC",

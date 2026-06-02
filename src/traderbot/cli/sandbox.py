@@ -1,6 +1,9 @@
 """Sandbox command group — agent filesystem isolation."""
+
 from __future__ import annotations
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import json as json_lib
@@ -52,7 +55,9 @@ def sandbox_exit(
     sandbox.exit_sandbox()
 
     if json_output:
-        json_lib.dump({"status": "sandbox_exited", "workspace": str(sandbox.workspace_dir)}, sys.stdout)
+        json_lib.dump(
+            {"status": "sandbox_exited", "workspace": str(sandbox.workspace_dir)}, sys.stdout
+        )
     else:
         Console().print("[green]Sandbox exited. Workspace retained at[/green]")
         Console().print(f"[dim]{sandbox.workspace_dir}[/dim]")
@@ -69,13 +74,16 @@ def sandbox_status(
     source_readonly = sandbox.verify() if sandbox.status.value == "active" else False
 
     if json_output:
-        json_lib.dump({
-            "status": str(sandbox.status),
-            "workspace": str(sandbox.workspace_dir),
-            "src_root": str(sandbox.src_root),
-            "source_readonly": source_readonly,
-            "os_sandbox_available": sandbox.is_available(),
-        }, sys.stdout)
+        json_lib.dump(
+            {
+                "status": str(sandbox.status),
+                "workspace": str(sandbox.workspace_dir),
+                "src_root": str(sandbox.src_root),
+                "source_readonly": source_readonly,
+                "os_sandbox_available": sandbox.is_available(),
+            },
+            sys.stdout,
+        )
         return
 
     console = Console()
@@ -84,4 +92,6 @@ def sandbox_status(
     console.print(f"Workspace:    {sandbox.workspace_dir}")
     console.print(f"Source root:  {sandbox.src_root}")
     console.print(f"Source RO:    {'[green]Yes[/green]' if source_readonly else '[red]No[/red]'}")
-    console.print(f"macOS sandbox:[{'green]Available[/green]' if sandbox.is_available() else 'yellow]Fallback (no sandbox-exec)[/yellow]'}")
+    console.print(
+        f"macOS sandbox:[{'green]Available[/green]' if sandbox.is_available() else 'yellow]Fallback (no sandbox-exec)[/yellow]'}"
+    )

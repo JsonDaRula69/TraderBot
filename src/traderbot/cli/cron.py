@@ -1,12 +1,14 @@
 """Cron command group — register decision/heartbeat cron loops with OpenClaw."""
+
 from __future__ import annotations
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import json as json_lib
 import os
 import shutil
-import subprocess as _subprocess
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -14,7 +16,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from traderbot.cli.helpers import _SUDO, _SCHTASKS, _SYSTEMCTL, err_console
+from traderbot.cli.helpers import _SUDO, _SYSTEMCTL
 
 # Ensure openclaw CLI is on PATH (npm global bin not inherited by subprocesses)
 _npm_global = str(Path(os.environ.get("HOME", "")) / ".npm-global" / "bin")
@@ -56,7 +58,9 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         # Find the agent's index in agents.list
         list_result = _sp.run(
             ["openclaw", "config", "get", "agents.list", "--json"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if list_result.returncode != 0:
             return False
@@ -79,15 +83,32 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         # Set heartbeat config keys via CLI
         _sp.run(
             ["openclaw", "config", "set", f"{prefix}.heartbeat.every", heartbeat_interval],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         _sp.run(
-            ["openclaw", "config", "set", f"{prefix}.heartbeat.isolatedSession", "true", "--strict-json"],
-            capture_output=True, timeout=10,
+            [
+                "openclaw",
+                "config",
+                "set",
+                f"{prefix}.heartbeat.isolatedSession",
+                "true",
+                "--strict-json",
+            ],
+            capture_output=True,
+            timeout=10,
         )
         _sp.run(
-            ["openclaw", "config", "set", f"{prefix}.heartbeat.lightContext", "true", "--strict-json"],
-            capture_output=True, timeout=10,
+            [
+                "openclaw",
+                "config",
+                "set",
+                f"{prefix}.heartbeat.lightContext",
+                "true",
+                "--strict-json",
+            ],
+            capture_output=True,
+            timeout=10,
         )
         return True
     except Exception:
@@ -120,8 +141,9 @@ def _install_news_ingest_timer(
         return result
 
     try:
-        from traderbot.utils import get_own_venv_dir, get_repo_dir
         from importlib import resources
+
+        from traderbot.utils import get_own_venv_dir, get_repo_dir
     except ImportError:
         return result
 
@@ -155,11 +177,32 @@ def _install_news_ingest_timer(
     tmp_tmr.write_text(tmr_content)
 
     try:
-        subprocess.run([_SUDO, "cp", str(tmp_svc), f"/etc/systemd/system/traderbot-news-ingest@{user}.service"], check=True, capture_output=True)
-        subprocess.run([_SUDO, "cp", str(tmp_tmr), f"/etc/systemd/system/traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run(
+            [
+                _SUDO,
+                "cp",
+                str(tmp_svc),
+                f"/etc/systemd/system/traderbot-news-ingest@{user}.service",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [_SUDO, "cp", str(tmp_tmr), f"/etc/systemd/system/traderbot-news-ingest@{user}.timer"],
+            check=True,
+            capture_output=True,
+        )
         subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], check=True, capture_output=True)
-        subprocess.run([_SUDO, _SYSTEMCTL, "enable", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
-        subprocess.run([_SUDO, _SYSTEMCTL, "start", f"traderbot-news-ingest@{user}.timer"], check=True, capture_output=True)
+        subprocess.run(
+            [_SUDO, _SYSTEMCTL, "enable", f"traderbot-news-ingest@{user}.timer"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [_SUDO, _SYSTEMCTL, "start", f"traderbot-news-ingest@{user}.timer"],
+            check=True,
+            capture_output=True,
+        )
         result["registered"] = True
     except subprocess.CalledProcessError as exc:
         result["error"] = str(exc.stderr.decode() if exc.stderr else exc)
@@ -205,6 +248,7 @@ def _install_news_ingest_timer_windows(
 def _systemd_available() -> bool:
     """Check if systemd is available on this system."""
     import subprocess
+
     try:
         subprocess.run([_SYSTEMCTL, "--version"], capture_output=True, timeout=5)
         return True
@@ -220,6 +264,7 @@ def _remove_news_ingest_timer(
 
     if sys.platform == "win32":
         from traderbot.windows_service import uninstall_news_ingest_task
+
         try:
             uninstall_news_ingest_task(agent_user)
         except Exception as exc:
@@ -233,19 +278,23 @@ def _remove_news_ingest_timer(
     try:
         subprocess.run(
             [_SUDO, _SYSTEMCTL, "stop", f"traderbot-news-ingest@{agent_user}.timer"],
-            capture_output=True, timeout=15,
+            capture_output=True,
+            timeout=15,
         )
         subprocess.run(
             [_SUDO, _SYSTEMCTL, "disable", f"traderbot-news-ingest@{agent_user}.timer"],
-            capture_output=True, timeout=15,
+            capture_output=True,
+            timeout=15,
         )
         subprocess.run(
             [_SUDO, "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.service"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             [_SUDO, "rm", "-f", f"/etc/systemd/system/traderbot-news-ingest@{agent_user}.timer"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True, timeout=15)
     except Exception:
@@ -256,7 +305,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-"message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
+        "message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
     },
     {
         "name": "experiment-check",
@@ -344,6 +393,7 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     },
 ]
 
+
 # ── Helper: remove cron jobs by agent prefix ─────────────────────────────
 def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
     """Remove all cron jobs whose name starts with ``<agent_id>-`` (or exact match)."""
@@ -355,15 +405,19 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
         result = subprocess.run(
             ["openclaw", "cron", "list", "--json"],
             env={**dict(subprocess.os.environ), "OPENCLAW_SKIP_UPDATE_CHECK": "1"},
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode != 0:
-            logger.warning("openclaw cron list returned %d: %s", result.returncode, result.stderr.strip())
+            logger.warning(
+                "openclaw cron list returned %d: %s", result.returncode, result.stderr.strip()
+            )
             return removed
         raw = result.stdout.strip()
         brace = raw.find("\n{")
         if brace >= 0:
-            raw = raw[brace + 1:]
+            raw = raw[brace + 1 :]
         elif raw.startswith("{"):
             pass
         else:
@@ -380,14 +434,19 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
             if jid:
                 if exact:
                     if jname == agent_id:
-                        subprocess.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
+                        subprocess.run(
+                            ["openclaw", "cron", "remove", jid], capture_output=True, timeout=10
+                        )
                         removed.append(jname)
                 elif jname.startswith(prefix):
-                    subprocess.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
+                    subprocess.run(
+                        ["openclaw", "cron", "remove", jid], capture_output=True, timeout=10
+                    )
                     removed.append(jname)
     except Exception:
         pass
     return removed
+
 
 @cron_app.command("setup-heartbeat-tasks")
 def cron_setup_heartbeat_tasks(
@@ -396,17 +455,25 @@ def cron_setup_heartbeat_tasks(
         typer.Option("--agent", help="OpenClaw agent ID to register heartbeat tasks for"),
     ],
     role: Annotated[
-        str, typer.Option("--role", help="Agent role: 'sysadmin' for fleet oversight, 'agent' for category trading"),
+        str,
+        typer.Option(
+            "--role",
+            help="Agent role: 'sysadmin' for fleet oversight, 'agent' for category trading",
+        ),
     ] = "agent",
     skip_heartbeat_config: Annotated[
         bool,
-        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
+        typer.Option(
+            "--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"
+        ),
     ] = False,
     replace: Annotated[
-        bool, typer.Option("--replace", help="Remove existing heartbeat tasks first, then re-register"),
+        bool,
+        typer.Option("--replace", help="Remove existing heartbeat tasks first, then re-register"),
     ] = False,
     json_output: Annotated[
-        bool, typer.Option("--json", help="Output as JSON"),
+        bool,
+        typer.Option("--json", help="Output as JSON"),
     ] = False,
 ) -> None:
     """Register each heartbeat task as an isolated cron job.
@@ -435,19 +502,26 @@ def cron_setup_heartbeat_tasks(
         # Remove any existing job with this name before re-adding (avoids duplicates)
         _remove_cron_jobs_by_name(job_name, exact=True)
         args = [
-            "--name", job_name,
-            "--cron", job["cron_expr"],
-            "--session", "isolated",
-            "--message", job["message"],
-            "--agent", agent_id,
+            "--name",
+            job_name,
+            "--cron",
+            job["cron_expr"],
+            "--session",
+            "isolated",
+            "--message",
+            job["message"],
+            "--agent",
+            agent_id,
         ]
         exit_code, output = _run_openclaw_cron_add(args)
         success = exit_code == 0
-        results.append({
-            "name": job["name"],
-            "registered": success,
-            "output": output if not success else "",
-        })
+        results.append(
+            {
+                "name": job["name"],
+                "registered": success,
+                "output": output if not success else "",
+            }
+        )
 
     if json_output:
         json_lib.dump(results, sys.stdout, indent=2)
@@ -467,7 +541,8 @@ def cron_remove_heartbeat_tasks(
         typer.Option("--agent", help="OpenClaw agent ID to remove heartbeat tasks for"),
     ],
     json_output: Annotated[
-        bool, typer.Option("--json", help="Output as JSON"),
+        bool,
+        typer.Option("--json", help="Output as JSON"),
     ] = False,
 ) -> None:
     """Remove all registered heartbeat cron tasks for an agent."""
@@ -492,11 +567,15 @@ def cron_setup(
     ],
     channel: Annotated[
         str | None,
-        typer.Option("--channel", help="Delivery channel for announce (e.g. telegram, slack, whatsapp)"),
+        typer.Option(
+            "--channel", help="Delivery channel for announce (e.g. telegram, slack, whatsapp)"
+        ),
     ] = None,
     to: Annotated[
         str | None,
-        typer.Option("--to", help="Delivery target (chat ID for telegram, E.164 phone for whatsapp)"),
+        typer.Option(
+            "--to", help="Delivery target (chat ID for telegram, E.164 phone for whatsapp)"
+        ),
     ] = None,
     heartbeat_interval: Annotated[
         str,
@@ -504,11 +583,15 @@ def cron_setup(
     ] = "6h",
     news_ingest_interval: Annotated[
         int | None,
-        typer.Option("--news-ingest-every", help="News ingestion interval in minutes. 0=disable, omit=skip"),
+        typer.Option(
+            "--news-ingest-every", help="News ingestion interval in minutes. 0=disable, omit=skip"
+        ),
     ] = None,
     skip_heartbeat_config: Annotated[
         bool,
-        typer.Option("--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"),
+        typer.Option(
+            "--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"
+        ),
     ] = False,
     dry_run: Annotated[
         bool,
@@ -525,7 +608,9 @@ def cron_setup(
     console = Console()
 
     if bool(channel) ^ bool(to):
-        console.print("[red]Error:[/red] Both --channel and --to are required when either is provided.")
+        console.print(
+            "[red]Error:[/red] Both --channel and --to are required when either is provided."
+        )
         raise typer.Exit(1)
 
     results: list[dict[str, str | bool]] = []
@@ -565,7 +650,17 @@ def cron_setup(
     ]
 
     for job in cron_jobs:
-        cmd_args = [agent_id, "--name", job["name"], "--schedule", job["cron_expr"], "--session", job["session"], "--message", job["message"]]
+        cmd_args = [
+            agent_id,
+            "--name",
+            job["name"],
+            "--schedule",
+            job["cron_expr"],
+            "--session",
+            job["session"],
+            "--message",
+            job["message"],
+        ]
         if channel and to:
             cmd_args += ["--channel", channel, "--to", to]
 
@@ -575,12 +670,14 @@ def cron_setup(
         else:
             exit_code, output = _run_openclaw_cron_add(cmd_args)
             ok = exit_code == 0
-            results.append({
-                "name": job["name"],
-                "registered": ok,
-                "exit_code": exit_code,
-                "output": output,
-            })
+            results.append(
+                {
+                    "name": job["name"],
+                    "registered": ok,
+                    "exit_code": exit_code,
+                    "output": output,
+                }
+            )
 
     if not dry_run:
         if not skip_heartbeat_config:
@@ -588,7 +685,9 @@ def cron_setup(
             results.append({"name": "heartbeat_config", "registered": hb_ok})
 
         if news_ingest_interval is not None and news_ingest_interval > 0:
-            timer_result = _install_news_ingest_timer(agent_id, interval_minutes=news_ingest_interval, console=console)
+            timer_result = _install_news_ingest_timer(
+                agent_id, interval_minutes=news_ingest_interval, console=console
+            )
             results.append(timer_result)
 
     if json_output:
@@ -602,6 +701,8 @@ def cron_setup(
         elif r.get("registered"):
             console.print(f"[green]✓[/green] {name}")
         else:
-            console.print(f"[red]✗[/red] {name}: {r.get('output', r.get('error', 'unknown error'))}")
+            console.print(
+                f"[red]✗[/red] {name}: {r.get('output', r.get('error', 'unknown error'))}"
+            )
 
     console.print(f"\n[bold]✓[/bold] Cron setup complete for agent '{agent_id}'")

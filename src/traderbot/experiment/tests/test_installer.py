@@ -4,7 +4,6 @@ Verifies the suggested_name mapping from categories to agent names
 as implemented in the traderbot-installer.sh script.
 """
 
-import pytest
 
 
 # The suggested-name mapping from traderbot-installer.sh lines 1734-1746
@@ -120,7 +119,9 @@ class TestSuggestedNameMapping:
             name = _suggested_name(cat.value)
             assert isinstance(name, str)
             assert len(name) > 0, f"No mapping for category {cat.value}"
-            assert name != cat.value[:1], f"Default single-char fallback for {cat.value}: got {name!r}"
+            assert name != cat.value[:1], (
+                f"Default single-char fallback for {cat.value}: got {name!r}"
+            )
 
 
 class TestAgentExists:
@@ -149,9 +150,7 @@ class TestAgentExists:
 
     def test_weatherman_unique(self) -> None:
         """weather is the ONLY category mapping to 'weatherman'."""
-        weatherman_cats = [
-            cat for cat, name in _SUGGESTED_NAME_MAP.items() if name == "weatherman"
-        ]
+        weatherman_cats = [cat for cat, name in _SUGGESTED_NAME_MAP.items() if name == "weatherman"]
         assert weatherman_cats == ["weather"], (
             f"weatherman should only map from 'weather', got {weatherman_cats}"
         )

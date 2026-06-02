@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import logging
-
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from traderbot.kalshi.models import ExchangeStatus
 

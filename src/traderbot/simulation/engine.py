@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
     from traderbot.profiles.models import TradingProfile
     from traderbot.simulation.data_loader import DataLoader
-    from traderbot.simulation.profiles import StrategyProfile
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +154,9 @@ class BacktestEngine:
 
                 signals = self._strategy.on_market_open(market, context)
                 logger.debug("Market open %s: %d signals", market.ticker, len(signals))
-                self._process_signals(signals, market, positions, portfolio_value_cents, breaker, context)
+                self._process_signals(
+                    signals, market, positions, portfolio_value_cents, breaker, context
+                )
 
             elif event["type"] == "trade":
                 trade = event["trade"]
@@ -178,7 +179,9 @@ class BacktestEngine:
 
                 signals = self._strategy.on_trade(trade, context)
                 logger.debug("Trade event %s: %d signals", ticker, len(signals))
-                self._process_signals(signals, matching_market, positions, portfolio_value_cents, breaker, context)
+                self._process_signals(
+                    signals, matching_market, positions, portfolio_value_cents, breaker, context
+                )
 
             elif event["type"] == "settle":
                 market = event["market"]
@@ -189,15 +192,17 @@ class BacktestEngine:
                     exit_price = 100 if outcome else 0
                     pnl = open_pos.compute_pnl(exit_price)
 
-                    closed_trades.append(BacktestTrade(
-                        ticker=market.ticker,
-                        direction=open_pos.direction,
-                        entry_price_cents=open_pos.entry_price_cents,
-                        exit_price_cents=exit_price,
-                        quantity=open_pos.quantity,
-                        pnl_cents=pnl,
-                        timestamp=market.close_time.isoformat(),
-                    ))
+                    closed_trades.append(
+                        BacktestTrade(
+                            ticker=market.ticker,
+                            direction=open_pos.direction,
+                            entry_price_cents=open_pos.entry_price_cents,
+                            exit_price_cents=exit_price,
+                            quantity=open_pos.quantity,
+                            pnl_cents=pnl,
+                            timestamp=market.close_time.isoformat(),
+                        )
+                    )
 
                     portfolio_value_cents += pnl
                     if pnl < 0:
@@ -225,7 +230,9 @@ class BacktestEngine:
         result = self._compute_result(closed_trades, positions, portfolio_value_cents)
         logger.info(
             "Backtest complete: %d trades, pnl=%d, win_rate=%s",
-            result.trade_count, result.total_pnl_cents, result.win_rate,
+            result.trade_count,
+            result.total_pnl_cents,
+            result.win_rate,
         )
         return result
 
@@ -238,26 +245,32 @@ class BacktestEngine:
         events: list[dict] = []
 
         for market in markets:
-            events.append({
-                "type": "market_open",
-                "timestamp": market.close_time,
-                "market": market,
-            })
-
-            for trade in trades_by_ticker.get(market.ticker, []):
-                events.append({
-                    "type": "trade",
-                    "timestamp": trade.timestamp,
-                    "trade": trade,
-                })
-
-            if market.ticker in outcomes:
-                events.append({
-                    "type": "settle",
+            events.append(
+                {
+                    "type": "market_open",
                     "timestamp": market.close_time,
                     "market": market,
-                    "outcome": outcomes[market.ticker],
-                })
+                }
+            )
+
+            for trade in trades_by_ticker.get(market.ticker, []):
+                events.append(
+                    {
+                        "type": "trade",
+                        "timestamp": trade.timestamp,
+                        "trade": trade,
+                    }
+                )
+
+            if market.ticker in outcomes:
+                events.append(
+                    {
+                        "type": "settle",
+                        "timestamp": market.close_time,
+                        "market": market,
+                        "outcome": outcomes[market.ticker],
+                    }
+                )
 
         events.sort(key=lambda e: e["timestamp"])
         return events
@@ -374,7 +387,11 @@ class BacktestEngine:
 
         pnls = [t.pnl_cents for t in closed_trades]
         mean_pnl = sum(pnls) / len(pnls)
-        std_pnl = (sum((p - mean_pnl) ** 2 for p in pnls) / (len(pnls) - 1)) ** 0.5 if len(pnls) > 1 else 1.0
+        std_pnl = (
+            (sum((p - mean_pnl) ** 2 for p in pnls) / (len(pnls) - 1)) ** 0.5
+            if len(pnls) > 1
+            else 1.0
+        )
         sharpe = (mean_pnl / std_pnl) * math.sqrt(252) if std_pnl > 0 else 0.0
 
         cumulative = self._initial_bankroll_cents
@@ -392,7 +409,11 @@ class BacktestEngine:
         if closed_trades:
             sq_diffs = []
             for t in closed_trades:
-                pred = t.entry_price_cents / 100.0 if t.direction == "yes" else 1.0 - t.entry_price_cents / 100.0
+                pred = (
+                    t.entry_price_cents / 100.0
+                    if t.direction == "yes"
+                    else 1.0 - t.entry_price_cents / 100.0
+                )
                 actual = 1.0 if t.pnl_cents > 0 else 0.0
                 sq_diffs.append((pred - actual) ** 2)
             brier_score = sum(sq_diffs) / len(sq_diffs)

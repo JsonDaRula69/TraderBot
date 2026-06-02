@@ -43,7 +43,9 @@ def check_position_limit(
         limit_name="position_limit",
         current_value=total,
         limit_value=limit_value,
-        rejection_reason=None if passed else f"Position would exceed {limit_pct:.0%} portfolio limit",
+        rejection_reason=None
+        if passed
+        else f"Position would exceed {limit_pct:.0%} portfolio limit",
     )
 
 

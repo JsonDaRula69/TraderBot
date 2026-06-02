@@ -64,9 +64,7 @@ def init_cache_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cached_markets_dates ON cached_markets(fetched_date_start, fetched_date_end)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_cached_trades_ticker ON cached_trades(ticker)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cached_trades_ticker ON cached_trades(ticker)")
     conn.commit()
 
 
@@ -111,7 +109,9 @@ class DataLoader:
         results: dict[str, bool] = {}
         for ticker in tickers:
             market = await self._history.get_market_series(ticker)
-            results[ticker] = bool(market.settlement_result) if market.settlement_result is not None else False
+            results[ticker] = (
+                bool(market.settlement_result) if market.settlement_result is not None else False
+            )
         return results
 
     def quality_report(
@@ -124,26 +124,36 @@ class DataLoader:
 
         for market in markets:
             if market.volume < _MIN_VOLUME_THRESHOLD:
-                flags.append(QualityFlag(
-                    ticker=market.ticker,
-                    flag_type="low_liquidity",
-                    message=f"Market has volume {market.volume} below threshold {_MIN_VOLUME_THRESHOLD}",
-                ))
+                flags.append(
+                    QualityFlag(
+                        ticker=market.ticker,
+                        flag_type="low_liquidity",
+                        message=f"Market has volume {market.volume} below threshold {_MIN_VOLUME_THRESHOLD}",
+                    )
+                )
 
             ticker_trades = trades_map.get(market.ticker, [])
             if len(ticker_trades) < _MIN_TRADES_FOR_QUALITY:
-                flags.append(QualityFlag(
-                    ticker=market.ticker,
-                    flag_type="no_trades",
-                    message=f"Market has {len(ticker_trades)} trades",
-                ))
+                flags.append(
+                    QualityFlag(
+                        ticker=market.ticker,
+                        flag_type="no_trades",
+                        message=f"Market has {len(ticker_trades)} trades",
+                    )
+                )
 
-            if market.status == "settled" and len(ticker_trades) >= _MIN_TRADES_FOR_QUALITY and self._check_settlement_inconsistency(market, ticker_trades):
-                flags.append(QualityFlag(
-                    ticker=market.ticker,
-                    flag_type="settlement_inconsistency",
-                    message="Trade prices inconsistent with settlement result",
-                ))
+            if (
+                market.status == "settled"
+                and len(ticker_trades) >= _MIN_TRADES_FOR_QUALITY
+                and self._check_settlement_inconsistency(market, ticker_trades)
+            ):
+                flags.append(
+                    QualityFlag(
+                        ticker=market.ticker,
+                        flag_type="settlement_inconsistency",
+                        message="Trade prices inconsistent with settlement result",
+                    )
+                )
 
         return DataQualityReport(total_markets=len(markets), flags=flags)
 
@@ -151,7 +161,9 @@ class DataLoader:
         if market.settlement_result is None or not trades:
             return False
         avg_price = sum(t.price for t in trades) / len(trades)
-        return (market.settlement_result is True and avg_price < 30) or (market.settlement_result is False and avg_price > 70)
+        return (market.settlement_result is True and avg_price < 30) or (
+            market.settlement_result is False and avg_price > 70
+        )
 
     def _get_cached_markets(self, start: date, end: date) -> list[Market] | None:
         rows = self._conn.execute(

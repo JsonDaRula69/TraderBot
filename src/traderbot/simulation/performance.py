@@ -91,7 +91,11 @@ def compute_edge_capture(trades: list[BacktestTrade]) -> float | None:
         if t.direction == "yes":
             theoretical_edge = abs(1.0 - market_prob) if t.pnl_cents > 0 else abs(0.0 - market_prob)
         else:
-            theoretical_edge = abs(0.0 - (1.0 - market_prob)) if t.pnl_cents > 0 else abs(1.0 - (1.0 - market_prob))
+            theoretical_edge = (
+                abs(0.0 - (1.0 - market_prob))
+                if t.pnl_cents > 0
+                else abs(1.0 - (1.0 - market_prob))
+            )
 
         if theoretical_edge < 1e-9:
             continue
@@ -111,9 +115,7 @@ def compute_win_rate(trades: list[BacktestTrade]) -> float | None:
     return wins / len(trades)
 
 
-def compute_sharpe(
-    trades: list[BacktestTrade], risk_free: float = 0.0
-) -> float | None:
+def compute_sharpe(trades: list[BacktestTrade], risk_free: float = 0.0) -> float | None:
     if len(trades) < 2:
         return None
     returns = [float(t.pnl_cents) for t in trades]
@@ -129,9 +131,7 @@ def compute_max_drawdown(trades: list[BacktestTrade], initial_bankroll_cents: in
     return max_drawdown(cumulative_values)
 
 
-def compute_calmar(
-    trades: list[BacktestTrade], initial_bankroll_cents: int
-) -> float | None:
+def compute_calmar(trades: list[BacktestTrade], initial_bankroll_cents: int) -> float | None:
     if not trades:
         return None
     total_pnl = sum(t.pnl_cents for t in trades)
@@ -156,7 +156,9 @@ def compute_metrics(
         "max_drawdown": compute_max_drawdown(trades, initial_bankroll_cents),
         "brier_score": compute_brier_score(trades),
         "edge_capture": compute_edge_capture(trades),
-        "fill_rate": compute_fill_rate(trades, total_signals) if total_signals > 0 else result.fill_rate,
+        "fill_rate": compute_fill_rate(trades, total_signals)
+        if total_signals > 0
+        else result.fill_rate,
         "calmar_ratio": compute_calmar(trades, initial_bankroll_cents),
     }
 
@@ -219,7 +221,7 @@ def compare_strategies_multi(
     names = sorted(results.keys())
     pairwise: list[StrategyComparison] = []
     for i, name_a in enumerate(names):
-        for name_b in names[i + 1:]:
+        for name_b in names[i + 1 :]:
             pairwise.append(
                 compare_strategies(
                     results[name_a],

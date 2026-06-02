@@ -1,11 +1,10 @@
 """Admin commands: bootstrap, heartbeat, halt, resume, backfill, cache-warm, learnings."""
+
 from __future__ import annotations
 
 import asyncio
 import json as json_lib
 import logging
-import platform as _platform
-import subprocess as _subprocess
 import sys
 import time
 from pathlib import Path
@@ -20,9 +19,9 @@ from rich.console import Console
 from rich.table import Table
 
 from traderbot.cli.helpers import (
+    _python_version_ok,
     _resolve_db_path,
     _with_db,
-    _python_version_ok,
     err_console,
 )
 
@@ -57,11 +56,16 @@ def register_commands(parent_app: typer.Typer) -> None:
         if not py_ok:
             if json_output:
                 json_lib.dump(
-                    {"error": f"Python {version_str} — 3.12.x required (chromadb dependency)", "steps": steps},
+                    {
+                        "error": f"Python {version_str} — 3.12.x required (chromadb dependency)",
+                        "steps": steps,
+                    },
                     sys.stdout,
                 )
                 raise typer.Exit(code=1)
-            console.print(f"[red]Python {version_str} detected — 3.12.x required for chromadb dependency.[/red]")
+            console.print(
+                f"[red]Python {version_str} detected — 3.12.x required for chromadb dependency.[/red]"
+            )
             raise typer.Exit(code=1)
 
         # Step 2: Setup data directory
@@ -79,7 +83,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             if dry_run:
                 console.print("[dim][dry-run] Would create data directory[/dim]")
             else:
-                console.print(f"  {'[green]✓[/green]' if data_dir.exists() else '[red]✗[/red]'} Created")
+                console.print(
+                    f"  {'[green]✓[/green]' if data_dir.exists() else '[red]✗[/red]'} Created"
+                )
 
         # Step 3: Initialize database
         db_ok = False
@@ -98,7 +104,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             if dry_run:
                 console.print("[dim][dry-run] Would initialize database[/dim]")
             else:
-                console.print(f"  {'[green]✓[/green] Database' if db_ok else '[red]✗[/red] Database'}")
+                console.print(
+                    f"  {'[green]✓[/green] Database' if db_ok else '[red]✗[/red] Database'}"
+                )
                 if not db_ok:
                     console.print(f"    Error: {steps.get('db_error', 'unknown')}")
 
@@ -109,20 +117,31 @@ def register_commands(parent_app: typer.Typer) -> None:
         steps["kalshi_configured"] = kalshi_ok
 
         if not json_output:
-            status = '[green]✓[/green]' if kalshi_ok else '[yellow]⚠[/yellow]'
+            status = "[green]✓[/green]" if kalshi_ok else "[yellow]⚠[/yellow]"
             console.print(f"  {status} Kalshi credentials")
 
         # Step 5: System info
         steps["platform"] = platform.system()
         steps["platform_release"] = platform.release()
 
-        logger.info("Bootstrap %s — python=%s py_ok=%s db_ok=%s kalshi=%s",
-                     "complete" if not dry_run else "dry-run",
-                     version_str, py_ok, db_ok, kalshi_ok)
+        logger.info(
+            "Bootstrap %s — python=%s py_ok=%s db_ok=%s kalshi=%s",
+            "complete" if not dry_run else "dry-run",
+            version_str,
+            py_ok,
+            db_ok,
+            kalshi_ok,
+        )
         if json_output:
-            json_lib.dump({"status": "ok" if (py_ok and db_ok) else "issues_found", "steps": steps}, sys.stdout, default=str)
+            json_lib.dump(
+                {"status": "ok" if (py_ok and db_ok) else "issues_found", "steps": steps},
+                sys.stdout,
+                default=str,
+            )
         else:
-            console.print(f"\n[{'green' if py_ok and db_ok else 'yellow'}]Bootstrap {'complete' if not dry_run else 'dry-run complete'}[/{'green' if py_ok and db_ok else 'yellow'}]")
+            console.print(
+                f"\n[{'green' if py_ok and db_ok else 'yellow'}]Bootstrap {'complete' if not dry_run else 'dry-run complete'}[/{'green' if py_ok and db_ok else 'yellow'}]"
+            )
             if dry_run:
                 console.print("[dim]Run without --dry-run to apply changes[/dim]")
 
@@ -161,9 +180,14 @@ def register_commands(parent_app: typer.Typer) -> None:
             else:
                 state_path = resolve_state_path(state_path=Path(".traderbot/adaptation_state.json"))
 
-            return asyncio.run(run_heartbeat_cycle(
-                conn, heartbeat_path=DEFAULT_HEARTBEAT_PATH, state_path=state_path, dry_run=dry_run
-            ))
+            return asyncio.run(
+                run_heartbeat_cycle(
+                    conn,
+                    heartbeat_path=DEFAULT_HEARTBEAT_PATH,
+                    state_path=state_path,
+                    dry_run=dry_run,
+                )
+            )
 
         try:
             result = _with_db(_resolve_db_path(db_path), _run)
@@ -195,11 +219,13 @@ def register_commands(parent_app: typer.Typer) -> None:
             f"  Trades: {perf.trade_count}  Win rate: {perf.win_rate:.0%}  P&L: {pnl_str} USD"
         )
         if perf.deviation_flag:
-            console.print(f"  [yellow]⚠ Performance deviation detected[/yellow]")
+            console.print("  [yellow]⚠ Performance deviation detected[/yellow]")
 
         if decision.closed_count >= 0:
-            console.print(f"\n[bold]Decisions[/bold] — {decision.open_count} open, "
-                          f"{decision.closed_count} closed")
+            console.print(
+                f"\n[bold]Decisions[/bold] — {decision.open_count} open, "
+                f"{decision.closed_count} closed"
+            )
 
         if len(lrn.promoted) > 0:
             console.print(f"\n[bold]Learning Promotion[/bold] — {lrn.promoted_count} promoted")
@@ -207,9 +233,15 @@ def register_commands(parent_app: typer.Typer) -> None:
         if cb.level != "NORMAL":
             console.print(f"  [yellow]⚠[/yellow] Circuit breaker: {cb.level} — {cb.reason}")
 
-        logger.info("Heartbeat complete — steps=%s trades=%d win_rate=%.0f%% pnl=%s promoted=%d cb=%s",
-                     ", ".join(result.steps_completed), perf.trade_count,
-                     perf.win_rate * 100, pnl_str, lrn.promoted_count, cb.level)
+        logger.info(
+            "Heartbeat complete — steps=%s trades=%d win_rate=%.0f%% pnl=%s promoted=%d cb=%s",
+            ", ".join(result.steps_completed),
+            perf.trade_count,
+            perf.win_rate * 100,
+            pnl_str,
+            lrn.promoted_count,
+            cb.level,
+        )
 
     @parent_app.command()
     def halt(
@@ -332,13 +364,17 @@ def register_commands(parent_app: typer.Typer) -> None:
                 learning_id = active_entries[0].id
                 result_path = promote_learning(conn, learning_id)
                 if result_path is None:
-                    logger.warning("Promotion failed for learning #%d — pattern_key=%s", learning_id, promote)
+                    logger.warning(
+                        "Promotion failed for learning #%d — pattern_key=%s", learning_id, promote
+                    )
                     if json_output:
                         json_lib.dump(
                             {"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout
                         )
                     else:
-                        err_console.print(f"[red]Promotion failed for learning[/red] #{learning_id}")
+                        err_console.print(
+                            f"[red]Promotion failed for learning[/red] #{learning_id}"
+                        )
                     raise typer.Exit(code=1)
 
                 promoted_entry = {
@@ -346,7 +382,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                     "pattern_key": promote,
                     "promoted_to": str(result_path),
                 }
-                logger.info("Promoted pattern '%s' — learning_id=%d → %s", promote, learning_id, result_path)
+                logger.info(
+                    "Promoted pattern '%s' — learning_id=%d → %s", promote, learning_id, result_path
+                )
                 if json_output:
                     json_lib.dump(promoted_entry, sys.stdout, default=str)
                 else:
@@ -380,7 +418,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             patterns = get_patterns(conn, category=category_filter)
 
             if json_output:
-                json_lib.dump([p.model_dump(mode="json") for p in patterns], sys.stdout, default=str)
+                json_lib.dump(
+                    [p.model_dump(mode="json") for p in patterns], sys.stdout, default=str
+                )
                 return
 
             if not patterns:
@@ -447,7 +487,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                 if "401" in err_msg or "Invalid or revoked token" in err_msg:
                     logger.error("Settlements API 401 — Kalshi session token is invalid or revoked")
                     return {
-                        "checked": 0, "updated": 0, "positions": [],
+                        "checked": 0,
+                        "updated": 0,
+                        "positions": [],
                         "error": "Settlements API 401 — run 'traderbot auth set-kalshi' to refresh credentials",
                     }
                 logger.error("Settlements check failed: %s", exc)
@@ -512,9 +554,15 @@ def register_commands(parent_app: typer.Typer) -> None:
                 f"updated: {result['updated']} (dry_run={dry_run})"
             )
             for pos in result["positions"]:
-                res_label = "YES" if pos["result"] is True else "NO" if pos["result"] is False else "UNKNOWN"
+                res_label = (
+                    "YES"
+                    if pos["result"] is True
+                    else "NO"
+                    if pos["result"] is False
+                    else "UNKNOWN"
+                )
                 console.print(
-                    f"  • {pos['ticker']}: {res_label} — PnL ${pos['pnl_cents']/100:.2f}"
+                    f"  • {pos['ticker']}: {res_label} — PnL ${pos['pnl_cents'] / 100:.2f}"
                 )
 
     @parent_app.command("reconcile")
@@ -598,4 +646,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         if json_output:
             json_lib.dump({"status": "warmed", **result}, sys.stdout)
         else:
-            console.print(f"[green]✓[/green] Event cache warmed: {result['events']} events across {result['categories']} categories")
+            console.print(
+                f"[green]✓[/green] Event cache warmed: {result['events']} events across {result['categories']} categories"
+            )

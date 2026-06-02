@@ -69,9 +69,7 @@ class MarketDataCache:
             self._market_cache[ticker] = (snapshot, expiry)
             log_cache_event(logger, "set_market", ticker, hit=False, action="store")
 
-    async def get_markets_batch(
-        self, tickers: list[str]
-    ) -> dict[str, MarketSnapshot]:
+    async def get_markets_batch(self, tickers: list[str]) -> dict[str, MarketSnapshot]:
         """Return cached snapshots for *tickers* — missing entries excluded.
 
         Caller inspects returned keys and fetches missing tickers from provider.
@@ -94,8 +92,12 @@ class MarketDataCache:
                 result[ticker] = snapshot
                 hits += 1
             log_cache_event(
-                logger, "get_markets_batch", str(len(tickers)), hit=hits > 0,
-                hits=hits, misses=misses,
+                logger,
+                "get_markets_batch",
+                str(len(tickers)),
+                hit=hits > 0,
+                hits=hits,
+                misses=misses,
             )
             return result
 
@@ -121,9 +123,7 @@ class MarketDataCache:
             self._orderbook_cache[ticker] = (snapshot, expiry)
             log_cache_event(logger, "set_orderbook", ticker, hit=False, action="store")
 
-    async def get_orderbooks_batch(
-        self, tickers: list[str]
-    ) -> dict[str, OrderBookSnapshot]:
+    async def get_orderbooks_batch(self, tickers: list[str]) -> dict[str, OrderBookSnapshot]:
         """Return cached orderbook snapshots for *tickers* — missing excluded."""
         async with self._lock:
             result: dict[str, OrderBookSnapshot] = {}
@@ -139,17 +139,19 @@ class MarketDataCache:
                 result[ticker] = snapshot
             return result
 
-    def _invalidate_under_lock(
-        self, ticker: str, reason: str = "invalidate"
-    ) -> None:
+    def _invalidate_under_lock(self, ticker: str, reason: str = "invalidate") -> None:
         """Remove market + orderbook entries (caller holds lock)."""
         removed_market = ticker in self._market_cache
         removed_ob = ticker in self._orderbook_cache
         self._market_cache.pop(ticker, None)
         self._orderbook_cache.pop(ticker, None)
         log_cache_event(
-            logger, reason, ticker, hit=False,
-            removed_market=removed_market, removed_orderbook=removed_ob,
+            logger,
+            reason,
+            ticker,
+            hit=False,
+            removed_market=removed_market,
+            removed_orderbook=removed_ob,
         )
 
     async def invalidate(self, ticker: str) -> None:
@@ -165,27 +167,29 @@ class MarketDataCache:
             self._market_cache.clear()
             self._orderbook_cache.clear()
             log_cache_event(
-                logger, "invalidate_all", "all", hit=False,
-                cleared_markets=market_count, cleared_orderbooks=ob_count,
+                logger,
+                "invalidate_all",
+                "all",
+                hit=False,
+                cleared_markets=market_count,
+                cleared_orderbooks=ob_count,
             )
 
     async def clear_expired(self) -> None:
         """Remove all expired entries from in-memory caches."""
         async with self._lock:
             now = time.monotonic()
-            expired_markets = [
-                t for t, (_, exp) in self._market_cache.items() if now >= exp
-            ]
-            expired_obs = [
-                t for t, (_, exp) in self._orderbook_cache.items() if now >= exp
-            ]
+            expired_markets = [t for t, (_, exp) in self._market_cache.items() if now >= exp]
+            expired_obs = [t for t, (_, exp) in self._orderbook_cache.items() if now >= exp]
             for t in expired_markets:
                 del self._market_cache[t]
             for t in expired_obs:
                 del self._orderbook_cache[t]
             if expired_markets or expired_obs:
                 log_cache_event(
-                    logger, "clear_expired", str(len(expired_markets + expired_obs)),
+                    logger,
+                    "clear_expired",
+                    str(len(expired_markets + expired_obs)),
                     hit=False,
                     expired_markets=len(expired_markets),
                     expired_orderbooks=len(expired_obs),
@@ -223,25 +227,24 @@ class MarketDataCache:
             settled_at=datetime.fromisoformat(settled_at_str),
         )
 
-    def set_settlement(
-        self, ticker: str, outcome: bool, settled_at: datetime
-    ) -> None:
+    def set_settlement(self, ticker: str, outcome: bool, settled_at: datetime) -> None:
         """Persist a settlement result."""
         with sqlite3.connect(str(self._settlement_db_path)) as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO settlements (ticker, outcome, settled_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO settlements (ticker, outcome, settled_at) VALUES (?, ?, ?)",
                 (ticker, int(outcome), settled_at.isoformat()),
             )
             conn.commit()
         log_cache_event(
-            logger, "set_settlement", ticker, hit=False,
-            outcome=outcome, settled_at=settled_at.isoformat(),
+            logger,
+            "set_settlement",
+            ticker,
+            hit=False,
+            outcome=outcome,
+            settled_at=settled_at.isoformat(),
         )
 
-    def get_settlements_batch(
-        self, tickers: list[str]
-    ) -> dict[str, SettlementResult]:
+    def get_settlements_batch(self, tickers: list[str]) -> dict[str, SettlementResult]:
         """Return settlement results for *tickers* in a single query.
 
         Missing tickers are excluded from the result dict.
@@ -267,15 +270,16 @@ class MarketDataCache:
                 settled_at=datetime.fromisoformat(settled_at_str),
             )
         log_cache_event(
-            logger, "get_settlements_batch", str(len(tickers)),
+            logger,
+            "get_settlements_batch",
+            str(len(tickers)),
             hit=len(rows) > 0,
-            hits=len(rows), misses=len(tickers) - len(rows),
+            hits=len(rows),
+            misses=len(tickers) - len(rows),
         )
         return result
 
-    def set_settlements_batch(
-        self, settlements: dict[str, tuple[bool, datetime]]
-    ) -> None:
+    def set_settlements_batch(self, settlements: dict[str, tuple[bool, datetime]]) -> None:
         """Persist multiple settlement results in a single transaction.
 
         Each value is ``(outcome: bool, settled_at: datetime)``.
@@ -289,12 +293,14 @@ class MarketDataCache:
         ]
         with sqlite3.connect(str(self._settlement_db_path)) as conn:
             conn.executemany(
-                "INSERT OR REPLACE INTO settlements (ticker, outcome, settled_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO settlements (ticker, outcome, settled_at) VALUES (?, ?, ?)",
                 rows,
             )
             conn.commit()
         log_cache_event(
-            logger, "set_settlements_batch", str(len(rows)),
-            hit=False, count=len(rows),
+            logger,
+            "set_settlements_batch",
+            str(len(rows)),
+            hit=False,
+            count=len(rows),
         )

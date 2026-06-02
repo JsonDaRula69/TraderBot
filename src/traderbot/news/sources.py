@@ -10,8 +10,8 @@ import logging
 import os
 import random
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 import feedparser
@@ -23,19 +23,19 @@ from traderbot.profiles.config import resolve_fred_key, resolve_openweather_key
 logger = logging.getLogger(__name__)
 
 NEWSAPI_CATEGORY_QUERIES: dict[NewsCategory, str] = {
-    NewsCategory.ECONOMICS: "economy OR GDP OR inflation OR \"federal reserve\" OR \"interest rates\"",
+    NewsCategory.ECONOMICS: 'economy OR GDP OR inflation OR "federal reserve" OR "interest rates"',
     NewsCategory.POLITICS: "politics OR election OR congress OR president OR legislation",
     NewsCategory.WEATHER: "weather OR hurricane OR tornado OR flood OR forecast OR storm",
     NewsCategory.SPORTS: "sports OR NFL OR NBA OR MLB OR NHL OR soccer OR championship",
-    NewsCategory.SCIENCE_AND_TECHNOLOGY: "technology OR AI OR software OR \"space research\" OR science",
+    NewsCategory.SCIENCE_AND_TECHNOLOGY: 'technology OR AI OR software OR "space research" OR science',
     NewsCategory.CRYPTO: "cryptocurrency OR bitcoin OR ethereum OR blockchain",
     NewsCategory.COMMODITIES: "commodities OR oil OR gold OR copper OR wheat OR futures",
-    NewsCategory.COMPANIES: "\"company earnings\" OR stocks OR IPO OR merger OR acquisition",
+    NewsCategory.COMPANIES: '"company earnings" OR stocks OR IPO OR merger OR acquisition',
     NewsCategory.ELECTIONS: "election OR vote OR polling OR primary OR ballot OR campaign",
-    NewsCategory.ENTERTAINMENT: "entertainment OR movie OR music OR Oscar OR Grammy OR \"box office\"",
-    NewsCategory.FINANCIALS: "financial OR banking OR markets OR trading OR NASDAQ OR \"S&P\"",
+    NewsCategory.ENTERTAINMENT: 'entertainment OR movie OR music OR Oscar OR Grammy OR "box office"',
+    NewsCategory.FINANCIALS: 'financial OR banking OR markets OR trading OR NASDAQ OR "S&P"',
     NewsCategory.HEALTH: "health OR wellness OR psychology OR therapy OR mental health",
-    NewsCategory.SOCIAL: "\"breaking news\" OR community OR trending OR viral",
+    NewsCategory.SOCIAL: '"breaking news" OR community OR trending OR viral',
     NewsCategory.MENTIONS: "trending OR celebrity OR mention OR viral",
 }
 
@@ -77,6 +77,8 @@ def _sanitize_url(url: str) -> str:
     if url.startswith("https://") or url.startswith("http://"):
         return url
     return ""
+
+
 class NewsAPIAuthError(Exception):
     """Raised when NewsAPI returns 401 — permanent auth failure, no retry."""
 
@@ -206,7 +208,11 @@ class NewsAggregator:
     ]
 
     _FRED_SERIES: ClassVar[dict[str, dict[str, str]]] = {
-        "CPIAUCSL": {"name": "CPI (All Urban Consumers)", "units": "index", "category": "ECONOMICS"},
+        "CPIAUCSL": {
+            "name": "CPI (All Urban Consumers)",
+            "units": "index",
+            "category": "ECONOMICS",
+        },
         "UNRATE": {"name": "Unemployment Rate", "units": "percent", "category": "ECONOMICS"},
         "FEDFUNDS": {"name": "Federal Funds Rate", "units": "percent", "category": "ECONOMICS"},
         "GDP": {"name": "Gross Domestic Product", "units": "billions", "category": "ECONOMICS"},
@@ -229,12 +235,20 @@ class NewsAggregator:
         self._twitter_api_key = twitter_api_key
         self._openweather_key = config.openweather_key
         self._fred_key = config.fred_key
-        self._reddit_subreddits = reddit_subreddits if reddit_subreddits is not None else (config.reddit_subreddits or ["politics", "economics", "weather"])
+        self._reddit_subreddits = (
+            reddit_subreddits
+            if reddit_subreddits is not None
+            else (config.reddit_subreddits or ["politics", "economics", "weather"])
+        )
         self._client = http_client or httpx.AsyncClient(timeout=30.0)
         self._newsapi_base = "https://newsapi.org/v2"
         self.rate_limit_limit: int | None = None
         self.rate_limit_remaining: int | None = None
-        self._daily_budget: int = daily_budget if daily_budget is not None else (config.daily_budget or int(os.environ.get("NEWSAPI_DAILY_BUDGET", "100")))
+        self._daily_budget: int = (
+            daily_budget
+            if daily_budget is not None
+            else (config.daily_budget or int(os.environ.get("NEWSAPI_DAILY_BUDGET", "100")))
+        )
         self._newsapi_daily_count: int = 0
         self._budget_reset_date: str = ""
         self._owm_daily_count: int = 0
@@ -256,7 +270,13 @@ class NewsAggregator:
             )
         self._newsapi_daily_count += 1
 
-    async def fetch_recent(self, source: NewsSource, limit: int = 20, query: str | None = None, category_filter: list[NewsCategory] | None = None) -> list[NewsItem | DataPoint]:
+    async def fetch_recent(
+        self,
+        source: NewsSource,
+        limit: int = 20,
+        query: str | None = None,
+        category_filter: list[NewsCategory] | None = None,
+    ) -> list[NewsItem | DataPoint]:
         """Fetch recent items from a single source."""
         try:
             match source:
@@ -270,7 +290,9 @@ class NewsAggregator:
                     return await self._fetch_twitter(limit)
                 case NewsSource.REDDIT:
                     subs = self._get_reddit_subs(category_filter)
-                    return await self._fetch_reddit(limit, subreddits=subs, category_filter=category_filter)
+                    return await self._fetch_reddit(
+                        limit, subreddits=subs, category_filter=category_filter
+                    )
                 case NewsSource.OPEN_METEO:
                     return await self._fetch_open_meteo(category_filter, limit)
                 case NewsSource.COINGECKO:
@@ -297,7 +319,9 @@ class NewsAggregator:
         source_filter: NewsSource | None = None,
     ) -> list[NewsItem | DataPoint]:
         """Aggregate from all matching sources in parallel."""
-        candidates: list[NewsSource] = [source_filter] if source_filter is not None else list(self._SOURCE_PRIORITY)
+        candidates: list[NewsSource] = (
+            [source_filter] if source_filter is not None else list(self._SOURCE_PRIORITY)
+        )
 
         # Filter candidates: exclude stubs, key-missing sources, category mismatches
         qualifying: list[NewsSource] = []
@@ -326,7 +350,9 @@ class NewsAggregator:
                 return await self._fetch_newsapi(limit)
             if src == NewsSource.REDDIT:
                 subs = self._get_reddit_subs(category_filter)
-                return await self._fetch_reddit(limit, subreddits=subs, category_filter=category_filter)
+                return await self._fetch_reddit(
+                    limit, subreddits=subs, category_filter=category_filter
+                )
             return await self.fetch_recent(src, limit=limit, category_filter=category_filter)
 
         tasks = [asyncio.ensure_future(_fetch_one(src)) for src in qualifying]
@@ -355,7 +381,9 @@ class NewsAggregator:
             return []
 
         if self.rate_limit_remaining is not None and self.rate_limit_remaining <= 0:
-            logger.warning("NewsAPI rate limit exhausted (%d remaining), skipping", self.rate_limit_remaining)
+            logger.warning(
+                "NewsAPI rate limit exhausted (%d remaining), skipping", self.rate_limit_remaining
+            )
             return []
 
         self._check_daily_budget()
@@ -450,7 +478,9 @@ class NewsAggregator:
             logger.error("NewsAPI request failed: %s", last_exc)
         return []
 
-    async def _fetch_category_news(self, categories: list[NewsCategory], limit: int = 20) -> list[NewsItem]:
+    async def _fetch_category_news(
+        self, categories: list[NewsCategory], limit: int = 20
+    ) -> list[NewsItem]:
         """Fetch news targeted to specific categories using /everything endpoint."""
         if not self._newsapi_key:
             logger.warning("NEWSAPI_API_KEY not set, skipping category news")
@@ -491,7 +521,9 @@ class NewsAggregator:
                 unique.append(item)
         return unique[:limit]
 
-    def _get_reddit_subs(self, category_filter: list[NewsCategory] | None = None) -> list[str] | None:
+    def _get_reddit_subs(
+        self, category_filter: list[NewsCategory] | None = None
+    ) -> list[str] | None:
         """Resolve subreddit list from category filter."""
         if not category_filter:
             return None
@@ -553,8 +585,15 @@ class NewsAggregator:
                         error_msg = error_data.get("message", response.text[:200])
                     except Exception:
                         error_msg = response.text[:200]
-                    logger.debug("NewsAPI /everything returned HTTP %d for query=%r: %s", response.status_code, query, error_msg)
-                    raise NewsAPIError(f"NewsAPI everything HTTP {response.status_code}: {error_msg}")
+                    logger.debug(
+                        "NewsAPI /everything returned HTTP %d for query=%r: %s",
+                        response.status_code,
+                        query,
+                        error_msg,
+                    )
+                    raise NewsAPIError(
+                        f"NewsAPI everything HTTP {response.status_code}: {error_msg}"
+                    )
 
                 try:
                     data = response.json()
@@ -676,7 +715,9 @@ class NewsAggregator:
                 if response.status_code == 429:
                     if attempt < 3:
                         delay = 1.0 * (2**attempt)
-                        logger.warning("NewsAPI rate limited, retry %d in %.1fs", attempt + 1, delay)
+                        logger.warning(
+                            "NewsAPI rate limited, retry %d in %.1fs", attempt + 1, delay
+                        )
                         await asyncio.sleep(delay)
                         continue
                     raise NewsAPIError("NewsAPI rate limit exhausted after retries")
@@ -711,7 +752,9 @@ class NewsAggregator:
         if not self._twitter_api_key:
             logger.debug("TWITTER_API_KEY not set, Twitter source skipped")
             return []
-        logger.warning("Twitter API integration not yet implemented despite TWITTER_API_KEY being set")
+        logger.warning(
+            "Twitter API integration not yet implemented despite TWITTER_API_KEY being set"
+        )
         return []
 
     async def _fetch_google_trends(
@@ -726,7 +769,7 @@ class NewsAggregator:
             return []
 
         try:
-            from pytrends.request import TrendReq  # noqa: TCH002
+            from pytrends.request import TrendReq
         except ImportError:
             logger.info("pytrends not installed, Google Trends source skipped")
             return []
@@ -738,7 +781,7 @@ class NewsAggregator:
                     loop.run_in_executor(None, TrendReq, "en-US", 360, 10),
                     timeout=10,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Google Trends client init timed out, skipping")
                 return []
 
@@ -747,7 +790,7 @@ class NewsAggregator:
                     loop.run_in_executor(None, pytrends.trending_searches, "united_states"),
                     timeout=10,
                 )
-            except (asyncio.TimeoutError, Exception):
+            except (TimeoutError, Exception):
                 logger.warning("Google Trends fetch failed (likely blocked), returning empty")
                 return []
 
@@ -782,13 +825,27 @@ class NewsAggregator:
             return []
 
         wmo_codes: dict[int, str] = {
-            0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-            45: "Fog", 48: "Depositing rime fog",
-            51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-            61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-            71: "Slight snowfall", 73: "Moderate snowfall", 75: "Heavy snowfall",
-            80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-            95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
+            0: "Clear",
+            1: "Mainly clear",
+            2: "Partly cloudy",
+            3: "Overcast",
+            45: "Fog",
+            48: "Depositing rime fog",
+            51: "Light drizzle",
+            53: "Moderate drizzle",
+            55: "Dense drizzle",
+            61: "Slight rain",
+            63: "Moderate rain",
+            65: "Heavy rain",
+            71: "Slight snowfall",
+            73: "Moderate snowfall",
+            75: "Heavy snowfall",
+            80: "Slight rain showers",
+            81: "Moderate rain showers",
+            82: "Violent rain showers",
+            95: "Thunderstorm",
+            96: "Thunderstorm with slight hail",
+            99: "Thunderstorm with heavy hail",
         }
 
         params_template: dict[str, Any] = {
@@ -798,7 +855,9 @@ class NewsAggregator:
             "timezone": "America/New_York",
         }
 
-        async def _fetch_city(ticker: str, city_label: str, lat: float, lon: float) -> DataPoint | None:
+        async def _fetch_city(
+            ticker: str, city_label: str, lat: float, lon: float
+        ) -> DataPoint | None:
             try:
                 params = {**params_template, "latitude": lat, "longitude": lon}
                 response = await self._client.get(
@@ -807,7 +866,8 @@ class NewsAggregator:
                 if response.status_code != 200:
                     logger.warning(
                         "Open-Meteo returned HTTP %d for %s, skipping",
-                        response.status_code, city_label,
+                        response.status_code,
+                        city_label,
                     )
                     return None
 
@@ -855,7 +915,10 @@ class NewsAggregator:
         sem = asyncio.Semaphore(3)  # Open-Meteo free tier rate-limits burst requests
 
         async def _rate_limited_fetch(
-            ticker: str, label: str, lat: float, lon: float,
+            ticker: str,
+            label: str,
+            lat: float,
+            lon: float,
         ) -> DataPoint | None:
             async with sem:
                 return await _fetch_city(ticker, label, lat, lon)
@@ -878,7 +941,19 @@ class NewsAggregator:
         return points
 
     _NWS_ALERT_STATES: ClassVar[list[str]] = [
-        "NY", "PA", "AZ", "MN", "WA", "IL", "TX", "CA", "FL", "CO", "GA", "MA", "MI",
+        "NY",
+        "PA",
+        "AZ",
+        "MN",
+        "WA",
+        "IL",
+        "TX",
+        "CA",
+        "FL",
+        "CO",
+        "GA",
+        "MA",
+        "MI",
     ]
 
     async def _fetch_nws_alerts(
@@ -933,9 +1008,7 @@ class NewsAggregator:
                 published_at = datetime.now(UTC)
                 if effective_str:
                     with contextlib.suppress(ValueError):
-                        published_at = datetime.fromisoformat(
-                            effective_str.replace("Z", "+00:00")
-                        )
+                        published_at = datetime.fromisoformat(effective_str.replace("Z", "+00:00"))
 
                 title = headline if headline else f"[NWS {severity}] {event}"
                 body_parts = [f"{event} — Severity: {severity}"]
@@ -979,13 +1052,27 @@ class NewsAggregator:
             past_days = 92
 
         wmo_codes: dict[int, str] = {
-            0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-            45: "Fog", 48: "Depositing rime fog",
-            51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-            61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-            71: "Slight snowfall", 73: "Moderate snowfall", 75: "Heavy snowfall",
-            80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-            95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
+            0: "Clear",
+            1: "Mainly clear",
+            2: "Partly cloudy",
+            3: "Overcast",
+            45: "Fog",
+            48: "Depositing rime fog",
+            51: "Light drizzle",
+            53: "Moderate drizzle",
+            55: "Dense drizzle",
+            61: "Slight rain",
+            63: "Moderate rain",
+            65: "Heavy rain",
+            71: "Slight snowfall",
+            73: "Moderate snowfall",
+            75: "Heavy snowfall",
+            80: "Slight rain showers",
+            81: "Moderate rain showers",
+            82: "Violent rain showers",
+            95: "Thunderstorm",
+            96: "Thunderstorm with slight hail",
+            99: "Thunderstorm with heavy hail",
         }
 
         params_template: dict[str, Any] = {
@@ -998,7 +1085,10 @@ class NewsAggregator:
         sem = asyncio.Semaphore(3)
 
         async def _fetch_city_historical(
-            ticker: str, city_label: str, lat: float, lon: float,
+            ticker: str,
+            city_label: str,
+            lat: float,
+            lon: float,
         ) -> list[DataPoint]:
             async with sem:
                 try:
@@ -1008,7 +1098,9 @@ class NewsAggregator:
                     )
                     if response.status_code != 200:
                         logger.warning(
-                            "Open-Meteo hist HTTP %d for %s", response.status_code, city_label,
+                            "Open-Meteo hist HTTP %d for %s",
+                            response.status_code,
+                            city_label,
                         )
                         return []
 
@@ -1034,34 +1126,40 @@ class NewsAggregator:
                         wcode_int = int(wcode) if wcode is not None else 0
                         desc = wmo_codes.get(wcode_int, "Unknown")
 
-                        from datetime import datetime, UTC
+                        from datetime import UTC, datetime
+
                         try:
                             ts = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=UTC)
                         except ValueError:
                             ts = datetime.now(tz=UTC)
 
-                        points.append(DataPoint(
-                            id=f"open-meteo-hist-{city_label.lower().replace(' ', '-')}-{day_str}",
-                            source=NewsSource.OPEN_METEO,
-                            category=NewsCategory.WEATHER,
-                            title=f"{city_label}: {day_str} High {high}°F Low {low}°F, {desc}",
-                            data={
-                                "temp_high_f": high,
-                                "temp_low_f": low,
-                                "precip_mm": precip_mm,
-                                "weather_code": wcode,
-                                "weather_desc": desc,
-                            },
-                            timestamp=ts,
-                            ticker_refs=[ticker],
-                            metadata={"city": city_label, "lat": str(lat), "lon": str(lon)},
-                        ))
+                        points.append(
+                            DataPoint(
+                                id=f"open-meteo-hist-{city_label.lower().replace(' ', '-')}-{day_str}",
+                                source=NewsSource.OPEN_METEO,
+                                category=NewsCategory.WEATHER,
+                                title=f"{city_label}: {day_str} High {high}°F Low {low}°F, {desc}",
+                                data={
+                                    "temp_high_f": high,
+                                    "temp_low_f": low,
+                                    "precip_mm": precip_mm,
+                                    "weather_code": wcode,
+                                    "weather_desc": desc,
+                                },
+                                timestamp=ts,
+                                ticker_refs=[ticker],
+                                metadata={"city": city_label, "lat": str(lat), "lon": str(lon)},
+                            )
+                        )
 
                     return points
 
                 except Exception:
                     import traceback
-                    logger.warning("Open-Meteo hist error for %s:\n%s", city_label, traceback.format_exc())
+
+                    logger.warning(
+                        "Open-Meteo hist error for %s:\n%s", city_label, traceback.format_exc()
+                    )
                     return []
 
         all_points: list[DataPoint] = []
@@ -1101,7 +1199,8 @@ class NewsAggregator:
         all_failed: list[str] = []  # track series that exhausted retries
 
         async def _fetch_series_range(
-            sid: str, info: dict[str, str],
+            sid: str,
+            info: dict[str, str],
         ) -> list[DataPoint]:
             async with sem:
                 try:
@@ -1120,7 +1219,12 @@ class NewsAggregator:
                         )
                         if response.status_code == 429:
                             retry_after = int(response.headers.get("Retry-After", 5))
-                            logger.warning("FRED rate limited for %s — retrying after %ds (attempt %d/3)", sid, retry_after, attempt + 1)
+                            logger.warning(
+                                "FRED rate limited for %s — retrying after %ds (attempt %d/3)",
+                                sid,
+                                retry_after,
+                                attempt + 1,
+                            )
                             await asyncio.sleep(retry_after)
                             continue
                         if response.status_code != 200:
@@ -1130,7 +1234,9 @@ class NewsAggregator:
                     else:
                         # All 3 retries exhausted
                         all_failed.append(sid)
-                        logger.warning("FRED backfill permanent failure for %s after 3 retries", sid)
+                        logger.warning(
+                            "FRED backfill permanent failure for %s after 3 retries", sid
+                        )
                         return []
 
                     data = response.json()
@@ -1147,7 +1253,8 @@ class NewsAggregator:
                     series_desc = info.get("name", sid)
                     category = info.get("category", "ECONOMICS")
 
-                    from datetime import datetime, UTC
+                    from datetime import UTC, datetime
+
                     points: list[DataPoint] = []
                     for obs in observations:
                         date_str = obs.get("date", "")
@@ -1159,16 +1266,24 @@ class NewsAggregator:
                         except ValueError:
                             continue
 
-                        points.append(DataPoint(
-                            id=f"fred-hist-{sid}-{date_str}",
-                            source=NewsSource.FRED,
-                            category=NewsCategory(category.lower()) if category.lower() in {e.value for e in NewsCategory} else NewsCategory.ECONOMICS,
-                            title=f"{series_desc}: {value} ({date_str})",
-                            data={"value": value, "series_id": sid},
-                            timestamp=ts,
-                            ticker_refs=[sid],
-                            metadata={"series": series_desc, "units": info.get("units", ""), "frequency": info.get("frequency", "")},
-                        ))
+                        points.append(
+                            DataPoint(
+                                id=f"fred-hist-{sid}-{date_str}",
+                                source=NewsSource.FRED,
+                                category=NewsCategory(category.lower())
+                                if category.lower() in {e.value for e in NewsCategory}
+                                else NewsCategory.ECONOMICS,
+                                title=f"{series_desc}: {value} ({date_str})",
+                                data={"value": value, "series_id": sid},
+                                timestamp=ts,
+                                ticker_refs=[sid],
+                                metadata={
+                                    "series": series_desc,
+                                    "units": info.get("units", ""),
+                                    "frequency": info.get("frequency", ""),
+                                },
+                            )
+                        )
 
                     logger.info("FRED backfill: %s — %d observations", series_desc, len(points))
                     return points
@@ -1197,21 +1312,26 @@ class NewsAggregator:
             logger.warning(
                 "FRED backfill: %d series permanently rate-limited (%s). "
                 "Will retry on next data pipeline cycle.",
-                len(all_failed), ", ".join(all_failed),
+                len(all_failed),
+                ", ".join(all_failed),
             )
             # Write a marker so caller knows retry is needed
-            all_points.append(DataPoint(
-                id=f"fred-retry-needed-{int(__import__('time').time())}",
-                source=NewsSource.FRED,
-                category=NewsCategory.ECONOMICS,
-                title=f"Partial FRED backfill — {len(all_failed)} series rate-limited",
-                data={"retry_series": all_failed},
-                timestamp=datetime.now(UTC),
-            ))
+            all_points.append(
+                DataPoint(
+                    id=f"fred-retry-needed-{int(__import__('time').time())}",
+                    source=NewsSource.FRED,
+                    category=NewsCategory.ECONOMICS,
+                    title=f"Partial FRED backfill — {len(all_failed)} series rate-limited",
+                    data={"retry_series": all_failed},
+                    timestamp=datetime.now(UTC),
+                )
+            )
 
         logger.info(
             "FRED backfill complete: %d points from %d series, %d permanently failed",
-            len(all_points), len(filtered_series), len(all_failed),
+            len(all_points),
+            len(filtered_series),
+            len(all_failed),
         )
         return all_points
 
@@ -1234,7 +1354,10 @@ class NewsAggregator:
             self._owm_budget_date = today
             self._owm_daily_count = 0
         if self._owm_daily_count >= 900:
-            logger.warning("OpenWeatherMap daily budget exhausted (%d calls today), skipping", self._owm_daily_count)
+            logger.warning(
+                "OpenWeatherMap daily budget exhausted (%d calls today), skipping",
+                self._owm_daily_count,
+            )
             return []
 
         self._owm_daily_count += 1
@@ -1252,7 +1375,9 @@ class NewsAggregator:
                 data = response.json()
                 entries = data.get("list", [])
             else:
-                logger.warning("OWM /group HTTP %d — falling back to individual calls", response.status_code)
+                logger.warning(
+                    "OWM /group HTTP %d — falling back to individual calls", response.status_code
+                )
         except Exception:
             logger.warning("OWM /group failed — falling back to individual calls", exc_info=True)
 
@@ -1270,7 +1395,11 @@ class NewsAggregator:
             try:
                 lat = entry.get("coord", {}).get("lat")
                 lon = entry.get("coord", {}).get("lon")
-                match_key = (round(float(lat), 2), round(float(lon), 2)) if lat is not None and lon is not None else None
+                match_key = (
+                    (round(float(lat), 2), round(float(lon), 2))
+                    if lat is not None and lon is not None
+                    else None
+                )
                 ticker = coord_to_ticker.get(match_key) if match_key else None
                 city_name = entry.get("name", "Unknown")
                 main = entry.get("main", {})
@@ -1317,7 +1446,10 @@ class NewsAggregator:
         limit: int = 20,
     ) -> list[DataPoint]:
         """Fallback: 15 parallel /weather calls when /group is unavailable."""
-        async def _fetch_city(ticker: str, city_name: str, lat: float, lon: float) -> DataPoint | None:
+
+        async def _fetch_city(
+            ticker: str, city_name: str, lat: float, lon: float
+        ) -> DataPoint | None:
             if self._owm_daily_count >= 900:
                 return None
             try:
@@ -1374,7 +1506,12 @@ class NewsAggregator:
                 logger.warning("OWM parallel fetch exception: %s", r)
         return points
 
-    async def _fetch_reddit(self, limit: int, subreddits: list[str] | None = None, category_filter: list[NewsCategory] | None = None) -> list[NewsItem]:
+    async def _fetch_reddit(
+        self,
+        limit: int,
+        subreddits: list[str] | None = None,
+        category_filter: list[NewsCategory] | None = None,
+    ) -> list[NewsItem]:
         """Fetch recent posts from configured subreddits via RSS."""
         single_category: NewsCategory | None = None
         if category_filter and len(category_filter) == 1:
@@ -1384,12 +1521,15 @@ class NewsAggregator:
             try:
                 feed_url = f"https://www.reddit.com/r/{sub}/.rss"
                 response = await self._client.get(
-                    feed_url, headers={"User-Agent": "TraderBot/1.0 (news aggregation)"}, timeout=30.0
+                    feed_url,
+                    headers={"User-Agent": "TraderBot/1.0 (news aggregation)"},
+                    timeout=30.0,
                 )
                 if response.status_code != 200:
                     logger.warning(
                         "Reddit RSS for r/%s returned HTTP %d, skipping",
-                        sub, response.status_code,
+                        sub,
+                        response.status_code,
                     )
                     return []
 
@@ -1406,7 +1546,11 @@ class NewsAggregator:
                             )
 
                         entry_link = entry.get("link", "") or ""
-                        entry_hash = hashlib.md5(entry_link.encode()).hexdigest()[:12] if entry_link else str(idx)
+                        entry_hash = (
+                            hashlib.md5(entry_link.encode()).hexdigest()[:12]
+                            if entry_link
+                            else str(idx)
+                        )
 
                         sub_items.append(
                             NewsItem(
@@ -1422,9 +1566,7 @@ class NewsAggregator:
                             )
                         )
                     except Exception:
-                        logger.warning(
-                            "Skipping malformed Reddit entry at r/%s index %d", sub, idx
-                        )
+                        logger.warning("Skipping malformed Reddit entry at r/%s index %d", sub, idx)
                         continue
                 return sub_items
             except Exception:
@@ -1457,14 +1599,23 @@ class NewsAggregator:
         Returns DataPoint objects with prices/market caps in integer cents.
         If MENTIONS is in category_filter, also fetches /search/trending.
         """
-        if category_filter is not None and NewsCategory.CRYPTO not in category_filter and NewsCategory.MENTIONS not in category_filter:
+        if (
+            category_filter is not None
+            and NewsCategory.CRYPTO not in category_filter
+            and NewsCategory.MENTIONS not in category_filter
+        ):
             return []
 
         from traderbot.auth import get_credential
+
         coingecko_key = get_credential("coingecko", "api_key")
         coingecko_tier = get_credential("coingecko", "tier")
         cg_tier = coingecko_tier.get_secret_value() if coingecko_tier is not None else "demo"
-        cg_base = "https://pro-api.coingecko.com/api/v3" if cg_tier == "pro" else "https://api.coingecko.com/api/v3"
+        cg_base = (
+            "https://pro-api.coingecko.com/api/v3"
+            if cg_tier == "pro"
+            else "https://api.coingecko.com/api/v3"
+        )
         cg_header = "x-cg-pro-api-key" if cg_tier == "pro" else "x-cg-demo-api-key"
         headers: dict[str, str] = {}
         if coingecko_key is not None:
@@ -1620,7 +1771,9 @@ class NewsAggregator:
                         symbol = coin_item.get("symbol", "")
                         name = coin_item.get("name", "")
                         market_cap_rank = int(coin_item.get("market_cap_rank") or 0)
-                        score = int(coin_item.get("score") if coin_item.get("score") is not None else idx)
+                        score = int(
+                            coin_item.get("score") if coin_item.get("score") is not None else idx
+                        )
 
                         results.append(
                             DataPoint(
@@ -1667,7 +1820,8 @@ class NewsAggregator:
                 if response.status_code != 200:
                     logger.warning(
                         "TheSportsDB %s returned HTTP %d, skipping",
-                        sport, response.status_code,
+                        sport,
+                        response.status_code,
                     )
                     return []
 
@@ -1692,9 +1846,7 @@ class NewsAggregator:
                         time_str = event.get("strTime", "00:00:00")
 
                         if date_str:
-                            timestamp = datetime.fromisoformat(
-                                f"{date_str}T{time_str}+00:00"
-                            )
+                            timestamp = datetime.fromisoformat(f"{date_str}T{time_str}+00:00")
                         else:
                             timestamp = datetime.now(tz=UTC)
 
@@ -1755,9 +1907,13 @@ class NewsAggregator:
         Iterates day by day through the date range for each tracked sport.
         Free tier returns current season data only.
         """
-        from datetime import datetime, timedelta, UTC, date
+        from datetime import UTC, datetime, timedelta
 
-        end = (datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else datetime.now(tz=UTC).date())
+        end = (
+            datetime.strptime(end_date, "%Y-%m-%d").date()
+            if end_date
+            else datetime.now(tz=UTC).date()
+        )
         start = datetime.strptime(start_date, "%Y-%m-%d").date()
 
         sem = asyncio.Semaphore(3)
@@ -1842,10 +1998,15 @@ class NewsAggregator:
 
         headers: dict[str, str] = {}
         from traderbot.auth import get_credential
+
         cg_key = get_credential("coingecko", "api_key")
         cg_tier = get_credential("coingecko", "tier")
         cg_tier_val = cg_tier.get_secret_value() if cg_tier is not None else "demo"
-        cg_base = "https://pro-api.coingecko.com/api/v3" if cg_tier_val == "pro" else "https://api.coingecko.com/api/v3"
+        cg_base = (
+            "https://pro-api.coingecko.com/api/v3"
+            if cg_tier_val == "pro"
+            else "https://api.coingecko.com/api/v3"
+        )
         cg_header = "x-cg-pro-api-key" if cg_tier_val == "pro" else "x-cg-demo-api-key"
         headers: dict[str, str] = {}
         if cg_key is not None:
@@ -1854,12 +2015,21 @@ class NewsAggregator:
         try:
             response = await self._client.get(
                 f"{cg_base}/coins/markets",
-                params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 30, "page": 1, "sparkline": "false"},
+                params={
+                    "vs_currency": "usd",
+                    "order": "market_cap_desc",
+                    "per_page": 30,
+                    "page": 1,
+                    "sparkline": "false",
+                },
                 headers=headers,
                 timeout=30.0,
             )
             if response.status_code != 200:
-                logger.warning("CoinGecko /coins/markets returned HTTP %d, cannot backfill", response.status_code)
+                logger.warning(
+                    "CoinGecko /coins/markets returned HTTP %d, cannot backfill",
+                    response.status_code,
+                )
                 return []
             coins = response.json()
         except Exception as exc:
@@ -1867,7 +2037,9 @@ class NewsAggregator:
             return []
 
         coin_ids = [(c.get("id", ""), c.get("symbol", "").upper()) for c in coins if c.get("id")]
-        logger.info("CoinGecko backfill: %d coins from %s to %s", len(coin_ids), from_timestamp, end_ts)
+        logger.info(
+            "CoinGecko backfill: %d coins from %s to %s", len(coin_ids), from_timestamp, end_ts
+        )
 
         sem = asyncio.Semaphore(3)
 
@@ -1876,7 +2048,11 @@ class NewsAggregator:
                 try:
                     response = await self._client.get(
                         f"{cg_base}/coins/{coin_id}/market_chart/range",
-                        params={"vs_currency": "usd", "from": str(from_timestamp), "to": str(end_ts)},
+                        params={
+                            "vs_currency": "usd",
+                            "from": str(from_timestamp),
+                            "to": str(end_ts),
+                        },
                         headers=headers,
                         timeout=30.0,
                     )
@@ -1983,19 +2159,25 @@ class NewsAggregator:
                             published = art.get("publishedAt", "")
                             content = art.get("content") or description
                             source_name = art.get("source", {}).get("name", "newsapi")
-                            timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")) if published else datetime.now(tz=UTC)
-                            items.append(NewsItem(
-                                id=hashlib.sha256(_sanitize_url(url).encode()).hexdigest(),
-                                source=NewsSource.NEWSAPI,
-                                title=_sanitize_content(title),
-                                body=_sanitize_content(content[:5000] if content else title),
-                                url=_sanitize_url(url),
-                                published_at=timestamp,
-                                category=news_cat,
-                                ticker_refs=[],
-                                data_freshness="unknown",
-                                content_truncated=len(content or "") > 5000,
-                            ))
+                            timestamp = (
+                                datetime.fromisoformat(published.replace("Z", "+00:00"))
+                                if published
+                                else datetime.now(tz=UTC)
+                            )
+                            items.append(
+                                NewsItem(
+                                    id=hashlib.sha256(_sanitize_url(url).encode()).hexdigest(),
+                                    source=NewsSource.NEWSAPI,
+                                    title=_sanitize_content(title),
+                                    body=_sanitize_content(content[:5000] if content else title),
+                                    url=_sanitize_url(url),
+                                    published_at=timestamp,
+                                    category=news_cat,
+                                    ticker_refs=[],
+                                    data_freshness="unknown",
+                                    content_truncated=len(content or "") > 5000,
+                                )
+                            )
                         except Exception:
                             continue
                     return items
@@ -2066,7 +2248,8 @@ class NewsAggregator:
                 if response.status_code != 200:
                     logger.warning(
                         "FRED series %s returned HTTP %d, skipping",
-                        sid, response.status_code,
+                        sid,
+                        response.status_code,
                     )
                     return None
 
@@ -2123,8 +2306,7 @@ class NewsAggregator:
                 return None
 
         tasks = [
-            asyncio.ensure_future(_fetch_series(sid, info))
-            for sid, info in filtered_series.items()
+            asyncio.ensure_future(_fetch_series(sid, info)) for sid, info in filtered_series.items()
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

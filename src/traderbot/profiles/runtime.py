@@ -40,7 +40,9 @@ def get_current_profile(**kwargs: Any) -> TradingProfile | None:
 
     resolution = resolve_token(token)
     if resolution is None:
-        logger.warning("Invalid or revoked token: %s", "****" + token[-4:] if len(token) > 4 else "****")
+        logger.warning(
+            "Invalid or revoked token: %s", "****" + token[-4:] if len(token) > 4 else "****"
+        )
         return None
 
     profile_name, agent_id = resolution
@@ -62,6 +64,7 @@ def _read_env_file_token() -> str | None:
     agent subprocesses that don't inherit the parent's env vars."""
     try:
         from traderbot.paths import get_data_dir
+
         env_path = get_data_dir() / ".env"
         if not env_path.exists():
             return None
@@ -93,9 +96,7 @@ def load_profile_config(
 
     try:
         kalshi_key, kalshi_secret = resolve_kalshi_credentials(profile)
-        config["credentials"] = {
-            "kalshi": (kalshi_key, kalshi_secret)
-        }
+        config["credentials"] = {"kalshi": (kalshi_key, kalshi_secret)}
     except ValueError as e:
         logger.warning("Failed to resolve Kalshi credentials: %s", e)
         config["credentials"] = {}

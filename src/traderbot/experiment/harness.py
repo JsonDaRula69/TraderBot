@@ -35,9 +35,7 @@ logger = logging.getLogger(__name__)
 
 def _load_market_row(conn: sqlite3.Connection, ticker: str) -> dict | None:
     """Fetch a single market row from the markets table."""
-    row = conn.execute(
-        "SELECT * FROM markets WHERE ticker = ?", (ticker,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM markets WHERE ticker = ?", (ticker,)).fetchone()
     if row is None:
         return None
     cols = [desc[0] for desc in conn.execute("SELECT * FROM markets LIMIT 0").description]
@@ -50,10 +48,7 @@ def _load_forecasts(conn: sqlite3.Connection, ticker: str) -> list[dict]:
         "SELECT forecast_temp_f, source, days_before FROM forecast_snapshots WHERE ticker = ?",
         (ticker,),
     ).fetchall()
-    return [
-        {"forecast_temp_f": r[0], "source": r[1], "days_before": r[2]}
-        for r in rows
-    ]
+    return [{"forecast_temp_f": r[0], "source": r[1], "days_before": r[2]} for r in rows]
 
 
 def _load_price_history(conn: sqlite3.Connection, ticker: str) -> list[dict]:
@@ -63,10 +58,7 @@ def _load_price_history(conn: sqlite3.Connection, ticker: str) -> list[dict]:
         "WHERE ticker = ? ORDER BY timestep",
         (ticker,),
     ).fetchall()
-    return [
-        {"timestep": r[0], "yes_price_cents": r[1], "no_price_cents": r[2]}
-        for r in rows
-    ]
+    return [{"timestep": r[0], "yes_price_cents": r[1], "no_price_cents": r[2]} for r in rows]
 
 
 def _build_market_data(row: dict) -> MarketData:
@@ -143,7 +135,9 @@ def _build_technical_data(price_history: list[dict]) -> TechnicalData:
     )
 
 
-def _build_prior_decisions(conn: sqlite3.Connection, run_id: str, ticker: str, treatment_name: str) -> PriorDecisions:
+def _build_prior_decisions(
+    conn: sqlite3.Connection, run_id: str, ticker: str, treatment_name: str
+) -> PriorDecisions:
     """Fetch prior decisions for this run/ticker/treatment to pass as context."""
     rows = conn.execute(
         "SELECT decision, estimated_prob, confidence, reasoning, timestep "

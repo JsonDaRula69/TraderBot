@@ -4,7 +4,6 @@ These tests verify the enum definitions in traderbot.wal remain correct,
 covering the addition of REJECTED and EXECUTED statuses.
 """
 
-import pytest
 
 from traderbot.wal import WalAction, WalStatus
 

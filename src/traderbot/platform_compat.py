@@ -111,7 +111,9 @@ def launchd_remove_services(glob_pattern: str) -> list[str]:
             removed.append(str(plist))
             logger.info("Removed launchd plist: %s", plist)
         else:
-            logger.warning("Failed to remove launchd plist %s: %s", plist, result.stderr.decode().strip())
+            logger.warning(
+                "Failed to remove launchd plist %s: %s", plist, result.stderr.decode().strip()
+            )
     logger.info("launchd service removal complete: %d services removed", len(removed))
     return removed
 
@@ -140,7 +142,9 @@ def systemd_remove_services(
             removed.append(str(svc))
             logger.info("Removed systemd unit: %s", unit)
         else:
-            logger.warning("Failed to remove systemd unit %s: %s", unit, result.stderr.decode().strip())
+            logger.warning(
+                "Failed to remove systemd unit %s: %s", unit, result.stderr.decode().strip()
+            )
     if timer_glob:
         for svc in list(service_dir.glob(timer_glob)):
             timer_unit = svc.name.replace(".service", ".timer")
@@ -188,7 +192,11 @@ def task_scheduler_remove_tasks(task_name_pattern: str) -> list[str]:
                     removed.append(task_name)
                     logger.info("Removed task: %s", task_name)
                 else:
-                    logger.warning("Failed to remove task %s: %s", task_name, del_result.stderr.decode().strip())
+                    logger.warning(
+                        "Failed to remove task %s: %s",
+                        task_name,
+                        del_result.stderr.decode().strip(),
+                    )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     logger.info("Task scheduler removal complete: %d tasks removed", len(removed))

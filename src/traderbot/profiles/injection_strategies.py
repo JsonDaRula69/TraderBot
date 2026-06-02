@@ -63,22 +63,16 @@ def _extract_fenced_block(content: str, start_marker: str, end_marker: str) -> s
     return content[start_idx:end_idx].strip()
 
 
-def _replace_fenced_block(
-    content: str, start_marker: str, end_marker: str, new_block: str
-) -> str:
+def _replace_fenced_block(content: str, start_marker: str, end_marker: str, new_block: str) -> str:
     start_idx = content.find(start_marker)
     end_idx = content.find(end_marker)
     if start_idx == -1 or end_idx == -1:
-        return (
-            content + "\n\n" + start_marker + "\n" + new_block + "\n" + end_marker + "\n"
-        )
+        return content + "\n\n" + start_marker + "\n" + new_block + "\n" + end_marker + "\n"
     after_start = start_idx + len(start_marker)
     return content[:after_start] + "\n" + new_block + "\n" + content[end_idx:]
 
 
-def _extract_marked_section(
-    template_content: str, start_marker: str, end_marker: str
-) -> str:
+def _extract_marked_section(template_content: str, start_marker: str, end_marker: str) -> str:
     start_idx = template_content.find(start_marker)
     end_idx = template_content.find(end_marker)
     if start_idx == -1 or end_idx == -1:
@@ -98,7 +92,8 @@ def _detect_markers(template_content: str, fallback_markers: tuple[str, str]) ->
     if start in template_content and end in template_content:
         return fallback_markers
     import re as _re
-    match = _re.search(r'<!--\s+(TRADERBOT_\w+)_START\s+-->', template_content)
+
+    match = _re.search(r"<!--\s+(TRADERBOT_\w+)_START\s+-->", template_content)
     if match:
         prefix = match.group(1)
         custom_start = f"<!-- {prefix}_START -->"
@@ -108,9 +103,7 @@ def _detect_markers(template_content: str, fallback_markers: tuple[str, str]) ->
     return fallback_markers
 
 
-def fenced_merge(
-    template_content: str, target_path: Path, markers: tuple[str, str]
-) -> None:
+def fenced_merge(template_content: str, target_path: Path, markers: tuple[str, str]) -> None:
     """Inject or replace content between fenced markers in target file.
 
     If target doesn't exist, writes the full template.
@@ -134,7 +127,9 @@ def fenced_merge(
     if start_marker in existing and end_marker in existing:
         new_content = _replace_fenced_block(existing, start_marker, end_marker, block)
     else:
-        new_content = existing.rstrip() + "\n\n" + start_marker + "\n" + block + "\n" + end_marker + "\n"
+        new_content = (
+            existing.rstrip() + "\n\n" + start_marker + "\n" + block + "\n" + end_marker + "\n"
+        )
     target_path.write_text(new_content)
 
 

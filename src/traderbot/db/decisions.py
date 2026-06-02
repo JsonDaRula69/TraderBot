@@ -81,7 +81,13 @@ def insert(conn: sqlite3.Connection, decision: Decision) -> int:
         ),
     )
     conn.commit()
-    logger.info("Stored decision for %s: direction=%s outcome=%s qty=%d", decision.ticker, decision.direction, decision.outcome, decision.quantity)
+    logger.info(
+        "Stored decision for %s: direction=%s outcome=%s qty=%d",
+        decision.ticker,
+        decision.direction,
+        decision.outcome,
+        decision.quantity,
+    )
     return cursor.lastrowid
 
 
@@ -159,7 +165,9 @@ def _row_to_model(row: sqlite3.Row) -> DbDecision:
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
     data["risk_checks"] = json.loads(data["risk_checks"])
     if isinstance(data.get("risk_checks"), dict):
-        data["risk_checks"] = {k: v if isinstance(v, bool) else v == "pass" for k, v in data["risk_checks"].items()}
+        data["risk_checks"] = {
+            k: v if isinstance(v, bool) else v == "pass" for k, v in data["risk_checks"].items()
+        }
     if data.get("actual_result") is not None:
         data["actual_result"] = bool(data["actual_result"])
     return DbDecision.model_validate(data)

@@ -43,7 +43,6 @@ from traderbot.auth import get_credential
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
 from traderbot.paths import get_data_dir
-from traderbot.paths import get_data_dir
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +85,7 @@ def _save_cache(data: dict) -> None:
 async def _seed_from_rest() -> dict:
     logger.info("Seeding event cache from REST...")
     from traderbot.kalshi.client import KalshiClient
+
     client = KalshiClient()
     all_events: dict[str, str] = {}
     cursor: str | None = None
@@ -96,7 +96,11 @@ async def _seed_from_rest() -> dict:
                 params["cursor"] = cursor
             resp = await client.get("/events", **params)
             if resp.status_code == 429:
-                logger.warning("REST seed rate limited at cursor=%s — collected %d so far", cursor, len(all_events))
+                logger.warning(
+                    "REST seed rate limited at cursor=%s — collected %d so far",
+                    cursor,
+                    len(all_events),
+                )
                 break
             if resp.status_code != 200:
                 logger.warning("REST seed failed at cursor=%s: %d", cursor, resp.status_code)
@@ -113,7 +117,12 @@ async def _seed_from_rest() -> dict:
             if not cursor:
                 break
         except Exception as exc:
-            logger.warning("REST seed failed at cursor=%s: %s — collected %d so far", cursor, exc, len(all_events))
+            logger.warning(
+                "REST seed failed at cursor=%s: %s — collected %d so far",
+                cursor,
+                exc,
+                len(all_events),
+            )
             break
     await client.close()
     logger.info("Seeded %d events from REST", len(all_events))
@@ -126,7 +135,11 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
     current_cache = _load_cache()
     current_map = current_cache.get("map", {})
     current_tickers = current_cache.get("tickers", {})
-    logger.info("Loaded %d events and %d ticker prices from existing cache", len(current_map), len(current_tickers))
+    logger.info(
+        "Loaded %d events and %d ticker prices from existing cache",
+        len(current_map),
+        len(current_tickers),
+    )
     if not current_map:
         current_map = await _seed_from_rest()
         _save_cache({"map": current_map, "tickers": current_tickers})
@@ -147,7 +160,11 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                 delay = RECONNECT_DELAY
                 _write_status(connected=True)
 
-                sub = {"id": 1, "cmd": "subscribe", "params": {"channels": ["market_lifecycle_v2", "ticker"]}}
+                sub = {
+                    "id": 1,
+                    "cmd": "subscribe",
+                    "params": {"channels": ["market_lifecycle_v2", "ticker"]},
+                }
                 await ws.send(json.dumps(sub))
                 ack = await ws.recv()
                 logger.info("Subscription ack: %s", ack[:200])

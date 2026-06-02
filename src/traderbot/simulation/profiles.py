@@ -30,7 +30,10 @@ class StrategyProfile(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     name: str
-    risk_multiplier: Annotated[float, Field(gt=0, le=1.0, description="Down-scaling factor: 1.0=full hard limits, 0.5=half")]
+    risk_multiplier: Annotated[
+        float,
+        Field(gt=0, le=1.0, description="Down-scaling factor: 1.0=full hard limits, 0.5=half"),
+    ]
     signal_weights: dict[str, float]
     category_focus: list[str]
     description: str
@@ -51,14 +54,18 @@ class StrategyProfile(BaseModel):
         from traderbot.kalshi.models import MarketCategory
         from traderbot.profiles.models import TradingProfile
 
-        enabled = [MarketCategory(c) for c in self.category_focus if c in MarketCategory._value2member_map_]
+        enabled = [
+            MarketCategory(c) for c in self.category_focus if c in MarketCategory._value2member_map_
+        ]
         return TradingProfile(
             name=self.name,
             mode="paper",
             description=self.description,
             enabled_categories=enabled,
             risk_multiplier=self.risk_multiplier,
-            max_position_per_market_pct=float(self.risk_multiplier * HARD_LIMITS["max_position_per_market_pct"]),
+            max_position_per_market_pct=float(
+                self.risk_multiplier * HARD_LIMITS["max_position_per_market_pct"]
+            ),
             max_daily_loss_pct=float(self.risk_multiplier * HARD_LIMITS["max_daily_loss_pct"]),
             max_drawdown_pct=float(self.risk_multiplier * HARD_LIMITS["max_drawdown_pct"]),
             max_open_positions=int(self.risk_multiplier * HARD_LIMITS["max_open_positions"]),

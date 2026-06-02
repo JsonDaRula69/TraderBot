@@ -83,4 +83,6 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
 
     conn.commit()
-    logger.info("Created experiment database tables (markets, forecast_snapshots, market_prices, settlement_actuals, agent_decisions)")
+    logger.info(
+        "Created experiment database tables (markets, forecast_snapshots, market_prices, settlement_actuals, agent_decisions)"
+    )

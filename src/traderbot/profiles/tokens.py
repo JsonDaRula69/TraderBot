@@ -65,12 +65,14 @@ def _derive_or_create_key() -> bytes:
 
 def _encrypt_data(data: str, key: bytes) -> bytes:
     from cryptography.fernet import Fernet
+
     fernet_key = base64.urlsafe_b64encode(key)
     return Fernet(fernet_key).encrypt(data.encode())
 
 
 def _decrypt_data(data: bytes, key: bytes) -> str:
     from cryptography.fernet import Fernet
+
     fernet_key = base64.urlsafe_b64encode(key)
     return Fernet(fernet_key).decrypt(data).decode()
 
@@ -190,13 +192,15 @@ def rotate_token(profile_name: str, ttl_days: int = TOKEN_TTL_DAYS) -> tuple[str
 
     new_token = generate_token()
     now = datetime.now(UTC)
-    tokens.append({
-        "token": new_token,
-        "profile": profile_name,
-        "agent": agent_id,
-        "created_at": now.isoformat(),
-        "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
-    })
+    tokens.append(
+        {
+            "token": new_token,
+            "profile": profile_name,
+            "agent": agent_id,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
+        }
+    )
     _save_tokens_file(tokens)
     logger.info(
         "Rotated token for profile '%s': %s -> %s",

@@ -121,7 +121,9 @@ class CircuitBreaker:
         try:
             raw = json.loads(self._state_file.read_text())
         except (json.JSONDecodeError, OSError):
-            logger.warning("Circuit breaker state file corrupt — defaulting to FULL_STOP (fail-secure)")
+            logger.warning(
+                "Circuit breaker state file corrupt — defaulting to FULL_STOP (fail-secure)"
+            )
             self._state = CircuitBreakerState(
                 level=BreakerLevel.FULL_STOP,
                 reason="State file corrupt — manual clearance required",
@@ -143,7 +145,9 @@ class CircuitBreaker:
         secret = self._get_or_create_secret()
         expected = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
-            logger.warning("Circuit breaker HMAC verification failed — defaulting to FULL_STOP (fail-secure)")
+            logger.warning(
+                "Circuit breaker HMAC verification failed — defaulting to FULL_STOP (fail-secure)"
+            )
             self._state = CircuitBreakerState(
                 level=BreakerLevel.FULL_STOP,
                 reason="HMAC verification failed — manual clearance required",

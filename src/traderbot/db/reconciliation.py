@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def reconcile_positions(db_path: str, kalshi_client: "KalshiClient") -> dict[str, int]:
+async def reconcile_positions(db_path: str, kalshi_client: KalshiClient) -> dict[str, int]:
     """Fetch open positions/orders from Kalshi and sync local DB.
 
     For each local position, checks if it still exists on Kalshi.
@@ -102,7 +102,7 @@ async def reconcile_positions(db_path: str, kalshi_client: "KalshiClient") -> di
     return counts
 
 
-async def reconcile_settlements(db_path: str, kalshi_client: "KalshiClient") -> dict[str, int]:
+async def reconcile_settlements(db_path: str, kalshi_client: KalshiClient) -> dict[str, int]:
     """Fetch recent settlements from Kalshi and update local DB.
 
     For each settlement:
@@ -128,9 +128,7 @@ async def reconcile_settlements(db_path: str, kalshi_client: "KalshiClient") -> 
         for settlement in settlements:
             local = get(conn, settlement.ticker)
             if local is None:
-                logger.debug(
-                    "Skipping settlement for %s (not in local DB)", settlement.ticker
-                )
+                logger.debug("Skipping settlement for %s (not in local DB)", settlement.ticker)
                 counts["skipped"] += 1
                 continue
 
@@ -153,7 +151,7 @@ async def reconcile_settlements(db_path: str, kalshi_client: "KalshiClient") -> 
     return counts
 
 
-async def reconcile_all(db_path: str, kalshi_client: "KalshiClient") -> dict[str, dict[str, int]]:
+async def reconcile_all(db_path: str, kalshi_client: KalshiClient) -> dict[str, dict[str, int]]:
     """Run both position and settlement reconciliation.
 
     Returns nested counts: {"positions": {...}, "settlements": {...}}.

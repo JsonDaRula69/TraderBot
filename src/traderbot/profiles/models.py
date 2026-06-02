@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -35,7 +34,9 @@ class TradingProfile(BaseModel):
     min_edge_pct: Annotated[float, Field(gt=0)]
 
     def model_post_init(self, __context) -> None:
-        logger.debug("Profile %s: mode=%s risk_mult=%.2f", self.name, self.mode, self.risk_multiplier)
+        logger.debug(
+            "Profile %s: mode=%s risk_mult=%.2f", self.name, self.mode, self.risk_multiplier
+        )
 
     @computed_field
     @property
@@ -54,6 +55,7 @@ class TradingProfile(BaseModel):
         the same mode (paper/live) don't share databases, ChromaDB, or audit logs.
         """
         from traderbot.paths import get_data_dir
+
         return str(get_data_dir() / f"{self.mode}-{self.name}")
 
     @computed_field
@@ -70,4 +72,3 @@ class TradingProfile(BaseModel):
         if not self.enabled_categories:
             return True
         return category in self.enabled_categories
-

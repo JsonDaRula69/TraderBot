@@ -72,7 +72,9 @@ class ValidatedDecision:
 
     def __post_init__(self) -> None:
         if self.decision not in ("buy_yes", "buy_no", "skip"):
-            raise ValueError(f"decision must be 'buy_yes', 'buy_no', or 'skip', got {self.decision!r}")
+            raise ValueError(
+                f"decision must be 'buy_yes', 'buy_no', or 'skip', got {self.decision!r}"
+            )
         if not (0.0 <= self.estimated_prob <= 1.0):
             raise ValueError(f"estimated_prob must be in [0.0, 1.0], got {self.estimated_prob}")
         if not (0.0 <= self.confidence <= 1.0):
@@ -82,17 +84,14 @@ class ValidatedDecision:
 class TreatmentInterface(ABC):
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     def bypass_llm(self) -> bool:
         return False
 
     @abstractmethod
-    def format_prompt(self, ctx: TreatmentContext) -> str:
-        ...
+    def format_prompt(self, ctx: TreatmentContext) -> str: ...
 
     @abstractmethod
-    def validate_response(self, response: dict) -> ValidatedDecision:
-        ...
+    def validate_response(self, response: dict) -> ValidatedDecision: ...

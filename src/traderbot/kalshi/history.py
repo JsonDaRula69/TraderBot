@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import _normalize_market, _normalize_trade, _unix_to_datetime
-
 from traderbot.kalshi.models import (
     CutoffTimestamps,
     Market,
@@ -56,7 +54,9 @@ class HistoryService:
         cursor: str | None = None,
     ) -> TradeListResponse:
         params: dict[str, Any] = {"limit": limit}
-        logger.debug("History query: ticker=%s from=%s to=%s limit=%s", ticker, after, before, limit)
+        logger.debug(
+            "History query: ticker=%s from=%s to=%s limit=%s", ticker, after, before, limit
+        )
         if after is not None:
             params["min_ts"] = int(after.timestamp())
         if before is not None:
