@@ -112,3 +112,46 @@ async def test_google_trends_graceful() -> None:
     assert isinstance(results, list), "Should return a list, not an exception"
     if results:
         _assert_datapoint(results[0], NewsSource.GOOGLE_TRENDS)
+
+
+@pytest.mark.asyncio
+async def test_newsapi_top_headlines() -> None:
+    _requires_internet()
+    _requires_env("NEWSAPI_API_KEY")
+    na = NewsAggregator()
+    results = await na._fetch_newsapi(limit=5)
+    assert len(results) > 0, "Should return at least 1 article"
+    _assert_datapoint(results[0], NewsSource.NEWSAPI)
+    assert results[0].category in (NewsCategory.NEWS, NewsCategory.US_POLITICS)
+
+
+def test_voyage_embeddings() -> None:
+    _requires_internet()
+    _requires_env("VOYAGE_API_KEY")
+    from traderbot.news.embeddings import VoyageClient
+
+    vc = VoyageClient()
+    result = vc.embed("Kalshi weather markets are trading at 85% probability")
+    assert result is not None, "Should return an embedding vector"
+    assert len(result) == 1024, "voyage-4-large should output 1024 dimensions"
+    assert all(isinstance(v, float) for v in result), "All embedding values should be float"
+
+
+def test_voyage_rerank() -> None:
+    _requires_internet()
+    _requires_env("VOYAGE_API_KEY")
+    from traderbot.news.embeddings import VoyageClient
+
+    vc = VoyageClient()
+    query = "probability of temperature exceeding 100°F in Phoenix"
+    docs = [
+        "NWS forecasts high of 108°F for Phoenix on June 15",
+        "Chicago expected to see mild temperatures this week",
+        "Hurricane watch issued for coastal Florida",
+    ]
+    result = vc.rerank(query, docs)
+    assert result is not None, "Should return reranked scores"
+    assert len(result) == 3, "Should return scores for all 3 documents"
+    # Indices: 0=Phoenix, 1=Chicago, 2=Florida. Phoenix should rank highest.
+    indices = [idx for idx, _ in result]
+    assert indices[0] == 0, "Phoenix heat doc should be the top result"
