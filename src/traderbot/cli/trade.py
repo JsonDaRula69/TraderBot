@@ -428,8 +428,16 @@ def register_commands(parent_app: typer.Typer) -> None:
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
         ] = False,
+        no_price_fetch: Annotated[
+            bool, typer.Option("--no-price-fetch", help="Skip fetching current prices from Kalshi")
+        ] = False,
     ) -> None:
-        """List current positions from SQLite."""
+        """List current positions from SQLite, with live prices from Kalshi.
+
+        Fetches current market prices from Kalshi's unauthenticated market
+        endpoint so P&L reflects real-time value, not stale entry prices.
+        Use --no-price-fetch to skip (faster, no API calls).
+        """
         from traderbot.db.positions import list_all
         from traderbot.profiles.runtime import get_current_profile
 
@@ -443,8 +451,55 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         all_positions = _with_db(db, list_all)
 
+        # Fetch current prices from Kalshi market data (unauthenticated)
+        price_map: dict[str, int] = {}
+        if not no_price_fetch:
+            try:
+                from traderbot.kalshi.client import KalshiClient
+                import asyncio
+
+                async def _fetch_prices() -> dict[str, int]:
+                    client = KalshiClient()
+                    prices: dict[str, int] = {}
+                    for pos in all_positions:
+                        if pos.settlement_result is None:
+                            try:
+                                resp = await client.get(f"/markets/{pos.ticker}")
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    mkt = data.get("market", data)
+                                    yes_bid = mkt.get("yes_bid")
+                                    if yes_bid is not None:
+                                        prices[pos.ticker] = int(yes_bid)
+                                    no_bid = mkt.get("no_bid")
+                                    if no_bid is not None and pos.ticker not in prices:
+                                        prices[pos.ticker] = 100 - int(no_bid)
+                            except Exception:
+                                pass
+                    await client.close()
+                    return prices
+
+                price_map = asyncio.run(_fetch_prices())
+            except Exception:
+                pass
+
         if json_output:
-            json_lib.dump([p.model_dump(mode="json") for p in all_positions], sys.stdout, default=str)
+            result = []
+            for p in all_positions:
+                entry = p.model_dump(mode="json")
+                if p.ticker in price_map:
+                    entry["current_price"] = price_map[p.ticker]
+                    if p.direction == "yes":
+                        entry["unrealized_pnl"] = (price_map[p.ticker] - p.avg_price) * p.quantity
+                    elif p.direction == "no":
+                        entry["unrealized_pnl"] = ((100 - price_map[p.ticker]) - p.avg_price) * p.quantity
+                    else:
+                        entry["unrealized_pnl"] = (price_map[p.ticker] - p.avg_price) * p.quantity
+                else:
+                    entry["current_price"] = None
+                    entry["unrealized_pnl"] = None
+                result.append(entry)
+            json_lib.dump(result, sys.stdout, default=str)
             return
 
         console = Console()
@@ -454,14 +509,29 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         table = Table(title="Positions")
         table.add_column("Ticker", style="cyan")
+        table.add_column("Side")
         table.add_column("Quantity", justify="right")
         table.add_column("Avg Price", justify="right")
+        table.add_column("Current", justify="right")
+        table.add_column("Unrealized P&L", justify="right")
         table.add_column("Settled")
-        table.add_column("PnL (¢)", justify="right")
         for p in all_positions:
+            current = f"{price_map[p.ticker]}¢" if p.ticker in price_map else "\u2014"
+            if p.ticker in price_map:
+                cur = price_map[p.ticker]
+                if p.direction == "no":
+                    entry_value = p.avg_price * p.quantity
+                    current_value = (100 - cur) * p.quantity
+                else:
+                    entry_value = p.avg_price * p.quantity
+                    current_value = cur * p.quantity
+                unrealized = current_value - entry_value
+                pnl_str = f"{unrealized:+d}¢" if unrealized else "0¢"
+            else:
+                pnl_str = "\u2014"
+            side = p.direction if hasattr(p, "direction") and p.direction else ""
             settled = "\u2014" if p.settlement_result is None else str(p.settlement_result)
-            pnl = str(p.pnl_cents) if p.settlement_result is not None else "\u2014"
-            table.add_row(p.ticker, str(p.quantity), str(p.avg_price), settled, pnl)
+            table.add_row(p.ticker, side, str(p.quantity), f"{p.avg_price}¢", current, pnl_str, settled)
         console.print(table)
 
     @parent_app.command()
