@@ -89,18 +89,11 @@ if command -v openclaw &>/dev/null; then
 fi
 
 # ── Step 6: Re-register cron jobs ────────────────────────────────────────
-if [[ -x "$TRADERBOT_CLI" ]]; then
-    echo "  Re-registering cron jobs..."
-    # Sysadmin (main) gets fleet oversight crons; category agents get trading crons
-    "$TRADERBOT_CLI" cron setup-heartbeat-tasks --agent main --role sysadmin --replace 2>/dev/null || true
-    for agent_dir in "$HOME/.openclaw/agents"/weather/agent; do
-        if [[ -d "$agent_dir" ]]; then
-            ag_id="$(basename "$(dirname "$agent_dir")")"
-            "$TRADERBOT_CLI" cron setup-heartbeat-tasks --agent "$ag_id" --replace 2>/dev/null || true
-        fi
-    done
-    echo "  Crons re-registered."
-fi
+# NOTE: Cron re-registration is handled by _reregister_cron_jobs() in
+# updater.py which runs during `traderbot update` (the Python CLI command
+# that calls this script).  Running it here AND in _reregister_cron_jobs()
+# produces duplicates, so we skip it here.
+echo "  Crons will be re-registered by the Python update pipeline."
 
 # ── Step 7: Restart WS daemon ─────────────────────────────────────────────
 echo "  Restarting WS daemon..."
