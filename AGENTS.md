@@ -24,13 +24,17 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## Git Discipline
 
-- **Commit early and often** — every code change gets its own commit and push. Never ask to commit.
+- **All commits MUST be made via Pull Requests** — never push directly to main. This ensures CI runs on every change and provides full traceability.
+- **PR flow**: create branch → commit → push → open PR → wait for CI → merge.
+- **CI must pass before merge** — every PR requires green status on: `Lint & format`, `Unit tests`, `Test (ubuntu-latest|macos-latest|windows-latest)`, and `Build wheel`.
+- **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement (branch protection is configured with bypass allowance). PRs from `jsondarula` can be merged once CI passes without additional review.
+- **External contributors** require 1 approving review before merge.
+- **Branch protection**: `main` is protected — requires CI status checks, up-to-date branch, and enforces admins. Force pushes are blocked.
 - **One concern per commit** — no mixing features, fixes, and docs in one commit
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `ci:`, `test:`, `deps:`
-- **Always tag**: `git tag v0.14.74` after every commit (note: `v` prefix on tag, no `v` in VERSION file)
-- **Always push**: commit + tag + push in one step: `git add VERSION <files> && git commit -m "type: msg" && git tag v0.14.74 && git push && git push --tags`
+- **Always tag**: `git tag v0.14.78` after every commit (note: `v` prefix on tag, no `v` in VERSION file)
+- **Tag + push via PR merge**, not during development. Tags are pushed when the PR is merged to main.
 - **Never commit** `.env`, credentials, or API keys
-- **Traceability**: every change is recoverable; rollback is always one `git revert` away
 - **Version increment**: update `VERSION` (increment PATCH by 1) as part of the commit — never as a separate step
 - **Sisyphus attribution**: every commit includes ultrawork attribution in the description:
   ```bash
@@ -104,14 +108,15 @@ This file defines conventions for AI-assisted development of this project. All A
   2. `lint`: ruff lint + format
   3. `unit`: fast unit tests only (`-m "unit"`) — gates subsequent jobs
   4. `test`: full matrix (ubuntu/macos/windows) — `-m "not live"`
-  5. `live`: API smoke tests — weekly schedule only, requires secrets
+  5. `live`: API smoke tests (Kalshi, Open-Meteo, CoinGecko, TheSportsDB, OpenWeatherMap, FRED, NewsAPI, VoyageAI, Google Trends) — runs on push to main + weekly. Skipped on fork PRs (secrets unavailable).
   6. `build`: builds wheel + verifies `pip install` works
 - **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
 - **Push to main** runs the same pipeline. Doc-only changes are skipped via `paths-ignore`.
 - **Weekly schedule** (Mondays 06:00 UTC) runs the full pipeline + CodeQL.
-- **Live tests** (`-m "live"`) run on push to main and weekly schedule — skipped on PRs because fork PRs can't access repository secrets (GitHub security restriction).
+- **Live tests** run on push to main and weekly schedule — skipped on PRs (fork PRs lack secrets).
 - **Concurrency**: in-progress runs are automatically cancelled when a new push arrives.
 - **Coverage**: new code should maintain or improve module-level coverage. Uploaded to Codecov on Linux.
+- **Adding new API tests**: when adding a new API-dependent feature, add a `@pytest.mark.live` test AND wire the required secret in `.github/workflows/ci.yml`. The CI workflow is the single source of truth for which secrets are tested.
 
 ### Test File Naming
 

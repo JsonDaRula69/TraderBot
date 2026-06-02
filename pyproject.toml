@@ -61,6 +61,10 @@ traderbot = "traderbot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
+exclude = ["tests", "experiments"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["tests", "experiments", ".github", ".openclaw"]
 
 [tool.uv]
 constraint-dependencies = ["onnxruntime<1.24"]
