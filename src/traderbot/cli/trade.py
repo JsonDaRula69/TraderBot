@@ -287,7 +287,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 pb = compute_paper_balance(profile)
                 if pb:
                     folio = PortfolioState(
-                        portfolio_value_cents=pb.remaining_cents,
+                        portfolio_value_cents=pb.initial_cents,
                         peak_value_cents=pb.initial_cents,
                         current_positions_value_cents=pb.cost_at_risk_cents,
                         today_realized_loss_cents=0,
