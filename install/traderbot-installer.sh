@@ -1588,6 +1588,8 @@ prompt_sandbox_docker() {
 openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
         openclaw config set agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources true 2>/dev/null || true
         openclaw config set 'agents.list[0].sandbox.mode' off 2>/dev/null || true
+    # Set tools.profile=coding for all agents (provides sessions, exec, fs tools)
+    openclaw config set 'agents.list[0].tools.profile' coding 2>/dev/null || true
     # Category agents get bind mounts for CLI access and data persistence
     # Use defaults.sandbox so all sandboxed agents inherit (main has mode:off)
     openclaw config set 'agents.defaults.sandbox.docker.binds' "[\"${HOME}/traderbot:/traderbot:ro\",\"${HOME}/.traderbot:/home/traderbot/.traderbot:rw\"]" --strict-json 2>/dev/null || true

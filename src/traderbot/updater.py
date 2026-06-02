@@ -529,6 +529,10 @@ def _configure_openclaw_sandbox() -> None:
             ["openclaw", "config", "set", 'agents.list[0].sandbox.mode', 'off'],
             capture_output=True, timeout=15,
         )
+        subprocess.run(
+            ["openclaw", "config", "set", 'agents.list[0].tools.profile', 'coding'],
+            capture_output=True, timeout=15,
+        )
         logger.info("OpenClaw sandbox configuration re-applied")
     except Exception as exc:
         logger.warning("Failed to re-apply sandbox config (openclaw CLI may not be on PATH): %s", exc)
