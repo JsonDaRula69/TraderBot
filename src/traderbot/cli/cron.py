@@ -288,31 +288,6 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "cron_expr": "0 */6 * * *",
         "message": "Run `traderbot heartbeat --json`. Review fleet P&L, agent win rates, drawdown across all assigned profiles. Check if any agent exceeds risk thresholds. If anomalies found, write to `.learnings/ERRORS.md` with details. Surface anomalies to human. Do not trade — do not touch order book.",
     },
-    {
-        "name": "experiment-execution",
-        "cron_expr": "0 */6 * * *",
-        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30 trades per backlog.md). DEPLOY via `traderbot profile update` if pass, REJECT with reason in backlog.md if fail. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/.",
-    },
-    {
-        "name": "auth-check",
-        "cron_expr": "0 * * * *",
-        "message": "Run `traderbot auth check --json`. Verify all API credentials are resolvable. If Kalshi credentials are missing or invalid, surface CRITICAL alert to human — this blocks all trading.",
-    },
-    {
-        "name": "learning-review",
-        "cron_expr": "0 * * * *",
-        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts.",
-    },
-    {
-        "name": "pipeline-health",
-        "cron_expr": "0 */6 * * *",
-        "message": "Check pipeline timers via `systemctl list-timers --all | grep traderbot`. Verify ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`. Run backfill if stale. Surface inactive timers or empty collections to human.",
-    },
-    {
-        "name": "performance-review",
-        "cron_expr": "0 */6 * * *",
-        "message": "Run `traderbot heartbeat --json`. Review fleet P&L, agent win rates, drawdown across all assigned profiles. Check if any agent exceeds risk thresholds. Surface anomalies to human. Do not trade — do not touch order book.",
-    },
 ]
 
 _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
