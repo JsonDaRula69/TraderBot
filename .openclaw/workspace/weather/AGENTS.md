@@ -160,7 +160,7 @@ The WS daemon is always on (systemd service). You never need to start or stop it
 
 | Step | Action |
 |---|---|
-| 1. SCAN | `traderbot scan --category weather --limit 200 --json` |
+| 1. SCAN | `traderbot scan --category weather --limit 50 --json 2>/dev/null` — if empty, retry once after 30s. If still empty: this is a SYSTEM ERROR (rate limited, credential failure, API outage), NOT a market closure. Kalshi markets always exist. Log full diagnostic in `.learnings/ERRORS.md`. Skip to step 10. |
 | 2. FILTER | Contracts within decision horizon. Remove expired/paused. |
 | 3. ASSESS_WEATHER_CONTEXT | Check for active NHC advisories, NWS warnings, emergency declarations. Use `traderbot data forecasts --cities NYC,CHI,LA --json` for structured data. |
 | 4. MODEL_CONSENSUS | `traderbot data forecasts --cities NYC,CHI,LA --json` — NWS high + GFS/ECMWF/GEM ensemble with spread. If all 3 models agree (spread < 2°F), high conviction. If spread > 5°F, halve position sizing. |
