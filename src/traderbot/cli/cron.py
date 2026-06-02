@@ -394,11 +394,18 @@ def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
     try:
         result = subprocess.run(
             ["openclaw", "cron", "list", "--json"],
+            env={**dict(subprocess.os.environ), "OPENCLAW_SKIP_UPDATE_CHECK": "1"},
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
             return removed
-        jobs = _cjson.loads(result.stdout)
+        raw = result.stdout.strip()
+        # Strip any "Update available: ..." banner that breaks JSON parse
+        for line in raw.splitlines():
+            if line.startswith("{"):
+                raw = line
+                break
+        jobs = _cjson.loads(raw)
         if not isinstance(jobs, list):
             jobs = jobs.get("jobs", []) if isinstance(jobs, dict) else []
         prefix = f"{agent_id}-"
