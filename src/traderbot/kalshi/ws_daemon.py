@@ -186,16 +186,24 @@ def main() -> None:
             return None
         api_key = api_key_str.get_secret_value()
 
-        # Try private_key_pem first, then private_key_path
-        private_key_pem = get_credential("kalshi", "private_key_pem")
+        # Resolve PEM: get_credential("kalshi", "private_key_pem") may return
+        # the PEM contents OR the path to the PEM file (when .env has
+        # KALSHI_PRIVATE_KEY_PATH and auth falls through to it).
+        # Detect which by checking if the value is a path-like string.
+        raw = get_credential("kalshi", "private_key_pem")
         priv: str | None = None
-        if private_key_pem:
-            priv = private_key_pem.get_secret_value()
-            pem_path = Path(priv)
-            if pem_path.exists():
-                priv = pem_path.read_text().strip()
+
+        if raw:
+            val = raw.get_secret_value()
+            if val.startswith("/") and "-----BEGIN" not in val:
+                # Looks like a file path — resolve via get_data_dir fallback
+                p = Path(val)
+                if not p.exists():
+                    p = get_data_dir() / p.name
+                if p.exists():
+                    priv = p.read_text().strip()
             else:
-                priv = priv.replace("\\n", "\n").strip()
+                priv = val.replace("\\n", "\n").strip()
 
         if not priv:
             key_path = get_credential("kalshi", "private_key_path")
