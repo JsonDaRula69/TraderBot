@@ -64,7 +64,11 @@ Category agents log into three files. The sysadmin reads all three. These are th
 - ✅ Execution failures (order rejected, wrong size, slippage beyond threshold)
 - ✅ Data quality issues (stale prices, missing markets, malformed responses)
 - ✅ Crash or hang conditions
+- ✅ Infrastructure failures (Docker, systemd, OpenClaw gateway)
 - ❌ Expected behavior (e.g., "market closed, trade rejected" is normal)
+- ❌ Category agent errors (those go in the agent's own ERRORS.md)
+
+**When you encounter an issue you cannot fix yourself** (e.g., a code bug, missing API capability, infrastructure limitation): investigate it thoroughly, then use the 🐙 github skill to file a GitHub issue in JsonDaRula69/TraderBot with reproduction steps, root cause analysis, and proposed solution. Label it appropriately (bug, infrastructure, enhancement).
 
 ### 💡 FEATURE_REQUESTS.md — Capability Gaps (What's Missing)
 

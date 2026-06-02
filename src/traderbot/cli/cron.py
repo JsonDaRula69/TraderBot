@@ -271,12 +271,12 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "learning-review",
         "cron_expr": "0 */6 * * *",
-        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts.",
+        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts. Then read each category agent's `.learnings/ERRORS.md` and `.learnings/FEATURE_REQUESTS.md`. For each unresolved entry: investigate by reproducing the error or verifying the capability gap. If confirmed: use the 🐙 github skill to file a GitHub issue in JsonDaRula69/TraderBot with investigation results, reproduction steps, and proposed fix. Labels: experiment (learnings), bug (errors), enhancement (feature requests). Mark the entry as INVESTIGATED in the agent's file.",
     },
     {
         "name": "pipeline-health",
         "cron_expr": "0 */6 * * *",
-        "message": "Check: (1) systemd timers via `systemctl list-timers --all | grep traderbot`, (2) ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`, (3) WS daemon via `traderbot ws status`. Run backfill if stale. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. Surface summary to sysadmin.",
+        "message": "Check: (1) systemd timers via `systemctl list-timers --all | grep traderbot`, (2) ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`, (3) WS daemon via `traderbot ws status`. Run backfill if stale. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. If any issue requires a code change, use the 🐙 github skill to file a GitHub issue with reproduction steps.",
     },
     {
         "name": "performance-review",
