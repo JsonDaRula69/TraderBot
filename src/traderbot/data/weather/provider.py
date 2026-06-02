@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 _OPEN_METEO_ENSEMBLE_URL = "https://api.open-meteo.com/v1/forecast"
-_OM_MODELS = ("gfs_seamless", "ecmwf_ifens", "gem_global")
+_OM_MODELS = ("gfs_seamless", "ecmwf_ifs", "gem_global")
 _REQUEST_TIMEOUT = 20.0
 
 # ------------------------------------------------------------------

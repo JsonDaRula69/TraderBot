@@ -1,8 +1,27 @@
-"""Persistent WebSocket daemon that maintains the event category cache.
+"""Persistent WebSocket daemon that maintains unified market data cache.
 
-Connects to Kalshi WebSocket, subscribes to ``market_lifecycle_v2``,
-and writes new events directly into ``~/.traderbot/event_category_cache.json``
-so ``list_markets_by_category()`` always sees current data without REST polling.
+Connects to Kalshi WebSocket, subscribes to ``market_lifecycle_v2`` and
+``ticker`` channels, and writes data directly into
+``~/.traderbot/event_category_cache.json`` so that CLI commands (scan,
+analyze, positions) always see current data without REST polling.
+
+Cache format::
+
+    {
+      "ts": <unix>,
+      "map": { "<ticker>": "<category>", ... },       ← lifecycle cache
+      "tickers": {
+        "<ticker>": {
+          "yes_bid": <int>,
+          "no_bid": <int>,
+          "volume": <int>,
+          "open_interest": <int>,
+          "updated_at": <unix>
+        },
+        ...
+      }
+    }
+
 Also seeds the cache from REST on startup if it's empty or stale.
 """
 
@@ -46,22 +65,25 @@ def _write_status(**kw: object) -> None:
     DAEMON_STATUS_PATH.write_text(json.dumps(payload, indent=2))
 
 
-def _load_cache() -> dict[str, str]:
+def _load_cache() -> dict:
     if CACHE_PATH.exists():
         try:
             data = json.loads(CACHE_PATH.read_text())
-            return data.get("map", {})
+            return {
+                "map": data.get("map", {}),
+                "tickers": data.get("tickers", {}),
+            }
         except (json.JSONDecodeError, KeyError):
             pass
-    return {}
+    return {"map": {}, "tickers": {}}
 
 
-def _save_cache(entries: dict[str, str]) -> None:
-    payload = {"ts": time.time(), "map": entries}
+def _save_cache(data: dict) -> None:
+    payload = {"ts": time.time(), "map": data.get("map", {}), "tickers": data.get("tickers", {})}
     CACHE_PATH.write_text(json.dumps(payload, indent=2))
 
 
-async def _seed_from_rest() -> dict[str, str]:
+async def _seed_from_rest() -> dict:
     logger.info("Seeding event cache from REST...")
     from traderbot.kalshi.client import KalshiClient
     client = KalshiClient()
@@ -101,11 +123,13 @@ async def _seed_from_rest() -> dict[str, str]:
 async def _run(api_key: str, private_key: str, ws_url: str) -> None:
     delay = RECONNECT_DELAY
 
-    current_map = _load_cache()
-    logger.info("Loaded %d events from existing cache", len(current_map))
+    current_cache = _load_cache()
+    current_map = current_cache.get("map", {})
+    current_tickers = current_cache.get("tickers", {})
+    logger.info("Loaded %d events and %d ticker prices from existing cache", len(current_map), len(current_tickers))
     if not current_map:
         current_map = await _seed_from_rest()
-        _save_cache(current_map)
+        _save_cache({"map": current_map, "tickers": current_tickers})
     _write_status(connected=False, cache_size=len(current_map))
 
     while True:
@@ -123,7 +147,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                 delay = RECONNECT_DELAY
                 _write_status(connected=True)
 
-                sub = {"id": 1, "cmd": "subscribe", "params": {"channels": ["market_lifecycle_v2"]}}
+                sub = {"id": 1, "cmd": "subscribe", "params": {"channels": ["market_lifecycle_v2", "ticker"]}}
                 await ws.send(json.dumps(sub))
                 ack = await ws.recv()
                 logger.info("Subscription ack: %s", ack[:200])
@@ -135,6 +159,22 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                         continue
 
                     channel = msg.get("channel", msg.get("type", ""))
+                    now = time.time()
+
+                    if channel == "ticker":
+                        data = msg.get("msg", msg)
+                        tkr = data.get("ticker", "")
+                        if tkr:
+                            current_tickers[tkr] = {
+                                "yes_bid": data.get("yes_bid"),
+                                "no_bid": data.get("no_bid"),
+                                "volume": data.get("volume"),
+                                "open_interest": data.get("open_interest"),
+                                "updated_at": now,
+                            }
+                            _save_cache({"map": current_map, "tickers": current_tickers})
+                        continue
+
                     if channel != "market_lifecycle_v2":
                         continue
 
@@ -145,10 +185,10 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
 
                     if ticker and category:
                         current_map[ticker] = category
-                        _save_cache(current_map)
+                        _save_cache({"map": current_map, "tickers": current_tickers})
                         logger.debug("Cache updated: %s → %s (%s)", ticker, category, lifecycle)
 
-                    _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+                    _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
 
         except websockets.ConnectionClosed:
             logger.warning("Connection closed, reconnecting in %.0fs", delay)

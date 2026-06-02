@@ -454,34 +454,47 @@ def register_commands(parent_app: typer.Typer) -> None:
         # Fetch current prices from Kalshi market data (unauthenticated)
         price_map: dict[str, int] = {}
         if not no_price_fetch:
-            try:
-                from traderbot.kalshi.client import KalshiClient
-                import asyncio
+            # Try WS cache first
+            from traderbot.kalshi.ws_cache import get_ticker_prices
 
-                async def _fetch_prices() -> dict[str, int]:
-                    client = KalshiClient()
-                    prices: dict[str, int] = {}
-                    for pos in all_positions:
-                        if pos.settlement_result is None:
+            tickers_to_fetch = [p.ticker for p in all_positions if p.settlement_result is None]
+            cached = get_ticker_prices(tickers_to_fetch)
+            for tkr, info in cached.items():
+                if info.get("yes_bid") is not None:
+                    price_map[tkr] = int(info["yes_bid"])
+                elif info.get("no_bid") is not None:
+                    price_map[tkr] = 100 - int(info["no_bid"])
+
+            # Fall back to REST for uncached/incomplete positions
+            rest_tickers = [t for t in tickers_to_fetch if t not in price_map]
+            if rest_tickers:
+                try:
+                    from traderbot.kalshi.client import KalshiClient
+                    import asyncio
+
+                    async def _fetch_prices() -> dict[str, int]:
+                        client = KalshiClient()
+                        prices: dict[str, int] = {}
+                        for tkr in rest_tickers:
                             try:
-                                resp = await client.get(f"/markets/{pos.ticker}")
+                                resp = await client.get(f"/markets/{tkr}")
                                 if resp.status_code == 200:
                                     data = resp.json()
                                     mkt = data.get("market", data)
                                     yes_bid = mkt.get("yes_bid")
                                     if yes_bid is not None:
-                                        prices[pos.ticker] = int(yes_bid)
+                                        prices[tkr] = int(yes_bid)
                                     no_bid = mkt.get("no_bid")
-                                    if no_bid is not None and pos.ticker not in prices:
-                                        prices[pos.ticker] = 100 - int(no_bid)
+                                    if no_bid is not None and tkr not in prices:
+                                        prices[tkr] = 100 - int(no_bid)
                             except Exception:
                                 pass
-                    await client.close()
-                    return prices
+                        await client.close()
+                        return prices
 
-                price_map = asyncio.run(_fetch_prices())
-            except Exception:
-                pass
+                    price_map = asyncio.run(_fetch_prices())
+                except Exception:
+                    pass
 
         if json_output:
             result = []
