@@ -45,3 +45,27 @@ class TestBaseDataProvider:
     def test_concrete_subclass_works(self) -> None:
         provider = _ConcreteProvider()
         assert provider.get_cache_key() == "test"
+
+
+class TestNoDeprecatedEcmwfIfens:
+    """Regression: ecmwf_ifens was renamed to ecmwf_ifs.
+
+    Bug: the old model name 'ecmwf_ifens' persisted in code after the rename.
+    This test scans all source files to ensure no references remain.
+    """
+
+    def test_no_deprecated_ecmwf_ifens_in_source(self) -> None:
+        import os
+
+        root = os.path.join(os.path.dirname(__file__), "..", "..", "src", "traderbot")
+        root = os.path.normpath(root)
+        found: list[tuple[str, int]] = []
+        for dirpath, _, filenames in os.walk(root):
+            for fn in filenames:
+                if fn.endswith(".py"):
+                    path = os.path.join(dirpath, fn)
+                    with open(path) as f:
+                        for i, line in enumerate(f, 1):
+                            if "ecmwf_ifens" in line:
+                                found.append((path, i))
+        assert not found, f"Deprecated ecmwf_ifens still referenced in: {found}"

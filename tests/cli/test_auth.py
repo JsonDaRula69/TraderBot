@@ -62,3 +62,20 @@ class TestAuthListKeys:
     def test_list_keys_no_credentials(self) -> None:
         result = runner.invoke(app, ["auth", "list-keys"])
         assert result.exit_code == 0
+
+
+class TestAuthCheckValidateFlag:
+    """Regression: auth check must accept --validate flag.
+
+    Bug: the --validate flag was missing from the auth check command,
+    preventing credential validation against the live Kalshi API.
+    """
+
+    def test_auth_check_validate_flag_in_help(self) -> None:
+        result = runner.invoke(app, ["auth", "check", "--help"])
+        assert result.exit_code == 0
+        assert "--validate" in result.output
+
+    def test_auth_check_validate_json_output(self) -> None:
+        result = runner.invoke(app, ["auth", "check", "--validate", "--json"])
+        assert result.exit_code == 0

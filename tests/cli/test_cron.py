@@ -23,3 +23,44 @@ class TestCronHelp:
         result = runner.invoke(app, ["cron", "remove-heartbeat-tasks", "--help"])
         assert result.exit_code == 0
         assert "--agent" in result.output
+
+
+class TestSysadminCronNoDuplicates:
+    """Regression: _SYSADMIN_HEARTBEAT_CRON_JOBS must not contain duplicate names.
+
+    Bug: a previous version had duplicate entries causing double registration
+    of cron jobs on every setup-heartbeat-tasks run.
+    """
+
+    def test_sysadmin_cron_jobs_no_duplicate_names(self) -> None:
+        from traderbot.cli.cron import _SYSADMIN_HEARTBEAT_CRON_JOBS
+
+        names = [j["name"] for j in _SYSADMIN_HEARTBEAT_CRON_JOBS]
+        assert len(names) == len(set(names)), (
+            f"Duplicate cron job names: {[n for n in names if names.count(n) > 1]}"
+        )
+
+
+class TestRemoveNewsIngestTimerUsesAgentUser:
+    """Regression: _remove_news_ingest_timer must use agent_user, not agent_id.
+
+    Bug: the function parameter was named agent_id but should be agent_user,
+    matching the install function signature and systemd unit file naming.
+    """
+
+    def test_remove_news_ingest_timer_uses_agent_user(self) -> None:
+        import inspect
+
+        from traderbot.cli.cron import _remove_news_ingest_timer
+
+        source = inspect.getsource(_remove_news_ingest_timer)
+        assert "agent_user" in source, "Function must use agent_user parameter"
+        assert "agent_id" not in source, "Function must not reference agent_id"
+
+    def test_install_news_ingest_timer_uses_agent_user(self) -> None:
+        import inspect
+
+        from traderbot.cli.cron import _install_news_ingest_timer
+
+        source = inspect.getsource(_install_news_ingest_timer)
+        assert "agent_user" in source, "Function must use agent_user parameter"

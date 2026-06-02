@@ -236,3 +236,66 @@ class TestRunAllChecks:
         results = run_all_checks(valid_trade, bad_portfolio)
         drawdown_result = next(r for r in results if r.limit_name == "drawdown")
         assert not drawdown_result.passed
+
+
+class TestPortfolioValueUsesInitialCents:
+    """Regression: portfolio_value_cents must come from initial_cents, not remaining_cents.
+
+    Bug: trade.py:290 previously used remaining_cents (balance after losses)
+    instead of initial_cents (starting balance). This meant that after losses,
+    the position limit would shrink based on losses already accounted for in
+    daily-loss checks — double-counting risk. The correct behavior is for
+    portfolio_value_cents to equal the initial capital so limits stay stable.
+    """
+
+    def test_position_limit_uses_full_initial_portfolio(self) -> None:
+        """Position limit should be 5% of initial_cents, not 5% of remaining_cents."""
+        initial_cents = 100_000_00  # $1,000 initial deposit
+        remaining_cents = 80_000_00  # $800 after $200 in losses
+        existing_positions = 2_000_00
+        # With initial_cents, the 5% limit = $50 → order of $300 should pass
+        result = check_position_limit(existing_positions, 3_000_00, initial_cents)
+        assert result.passed, (
+            f"Position limit should use initial_cents ({initial_cents}), "
+            f"not remaining_cents ({remaining_cents})"
+        )
+
+    def test_position_limit_would_fail_if_using_remaining_cents(self) -> None:
+        """If portfolio_value_cents were remaining_cents (smaller), limits would be too tight."""
+        initial_cents = 100_000_00
+        remaining_cents = 40_000_00  # After heavy losses
+        existing_positions = 1_500_00
+        # With initial_cents: 5% of 100000 = 5000, 1500+2500=4000 → pass
+        # With remaining_cents: 5% of 40000 = 2000, 1500+2500=4000 → fail
+        result_initial = check_position_limit(existing_positions, 2_500_00, initial_cents)
+        assert result_initial.passed, "Using initial_cents should allow this order"
+
+        result_remaining = check_position_limit(existing_positions, 2_500_00, remaining_cents)
+        assert not result_remaining.passed, "Using remaining_cents would double-count losses"
+
+    def test_run_all_checks_uses_initial_portfolio_value(self) -> None:
+        """run_all_checks should use portfolio_value_cents as initial capital, not reduced."""
+        initial_portfolio = PortfolioState(
+            portfolio_value_cents=100_000_00,  # initial_cents (not remaining)
+            peak_value_cents=100_000_00,
+            current_positions_value_cents=1_000_00,
+            today_realized_loss_cents=200_00,  # $200 in realized losses
+            today_unrealized_loss_cents=50_00,
+            open_positions_count=5,
+        )
+        trade = TradeRequest(
+            ticker="KXBTCD-26MAR31-T55000",
+            direction="yes",
+            quantity=10,
+            price_cents=40,  # $0.40 per contract → $4 total
+            estimated_prob=0.65,
+            confidence=0.8,
+            edge_estimate=0.15,
+            market_price_cents=62,
+            market_open_interest=2500,
+        )
+        results = run_all_checks(trade, initial_portfolio)
+        position_result = next(r for r in results if r.limit_name == "position_limit")
+        assert position_result.passed, (
+            "With initial_cents as portfolio_value, small order should pass position limit"
+        )
