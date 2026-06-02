@@ -79,8 +79,15 @@ def auth_rotate(
 @auth_app.command("check")
 def auth_check(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    validate: Annotated[
+        bool, typer.Option("--validate", help="Validate credentials against Kalshi API")
+    ] = False,
 ) -> None:
-    """Verify KALSHI_API_KEY is configured (keyring, .env, or environment)."""
+    """Verify KALSHI_API_KEY is configured (keyring, .env, or environment).
+
+    With --validate, also tests the credentials against the Kalshi API
+    (/exchange/status) to confirm they are valid, not just present.
+    """
     console = Console()
     from traderbot.auth import AuthManager
     mgr = AuthManager()
@@ -90,23 +97,44 @@ def auth_check(
     else:
         key = None
 
-    if key and key.strip():
-        ok = True
-        if json_output:
-            print(json_lib.dumps({"status": "ok", "key_found": True}))
-        else:
-            console.print("[green]OK: KALSHI_API_KEY configured[/green]")
-    else:
-        ok = False
-        if json_output:
-            print(json_lib.dumps({"status": "missing", "key_found": False}))
-        else:
-            console.print("[red]Missing: KALSHI_API_KEY not found in .env or environment[/red]")
+    key_found = bool(key and key.strip())
 
-    if not ok and not json_output:
-        console.print(
-            "[dim]Add KALSHI_API_KEY to your .env file in the data directory.[/dim]"
-        )
+    output: dict[str, object] = {"status": "ok" if key_found else "missing", "key_found": key_found}
+
+    if key_found and validate:
+        try:
+            import asyncio
+
+            from traderbot.kalshi.client import AuthenticationError, KalshiClient
+
+            async def _test_auth() -> int:
+                client = KalshiClient()
+                resp = await client.get("/exchange/status")
+                await client.close()
+                return resp.status_code
+
+            status_code = asyncio.run(_test_auth())
+            api_valid = status_code == 200
+            output["api_valid"] = api_valid
+        except (AuthenticationError, Exception) as exc:
+            output["api_valid"] = False
+            output["error"] = str(exc)
+
+    if json_output:
+        print(json_lib.dumps(output))
+        return
+
+    if key_found:
+        console.print("[green]OK: KALSHI_API_KEY configured[/green]")
+        if validate:
+            if output.get("api_valid"):
+                console.print("[green]Kalshi API: credentials valid[/green]")
+            else:
+                console.print(f"[red]Kalshi API: credentials invalid — {output.get('error', 'unknown error')}[/red]")
+                console.print("[yellow]Regenerate your API key from the Kalshi dashboard with trade and portfolio:read scopes.[/yellow]")
+    else:
+        console.print("[red]Missing: KALSHI_API_KEY not found in .env or environment[/red]")
+        console.print("[dim]Add KALSHI_API_KEY to your .env file in the data directory.[/dim]")
 
 
 @auth_app.command("setup-master-password")
