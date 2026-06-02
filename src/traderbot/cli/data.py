@@ -86,7 +86,7 @@ def forecasts_cmd(
         ens = consensus_map.get(city, {})
         models = ens.get("models_used", [])
         gfs = fc.temperature_high if "gfs_seamless" in models else "N/A"
-        ecmwf = fc.temperature_high if "ecmwf_ifens" in models else "N/A"
+        ecmwf = fc.temperature_high if "ecmwf_ifs" in models else "N/A"
         gem = fc.temperature_high if "gem_global" in models else "N/A"
         table.add_row(
             city,
