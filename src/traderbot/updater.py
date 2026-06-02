@@ -73,7 +73,8 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
             pass
         return result
     except Exception as exc:
-        if "403" in str(exc) and cache_path.exists():
+        is_403 = "403" in str(exc)
+        if is_403 and cache_path.exists():
             try:
                 stale = json.loads(cache_path.read_text())
                 if "tag" in stale and "url" in stale:
@@ -81,6 +82,19 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
                     return stale["tag"], stale["url"]
             except Exception:
                 pass
+        # Rate-limited with no cache yet: seed from local VERSION so subsequent
+        # callers within the TTL skip the API entirely.
+        if is_403:
+            current = get_current_version()
+            try:
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(
+                    json.dumps({"tag": current, "url": "", "ts": __import__("time").time()})
+                )
+                cache_path.chmod(0o600)
+            except Exception:
+                pass
+            return (current, "")
         logger.warning("Failed to fetch latest version: %s", exc)
         return None
 
