@@ -10,14 +10,33 @@ on:
       - "LICENSE"
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"  # every Monday 06:00 UTC — full matrix + live tests
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  frozen-check:
+    name: Frozen lockfile check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Check lockfile is fresh
+        run: uv sync --frozen
+
   lint:
     name: Lint & format
+    needs: frozen-check
     runs-on: ubuntu-latest
 
     steps:
@@ -38,9 +57,35 @@ jobs:
       - name: Check formatting with ruff
         run: uv run ruff format --check
 
+  unit:
+    name: Unit tests
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run unit tests
+        run: uv run pytest -m "unit" --cov=src/traderbot --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
   test:
     name: Test (${{ matrix.os }})
-    needs: lint
+    needs: unit
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,7 +104,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run tests
+      - name: Run tests (not live)
         run: uv run pytest -m "not live" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage to Codecov (Linux only)
@@ -68,6 +113,31 @@ jobs:
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
+
+  live:
+    name: Live API tests
+    needs: unit
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run live tests
+        run: uv run pytest -m "live" --timeout=60 -x
+        env:
+          KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
+          KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
+        continue-on-error: true
 
   build:
     name: Build wheel
@@ -89,3 +159,4 @@ jobs:
         run: |
           WHEEL=$(ls dist/traderbot-*-py3-none-any.whl)
           uv tool install --reinstall "$WHEEL"
+          uvx traderbot --version

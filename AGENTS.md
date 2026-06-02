@@ -10,27 +10,34 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: v0.13.52
+- **Current version**: 0.14.74
 
 ## Versioning Scheme
 
-- **Format**: `MAJOR.MINOR.PATCH` (zero-padded: `v0.00.01`)
-- **Every commit** increments the patch version by 1 (v0.00.01 → v0.00.02 → v0.00.03 …)
-- **Milestone releases** increment the minor version and reset patch to 00 (v0.00.99 → v0.01.00)
-- **Major releases** increment the major version and reset minor/patch (v1.00.00)
-- **Tags**: Every commit must be tagged with its version (`git tag v0.00.0N`)
-- **Version file**: `VERSION` at repo root is the single source of truth — update it before every commit
+- **Format**: `MAJOR.MINOR.PATCH` (e.g. `0.14.74`)
+- **Every commit** increments the patch version by 1 (0.14.73 → 0.14.74 → 0.14.75 …)
+- **Milestone releases** increment the minor version and reset patch to 00 (0.14.99 → 0.15.00)
+- **Major releases** increment the major version and reset minor/patch (1.0.0)
+- **Tags**: Every commit must be tagged with its version (`git tag v0.14.74`)
+- **Version file**: `VERSION` at repo root is the single source of truth — no `v` prefix (hatchling reads it for PyPI publishing)
+- **PyPI**: Tag pushes trigger auto-publish via `.github/workflows/python-publish.yml`
 
 ## Git Discipline
 
 - **Commit early and often** — every code change gets its own commit and push. Never ask to commit.
 - **One concern per commit** — no mixing features, fixes, and docs in one commit
-- **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`
-- **Always tag**: `git tag v0.00.0N` after every commit
-- **Always push**: commit + tag + push in one step: `git add VERSION <files> && git commit -m "type: msg" && git tag v0.00.0N && git push && git push --tags`
+- **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `ci:`, `test:`, `deps:`
+- **Always tag**: `git tag v0.14.74` after every commit (note: `v` prefix on tag, no `v` in VERSION file)
+- **Always push**: commit + tag + push in one step: `git add VERSION <files> && git commit -m "type: msg" && git tag v0.14.74 && git push && git push --tags`
 - **Never commit** `.env`, credentials, or API keys
 - **Traceability**: every change is recoverable; rollback is always one `git revert` away
 - **Version increment**: update `VERSION` (increment PATCH by 1) as part of the commit — never as a separate step
+- **Sisyphus attribution**: every commit includes ultrawork attribution in the description:
+  ```bash
+  git commit -m "type: message" \
+    -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+    -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+  ```
 
 ## Source of Truth
 
@@ -92,10 +99,18 @@ This file defines conventions for AI-assisted development of this project. All A
   - `integration` — tests with mocked external services
   - `live` — tests that hit real API endpoints (skipped in CI, requires credentials)
   - `slow` — tests excluded from fast runs
-- **Coverage**: new code should maintain or improve module-level coverage. Existing gaps don't justify widening them.
-- **Fixtures**: use shared fixtures from `tests/conftest.py` and `tests/news/conftest.py`. Don't duplicate fixture setup across test files.
-- **Parity**: bug fixes must include a regression test. New features must include tests for the public API surface.
-- **Pattern**: prefer `MockDataProvider` over monkeypatching HTTP calls. Use `respx` (available in dev deps) for HTTP-level mocking when needed.
+- **CI pipeline** (`.github/workflows/ci.yml`), layered in this order:
+  1. `frozen-check`: validates lockfile is fresh (`uv sync --frozen`)
+  2. `lint`: ruff lint + format
+  3. `unit`: fast unit tests only (`-m "unit"`) — gates subsequent jobs
+  4. `test`: full matrix (ubuntu/macos/windows) — `-m "not live"`
+  5. `live`: API smoke tests — weekly schedule only, requires secrets
+  6. `build`: builds wheel + verifies `pip install` works
+- **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
+- **Push to main** runs the same pipeline. Doc-only changes are skipped via `paths-ignore`.
+- **Weekly schedule** (Mondays 06:00 UTC) runs the full pipeline + live tests + CodeQL.
+- **Concurrency**: in-progress runs are automatically cancelled when a new push arrives.
+- **Coverage**: new code should maintain or improve module-level coverage. Uploaded to Codecov on Linux.
 
 ### Test File Naming
 
@@ -246,8 +261,8 @@ TraderBot agents run inside OpenClaw's Docker sandbox. Key design:
 
 `traderbot update` (Python CLI) and `traderbot-installer.sh --update` both execute this pipeline in order:
 
-1. **git pull** from origin (main or dev)
-2. **pip install -e .** (reinstall package)
+1. **pip upgrade** or **git pull** — detects install mode (pip-installed → `pip install --upgrade traderbot`; git-installed → `git pull`)
+2. **pip install -e .** (reinstall package, git mode only)
 3. **Refresh workspace files** (replace templates, preserve user data)
 4. **Rebuild Docker sandbox image** (if Docker available)
 5. **Re-apply OpenClaw sandbox config** (binds, dangerouslyAllowExternalBindSources, mode)
