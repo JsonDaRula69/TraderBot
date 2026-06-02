@@ -263,11 +263,14 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
             )
             if result.returncode == 0:
                 logger.info("Bootstrap update script completed successfully")
-                return True
+                # Bash script handles: git pull, pip install, workspace refresh,
+                # sandbox rebuild, config reapply, WS restart, gateway restart.
+                # We still need to run Python-specific steps below.
+                skip_bash_steps = True
         except Exception as exc:
             logger.warning("Bootstrap update script failed: %s — falling back to Python updater", exc)
 
-    # Fallback: in-process Python update
+    # Python-specific post-update steps (runs regardless of bash script)
     try:
         if not (repo_dir / ".git").exists():
             logger.error("Cannot update: not a git repository.")

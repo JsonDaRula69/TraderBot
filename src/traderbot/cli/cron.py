@@ -393,6 +393,7 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
+            logger.warning("openclaw cron list returned %d: %s", result.returncode, result.stderr.strip())
             return removed
         raw = result.stdout.strip()
         brace = raw.find("\n{")
