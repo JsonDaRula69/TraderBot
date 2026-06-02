@@ -44,6 +44,15 @@ class EnvKalshiConfig(BaseSettings):
     def resolve_private_key(self) -> SecretStr | None:
         if self.private_key_pem is not None:
             return self.private_key_pem
+        if self.private_key_path is not None:
+            try:
+                pem = self.private_key_path.read_text()
+                return SecretStr(pem)
+            except (FileNotFoundError, OSError):
+                from traderbot.paths import get_data_dir
+                alt = get_data_dir() / self.private_key_path.name
+                if alt.exists():
+                    return SecretStr(alt.read_text())
         return None
 
 

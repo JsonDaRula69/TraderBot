@@ -657,6 +657,9 @@ def get_news_summary(
         where_clause = {"$and": conditions}
 
     col_dim = _collection_dim(vs, collection_name)
+    if col_dim == 0:
+        logger.debug("Collection '%s' is empty — returning empty summary", collection_name)
+        return []
 
     # If semantic query, try Voyage embed
     query_embedding: list[float] | None = None
