@@ -37,18 +37,26 @@ def register_commands(parent_app: typer.Typer) -> None:
         console = Console()
 
         def _scan_once() -> list[dict[str, object]]:
-            try:
-                from traderbot.kalshi.client import KalshiClient
+            import time as _time
+            for attempt in range(3):
+                try:
+                    from traderbot.kalshi.client import KalshiClient
 
-                client = KalshiClient()
-                service = MarketService(client)
-                if category is not None:
-                    result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
-                else:
-                    result = asyncio.run(service.list_markets(limit=limit))
-                return [m.model_dump(mode="json") for m in result.markets]
-            except Exception:
-                return []
+                    client = KalshiClient()
+                    service = MarketService(client)
+                    if category is not None:
+                        result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+                    else:
+                        result = asyncio.run(service.list_markets(limit=limit))
+                    if result.markets or attempt == 2:
+                        return [m.model_dump(mode="json") for m in result.markets]
+                    logger.warning("Scan returned empty, retrying (attempt %d/3)", attempt + 1)
+                    _time.sleep(5)
+                except Exception:
+                    if attempt == 2:
+                        return []
+                    _time.sleep(5)
+            return []
 
         if continuous:
             import time
