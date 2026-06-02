@@ -4,11 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "traderbot"
-version = "0.10.18"
+dynamic = ["version"]
 description = "Autonomous prediction market investment toolkit for Kalshi"
 readme = "README.md"
-license = "MIT"
+license = { text = "MIT" }
 requires-python = ">=3.12,<3.13"
+keywords = ["kalshi", "prediction-markets", "trading", "ai-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "httpx>=0.27",
     "websockets>=13.0",
@@ -28,6 +37,15 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JsonDaRula69/TraderBot"
+Repository = "https://github.com/JsonDaRula69/TraderBot"
+"Bug Tracker" = "https://github.com/JsonDaRula69/TraderBot/issues"
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>\\d+\\.\\d+\\.\\d+)"
 
 [project.optional-dependencies]
 dev = [
