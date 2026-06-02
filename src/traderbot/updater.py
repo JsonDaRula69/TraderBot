@@ -273,6 +273,24 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
             logger.error("Cannot update: not a git repository.")
             return False
 
+        # Backup all profile databases before update
+        import shutil
+        data_dir = Path.home() / ".traderbot"
+        backup_dir = data_dir / ".update_backup"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        for f in data_dir.rglob("*.db"):
+            rel = f.relative_to(data_dir)
+            dest = backup_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, dest)
+            logger.info("Backed up %s to %s", f, dest)
+        # Clean backups older than 30 days
+        import time as _time
+        cutoff = _time.time() - 2592000
+        for f in backup_dir.rglob("*"):
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink()
+
         if verify_signature and not dev:
             latest_result = fetch_latest_version()
             if latest_result is not None:

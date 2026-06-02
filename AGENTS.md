@@ -134,6 +134,23 @@ def test_kalshi_config_loads_from_env():
 - Always test the credential-gated path gracefully: if `.env` is missing a key, the test should `pytest.skip("KALSHI_API_KEY not set")` rather than fail
 - The `integration_conftest.py` at `tests/integration_conftest.py` provides session-scoped fixtures (`temp_traderbot_env`) that parse credentials and set up a temporary environment — use it for tests that need real Kalshi API access
 
+## Database Integrity
+
+Profile-specific SQLite databases contain all trade positions, decisions, and performance data. Loss or corruption directly breaks agent trading.
+
+**Protection rules:**
+- **Never clobber or empty a profile DB**. If a profile's DB path changes (profile rename, re-assign), the old DB must be preserved — never overwritten.
+- **Backup before update** — `traderbot update` now automatically backs up all `~/.traderbot/*.db` files to `~/.traderbot/.update_backup/` before any update action. Backups older than 30 days are pruned.
+- **Profile DB paths are deterministic**: `get_data_dir() / "paper-{profile_name}" / "db" / "decisions.db"`. Never use a raw `traderbot.db` path when a profile is active — `_resolve_db_path()` redirects to profile-specific DBs.
+- **When a profile rename or migration is detected**, verify the new DB path is empty before writing: if the old DB has data and the new path has 0 positions, warn and offer to copy.
+- **Manual recovery**: If data is lost, check `~/.traderbot/.update_backup/` for the last backup, or parse SESSION-STATE.md on the agent's workspace for trade logs.
+
+**DB layout:**
+- `~/.traderbot/traderbot.db` — global DB (used when no profile is active)
+- `~/.traderbot/paper-{profile_name}/db/decisions.db` — profile-specific paper DB
+- `~/.traderbot/.update_backup/*.db` — auto-backups from update
+- `~/.openclaw/workspace/weather/.traderbot/` — sandbox workspace copy (mirrors host decisions.db)
+
 ## Idempotency
 
 All setup and registration operations MUST be idempotent — safe to run twice without side effects or duplication.
