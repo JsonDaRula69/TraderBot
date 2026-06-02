@@ -191,6 +191,8 @@ def main() -> None:
         pem_path = Path(priv)
         if pem_path.exists():
             priv = pem_path.read_text().strip()
+        else:
+            priv = priv.replace("\\n", "\n").strip()
         return (api_key.get_secret_value(), priv)
 
     creds = loop.run_until_complete(_resolve_creds())
