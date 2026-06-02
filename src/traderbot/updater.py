@@ -30,10 +30,10 @@ def get_current_version() -> str:
     repo_dir = Path(__file__).resolve().parent.parent.parent
     version_file = repo_dir / "VERSION"
     if version_file.exists():
-        return version_file.read_text().strip()
+        return version_file.read_text().strip().lstrip("v")
     try:
         from importlib.metadata import version
-        return version("traderbot")
+        return version("traderbot").lstrip("v")
     except Exception:
         return "0.0.0"
 
