@@ -831,6 +831,23 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         executed = [d for d in decisions if d.outcome == "executed"]
 
+        # Compute cost of open positions (paper mode balance tracking)
+        from traderbot.profiles.runtime import get_current_profile as _get_profile
+        _prof = _get_profile()
+        _remaining = None
+        _cost_at_risk = 0
+        if _prof and _prof.paper_mode and _prof.initial_balance_cents:
+            from traderbot.db.positions import list_all as _list_positions
+            from traderbot.db import get_connection as _get_conn
+            try:
+                _pos_db = _resolve_db_path(None)
+                with _get_conn(_pos_db) as _conn:
+                    _open = _list_positions(_conn)
+                    _cost_at_risk = sum(p.avg_price * p.quantity for p in _open if p.settlement_result is None)
+                _remaining = _prof.initial_balance_cents - _cost_at_risk
+            except Exception:
+                pass
+
         trade_count = len(executed)
         total_pnl = 0
         if trade_count > 0:
@@ -856,6 +873,8 @@ def register_commands(parent_app: typer.Typer) -> None:
             "trade_count": trade_count,
             "total_pnl_cents": total_pnl,
             "win_rate": win_rate,
+            "open_position_cost_cents": _cost_at_risk,
+            "remaining_balance_cents": _remaining,
             "date_range": {"from": from_date, "to": to_date},
         }
 
@@ -869,6 +888,8 @@ def register_commands(parent_app: typer.Typer) -> None:
         table.add_row("Total Trades", str(trade_count))
         table.add_row("Total P&L", f"${total_pnl / 100:.2f}")
         table.add_row("Win Rate", f"{win_rate:.1%}" if win_rate is not None else "\u2014")
+        table.add_row("Cost at Risk", f"${_cost_at_risk / 100:.2f}¢" if _remaining is not None else "\u2014")
+        table.add_row("Remaining Balance", f"${_remaining / 100:.2f}" if _remaining is not None else "\u2014")
         if from_date or to_date:
             table.add_row("Period", f"{from_date or 'start'} \u2014 {to_date or 'now'}")
         console.print(table)
