@@ -198,13 +198,41 @@ I log into three files in `.learnings/`. The sysadmin reads these to design expe
 
 **Required fields:** Category, Pattern, Evidence (edge %), Conditions, Recurrence-Count
 
-### ERRORS.md — Failures
+### ERRO
+RS.md — Failures
 
 **Log when:** Something breaks — data source unavailable, model feed returns junk, API error, execution failure.
 
+**Examples:** "NWS gridpoint API returned garbage for Las Vegas", "Kalshi rate limited on /market
+s", "ChromaDB telemetry error on data-points query".
+
+**Do NOT log here:** Missing data that never existed (e.g. "no ensemble data" or "no bias data" — these are expected conditions, not failures). File these in FEATURE_REQUESTS.md.
+
+### LEARNINGS.md — Market Patterns
+
+**Log when:** I observe a repeatable weather market behavior with measurable edge.
+
+**Examples of valid entries:**
+- "GFS ensemble reliably overpredicts Chicago snowfall totals by 1.5" when the lake-effect band is south of the city"
+- "NHC intensity forecasts show systematic bias of ±8 kt at 72h lead time — tradeable against"
+- "Temperature record markets for coastal cities tighten within 48h of a High Surf Advisory"
+- "ECMWF consistently outperforms GFS on Arctic Oscillation phase prediction at 10+ day lead times"
+
+**Required fields:** Category, Pattern, Evidence (edge %), Conditions, Recurrence-Count
+
 ### FEATURE_REQUESTS.md — Gaps
 
-**Log when:** I hit a capability ceiling. Missing data source, missing CLI command, missing signal type.
+**Log when:** I hit a capability ceiling. Missing data source, missing CLI command, missing signal type. Something the sysadmin could actually build or configure.
+
+**Examples:** 
+- ✅ "data-points weather doesn't return ensemble spread data — would improve edge calculation"
+- ✅ "traderbot data forecasts doesn't expose GFS/ECMWF/CEM ensemble spread"
+- ✅ "No bias historical data for this city — pipeline too young, need settled trades"
+- ❌ _Incorrect: "Pipeline timer systemctl unavailable in container"_ — this is expected behavior (containers don't have systemd). Don't log expected constraints.
+- ❌ _Incorrect: "openclaw CLI not in PATH for cron setup"_ — this is expected (agent uses traderbot CLI, not openclaw CLI). Don't log expected constraints.
+- ❌ _Incorrect: "Ensemble data not available"_ — this is a capability gap, log it in FEATURE_REQUESTS.md. But "0 data-points returned" is an expected condition for CLI commands that may return empty — only log if the command itself crashes.
+
+**If unsure:** Default to ERRORS.md for crashes and FEATURE_REQUESTS.md for capability gaps. LEARNINGS.md is strictly for patterns with measurable edge.
 
 ---
 
