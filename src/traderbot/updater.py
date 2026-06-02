@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 import sys
+import time as _time
 from pathlib import Path
 
 import httpx
@@ -50,7 +51,7 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
     if cache_path.exists():
         try:
             cached = json.loads(cache_path.read_text())
-            age = __import__("time").time() - cached.get("ts", 0)
+            age = _time.time() - cached.get("ts", 0)
             if age < cache_ttl_seconds and "tag" in cached and "url" in cached:
                 return cached["tag"], cached["url"]
         except Exception:
@@ -67,7 +68,7 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
         result = (tag.lstrip("v"), data.get("zipball_url", ""))
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps({"tag": result[0], "url": result[1], "ts": __import__("time").time()}))
+            cache_path.write_text(json.dumps({"tag": result[0], "url": result[1], "ts": _time.time()}))
             cache_path.chmod(0o600)
         except Exception:
             pass
@@ -89,7 +90,7 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
             try:
                 CACHE_DIR.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(
-                    json.dumps({"tag": current, "url": "", "ts": __import__("time").time()})
+                    json.dumps({"tag": current, "url": "", "ts": _time.time()})
                 )
                 cache_path.chmod(0o600)
             except Exception:
@@ -102,18 +103,60 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
 def check_for_updates(
     silent: bool = False,
     force: bool = False,
-    check_interval_minutes: int = 60,
+    check_interval_minutes: int | None = None,
     dev: bool = False,
 ) -> dict | None:
+    """Check for newer releases, respecting configured interval and rate-limit cache.
+
+    Loads ``UpdateConfig`` internally. Respects *check_interval_minutes* by
+    tracking the last-check time in an interval marker file — subsequent calls
+    within the interval return ``None`` (no-op) unless *force* is ``True``.
+
+    The actual version fetch itself is cached (``fetch_latest_version``) with a TTL
+    equal to *check_interval_minutes*, so the GitHub API is hit at most once per
+    interval regardless of how many callers fire.
+    """
+    from traderbot.update_config import UpdateConfig
+
+    config = UpdateConfig.load()
+    if not config.enabled and not force:
+        return None
+
+    interval_minutes = check_interval_minutes if check_interval_minutes is not None else config.check_interval_minutes
+
+    # Interval guard: skip if we checked recently (unless forced)
+    interval_marker = CACHE_DIR / ".update_check_ts"
+    if not force and interval_marker.exists():
+        try:
+            last_check = float(interval_marker.read_text().strip())
+            if _time.time() - last_check < interval_minutes * 60:
+                return None
+        except Exception:
+            pass
+
     current = get_current_version().lstrip("v")
-    latest = fetch_latest_version()
+    latest = fetch_latest_version(cache_ttl_seconds=interval_minutes * 60)
     if latest is None:
         return None
+
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        interval_marker.write_text(str(_time.time()))
+    except Exception:
+        pass
+
     latest_ver, url = latest
     if _version_tuple(latest_ver) > _version_tuple(current) or force:
         if not silent:
             print(f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update.")
-        return {"current": current, "latest": latest_ver, "url": url}
+        result: dict = {"current": current, "latest": latest_ver, "url": url}
+
+        if config.auto_apply and not silent:
+            if apply_update(dev=dev):
+                logger.info("Auto-update applied: v%s → v%s", current, latest_ver)
+            else:
+                logger.warning("Auto-update failed: v%s → v%s", current, latest_ver)
+        return result
     return None
 
 

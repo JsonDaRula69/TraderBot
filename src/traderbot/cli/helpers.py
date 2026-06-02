@@ -145,7 +145,7 @@ def _check_updates_on_startup() -> None:
         if not config.enabled or not config.check_on_startup:
             return
 
-        result = check_for_updates(check_interval_minutes=config.check_interval_minutes)
+        result = check_for_updates()
         if result:
             Console().print(
                 f"[dim]Update available: v{result['current']} → v{result['latest']}. "
