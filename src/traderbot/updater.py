@@ -38,7 +38,24 @@ def get_current_version() -> str:
         return "0.0.0"
 
 
-def fetch_latest_version() -> tuple[str, str] | None:
+def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | None:
+    """Fetch latest release version from GitHub, cached locally to avoid 403 rate limits.
+
+    Caches the result to ``CACHE_DIR / .update_cache.json`` for *cache_ttl_seconds*
+    (default 1 hour). Subsequent calls within the TTL return the cached value
+    without hitting the GitHub API — preventing unauthenticated rate-limit
+    exhaustion (60 req/hour per IP).
+    """
+    cache_path = CACHE_DIR / ".update_cache.json"
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text())
+            age = __import__("time").time() - cached.get("ts", 0)
+            if age < cache_ttl_seconds and "tag" in cached and "url" in cached:
+                return cached["tag"], cached["url"]
+        except Exception:
+            pass
+
     url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     try:
         resp = httpx.get(url, timeout=15)
@@ -47,8 +64,23 @@ def fetch_latest_version() -> tuple[str, str] | None:
         tag = data.get("tag_name", "")
         if not tag or not tag.startswith("v"):
             return None
-        return tag.lstrip("v"), data.get("zipball_url", "")
+        result = (tag.lstrip("v"), data.get("zipball_url", ""))
+        try:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps({"tag": result[0], "url": result[1], "ts": __import__("time").time()}))
+            cache_path.chmod(0o600)
+        except Exception:
+            pass
+        return result
     except Exception as exc:
+        if "403" in str(exc) and cache_path.exists():
+            try:
+                stale = json.loads(cache_path.read_text())
+                if "tag" in stale and "url" in stale:
+                    logger.warning("GitHub API rate limited — using cached version info")
+                    return stale["tag"], stale["url"]
+            except Exception:
+                pass
         logger.warning("Failed to fetch latest version: %s", exc)
         return None
 
