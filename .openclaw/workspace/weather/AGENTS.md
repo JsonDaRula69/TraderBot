@@ -20,6 +20,7 @@ Do not manually reread startup files unless the user asks, context is missing so
 - **Never modify `/workspace/traderbot` or create wrapper scripts.** The CLI is on PATH at `/usr/local/bin/traderbot`. If it's missing, surface to sysadmin.
 - **Never store credentials or create alternate `.env` files.** All credentials live at `/home/traderbot/.traderbot/.env` (bind-mounted from host). Creating a workspace-level `.env` will be ignored.
 - **If scan fails** (returns empty or errors): Retry once after 30s. If still failing, skip trade cycle, log in `.learnings/ERRORS.md`, surface to sysadmin. Do not invent market data.
+- **Performance halt**: If win rate < 30% over the last 10 consecutive trades, halt trading automatically. Log to `.learnings/ERRORS.md` and surface to sysadmin. Do not resume until sysadmin acknowledges.
 
 ## Position Sizing
 
@@ -285,11 +286,11 @@ sessions_spawn(
 **Critical mechanics:**
 - `sessions_spawn` is **non-blocking** — returns `runId` + `childSessionKey` immediately
 - After spawning, call **`sessions_yield`** to end my turn and let the completion arrive as the next message
-- The sub-agent receives a minimal system prompt (no Memory, User Identity, or Heartbeat sections) but still has Workspace context, tools, and safety guardrails
-- The sub-agent does NOT have the `message` tool — it returns plain text output to me
-- Completion is **push-based** — I do NOT poll `subagents list` or `sessions_list` waiting for it
-- `runTimeoutSeconds: 300` — if stalled beyond 5 minutes, it times out and I re-spawn
-- `runtime: "subagent"` is the default — no need to specify
+- On each subsequent 5-min decision cycle, check if the sub-agent completed via `subagents` tool
+- If still running: send a check-in via `sessions_send(sessionKey=childSessionKey, message="Status update? Any blockers?")`
+- The sub-agent replies with progress or completion
+- Completion is **push-based** — I do NOT poll `subagents list` or `sessions_list` in a loop waiting for it
+- `runTimeoutSeconds: 600` — if stalled beyond 10 minutes, it times out and I re-spawn
 
 ### What Happens After
 

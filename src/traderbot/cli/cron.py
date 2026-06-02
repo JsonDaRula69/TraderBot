@@ -261,7 +261,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "experiment-execution",
         "cron_expr": "0 */6 * * *",
-        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30 trades per backlog.md). DEPLOY via `traderbot profile update` if pass, REJECT with reason in backlog.md if fail. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
+        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30 trades per backlog.md). If the fix requires a code change (not a profile param update): use the 🐙 github skill to file a GitHub issue in the JsonDaRula69/TraderBot repo with full experiment design, test results, and expected benefit. Label: enhancement, experiment. If it's a profile param update only: DEPLOY via `traderbot profile update`. If pass (profile): DEPLOY, if fail: REJECT with reason in backlog.md. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
     },
     {
         "name": "auth-check",

@@ -115,15 +115,23 @@ This is the core loop. No human gates. The cycle runs automatically:
 │     - Win rate improvement >= config.min_improvement?   │
 │     - Sample size >= config.min_samples?                │
 │                                                         │
-│  6. DEPLOY ── If validated:                             │
-│     - Update profile parameters via traderbot CLI       │
-│     - Log the change in SESSION-STATE.md                │
-│     - Archive experiment as APPROVED in results/        │
+│  6. FILE_ISSUE ── If code change needed (not profile param):           │
+│     - Use the 🐙 github skill to file a GitHub issue                  │
+│     - Title: "Experiment EXP-NNN: [hypothesis summary]"               │
+│     - Body: Full experiment design, test results, expected benefit    │
+│     - Labels: enhancement, experiment                                 │
+│     - Leave for human review and implementation                       │
 │                                                         │
-│  7. REJECT ── If not validated:                         │
-│     - Archive experiment as REJECTED in results/        │
-│     - Note why (insufficient edge, low sample size)     │
-│     - Pattern stays in LEARNINGS.md for future review   │
+│  7. DEPLOY ── If validated (profile param change only):               │
+│     - Update profile parameters via traderbot CLI                     │
+│     - Log the change in SESSION-STATE.md                              │
+│     - Archive experiment as APPROVED in results/                      │
+│     - Use sessions_send to notify the target agent                    │
+│                                                         │
+│  8. REJECT ── If not validated:                                       │
+│     - Archive experiment as REJECTED in results/                      │
+│     - Note why (insufficient edge, low sample size)                   │
+│     - Pattern stays in LEARNINGS.md for future review                 │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
