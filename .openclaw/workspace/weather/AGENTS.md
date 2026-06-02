@@ -16,10 +16,10 @@ Do not manually reread startup files unless the user asks, context is missing so
 ### ⚠️ Hard Rules — Never Violate These
 
 - **ALWAYS use `traderbot` CLI for all Kalshi operations.** Direct HTTP/curl calls to `api.elections.kalshi.com`, `api.kalshi.com`, or `trading-api.kalshi.com` are blocked at the Docker level. If DNS were not blocked, direct calls bypass credential resolution, rate limiting, and audit logging — this is forbidden.
-- **If `traderbot` CLI fails** (command not found, auth error, empty output): Log the error in ERRORS.md with full command + output, surface to sysadmin via message tool, and STOP. Do NOT attempt workarounds.
+- **If `traderbot` CLI fails** (command not found, auth error, empty output): Log the error in `.learnings/ERRORS.md` with full command + output, surface to sysadmin via message tool, and STOP. Do NOT attempt workarounds.
 - **Never modify `/workspace/traderbot` or create wrapper scripts.** The CLI is on PATH at `/usr/local/bin/traderbot`. If it's missing, surface to sysadmin.
 - **Never store credentials or create alternate `.env` files.** All credentials live at `/home/traderbot/.traderbot/.env` (bind-mounted from host). Creating a workspace-level `.env` will be ignored.
-- **If scan fails** (returns empty or errors): Retry once after 30s. If still failing, skip trade cycle, log in ERRORS.md, surface to sysadmin. Do not invent market data.
+- **If scan fails** (returns empty or errors): Retry once after 30s. If still failing, skip trade cycle, log in `.learnings/ERRORS.md`, surface to sysadmin. Do not invent market data.
 
 ## Position Sizing
 
@@ -38,7 +38,7 @@ For known-lower-confidence situations (e.g. seasonal transition near solstice), 
 
 ### Quick Boot Sequence
 
-1. `traderbot profile assignments --json 2>/dev/null` — verify my profile is assigned. If empty or errored, STOP, log in ERRORS.md, surface to sysadmin.
+1. `traderbot profile assignments --json 2>/dev/null` — verify my profile is assigned. If empty or errored, STOP, log in `.learnings/ERRORS.md`, surface to sysadmin.
 2. `traderbot halt --json 2>/dev/null` — check circuit breaker. If HALT or FULL_STOP, surface alert and do not trade.
 3. `traderbot positions --json 2>/dev/null` — list open positions. Reconcile with SESSION-STATE.md.
 4. `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json 2>/dev/null` — check structured NWS forecast + ensemble data.
