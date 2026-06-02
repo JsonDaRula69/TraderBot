@@ -380,13 +380,8 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
 ]
 
 # ── Helper: remove cron jobs by agent prefix ─────────────────────────────
-def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
-    """Remove all cron jobs whose name starts with ``<agent_id>-``.
-
-    ``openclaw cron remove`` requires a job ID, not a name.  This helper
-    fetches the full job list by ID, finds matching jobs, and removes by ID.
-    Returns the list of removed job names.
-    """
+def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
+    """Remove all cron jobs whose name starts with ``<agent_id>-`` (or exact match)."""
     import json as _cjson
     import subprocess
 
@@ -400,7 +395,6 @@ def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
         if result.returncode != 0:
             return removed
         raw = result.stdout.strip()
-        # Strip any "Update available: ..." banner that breaks JSON parse
         brace = raw.find("\n{")
         if brace >= 0:
             raw = raw[brace + 1:]
@@ -417,12 +411,14 @@ def _remove_cron_jobs_by_name(agent_id: str) -> list[str]:
         for job in jobs:
             jname = job.get("name", "")
             jid = job.get("id", "")
-            if jname.startswith(prefix) and jid:
-                subprocess.run(
-                    ["openclaw", "cron", "remove", jid],
-                    capture_output=True, timeout=10,
-                )
-                removed.append(jname)
+            if jid:
+                if exact:
+                    if jname == agent_id:
+                        subprocess.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
+                        removed.append(jname)
+                elif jname.startswith(prefix):
+                    subprocess.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
+                    removed.append(jname)
     except Exception:
         pass
     return removed
@@ -469,8 +465,11 @@ def cron_setup_heartbeat_tasks(
 
     jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
     for job in jobs:
+        job_name = f"{agent_id}-{job['name']}"
+        # Remove any existing job with this name before re-adding (avoids duplicates)
+        _remove_cron_jobs_by_name(job_name, exact=True)
         args = [
-            "--name", f"{agent_id}-{job['name']}",
+            "--name", job_name,
             "--cron", job["cron_expr"],
             "--session", "isolated",
             "--message", job["message"],
