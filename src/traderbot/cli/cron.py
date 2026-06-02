@@ -16,6 +16,11 @@ from rich.console import Console
 
 from traderbot.cli.helpers import _SUDO, _SCHTASKS, _SYSTEMCTL, err_console
 
+# Ensure openclaw CLI is on PATH (npm global bin not inherited by subprocesses)
+_npm_global = str(Path(os.environ.get("HOME", "")) / ".npm-global" / "bin")
+if _npm_global not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = f"{_npm_global}:{os.environ.get('PATH', '')}"
+
 cron_app = typer.Typer(name="cron", help="Register cron loops and heartbeat with OpenClaw.")
 
 
