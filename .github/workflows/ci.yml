@@ -48,14 +48,11 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev
-
       - name: Lint with ruff
-        run: uv run ruff check src/ --exit-zero
+        run: uvx --with ruff ruff check src/ --exit-zero
 
       - name: Check formatting with ruff
-        run: uv run ruff format src/traderbot --check
+        run: uvx --with ruff ruff format src/traderbot --check
 
   unit:
     name: Unit tests
