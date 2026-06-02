@@ -437,10 +437,21 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         async def _check() -> dict:
-            client = KalshiClient()
-            portfolio = PortfolioService(client)
-            settlements = await portfolio.get_settlements()
-            await client.close()
+            try:
+                client = KalshiClient()
+                portfolio = PortfolioService(client)
+                settlements = await portfolio.get_settlements()
+                await client.close()
+            except Exception as exc:
+                err_msg = str(exc)
+                if "401" in err_msg or "Invalid or revoked token" in err_msg:
+                    logger.error("Settlements API 401 — Kalshi session token is invalid or revoked")
+                    return {
+                        "checked": 0, "updated": 0, "positions": [],
+                        "error": "Settlements API 401 — run 'traderbot auth set-kalshi' to refresh credentials",
+                    }
+                logger.error("Settlements check failed: %s", exc)
+                return {"checked": 0, "updated": 0, "positions": [], "error": err_msg}
 
             updated_positions: list[dict] = []
             checked = 0
