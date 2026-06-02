@@ -24,6 +24,7 @@ from traderbot.auth import get_credential
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
 from traderbot.paths import get_data_dir
+from traderbot.paths import get_data_dir
 
 logging.basicConfig(
     level=logging.INFO,
