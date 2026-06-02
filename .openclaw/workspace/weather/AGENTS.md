@@ -168,7 +168,7 @@ The WS daemon is always on (systemd service). You never need to start or stop it
 | 6. BIAS_CHECK | `traderbot data bias <CITY> --days 90 --json` — check if NWS has been over/under-predicting for this city recently. If 0 comparisons returned, this is expected for new pipelines — bias data comes from settled trades (forecast vs actual), not from backfill. Skip bias adjustment and use raw forecast. |
 | 7. ANALYZE_CANDIDATES | For promising contracts: `traderbot analyze <TICKER> --json` |
 | 8. NEWS_CHECK | `traderbot news-context weather --json` — filter for NOAA/NWS only |
-| 9. TRADE_OR_WAIT | If risk pipeline passes and edge >= profile threshold → trade. Wait. |
+| 9. TRADE_OR_WAIT | Authoritative source: `traderbot halt --json`. If `level > 0` or `can_trade == false`, skip. Do NOT compute drawdown from cost basis — committed capital ≠ realized losses. |
 | 10. LOG | Every decision in SESSION-STATE.md — whether I traded or not |
 
 ### High-Impact Event Cadence
