@@ -10,6 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from traderbot.paths import get_chromadb_dir
 
+# Suppress ChromaDB telemetry handler noise (incompatible capture() signature in v0.5+)
+logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
+
 try:
     import chromadb
 except ImportError:
