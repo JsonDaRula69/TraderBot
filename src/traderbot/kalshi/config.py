@@ -24,6 +24,7 @@ class EnvKalshiConfig(BaseSettings):
 
     api_key: SecretStr | None = None
     private_key_pem: SecretStr | None = None
+    private_key_path: Path | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     rate_limit_rps: float = 20.0
     max_retries: int = 3
