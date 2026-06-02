@@ -30,11 +30,11 @@ export PATH="${HOME}/.npm-global/bin:/usr/local/bin:${PATH}"
 cd "$REPO_DIR"
 echo "  Pulling latest code from $_BRANCH..."
 git stash --include-untracked 2>/dev/null || true
-git pull origin "$_BRANCH" 2>&1
+git pull origin "$_BRANCH"
 
 # ── Step 2: pip install ──────────────────────────────────────────────────
 echo "  Reinstalling traderbot package..."
-"$PYTHON" -m pip install -e . 2>&1
+"$PYTHON" -m pip install -e .
 
 # ── Step 3: Refresh workspace files ──────────────────────────────────────
 echo "  Refreshing agent workspace files..."
@@ -67,7 +67,7 @@ fi
 if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
     if [[ -x "install/docker/build-sandbox.sh" ]]; then
         echo "  Rebuilding Docker sandbox image..."
-        bash "install/docker/build-sandbox.sh" 2>&1 || echo "  Warning: sandbox rebuild failed." >&2
+        bash "install/docker/build-sandbox.sh" || echo "  Warning: sandbox rebuild failed." >&2
     fi
 fi
 

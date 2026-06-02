@@ -259,7 +259,7 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
             flag = "--dev" if dev else ""
             result = subprocess.run(
                 ["bash", str(bootstrap), flag],
-                capture_output=True, timeout=600,
+                timeout=600,
             )
             if result.returncode == 0:
                 logger.info("Bootstrap update script completed successfully")
