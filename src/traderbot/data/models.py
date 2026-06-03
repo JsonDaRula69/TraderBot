@@ -80,3 +80,4 @@ class TradingSignal(BaseModel):
     model_consensus: float = Field(ge=0.0, le=1.0)
     bias_adjustment: float
     reasoning: str
+    phantom_edge_flag: str | None = None
