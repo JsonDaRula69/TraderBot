@@ -72,8 +72,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run unit tests
-        shell: bash
-        run: . .venv/bin/activate && python -m pytest -m "unit" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen python -m pytest -m "unit" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -103,8 +102,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests (not live)
-        shell: bash
-        run: . .venv/bin/activate && python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -133,8 +131,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run live tests
-        shell: bash
-        run: . .venv/bin/activate && python -m pytest -m "live" --timeout=60 -x
+        run: uv run --frozen python -m pytest -m "live" --timeout=60 -x
         env:
           KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
           KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
