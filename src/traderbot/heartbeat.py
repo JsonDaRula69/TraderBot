@@ -613,5 +613,5 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
 {alert_lines}
 """
 
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     logger.info("Heartbeat written to %s", path)

@@ -161,11 +161,11 @@ class FilesystemSandbox:
         On Windows, this is a no-op; NTFS ACLs handle this separately
         via the icacls command (not yet implemented).
         """
-        if sys.platform == "win32":
-            return
-
         if not self._src_root.exists():
             raise FileNotFoundError(f"Source root not found: {self._src_root}")
+
+        if sys.platform == "win32":
+            return
 
         for path in self._src_root.rglob("*"):
             with contextlib.suppress(OSError):

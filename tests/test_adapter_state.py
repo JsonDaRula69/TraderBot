@@ -78,7 +78,7 @@ class TestResolveStatePath:
 
     def test_default_path(self) -> None:
         result = resolve_state_path()
-        assert str(result).endswith(".traderbot/adaptation_state.json")
+        assert result.as_posix().endswith(".traderbot/adaptation_state.json")
         assert Path(result).is_absolute()
 
 

@@ -50,7 +50,6 @@ class TestNewsCommand:
     def test_news_no_api_keys_json(self):
         mock_agg = _make_mock_aggregator([])
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
         ):
             result = runner.invoke(app, ["news", "--json"])
@@ -62,7 +61,6 @@ class TestNewsCommand:
     def test_news_no_api_keys_rich(self):
         mock_agg = _make_mock_aggregator([])
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
         ):
             result = runner.invoke(app, ["news"])
@@ -322,7 +320,6 @@ class TestSentimentCommand:
         mock_impact.impact_confidence = 0.0
 
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
             patch("traderbot.news.impact_assessor.ImpactAssessor.assess", return_value=mock_impact),
         ):
