@@ -711,6 +711,7 @@ class TestTrade:
         """With mocked MarketService returning realistic data, trade should pass liquidity and edge checks."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
         from traderbot.paper import PaperBalance
+        from traderbot.profiles.models import TradingProfile
 
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
@@ -728,20 +729,23 @@ class TestTrade:
         )
         portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
 
+        profile = TradingProfile(
+            name="test",
+            mode="paper",
+            description="Test profile",
+            risk_multiplier=1.0,
+            max_position_per_market_pct=0.5,
+            max_daily_loss_pct=0.2,
+            max_drawdown_pct=0.5,
+            max_open_positions=10,
+            min_liquidity_threshold=1,
+            min_edge_pct=0.01,
+            initial_balance_cents=100000,
+        )
+
         with (
-            patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
-            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(
-                paper_mode=True,
-                initial_balance_cents=100000,
-                risk_multiplier=1.0,
-                is_category_enabled=MagicMock(return_value=True),
-                max_position_per_market_pct=0.05,
-                max_daily_loss_pct=0.02,
-                max_drawdown_pct=0.10,
-                max_open_positions=5,
-                min_liquidity_threshold=100000,
-                min_edge_pct=0.01,
-            )),
+            patch("traderbot.profiles.runtime.get_current_profile", return_value=profile),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
