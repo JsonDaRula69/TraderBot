@@ -500,7 +500,7 @@ class TestHeartbeatCycle:
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         assert hb_path.exists()
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "Heartbeat:" in content
         assert "Performance" in content
         assert "Adaptation" in content
@@ -518,7 +518,7 @@ class TestHeartbeatCycle:
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         after = datetime.now(UTC)
 
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         ts_line = next(
             line for line in content.split("\n") if line.startswith("## Last Heartbeat:")
         )
@@ -734,7 +734,7 @@ class TestEdgeCases:
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         with patch("traderbot.heartbeat.step_circuit_breaker_check", return_value=mock_cb_result):
             asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "NORMAL" in content
         conn.close()
 
@@ -745,7 +745,7 @@ class TestEdgeCases:
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "Alerts" in content
         conn.close()
 
