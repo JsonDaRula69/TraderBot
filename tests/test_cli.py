@@ -558,6 +558,7 @@ class TestSignals:
 class TestTrade:
     def test_trade_rejected_with_defaults(self):
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -581,6 +582,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
         ):
             result = runner.invoke(
                 app, ["trade", "TEST-TICKER", "--direction", "yes", "--quantity", "1", "--price", "50", "--no-confirm"]
@@ -590,6 +592,7 @@ class TestTrade:
 
     def test_trade_json_output(self):
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -613,6 +616,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
         ):
             result = runner.invoke(
                 app,
@@ -639,6 +643,7 @@ class TestTrade:
     def test_trade_executed(self):
         """Mock evaluate_trade to return non-zero sized amount, verify 'executed' output."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -657,6 +662,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
@@ -671,6 +677,7 @@ class TestTrade:
     def test_trade_executed_json(self):
         """Mock evaluate_trade to return non-zero sized amount, verify JSON output has 'executed'."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -689,6 +696,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
@@ -704,6 +712,7 @@ class TestTrade:
     def test_trade_command_passes_risk_checks_with_live_data(self):
         """With mocked MarketService returning realistic data, trade should pass liquidity and edge checks."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
@@ -722,6 +731,8 @@ class TestTrade:
         portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
 
         with (
+            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
             patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),

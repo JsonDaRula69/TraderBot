@@ -20,10 +20,9 @@ from rich.table import Table
 
 from traderbot.cli.helpers import (
     _python_version_ok,
-    _resolve_db_path,
-    _with_db,
     err_console,
 )
+from traderbot.paths import _resolve_db_path, _with_db
 
 
 def register_commands(parent_app: typer.Typer) -> None:

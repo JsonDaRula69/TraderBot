@@ -15,7 +15,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import _get_strategy, _resolve_db_path, _with_db
+from traderbot.cli.helpers import _get_strategy
+from traderbot.paths import _resolve_db_path, _with_db
 from traderbot.paper import compute_paper_balance
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
@@ -588,7 +589,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         table = Table(title="Positions")
-        table.add_column("Ticker", style="cyan")
+        table.add_column("Ticker", style="cyan", no_wrap=True)
         table.add_column("Side")
         table.add_column("Quantity", justify="right")
         table.add_column("Avg Price", justify="right")
