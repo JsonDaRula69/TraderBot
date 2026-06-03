@@ -31,10 +31,16 @@ def check_position_limit(
     order_value_cents: int,
     portfolio_value_cents: int,
     *,
+    per_ticker_position_value_cents: int | None = None,
     limits: dict[str, float | int] | MappingProxyType | None = None,
 ) -> RiskCheckResult:
     effective = limits if limits is not None else HARD_LIMITS
-    total = current_position_value_cents + order_value_cents
+    effective_current = (
+        per_ticker_position_value_cents
+        if per_ticker_position_value_cents is not None
+        else current_position_value_cents
+    )
+    total = effective_current + order_value_cents
     limit_value = portfolio_value_cents * effective["max_position_per_market_pct"]
     limit_pct = effective["max_position_per_market_pct"]
     passed = total <= limit_value
@@ -151,6 +157,7 @@ def run_all_checks(
     trade_request: TradeRequest,
     portfolio: PortfolioState,
     *,
+    per_ticker_position_value_cents: int | None = None,
     limits: dict[str, float | int] | MappingProxyType | None = None,
 ) -> list[RiskCheckResult]:
     order_value_cents = trade_request.quantity * trade_request.price_cents
@@ -161,6 +168,7 @@ def run_all_checks(
             portfolio.current_positions_value_cents,
             order_value_cents,
             portfolio.portfolio_value_cents,
+            per_ticker_position_value_cents=per_ticker_position_value_cents,
             limits=limits,
         ),
         check_daily_loss(today_loss, portfolio.portfolio_value_cents, limits=limits),

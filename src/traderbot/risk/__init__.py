@@ -57,6 +57,8 @@ def evaluate_trade(
     portfolio: PortfolioState,
     breaker: CircuitBreaker,
     profile: TradingProfile | None = None,
+    *,
+    per_ticker_position_value_cents: int | None = None,
 ) -> int:
     """Run the full risk gate: circuit breaker → limits → sizing.
 
@@ -65,10 +67,18 @@ def evaluate_trade(
         portfolio: Current portfolio state
         breaker: Circuit breaker instance
         profile: Optional trading profile for profile-aware risk limits
+        per_ticker_position_value_cents: If provided, uses this per-ticker value
+            for the position limit check instead of the aggregate portfolio value.
 
     Returns the sized position in cents (0 if rejected).
     """
-    result = evaluate_trade_full(trade_request, portfolio, breaker, profile)
+    result = evaluate_trade_full(
+        trade_request,
+        portfolio,
+        breaker,
+        profile,
+        per_ticker_position_value_cents=per_ticker_position_value_cents,
+    )
     return result.sized_position_cents
 
 
@@ -77,6 +87,8 @@ def evaluate_trade_full(
     portfolio: PortfolioState,
     breaker: CircuitBreaker,
     profile: TradingProfile | None = None,
+    *,
+    per_ticker_position_value_cents: int | None = None,
 ) -> TradeResult:
     """Run the full risk gate and return both sized position and direction.
 
@@ -126,7 +138,12 @@ def evaluate_trade_full(
     # Intentionally using unsized quantity for conservative position limit check.
     # This may over-reject trades that would pass with the Kelly-sized quantity.
     # Future: consider two-pass — soft check with original qty, hard check with sized qty.
-    results = run_all_checks(trade_request, portfolio, limits=effective_limits)
+    results = run_all_checks(
+        trade_request,
+        portfolio,
+        per_ticker_position_value_cents=per_ticker_position_value_cents,
+        limits=effective_limits,
+    )
     failed = [r for r in results if not r.passed]
     if failed:
         for r in failed:

@@ -17,6 +17,8 @@ from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.risk import TradeResult
 
 runner = CliRunner()
+
+
 class TestMainHelp:
     def test_help_succeeds(self):
         result = runner.invoke(app, ["--help"])
@@ -24,7 +26,20 @@ class TestMainHelp:
         assert "traderbot" in result.output.lower() or "prediction" in result.output.lower()
 
     def test_subcommand_help(self):
-        for cmd in ["scan", "positions", "audit", "trade", "heartbeat", "halt", "backtest", "paper", "performance", "compare", "bootstrap", "learnings"]:
+        for cmd in [
+            "scan",
+            "positions",
+            "audit",
+            "trade",
+            "heartbeat",
+            "halt",
+            "backtest",
+            "paper",
+            "performance",
+            "compare",
+            "bootstrap",
+            "learnings",
+        ]:
             result = runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"{cmd} --help failed: {result.output}"
 
@@ -82,7 +97,10 @@ class TestNewsCommand:
     @pytest.mark.unit
     def test_news_with_mock_items_json(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -114,7 +132,10 @@ class TestNewsCommand:
     @pytest.mark.unit
     def test_news_with_category_filter_json(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -154,7 +175,10 @@ class TestNewsCommand:
     @pytest.mark.unit
     def test_news_with_source_filter_json(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -183,7 +207,10 @@ class TestNewsCommand:
     @pytest.mark.unit
     def test_news_rich_output(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -233,7 +260,10 @@ class TestSentimentCommand:
     @pytest.mark.unit
     def test_sentiment_with_mock_items_json(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -253,9 +283,15 @@ class TestSentimentCommand:
         with (
             patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
-            patch("traderbot.news.impact_assessor.ImpactAssessor.assess", return_value=MagicMock(
-                magnitude=0.7, direction="bullish", timeframe="short", confidence=0.8,
-            )),
+            patch(
+                "traderbot.news.impact_assessor.ImpactAssessor.assess",
+                return_value=MagicMock(
+                    magnitude=0.7,
+                    direction="bullish",
+                    timeframe="short",
+                    confidence=0.8,
+                ),
+            ),
         ):
             result = runner.invoke(app, ["sentiment", "BTC", "--json"])
             assert result.exit_code == 0
@@ -269,7 +305,10 @@ class TestSentimentCommand:
     @pytest.mark.unit
     def test_sentiment_with_mock_items_rich(self):
         from traderbot.kalshi.models import MarketCategory
-        from traderbot.news.sources import NewsItem as SourcesNewsItem, NewsSource as SourcesNewsSource
+        from traderbot.news.sources import (
+            NewsItem as SourcesNewsItem,
+            NewsSource as SourcesNewsSource,
+        )
 
         fake_items = [
             SourcesNewsItem(
@@ -289,9 +328,15 @@ class TestSentimentCommand:
         with (
             patch.dict("os.environ", {"NEWSAPI_KEY": "fake-key"}),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
-            patch("traderbot.news.impact_assessor.ImpactAssessor.assess", return_value=MagicMock(
-                magnitude=0.7, direction="bullish", timeframe="short", confidence=0.8,
-            )),
+            patch(
+                "traderbot.news.impact_assessor.ImpactAssessor.assess",
+                return_value=MagicMock(
+                    magnitude=0.7,
+                    direction="bullish",
+                    timeframe="short",
+                    confidence=0.8,
+                ),
+            ),
         ):
             result = runner.invoke(app, ["sentiment", "BTC"])
             assert result.exit_code == 0
@@ -568,21 +613,71 @@ class TestTrade:
             event_ticker="TEST-EVENT",
         )
         orderbook = OrderBook(yes_bids=[], no_bids=[])
-        portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
+        portfolio = PortfolioState(
+            portfolio_value_cents=100000,
+            peak_value_cents=100000,
+            current_positions_value_cents=0,
+            today_realized_loss_cents=0,
+            today_unrealized_loss_cents=0,
+            open_positions_count=0,
+        )
 
         with (
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
-            patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
-            patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
-            patch("traderbot.kalshi.markets.MarketService.get_portfolio", new=AsyncMock(return_value=portfolio), create=True),
-            patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
-            patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
-            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_market",
+                new=AsyncMock(return_value=market),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_orderbook",
+                new=AsyncMock(return_value=orderbook),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_portfolio",
+                new=AsyncMock(return_value=portfolio),
+                create=True,
+            ),
+            patch(
+                "traderbot.risk.evaluate_trade_full",
+                return_value=TradeResult(sized_position_cents=0, direction="yes"),
+            ),
+            patch(
+                "traderbot.risk.circuit_breaker.CircuitBreaker",
+                return_value=MagicMock(
+                    get_state=MagicMock(return_value=CircuitBreakerState()),
+                    _secret_file=MagicMock(),
+                ),
+            ),
+            patch(
+                "traderbot.profiles.runtime.get_current_profile",
+                return_value=MagicMock(paper_mode=True),
+            ),
+            patch(
+                "traderbot.cli.trade.compute_paper_balance",
+                return_value=PaperBalance(
+                    initial_cents=100000,
+                    cost_at_risk_cents=0,
+                    settled_payout_cents=0,
+                    remaining_cents=100000,
+                    open_position_count=0,
+                ),
+            ),
+            patch("traderbot.cli.trade.position_value_for_ticker", return_value=0),
         ):
             result = runner.invoke(
-                app, ["trade", "TEST-TICKER", "--direction", "yes", "--quantity", "1", "--price", "50", "--no-confirm"]
+                app,
+                [
+                    "trade",
+                    "TEST-TICKER",
+                    "--direction",
+                    "yes",
+                    "--quantity",
+                    "1",
+                    "--price",
+                    "50",
+                    "--no-confirm",
+                ],
             )
             assert result.exit_code == 0
             assert "rejected" in result.output.lower() or "executed" in result.output.lower()
@@ -602,18 +697,57 @@ class TestTrade:
             event_ticker="TEST-EVENT",
         )
         orderbook = OrderBook(yes_bids=[], no_bids=[])
-        portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
+        portfolio = PortfolioState(
+            portfolio_value_cents=100000,
+            peak_value_cents=100000,
+            current_positions_value_cents=0,
+            today_realized_loss_cents=0,
+            today_unrealized_loss_cents=0,
+            open_positions_count=0,
+        )
 
         with (
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
-            patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
-            patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
-            patch("traderbot.kalshi.markets.MarketService.get_portfolio", new=AsyncMock(return_value=portfolio), create=True),
-            patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
-            patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
-            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_market",
+                new=AsyncMock(return_value=market),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_orderbook",
+                new=AsyncMock(return_value=orderbook),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_portfolio",
+                new=AsyncMock(return_value=portfolio),
+                create=True,
+            ),
+            patch(
+                "traderbot.risk.evaluate_trade_full",
+                return_value=TradeResult(sized_position_cents=0, direction="yes"),
+            ),
+            patch(
+                "traderbot.risk.circuit_breaker.CircuitBreaker",
+                return_value=MagicMock(
+                    get_state=MagicMock(return_value=CircuitBreakerState()),
+                    _secret_file=MagicMock(),
+                ),
+            ),
+            patch(
+                "traderbot.profiles.runtime.get_current_profile",
+                return_value=MagicMock(paper_mode=True),
+            ),
+            patch(
+                "traderbot.cli.trade.compute_paper_balance",
+                return_value=PaperBalance(
+                    initial_cents=100000,
+                    cost_at_risk_cents=0,
+                    settled_payout_cents=0,
+                    remaining_cents=100000,
+                    open_position_count=0,
+                ),
+            ),
+            patch("traderbot.cli.trade.position_value_for_ticker", return_value=0),
         ):
             result = runner.invoke(
                 app,
@@ -653,20 +787,61 @@ class TestTrade:
             event_ticker="TEST-EVENT",
         )
         orderbook = OrderBook(yes_bids=[], no_bids=[])
-        portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
+        portfolio = PortfolioState(
+            portfolio_value_cents=100000,
+            peak_value_cents=100000,
+            current_positions_value_cents=0,
+            today_realized_loss_cents=0,
+            today_unrealized_loss_cents=0,
+            open_positions_count=0,
+        )
 
         with (
-            patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
-            patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
-            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch(
+                "traderbot.risk.evaluate_trade_full",
+                return_value=TradeResult(sized_position_cents=5000, direction="yes"),
+            ),
+            patch(
+                "traderbot.risk.circuit_breaker.CircuitBreaker",
+                return_value=MagicMock(
+                    get_state=MagicMock(return_value=CircuitBreakerState()),
+                    _secret_file=MagicMock(),
+                ),
+            ),
+            patch(
+                "traderbot.profiles.runtime.get_current_profile",
+                return_value=MagicMock(paper_mode=True),
+            ),
+            patch(
+                "traderbot.cli.trade.compute_paper_balance",
+                return_value=PaperBalance(
+                    initial_cents=100000,
+                    cost_at_risk_cents=0,
+                    settled_payout_cents=0,
+                    remaining_cents=100000,
+                    open_position_count=0,
+                ),
+            ),
+            patch("traderbot.cli.trade.position_value_for_ticker", return_value=0),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
-            patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
-            patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
-            patch("traderbot.kalshi.markets.MarketService.get_portfolio", new=AsyncMock(return_value=portfolio), create=True),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_market",
+                new=AsyncMock(return_value=market),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_orderbook",
+                new=AsyncMock(return_value=orderbook),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_portfolio",
+                new=AsyncMock(return_value=portfolio),
+                create=True,
+            ),
         ):
-            result = runner.invoke(app, ["trade", "TEST-TICKER", "--direction", "yes", "--no-confirm"])
+            result = runner.invoke(
+                app, ["trade", "TEST-TICKER", "--direction", "yes", "--no-confirm"]
+            )
             assert result.exit_code == 0
             assert "approved" in result.output.lower() or "executed" in result.output.lower()
 
@@ -687,20 +862,61 @@ class TestTrade:
             event_ticker="TEST-EVENT",
         )
         orderbook = OrderBook(yes_bids=[], no_bids=[])
-        portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
+        portfolio = PortfolioState(
+            portfolio_value_cents=100000,
+            peak_value_cents=100000,
+            current_positions_value_cents=0,
+            today_realized_loss_cents=0,
+            today_unrealized_loss_cents=0,
+            open_positions_count=0,
+        )
 
         with (
-            patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
-            patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
-            patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch(
+                "traderbot.risk.evaluate_trade_full",
+                return_value=TradeResult(sized_position_cents=5000, direction="yes"),
+            ),
+            patch(
+                "traderbot.risk.circuit_breaker.CircuitBreaker",
+                return_value=MagicMock(
+                    get_state=MagicMock(return_value=CircuitBreakerState()),
+                    _secret_file=MagicMock(),
+                ),
+            ),
+            patch(
+                "traderbot.profiles.runtime.get_current_profile",
+                return_value=MagicMock(paper_mode=True),
+            ),
+            patch(
+                "traderbot.cli.trade.compute_paper_balance",
+                return_value=PaperBalance(
+                    initial_cents=100000,
+                    cost_at_risk_cents=0,
+                    settled_payout_cents=0,
+                    remaining_cents=100000,
+                    open_position_count=0,
+                ),
+            ),
+            patch("traderbot.cli.trade.position_value_for_ticker", return_value=0),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
-            patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
-            patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
-            patch("traderbot.kalshi.markets.MarketService.get_portfolio", new=AsyncMock(return_value=portfolio), create=True),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_market",
+                new=AsyncMock(return_value=market),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_orderbook",
+                new=AsyncMock(return_value=orderbook),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_portfolio",
+                new=AsyncMock(return_value=portfolio),
+                create=True,
+            ),
         ):
-            result = runner.invoke(app, ["trade", "TEST-TICKER", "--direction", "yes", "--json", "--no-confirm"])
+            result = runner.invoke(
+                app, ["trade", "TEST-TICKER", "--direction", "yes", "--json", "--no-confirm"]
+            )
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert data["status"] == "approved"
@@ -726,7 +942,14 @@ class TestTrade:
             yes_bids=[OrderBookLevel(price=58, size=200)],
             no_bids=[OrderBookLevel(price=42, size=150)],
         )
-        portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
+        portfolio = PortfolioState(
+            portfolio_value_cents=100000,
+            peak_value_cents=100000,
+            current_positions_value_cents=0,
+            today_realized_loss_cents=0,
+            today_unrealized_loss_cents=0,
+            open_positions_count=0,
+        )
 
         profile = TradingProfile(
             name="test",
@@ -744,17 +967,46 @@ class TestTrade:
 
         with (
             patch("traderbot.profiles.runtime.get_current_profile", return_value=profile),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
-            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch(
+                "traderbot.cli.trade.compute_paper_balance",
+                return_value=PaperBalance(
+                    initial_cents=100000,
+                    cost_at_risk_cents=0,
+                    settled_payout_cents=0,
+                    remaining_cents=100000,
+                    open_position_count=0,
+                ),
+            ),
+            patch("traderbot.cli.trade.position_value_for_ticker", return_value=0),
             patch("traderbot.kalshi.client.KalshiClient"),
-            patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
-            patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
-            patch("traderbot.kalshi.markets.MarketService.get_portfolio", new=AsyncMock(return_value=portfolio), create=True),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_market",
+                new=AsyncMock(return_value=market),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_orderbook",
+                new=AsyncMock(return_value=orderbook),
+            ),
+            patch(
+                "traderbot.kalshi.markets.MarketService.get_portfolio",
+                new=AsyncMock(return_value=portfolio),
+                create=True,
+            ),
             patch("traderbot.master_password.require_auth"),
         ):
             result = runner.invoke(
                 app,
-                ["trade", "KXBTCD-26MAR31-T55000", "--direction", "yes", "--quantity", "1", "--price", "60", "--no-confirm"],
+                [
+                    "trade",
+                    "KXBTCD-26MAR31-T55000",
+                    "--direction",
+                    "yes",
+                    "--quantity",
+                    "1",
+                    "--price",
+                    "60",
+                    "--no-confirm",
+                ],
             )
             assert result.exit_code == 0
 
@@ -1001,6 +1253,7 @@ class TestHeartbeat:
             result = runner.invoke(app, ["heartbeat", "--json"])
             assert result.exit_code == 0
             import json as json_lib
+
             data = json_lib.loads(result.output)
             assert "timestamp" in data
 
@@ -1016,7 +1269,9 @@ class TestCronSetup:
 
     def test_cron_setup_dry_run_json(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+            result = runner.invoke(
+                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
+            )
             assert result.exit_code == 0
             lines = result.output.strip().split("\n")
             json_line = next((line.strip() for line in lines if line.strip().startswith("[")), None)
@@ -1032,7 +1287,16 @@ class TestCronSetup:
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
             result = runner.invoke(
                 app,
-                ["cron", "setup", "--agent", "test-agent", "--heartbeat-every", "30m", "--dry-run", "--json"],
+                [
+                    "cron",
+                    "setup",
+                    "--agent",
+                    "test-agent",
+                    "--heartbeat-every",
+                    "30m",
+                    "--dry-run",
+                    "--json",
+                ],
             )
             assert result.exit_code == 0
             assert "heartbeat_loop" in strip_ansi(result.output)
@@ -1041,7 +1305,15 @@ class TestCronSetup:
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
             result = runner.invoke(
                 app,
-                ["cron", "setup", "--agent", "test-agent", "--skip-heartbeat-config", "--dry-run", "--json"],
+                [
+                    "cron",
+                    "setup",
+                    "--agent",
+                    "test-agent",
+                    "--skip-heartbeat-config",
+                    "--dry-run",
+                    "--json",
+                ],
             )
             assert result.exit_code == 0
 
@@ -1052,19 +1324,33 @@ class TestCronSetup:
             assert "openclaw" in result.output.lower()
 
     def test_cron_setup_channel_without_to_errors(self):
-        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--dry-run"])
+        result = runner.invoke(
+            app, ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--dry-run"]
+        )
         assert result.exit_code == 1
         assert "channel" in result.output.lower() or "to" in result.output.lower()
 
     def test_cron_setup_to_without_channel_errors(self):
-        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--to", "+15555550123", "--dry-run"])
+        result = runner.invoke(
+            app, ["cron", "setup", "--agent", "test-agent", "--to", "+15555550123", "--dry-run"]
+        )
         assert result.exit_code == 1
         assert "channel" in result.output.lower() or "to" in result.output.lower()
 
     def test_cron_setup_with_channel_and_to_dry_run(self):
         result = runner.invoke(
             app,
-            ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--to", "+15555550123", "--dry-run"],
+            [
+                "cron",
+                "setup",
+                "--agent",
+                "test-agent",
+                "--channel",
+                "telegram",
+                "--to",
+                "+15555550123",
+                "--dry-run",
+            ],
         )
         assert result.exit_code == 0
 
@@ -1085,7 +1371,17 @@ class TestCronSetup:
         ):
             result = runner.invoke(
                 app,
-                ["cron", "setup", "--agent", "my-agent", "--channel", "telegram", "--to", "+15555550123", "--json"],
+                [
+                    "cron",
+                    "setup",
+                    "--agent",
+                    "my-agent",
+                    "--channel",
+                    "telegram",
+                    "--to",
+                    "+15555550123",
+                    "--json",
+                ],
             )
             assert result.exit_code == 0
         for call_args in calls:
@@ -1120,7 +1416,9 @@ class TestCronSetup:
 
     def test_cron_setup_dry_run_news_loop_event(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+            result = runner.invoke(
+                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
+            )
             assert result.exit_code == 0
             lines = result.output.strip().split("\n")
             json_line = next((line.strip() for line in lines if line.strip().startswith("[")), None)
@@ -1132,7 +1430,9 @@ class TestCronSetup:
 
     def test_cron_setup_decision_loop_247_cron(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
+            result = runner.invoke(
+                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
+            )
             assert result.exit_code == 0
             assert "*/5" in strip_ansi(result.output)
 
@@ -1343,7 +1643,7 @@ class TestBacktestCommand:
         ):
             result = runner.invoke(app, ["backtest", "--db", str(tmp_path / "test.db"), "--json"])
             assert result.exit_code == 0
-            json_output = result.output[result.output.index("{"):]
+            json_output = result.output[result.output.index("{") :]
             data = json.loads(json_output)
             assert "metrics" in data
             assert data["metrics"]["trade_count"] == 5
@@ -1378,8 +1678,6 @@ class TestPaperCommand:
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert "error" in data
-
-
 
 
 class TestPerformanceCommand:
@@ -1496,8 +1794,6 @@ class TestCompareCommand:
             data = json.loads(result.output)
             assert "error" in data
 
-
-
     @pytest.mark.unit
     def test_compare_with_mock_profiles(self, tmp_path):
         from traderbot.simulation.engine import BacktestResult
@@ -1546,7 +1842,14 @@ class TestCompareCommand:
             patch("traderbot.simulation.profiles.run_profiles", side_effect=fake_run_profiles),
         ):
             result = runner.invoke(
-                app, ["compare", "--profiles", "Conservative,Aggressive", "--db", str(tmp_path / "test.db")]
+                app,
+                [
+                    "compare",
+                    "--profiles",
+                    "Conservative,Aggressive",
+                    "--db",
+                    str(tmp_path / "test.db"),
+                ],
             )
             assert result.exit_code == 0
             assert "Profile Comparison" in strip_ansi(result.output)
@@ -1578,7 +1881,8 @@ class TestCompareCommand:
             patch("traderbot.simulation.profiles.run_profiles", side_effect=fake_run_profiles),
         ):
             result = runner.invoke(
-                app, ["compare", "--profiles", "Moderate", "--db", str(tmp_path / "test.db"), "--json"]
+                app,
+                ["compare", "--profiles", "Moderate", "--db", str(tmp_path / "test.db"), "--json"],
             )
             assert result.exit_code == 0
             data = json.loads(result.output)
@@ -1606,7 +1910,9 @@ class TestBootstrapCommand:
         }
         with (
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
-            patch("traderbot.cli.helpers._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
+            patch(
+                "traderbot.cli.helpers._python_version_ok", return_value=(True, "3.12.0", (3, 12))
+            ),
         ):
             result = runner.invoke(app, ["bootstrap", "--dry-run"])
             assert result.exit_code == 0
@@ -1644,16 +1950,15 @@ class TestBootstrapCommand:
         }
         with (
             patch("traderbot.auth.AuthManager.check_credentials", return_value=mock_status),
-            patch("traderbot.cli.helpers._python_version_ok", return_value=(True, "3.12.0", (3, 12))),
+            patch(
+                "traderbot.cli.helpers._python_version_ok", return_value=(True, "3.12.0", (3, 12))
+            ),
         ):
             result = runner.invoke(app, ["bootstrap", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             steps = data.get("steps", data)
             assert steps["python_version_ok"] is True
-
-
-
 
 
 class TestLearnings:
@@ -1689,8 +1994,20 @@ class TestLearnings:
         with get_connection(db) as conn:
             init_schema(conn)
             init_table(conn)
-            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "High volume precedes reversal", "Observed 15 times", 0.85)
-            record_pattern(conn, LearningCategory.RISK_SIGNAL, "Drawdown > 5% triggers panic sells", "3 events", 0.7)
+            record_pattern(
+                conn,
+                LearningCategory.MARKET_BEHAVIOR,
+                "High volume precedes reversal",
+                "Observed 15 times",
+                0.85,
+            )
+            record_pattern(
+                conn,
+                LearningCategory.RISK_SIGNAL,
+                "Drawdown > 5% triggers panic sells",
+                "3 events",
+                0.7,
+            )
 
         result = runner.invoke(app, ["learnings", "--db", str(db)])
         assert result.exit_code == 0
@@ -1707,7 +2024,13 @@ class TestLearnings:
         with get_connection(db) as conn:
             init_schema(conn)
             init_table(conn)
-            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "High volume precedes reversal", "Observed 15 times", 0.85)
+            record_pattern(
+                conn,
+                LearningCategory.MARKET_BEHAVIOR,
+                "High volume precedes reversal",
+                "Observed 15 times",
+                0.85,
+            )
 
         result = runner.invoke(app, ["learnings", "--db", str(db), "--json"])
         assert result.exit_code == 0
@@ -1726,7 +2049,9 @@ class TestLearnings:
         with get_connection(db) as conn:
             init_schema(conn)
             init_table(conn)
-            record_pattern(conn, LearningCategory.MARKET_BEHAVIOR, "Market pattern", "evidence", 0.8)
+            record_pattern(
+                conn, LearningCategory.MARKET_BEHAVIOR, "Market pattern", "evidence", 0.8
+            )
             record_pattern(conn, LearningCategory.RISK_SIGNAL, "Risk pattern", "evidence", 0.7)
 
         result = runner.invoke(app, ["learnings", "--db", str(db), "--category", "RiskSignal"])
@@ -1737,7 +2062,13 @@ class TestLearnings:
     @pytest.mark.unit
     def test_learnings_filter_by_deprecated_status(self, tmp_path):
         from traderbot.db import get_connection, init_schema
-        from traderbot.db.learnings import LearningCategory, LearningStatus, init_table, record_pattern, set_status
+        from traderbot.db.learnings import (
+            LearningCategory,
+            LearningStatus,
+            init_table,
+            record_pattern,
+            set_status,
+        )
 
         db = tmp_path / "test.db"
         with get_connection(db) as conn:
@@ -1759,7 +2090,9 @@ class TestLearnings:
     @pytest.mark.unit
     def test_learnings_promote_json_not_found(self, tmp_path):
         db = tmp_path / "test.db"
-        result = runner.invoke(app, ["learnings", "--db", str(db), "--promote", "nonexistent-key", "--json"])
+        result = runner.invoke(
+            app, ["learnings", "--db", str(db), "--promote", "nonexistent-key", "--json"]
+        )
         assert result.exit_code == 1
         data = json.loads(result.output)
         assert "error" in data
