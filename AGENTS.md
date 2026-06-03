@@ -10,7 +10,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: 0.14.74
+- **Current version**: 0.14.81
 
 ## Versioning Scheme
 
@@ -24,24 +24,19 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## Git Discipline
 
-- **All commits MUST be made via Pull Requests** — never push directly to main. This ensures CI runs on every change and provides full traceability.
+- **All commits MUST be made via Pull Requests** — never push directly to main.
 - **PR flow**: create branch → commit → push → open PR → wait for CI → merge.
 - **CI must pass before merge** — every PR requires green status on: `Lint & format`, `Unit tests`, `Test (ubuntu-latest|macos-latest|windows-latest)`, and `Build wheel`.
-- **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement (branch protection is configured with bypass allowance). PRs from `jsondarula` can be merged once CI passes without additional review.
+- **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement. PRs from `jsondarula` can be merged once CI passes without additional review.
 - **External contributors** require 1 approving review before merge.
-- **Branch protection**: `main` is protected — requires CI status checks, up-to-date branch, and enforces admins. Force pushes are blocked.
+- **Branch protection**: `main` is protected — requires CI status checks, up-to-date branch, and enforces admins. Force pushes blocked. Bypass allowance for `jsondarula` set via GraphQL API on rule `BPR_kwDOSIPo7s4ElNFj`. Not exposed in UI for this account tier.
 - **One concern per commit** — no mixing features, fixes, and docs in one commit
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `ci:`, `test:`, `deps:`
-- **Always tag**: `git tag v0.14.78` after every commit (note: `v` prefix on tag, no `v` in VERSION file)
-- **Tag + push via PR merge**, not during development. Tags are pushed when the PR is merged to main.
+- **Always tag**: `git tag v0.14.NN` after every commit (note: `v` on tag, no `v` in VERSION file)
+- **Tags push on PR merge** via the Release workflow, not during development.
 - **Never commit** `.env`, credentials, or API keys
-- **Version increment**: update `VERSION` (increment PATCH by 1) as part of the commit — never as a separate step
-- **Sisyphus attribution**: every commit includes ultrawork attribution in the description:
-  ```bash
-  git commit -m "type: message" \
-    -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
-    -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
-  ```
+- **Version increment**: update `VERSION` (increment PATCH by 1) as part of the commit.
+- **Sisyphus attribution**: every commit includes Sisyphus co-author in the description.
 
 ## Source of Truth
 
@@ -97,19 +92,23 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## Testing Discipline
 
-- **Run before commit**: execute `uv run pytest -m "not live"` before every commit. All tests must pass.
+- **Run before committing changes**: execute `uv run pytest -m "not live"` before every commit. All tests must pass.
+- **Run before merging PR**: CI runs the full pipeline automatically. Verify all required status checks pass on the PR.
 - **Markers**: use the standard marker taxonomy defined in `pyproject.toml`:
-  - `unit` — pure unit tests with no external dependencies (fastest)
+  - `unit` — pure unit tests with no external dependencies (fastest). Run via: `uv run pytest -m "unit"`
   - `integration` — tests with mocked external services
   - `live` — tests that hit real API endpoints (skipped in CI, requires credentials)
   - `slow` — tests excluded from fast runs
 - **CI pipeline** (`.github/workflows/ci.yml`), layered in this order:
   1. `frozen-check`: validates lockfile is fresh (`uv sync --frozen`)
-  2. `lint`: ruff lint + format
+  2. `lint`: ruff lint + format (`uvx --with ruff ruff check`, `uvx --with ruff ruff format --check`)
   3. `unit`: fast unit tests only (`-m "unit"`) — gates subsequent jobs
   4. `test`: full matrix (ubuntu/macos/windows) — `-m "not live"`
   5. `live`: API smoke tests (Kalshi, Open-Meteo, CoinGecko, TheSportsDB, OpenWeatherMap, FRED, NewsAPI, VoyageAI, Google Trends) — runs on push to main + weekly. Skipped on fork PRs (secrets unavailable).
   6. `build`: builds wheel + verifies `pip install` works
+- **Pre-existing test failures**: if a test was already failing before your changes, note it in the PR but don't hold the merge. Fixes should be submitted as a separate PR.
+- **Setup for local test execution**: use `uv sync --all-extras --dev` to install pytest (it's in `[project.optional-dependencies] dev`, not `[dependency-groups] dev`).
+- **CLI trade tests**: these require extensive mocking due to the DB persistence layer (`_resolve_db_path`, `get_connection`, `upsert`). If the circular import chain (`traderbot.cli.app` → `traderbot.cli.trade` → `traderbot.paper` → `traderbot.cli.helpers` → ...) prevents clean mocks, the affected tests need the import chain refactored (extract DB code from CLI).
 - **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
 - **Push to main** runs the same pipeline. Doc-only changes are skipped via `paths-ignore`.
 - **Weekly schedule** (Mondays 06:00 UTC) runs the full pipeline + CodeQL.
@@ -117,6 +116,29 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Concurrency**: in-progress runs are automatically cancelled when a new push arrives.
 - **Coverage**: new code should maintain or improve module-level coverage. Uploaded to Codecov on Linux.
 - **Adding new API tests**: when adding a new API-dependent feature, add a `@pytest.mark.live` test AND wire the required secret in `.github/workflows/ci.yml`. The CI workflow is the single source of truth for which secrets are tested.
+
+## GitHub Branches and Protection
+
+- **All commits MUST be made via Pull Requests** — never push directly to main. This ensures CI runs on every change and provides full traceability.
+- **PR flow**: create branch → commit → push → open PR → wait for CI → merge.
+- **CI must pass before merge** — every PR requires green status on: `Lint & format`, `Unit tests`, `Test (ubuntu-latest|macos-latest|windows-latest)`, and `Build wheel`.
+- **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement (branch protection is configured with bypass allowance via GraphQL API mutation). PRs from `jsondarula` can be merged once CI passes without additional review.
+- **External contributors** require 1 approving review before merge.
+- **Branch protection configuration** is managed via GitHub REST API (`PUT /repos/{owner}/{repo}/branches/main/protection`). The bypass allowance for `jsondarula` was set via GraphQL mutation on the branch protection rule ID `BPR_kwDOSIPo7s4ElNFj`. Branch protection requires:
+  - 6 required status checks (Lint & format, Unit tests, Test on all 3 OS, Build wheel)
+  - Strict status checks (branch must be up-to-date)
+  - Enforce admins enabled
+  - The `bypass_pull_request_allowances` field is NOT exposed in the GitHub Settings UI for this account tier — it must be set via API.
+- **Force pushes** are blocked on `main`.
+- **Tags**: `git tag v0.14.78` after every commit (note: `v` prefix on tag, no `v` in VERSION file).
+- **Tag + push via PR merge**, not during development. The Release workflow (`release.yml`) auto-creates a GitHub Release when a tag is pushed.
+
+## PyPI Publishing
+
+- **Automatic**: `.github/workflows/python-publish.yml` triggers on tag pushes (`v*`). Builds with `uv build`, publishes with `uv publish`.
+- **Required secret**: `PYPI_TOKEN` in GitHub Actions secrets.
+- **Manual publish**: `uv build && uv publish` from the repo root.
+- **Wheel exclusions**: `tests/` and `experiments/` are excluded from the wheel. Only `src/traderbot/` ships.
 
 ### Test File Naming
 
