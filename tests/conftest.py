@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 pytest_plugins = ["tests.integration_conftest"]
@@ -164,3 +165,18 @@ def paper_trader(mock_provider: MockDataProvider, in_memory_db: sqlite3.Connecti
         initial_cash_cents=1_000_00,
         slippage_model=PaperSlippageModel(base_slippage_cents=1),
     )
+
+
+# ---------------------------------------------------------------------------
+# ANSI-stripping helper for CLI help-text tests.
+# On CI (GITHUB_ACTIONS=true), Rich forces terminal codes into --help output.
+# Substring assertions like assert "--flag" in result.output fail because ANSI
+# sequences split the dashes from the flag name.
+# Use this function in test assertions to get the plain text.
+# ---------------------------------------------------------------------------
+
+_ANSI_ESCAPE = re.compile(r"\x1B\[[0-9;]*[a-zA-Z]")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)

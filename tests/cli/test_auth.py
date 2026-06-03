@@ -4,6 +4,8 @@ from typer.testing import CliRunner
 
 from traderbot.cli import app
 
+from tests.conftest import strip_ansi
+
 runner = CliRunner()
 
 
@@ -11,7 +13,7 @@ class TestAuthHelp:
     def test_auth_help_succeeds(self) -> None:
         result = runner.invoke(app, ["auth", "--help"])
         assert result.exit_code == 0
-        assert "Manage API credentials" in result.output
+        assert "Manage API credentials" in strip_ansi(result.output)
 
     def test_list_keys_help(self) -> None:
         result = runner.invoke(app, ["auth", "list-keys", "--help"])
@@ -74,7 +76,7 @@ class TestAuthCheckValidateFlag:
     def test_auth_check_validate_flag_in_help(self) -> None:
         result = runner.invoke(app, ["auth", "check", "--help"])
         assert result.exit_code == 0
-        assert "--validate" in result.output
+        assert "--validate" in strip_ansi(result.output)
 
     def test_auth_check_validate_json_output(self) -> None:
         result = runner.invoke(app, ["auth", "check", "--validate", "--json"])

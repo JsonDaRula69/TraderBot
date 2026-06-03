@@ -4,6 +4,8 @@ from typer.testing import CliRunner
 
 from traderbot.cli import app
 
+from tests.conftest import strip_ansi
+
 runner = CliRunner()
 
 
@@ -16,13 +18,13 @@ class TestCronHelp:
     def test_setup_heartbeat_tasks_help(self) -> None:
         result = runner.invoke(app, ["cron", "setup-heartbeat-tasks", "--help"])
         assert result.exit_code == 0
-        assert "--agent" in result.output
-        assert "--role" in result.output
+        assert "--agent" in strip_ansi(result.output)
+        assert "--role" in strip_ansi(result.output)
 
     def test_remove_heartbeat_tasks_help(self) -> None:
         result = runner.invoke(app, ["cron", "remove-heartbeat-tasks", "--help"])
         assert result.exit_code == 0
-        assert "--agent" in result.output
+        assert "--agent" in strip_ansi(result.output)
 
 
 class TestSysadminCronNoDuplicates:

@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from tests.conftest import strip_ansi
+
 from typer.testing import CliRunner
 
 from traderbot.cli import app
@@ -578,8 +580,8 @@ class TestHeartbeatCLI:
     def test_heartbeat_help(self):
         result = runner.invoke(app, ["heartbeat", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.output
-        assert "--dry-run" in result.output
+        assert "--json" in strip_ansi(result.output)
+        assert "--dry-run" in strip_ansi(result.output)
 
     def test_heartbeat_json_output(self):
         result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
@@ -598,10 +600,10 @@ class TestHeartbeatCLI:
     def test_heartbeat_rich_output(self):
         result = runner.invoke(app, ["heartbeat", "--dry-run"])
         assert result.exit_code == 0
-        assert "Heartbeat" in result.output
-        assert "Performance" in result.output
-        assert "Adaptation" in result.output
-        assert "Circuit Breaker" in result.output
+        assert "Heartbeat" in strip_ansi(result.output)
+        assert "Performance" in strip_ansi(result.output)
+        assert "Adaptation" in strip_ansi(result.output)
+        assert "Circuit Breaker" in strip_ansi(result.output)
 
     def test_heartbeat_dry_run_flag(self):
         result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])

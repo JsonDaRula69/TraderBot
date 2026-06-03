@@ -11,6 +11,7 @@ import pytest
 from typer.testing import CliRunner
 
 from traderbot.cli import app
+from tests.conftest import strip_ansi
 from traderbot.db import get_connection, init_schema
 from traderbot.db.learnings import (
     FeatureRequestRecord,
@@ -483,7 +484,7 @@ class TestCLILearningsIntegration:
 
         result = runner.invoke(app, ["learnings", "--db", str(db_file)])
         assert result.exit_code == 0
-        assert "No patterns found" in result.output
+        assert "No patterns found" in strip_ansi(result.output)
 
     def test_learnings_list_with_patterns(self, tmp_path: Path) -> None:
         """learnings CLI lists recorded patterns."""
@@ -499,8 +500,8 @@ class TestCLILearningsIntegration:
 
         result = runner.invoke(app, ["learnings", "--db", str(db_file)])
         assert result.exit_code == 0
-        assert "Spread widens at" in result.output
-        assert "Illiquid slippage" in result.output
+        assert "Spread widens at" in strip_ansi(result.output)
+        assert "Illiquid slippage" in strip_ansi(result.output)
 
     def test_learnings_list_json(self, tmp_path: Path) -> None:
         """learnings --json outputs valid JSON array."""
@@ -536,7 +537,7 @@ class TestCLILearningsIntegration:
             app, ["learnings", "--db", str(db_file), "--category", "RiskSignal"]
         )
         assert result.exit_code == 0
-        assert "Risk pattern" in result.output
+        assert "Risk pattern" in strip_ansi(result.output)
         assert "Market pattern" not in result.output
 
     def test_learnings_promote_via_cli(self, tmp_path: Path) -> None:

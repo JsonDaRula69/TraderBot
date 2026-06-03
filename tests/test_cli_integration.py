@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
+from tests.conftest import strip_ansi
+
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -32,5 +34,5 @@ def test_cli_paper_help_shows_flags() -> None:
         timeout=10,
     )
     assert result.returncode == 0, f"CLI --help failed: {result.stderr}"
-    assert "--initial-balance" in result.stdout
-    assert "--reconcile" in result.stdout
+    assert "--initial-balance" in strip_ansi(result.stdout)
+    assert "--reconcile" in strip_ansi(result.stdout)
