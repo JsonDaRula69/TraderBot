@@ -2,6 +2,7 @@
 
 No LLM required. Runs as a pure data pipeline.
 """
+
 import hashlib
 import logging
 import time
@@ -164,7 +165,9 @@ def _store_datapoints(
     embeddings: list[list[float]] | None = None
     if use_voyage_storage:
         if voyage is None:
-            logger.error("Cannot store data_points — collection needs Voyage embeddings but no VoyageClient provided")
+            logger.error(
+                "Cannot store data_points — collection needs Voyage embeddings but no VoyageClient provided"
+            )
             return 0
         try:
             embeddings = voyage.embed_batch(texts)
@@ -263,20 +266,26 @@ def _store_newsapi_backfill(
     embeddings: list[list[float]] | None = None
     if use_voyage:
         if voyage is None:
-            logger.error("Cannot store NewsAPI backfill — collection needs Voyage but no client provided")
+            logger.error(
+                "Cannot store NewsAPI backfill — collection needs Voyage but no client provided"
+            )
             return 0
         try:
             embeddings = voyage.embed_batch(texts)
         except Exception as exc:
             logger.warning("Voyage embed failed for NewsAPI backfill: %s", exc)
         if embeddings is None:
-            logger.error("Voyage unavailable — cannot store NewsAPI backfill to %d-dim collection", news_dim)
+            logger.error(
+                "Voyage unavailable — cannot store NewsAPI backfill to %d-dim collection", news_dim
+            )
             return 0
 
     stored = 0
     for i, item in enumerate(items):
         doc_id = hashlib.sha256((item.url or item.title).encode()).hexdigest()
-        category_str = item.category.value if hasattr(item.category, "value") else str(item.category)
+        category_str = (
+            item.category.value if hasattr(item.category, "value") else str(item.category)
+        )
         meta: dict[str, str | float] = {
             "source": item.source.value if hasattr(item.source, "value") else str(item.source),
             "category": category_str,
@@ -318,11 +327,10 @@ def backfill_data(
     """
     import asyncio
     import os as _os
-    from datetime import timedelta, datetime, UTC
+    from datetime import UTC, datetime, timedelta
 
-    from traderbot.news.sources import DataSourcesConfig, NewsAggregator
-    import os as _os
     from traderbot.auth import get_credential
+    from traderbot.news.sources import DataSourcesConfig, NewsAggregator
 
     _fred_cred = get_credential("fred", "api_key")
     fred_key = _fred_cred.get_secret_value() if _fred_cred else None
@@ -343,6 +351,7 @@ def backfill_data(
 
     async def _run_all() -> dict[str, int]:
         from traderbot.news.embeddings import VoyageClient
+
         aggregator = NewsAggregator(config=ds_config)
         voyage = VoyageClient()
 
@@ -350,9 +359,17 @@ def backfill_data(
         dp_dim = _collection_dim(vs, _DATA_COLLECTION)
         use_voyage_dp = dp_dim == 0 or dp_dim == 1024
         if not use_voyage_dp:
-            logger.warning("data_points collection at %d-dim — backfill embeddings may be rejected", dp_dim)
+            logger.warning(
+                "data_points collection at %d-dim — backfill embeddings may be rejected", dp_dim
+            )
 
-        counts: dict[str, int] = {"open_meteo": 0, "fred": 0, "coingecko": 0, "thesportsdb": 0, "newsapi": 0}
+        counts: dict[str, int] = {
+            "open_meteo": 0,
+            "fred": 0,
+            "coingecko": 0,
+            "thesportsdb": 0,
+            "newsapi": 0,
+        }
 
         # Open-Meteo: chunk past_days=92 (max allowed) and remainder
         remaining_days = int(months * 30.44)
@@ -364,11 +381,15 @@ def backfill_data(
 
         open_meteo_total = 0
         for i, past_days in enumerate(chunks):
-            logger.info("Open-Meteo backfill chunk %d/%d: past_days=%d", i + 1, len(chunks), past_days)
+            logger.info(
+                "Open-Meteo backfill chunk %d/%d: past_days=%d", i + 1, len(chunks), past_days
+            )
             try:
                 points = await aggregator._backfill_open_meteo(past_days=past_days)
                 if points:
-                    stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                    stored = _store_datapoints(
+                        points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp
+                    )
                     open_meteo_total += stored
                     logger.info("Open-Meteo chunk stored %d/%d data points", stored, len(points))
             except Exception as exc:
@@ -382,7 +403,9 @@ def backfill_data(
         try:
             points = await aggregator._backfill_fred(observation_start=start_date)
             if points:
-                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                stored = _store_datapoints(
+                    points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp
+                )
                 counts["fred"] = stored
                 logger.info("FRED backfill stored %d/%d data points", stored, len(points))
         except Exception as exc:
@@ -394,7 +417,9 @@ def backfill_data(
         try:
             points = await aggregator._backfill_coingecko(from_timestamp=from_timestamp)
             if points:
-                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                stored = _store_datapoints(
+                    points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp
+                )
                 counts["coingecko"] = stored
                 logger.info("CoinGecko backfill stored %d/%d data points", stored, len(points))
         except Exception as exc:
@@ -406,7 +431,9 @@ def backfill_data(
         try:
             points = await aggregator._backfill_thesportsdb(start_date=start_date)
             if points:
-                stored = _store_datapoints(points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp)
+                stored = _store_datapoints(
+                    points, vs, voyage=voyage, use_voyage_storage=use_voyage_dp
+                )
                 counts["thesportsdb"] = stored
                 logger.info("TheSportsDB backfill stored %d/%d data points", stored, len(points))
         except Exception as exc:
@@ -449,6 +476,7 @@ def ingest_news(
     start = time.monotonic()
 
     import os as _os
+
     from traderbot.news.sources import DataSourcesConfig
 
     resolved_newsapi = newsapi_key or _os.environ.get("NEWSAPI_API_KEY")
@@ -533,7 +561,11 @@ def ingest_news(
         if classified is None:
             report.skipped += 1
             continue
-        category_str = classified.category.value if hasattr(classified.category, "value") else str(classified.category)
+        category_str = (
+            classified.category.value
+            if hasattr(classified.category, "value")
+            else str(classified.category)
+        )
         text = _flatten_text(item)
         sentiment = scorer.score(text, item.source, item.id)
         impact = assessor.assess(
@@ -557,15 +589,15 @@ def ingest_news(
         except Exception as exc:
             logger.warning("Voyage batch embed failed — storing without embeddings: %s", exc)
     else:
-        logger.info(
-            "Legacy 384-dim collection — ChromaDB auto-embedding with all-MiniLM-L6-v2"
-        )
+        logger.info("Legacy 384-dim collection — ChromaDB auto-embedding with all-MiniLM-L6-v2")
 
     # Store each item
     for i, item in enumerate(batch_items):
         classified = batch_classified[i]
         category_str = (
-            classified.category.value if hasattr(classified.category, "value") else str(classified.category)  # type: ignore[union-attr]
+            classified.category.value
+            if hasattr(classified.category, "value")
+            else str(classified.category)  # type: ignore[union-attr]
         )
         sentiment = batch_sentiments[i]
         impact = batch_impacts[i]
@@ -589,7 +621,15 @@ def ingest_news(
             # Store signal items in a separate collection for fast lookup
             if _is_signal(sentiment, impact):
                 sig_meta = dict(metadata)
-                sig_meta["signal_type"] = "impact" if (impact and getattr(impact, "magnitude", 0) and float(getattr(impact, "magnitude", 0)) >= 0.7) else "sentiment"  # type: ignore[arg-type]
+                sig_meta["signal_type"] = (
+                    "impact"
+                    if (
+                        impact
+                        and getattr(impact, "magnitude", 0)
+                        and float(getattr(impact, "magnitude", 0)) >= 0.7
+                    )
+                    else "sentiment"
+                )  # type: ignore[arg-type]
                 vs.add_document(
                     doc_id=f"sig-{doc_id}",
                     text=text,
@@ -762,10 +802,12 @@ def get_data_points(
 
     try:
         results = col.get(
-            where={"$and": [
-                {"category": {"$eq": category}},
-                {"timestamp_epoch": {"$gte": cutoff}},
-            ]},
+            where={
+                "$and": [
+                    {"category": {"$eq": category}},
+                    {"timestamp_epoch": {"$gte": cutoff}},
+                ]
+            },
             include=["metadatas", "documents"],
             limit=max_items * 2,
         )
@@ -800,14 +842,16 @@ def get_data_points(
             elif key.startswith("meta_"):
                 meta_fields[key[5:]] = str(value)
 
-        points.append({
-            "id": doc_id,
-            "title": (doc or "")[:120],
-            "source": meta.get("source", ""),
-            "timestamp": meta.get("timestamp", ""),
-            "data": data_fields,
-            "_meta": meta_fields,
-        })
+        points.append(
+            {
+                "id": doc_id,
+                "title": (doc or "")[:120],
+                "source": meta.get("source", ""),
+                "timestamp": meta.get("timestamp", ""),
+                "data": data_fields,
+                "_meta": meta_fields,
+            }
+        )
 
     points.sort(key=lambda p: p["timestamp"], reverse=True)
     points = points[:max_items]
@@ -850,7 +894,10 @@ def get_news_context(
     data_points_result: dict | None = None
     if include_data_points:
         data_points_result = get_data_points(
-            category=category, since_hours=since_hours, max_items=20, vector_store=vs,
+            category=category,
+            since_hours=since_hours,
+            max_items=20,
+            vector_store=vs,
         )
 
     try:
@@ -863,10 +910,12 @@ def get_news_context(
 
     try:
         results = col.get(
-            where={"$and": [
-                {"category": {"$eq": category}},
-                {"published_epoch": {"$gte": cutoff}},
-            ]},
+            where={
+                "$and": [
+                    {"category": {"$eq": category}},
+                    {"published_epoch": {"$gte": cutoff}},
+                ]
+            },
             include=["metadatas", "documents"],
             limit=max_articles * 3,
         )
@@ -903,13 +952,15 @@ def get_news_context(
                 sentiment_scores.append(score)
             except (ValueError, TypeError):
                 pass
-        articles.append({
-            "id": doc_id,
-            "title": meta.get("title", "")[:120],
-            "source": meta.get("source", ""),
-            "published": meta.get("published", ""),
-            "sentiment_score": score,
-        })
+        articles.append(
+            {
+                "id": doc_id,
+                "title": meta.get("title", "")[:120],
+                "source": meta.get("source", ""),
+                "published": meta.get("published", ""),
+                "sentiment_score": score,
+            }
+        )
 
     articles.sort(key=lambda a: a["published"], reverse=True)
     articles = articles[:max_articles]

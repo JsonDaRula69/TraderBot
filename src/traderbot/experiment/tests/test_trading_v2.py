@@ -4,7 +4,6 @@ Verifies OrderRequest.to_v2_body() produces correct V2 API body with
 bid/ask sides and dollar-formatted prices.
 """
 
-import pytest
 
 from traderbot.kalshi.models import OrderRequest, OrderSideV2
 
@@ -152,8 +151,9 @@ class TestV2Endpoint:
         """The trading service must POST to /portfolio/events/orders/v2."""
         # We verify this by checking the source module's path constant.
         # This is a structural test confirming the endpoint string.
-        import traderbot.kalshi.trading as trading_mod
         import inspect
+
+        import traderbot.kalshi.trading as trading_mod
 
         src = inspect.getsource(trading_mod.TradingService.place_order)
         assert "/portfolio/events/orders/v2" in src, (

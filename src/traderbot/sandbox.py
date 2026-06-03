@@ -161,11 +161,11 @@ class FilesystemSandbox:
         On Windows, this is a no-op; NTFS ACLs handle this separately
         via the icacls command (not yet implemented).
         """
-        if sys.platform == "win32":
-            return
-
         if not self._src_root.exists():
             raise FileNotFoundError(f"Source root not found: {self._src_root}")
+
+        if sys.platform == "win32":
+            return
 
         for path in self._src_root.rglob("*"):
             with contextlib.suppress(OSError):
@@ -239,7 +239,9 @@ def get_active_sandbox() -> FilesystemSandbox | None:
         return None
 
     try:
-        with portalocker.Lock(str(lock_path), portalocker.LockFlags.SHARED | portalocker.LockFlags.NON_BLOCKING):
+        with portalocker.Lock(
+            str(lock_path), portalocker.LockFlags.SHARED | portalocker.LockFlags.NON_BLOCKING
+        ):
             return FilesystemSandbox(
                 src_root=get_source_root(),
                 workspace_dir=get_agent_workspace_dir(),

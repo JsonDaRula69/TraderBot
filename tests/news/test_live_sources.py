@@ -77,6 +77,18 @@ async def test_coingecko_crypto_markets() -> None:
 
 
 @pytest.mark.asyncio
+async def test_coingecko_authenticated() -> None:
+    _requires_internet()
+    _requires_env("COINGECKO_API_KEY")
+    na = NewsAggregator()
+    results = await na._fetch_coingecko(limit=5)
+    assert len(results) > 0, "Should return at least 1 crypto DataPoint with auth"
+    _assert_datapoint(results[0], NewsSource.COINGECKO)
+    assert results[0].category == NewsCategory.CRYPTO
+    assert "price_cents" in results[0].data
+
+
+@pytest.mark.asyncio
 async def test_openweathermap_weather() -> None:
     _requires_internet()
     _requires_env("OPENWEATHER_API_KEY")

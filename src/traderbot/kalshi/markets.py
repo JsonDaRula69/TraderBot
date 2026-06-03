@@ -35,19 +35,20 @@ _event_cache_lock = asyncio.Lock()
 
 def _event_cache_path() -> Path:
     from traderbot.paths import get_data_dir
+
     return get_data_dir() / "event_category_cache.json"
 
 
 def _clear_event_cache() -> None:
     """Clear the event category cache (for testing)."""
-    global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+    global _event_category_cache, _event_cache_ts
     _event_category_cache = {}
     _event_cache_ts = 0.0
 
 
 def _load_event_cache_from_disk() -> bool:
     """Load event category cache from disk if fresh. Returns True if loaded."""
-    global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+    global _event_category_cache, _event_cache_ts
     cache_file = _event_cache_path()
     if not cache_file.exists():
         return False
@@ -67,10 +68,14 @@ def _save_event_cache_to_disk() -> None:
     """Persist event category cache to disk for cross-process reuse."""
     cache_file = _event_cache_path()
     cache_file.parent.mkdir(parents=True, exist_ok=True)
-    cache_file.write_text(json.dumps({
-        "ts": _event_cache_ts,
-        "map": _event_category_cache,
-    }))
+    cache_file.write_text(
+        json.dumps(
+            {
+                "ts": _event_cache_ts,
+                "map": _event_category_cache,
+            }
+        )
+    )
 
 
 class MarketService:
@@ -271,10 +276,14 @@ class MarketService:
         event_category_map = await self._get_event_category_map()
         target_cat = category.lower().replace("_", " ")
         matched_events = [
-            (ticker, cat) for ticker, cat in event_category_map.items()
-            if target_cat in cat.lower()
+            (ticker, cat) for ticker, cat in event_category_map.items() if target_cat in cat.lower()
         ]
-        logger.info("Found %d events matching '%s' out of %d total", len(matched_events), category, len(event_category_map))
+        logger.info(
+            "Found %d events matching '%s' out of %d total",
+            len(matched_events),
+            category,
+            len(event_category_map),
+        )
 
         all_markets: list[Market] = []
 
@@ -292,7 +301,9 @@ class MarketService:
                         return []
 
             event_ticker_to_cat = dict(matched_events)
-            results = await asyncio.gather(*[_fetch_markets_for_event(t) for t in event_ticker_to_cat])
+            results = await asyncio.gather(
+                *[_fetch_markets_for_event(t) for t in event_ticker_to_cat]
+            )
             for market_list in results:
                 for m in market_list:
                     if m.event_ticker in event_ticker_to_cat:
@@ -355,7 +366,9 @@ class MarketService:
                     if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
                         series_map[ticker] = cat
         except Exception:
-            logger.debug("Series category query failed for '%s', falling back to unscoped fetch", category)
+            logger.debug(
+                "Series category query failed for '%s', falling back to unscoped fetch", category
+            )
 
         if not series_map:
             try:
@@ -368,7 +381,12 @@ class MarketService:
                         ticker = s.get("ticker", "")
                         cat = s.get("category", "")
                         freq = s.get("frequency", "")
-                        if ticker and cat and target_cat in cat.lower() and freq in ("daily", "hourly"):
+                        if (
+                            ticker
+                            and cat
+                            and target_cat in cat.lower()
+                            and freq in ("daily", "hourly")
+                        ):
                             series_map[ticker] = cat
             except Exception:
                 logger.warning("Failed to fetch any series data")
@@ -379,7 +397,11 @@ class MarketService:
             return []
 
         series_items = list(series_map.items())
-        logger.debug("Found %d daily/hourly series matching '%s', fetching markets", len(series_items), category)
+        logger.debug(
+            "Found %d daily/hourly series matching '%s', fetching markets",
+            len(series_items),
+            category,
+        )
 
         semaphore = asyncio.Semaphore(2)
         all_markets: list[Market] = []
@@ -388,7 +410,9 @@ class MarketService:
             async with semaphore:
                 await asyncio.sleep(0.25)
                 try:
-                    resp = await self._client.get("/markets", series_ticker=st, status="open", limit=50)
+                    resp = await self._client.get(
+                        "/markets", series_ticker=st, status="open", limit=50
+                    )
                     resp.raise_for_status()
                     data = resp.json()
                     markets = [_normalize_market(m) for m in data.get("markets", [])]
@@ -407,12 +431,14 @@ class MarketService:
         for ml in results:
             all_markets.extend(ml)
 
-        logger.debug("Series discovery: %d markets from %d series", len(all_markets), len(series_items))
+        logger.debug(
+            "Series discovery: %d markets from %d series", len(all_markets), len(series_items)
+        )
         return all_markets
 
     async def _get_event_category_map(self) -> dict[str, str]:
         """Return cached event category map, refreshing if stale."""
-        global _event_category_cache, _event_cache_ts  # noqa: PLW0603
+        global _event_category_cache, _event_cache_ts
         now = time.monotonic()
         if _event_category_cache and (now - _event_cache_ts) < _EVENT_CACHE_TTL:
             return dict(_event_category_cache)

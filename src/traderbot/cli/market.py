@@ -1,4 +1,5 @@
 """Market commands: scan, signals, sentiment."""
+
 from __future__ import annotations
 
 import asyncio
@@ -23,9 +24,15 @@ def register_commands(parent_app: typer.Typer) -> None:
     @parent_app.command()
     def scan(
         limit: Annotated[int, typer.Option("--limit", help="Max markets to return")] = 500,
-        category: Annotated[str | None, typer.Option("--category", help="Filter by category")] = None,
+        category: Annotated[
+            str | None, typer.Option("--category", help="Filter by category")
+        ] = None,
         continuous: Annotated[
-            bool, typer.Option("--continuous", help="Continuous polling mode for agent service (re-scans every 5min)")
+            bool,
+            typer.Option(
+                "--continuous",
+                help="Continuous polling mode for agent service (re-scans every 5min)",
+            ),
         ] = False,
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
@@ -44,7 +51,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                     client = KalshiClient()
                     service = MarketService(client)
                     if category is not None:
-                        result = await service.list_markets_by_category(category=category, limit=limit)
+                        result = await service.list_markets_by_category(
+                            category=category, limit=limit
+                        )
                     else:
                         result = await service.list_markets(limit=limit)
                     if result.markets or attempt == 2:
@@ -59,13 +68,16 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         if continuous:
             import time
+
             while True:
                 markets = asyncio.run(_scan_once())
                 if json_output:
                     json_lib.dump(markets, sys.stdout, default=str)
                     sys.stdout.flush()
                 else:
-                    console.print(f"[{datetime.now(UTC).isoformat()}] Scan complete: {len(markets)} markets")
+                    console.print(
+                        f"[{datetime.now(UTC).isoformat()}] Scan complete: {len(markets)} markets"
+                    )
                 # time.sleep() is safe here — this runs in a dedicated sync thread from typer
                 time.sleep(300)  # 5-minute polling interval to match decision loop cadence
 
@@ -95,7 +107,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
     ) -> None:
         """Compute and display trading signals across open markets."""
-        from traderbot.analysis.odds import implied_probability
         from traderbot.analysis.signals import generate_signal
         from traderbot.kalshi.models import MarketCategory
 
@@ -108,7 +119,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             except ValueError:
                 valid = ", ".join(c.value for c in MarketCategory)
                 if json_output:
-                    json_lib.dump({"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout)
+                    json_lib.dump(
+                        {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
+                    )
                 else:
                     err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
                 raise typer.Exit(code=1) from None
@@ -120,7 +133,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             client = KalshiClient()
             service = MarketService(client)
             if category_enum is not None:
-                result = asyncio.run(service.list_markets_by_category(category=category, limit=limit))
+                result = asyncio.run(
+                    service.list_markets_by_category(category=category, limit=limit)
+                )
             else:
                 result = asyncio.run(service.list_markets(limit=limit))
             markets = result.markets
@@ -133,7 +148,12 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         if category_enum is not None:
             cat_val = category_enum.value
-            markets = [m for m in markets if m.market_category == category_enum or (m.category and m.category.lower() in (cat_val, f"climate and {cat_val}"))]
+            markets = [
+                m
+                for m in markets
+                if m.market_category == category_enum
+                or (m.category and m.category.lower() in (cat_val, f"climate and {cat_val}"))
+            ]
 
         if not markets:
             if json_output:
@@ -146,6 +166,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         if category is not None:
             try:
                 from traderbot.news.ingest import get_news_context
+
                 news_context = get_news_context(category=category.lower())
             except Exception:
                 pass
@@ -155,13 +176,17 @@ def register_commands(parent_app: typer.Typer) -> None:
         for mkt in markets:
             try:
                 signal = generate_signal(mkt, news_context)
-                results.append({
-                    "ticker": mkt.ticker,
-                    "question": mkt.question,
-                    "signal": signal.value,
-                    "confidence": signal.confidence,
-                    "category": mkt.market_category.value if mkt.market_category else mkt.category or "",
-                })
+                results.append(
+                    {
+                        "ticker": mkt.ticker,
+                        "question": mkt.question,
+                        "signal": signal.value,
+                        "confidence": signal.confidence,
+                        "category": mkt.market_category.value
+                        if mkt.market_category
+                        else mkt.category or "",
+                    }
+                )
             except Exception:
                 pass
 
@@ -177,8 +202,13 @@ def register_commands(parent_app: typer.Typer) -> None:
         table.add_column("Category", style="green")
         for r in results:
             signal_color = {"BUY": "green", "SELL": "red", "HOLD": "yellow"}.get(r["signal"], "")
-            table.add_row(r["ticker"], r["question"], f"[{signal_color}]{r['signal']}[/{signal_color}]",
-                          f"{r['confidence']:.2f}", r["category"])
+            table.add_row(
+                r["ticker"],
+                r["question"],
+                f"[{signal_color}]{r['signal']}[/{signal_color}]",
+                f"{r['confidence']:.2f}",
+                r["category"],
+            )
         console.print(table)
 
     @parent_app.command()
@@ -259,38 +289,42 @@ def register_commands(parent_app: typer.Typer) -> None:
                 continue
             sentiment = scorer.score(item.title, item.source, item.id)
             impact = assessor.assess(item, classified, sentiment)
-            classified_items.append({
-                "news_item": item,
-                "category": classified.category,
-                "sentiment_score": sentiment.score,
-                "sentiment_confidence": sentiment.confidence,
-                "sentiment_model": sentiment.model,
-                "impact": impact,
-            })
+            classified_items.append(
+                {
+                    "news_item": item,
+                    "category": classified.category,
+                    "sentiment_score": sentiment.score,
+                    "sentiment_confidence": sentiment.confidence,
+                    "sentiment_model": sentiment.model,
+                    "impact": impact,
+                }
+            )
 
         if json_output:
             output = []
             for entry in classified_items:
                 item = entry["news_item"]
                 impact = entry["impact"]
-                output.append({
-                    "ticker": ticker_upper,
-                    "id": item.id,
-                    "title": item.title,
-                    "source": item.source.value,
-                    "category": entry["category"].value,
-                    "sentiment_score": entry["sentiment_score"],
-                    "sentiment_confidence": entry["sentiment_confidence"],
-                    "sentiment_model": entry["sentiment_model"],
-                    "impact": {
-                        "magnitude": impact.magnitude,
-                        "direction": impact.direction,
-                        "timeframe": impact.timeframe,
-                        "confidence": impact.confidence,
-                    },
-                    "url": item.url,
-                    "published_at": item.published_at.isoformat(),
-                })
+                output.append(
+                    {
+                        "ticker": ticker_upper,
+                        "id": item.id,
+                        "title": item.title,
+                        "source": item.source.value,
+                        "category": entry["category"].value,
+                        "sentiment_score": entry["sentiment_score"],
+                        "sentiment_confidence": entry["sentiment_confidence"],
+                        "sentiment_model": entry["sentiment_model"],
+                        "impact": {
+                            "magnitude": impact.magnitude,
+                            "direction": impact.direction,
+                            "timeframe": impact.timeframe,
+                            "confidence": impact.confidence,
+                        },
+                        "url": item.url,
+                        "published_at": item.published_at.isoformat(),
+                    }
+                )
             json_lib.dump(output, sys.stdout, default=str)
             return
 
@@ -309,7 +343,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         for entry in classified_items:
             item = entry["news_item"]
             impact = entry["impact"]
-            sent_str = f"{entry['sentiment_score']:.2f}" if entry["sentiment_score"] is not None else "—"
+            sent_str = (
+                f"{entry['sentiment_score']:.2f}" if entry["sentiment_score"] is not None else "—"
+            )
             table.add_row(
                 item.source.value,
                 entry["category"].value,

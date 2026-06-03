@@ -49,12 +49,14 @@ def _derive_or_create_key() -> bytes:
 
 def _encrypt_data(data: str, key: bytes) -> bytes:
     from cryptography.fernet import Fernet
+
     fernet_key = base64.urlsafe_b64encode(key)
     return Fernet(fernet_key).encrypt(data.encode())
 
 
 def _decrypt_data(data: bytes, key: bytes) -> str:
     from cryptography.fernet import Fernet
+
     fernet_key = base64.urlsafe_b64encode(key)
     return Fernet(fernet_key).decrypt(data).decode()
 
@@ -98,8 +100,7 @@ class ProfileRegistry:
             raise ValueError(f"Profile '{profile.name}' already exists")
 
         profile_dict = profile.model_dump(
-            exclude={"paper_mode", "base_dir", "env_file"},
-            mode="json"
+            exclude={"paper_mode", "base_dir", "env_file"}, mode="json"
         )
 
         data = self._read_profiles_file()
@@ -114,6 +115,7 @@ class ProfileRegistry:
 
         if profile_dict.get("enabled_categories"):
             from traderbot.kalshi.models import MarketCategory
+
             profile_dict["enabled_categories"] = [
                 MarketCategory(cat.lower()) if isinstance(cat, str) else cat
                 for cat in profile_dict["enabled_categories"]
@@ -163,12 +165,12 @@ class ProfileRegistry:
             raise ValueError(f"Profile '{name}' not found")
 
         profile_dict = existing.model_dump(
-            exclude={"paper_mode", "base_dir", "env_file"},
-            mode="json"
+            exclude={"paper_mode", "base_dir", "env_file"}, mode="json"
         )
 
         if profile_dict.get("enabled_categories"):
             from traderbot.kalshi.models import MarketCategory
+
             profile_dict["enabled_categories"] = [
                 MarketCategory(cat.lower()) if isinstance(cat, str) else cat
                 for cat in profile_dict["enabled_categories"]
@@ -176,11 +178,11 @@ class ProfileRegistry:
 
         if "enabled_categories" in kwargs:
             from traderbot.kalshi.models import MarketCategory
+
             cats = kwargs.pop("enabled_categories")
             if isinstance(cats, list):
                 profile_dict["enabled_categories"] = [
-                    MarketCategory(cat.lower()) if isinstance(cat, str) else cat
-                    for cat in cats
+                    MarketCategory(cat.lower()) if isinstance(cat, str) else cat for cat in cats
                 ]
             else:
                 profile_dict["enabled_categories"] = cats
@@ -193,8 +195,7 @@ class ProfileRegistry:
 
         data = self._read_profiles_file()
         data[name] = updated_profile.model_dump(
-            exclude={"paper_mode", "base_dir", "env_file"},
-            mode="json"
+            exclude={"paper_mode", "base_dir", "env_file"}, mode="json"
         )
         self._write_profiles_file(data)
 

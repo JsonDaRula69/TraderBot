@@ -165,7 +165,9 @@ def experiment_verify(
 def experiment_run(
     treatments: Annotated[
         str | None,
-        typer.Option("--treatments", "-t", help="Comma-separated treatment names (registered in registry)"),
+        typer.Option(
+            "--treatments", "-t", help="Comma-separated treatment names (registered in registry)"
+        ),
     ] = None,
     control: Annotated[
         str | None,
@@ -245,7 +247,9 @@ def experiment_run(
         return
 
     if not db_path.exists():
-        err_console.print(f"[red]Database not found:[/red] {db_path}. Run 'experiment populate' first.")
+        err_console.print(
+            f"[red]Database not found:[/red] {db_path}. Run 'experiment populate' first."
+        )
         raise typer.Exit(code=1)
 
     provider = OllamaProvider(model=model)
@@ -361,8 +365,10 @@ def _dry_run_preview(
         _output_console.print(f"  DB: {db_path}")
         _output_console.print(f"  Seed: {seed}")
         if "market_preview" in preview and isinstance(preview["market_preview"], dict):
-            _output_console.print(f"  Market preview: {preview['market_preview']['stratum_cells']} cells, "
-                                  f"{preview['market_preview']['total_markets']} markets")
+            _output_console.print(
+                f"  Market preview: {preview['market_preview']['stratum_cells']} cells, "
+                f"{preview['market_preview']['total_markets']} markets"
+            )
 
 
 @experiment_app.command("results")

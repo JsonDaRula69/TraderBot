@@ -11,10 +11,6 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +19,7 @@ _HOOKS_DIR = _OPENCLAW_DIR / "hooks"
 
 # Common locations for the openclaw CLI
 _OPENCLAW_CLI_CANDIDATES = [
-    "openclaw",                                 # on PATH
+    "openclaw",  # on PATH
     Path.home() / ".npm-global" / "bin" / "openclaw",
     Path.home() / ".local" / "bin" / "openclaw",
     Path("/usr/local/bin/openclaw"),
@@ -133,14 +129,16 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
     subprocess that has not sourced the user's shell init files).
     """
     env = os.environ.copy()
-    env["PATH"] = ":".join([
-        str(Path.home() / ".npm-global" / "bin"),
-        "/usr/local/bin",
-        "/usr/local/sbin",
-        "/usr/bin",
-        "/bin",
-        env.get("PATH", ""),
-    ])
+    env["PATH"] = ":".join(
+        [
+            str(Path.home() / ".npm-global" / "bin"),
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/bin",
+            env.get("PATH", ""),
+        ]
+    )
 
     for cli_path in _OPENCLAW_CLI_CANDIDATES:
         resolved = shutil.which(str(cli_path), path=env["PATH"])
@@ -166,12 +164,15 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
             pass
     return False
 
+
 def get_openclaw_version() -> str | None:
     """Return installed OpenClaw version string, or ``None``."""
     try:
         result = subprocess.run(
             ["openclaw", "--version"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -227,9 +228,18 @@ def ensure_agent_bootstrap_hook() -> bool:
     extra_paths = ["SESSION-STATE.md", "HEARTBEAT_DATA.md"]
     try:
         import subprocess
+
         current = subprocess.run(
-            ["openclaw", "config", "get", "hooks.internal.entries.bootstrap-extra-files.paths", "--json"],
-            capture_output=True, text=True, timeout=10,
+            [
+                "openclaw",
+                "config",
+                "get",
+                "hooks.internal.entries.bootstrap-extra-files.paths",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if current.returncode == 0:
             existing = json.loads(current.stdout)
@@ -238,20 +248,33 @@ def ensure_agent_bootstrap_hook() -> bool:
                     if p not in existing:
                         existing.append(p)
             subprocess.run(
-                ["openclaw", "config", "set", "hooks.internal.entries.bootstrap-extra-files.paths",
-                 json.dumps(existing), "--strict-json", "--merge"],
-                capture_output=True, timeout=10,
+                [
+                    "openclaw",
+                    "config",
+                    "set",
+                    "hooks.internal.entries.bootstrap-extra-files.paths",
+                    json.dumps(existing),
+                    "--strict-json",
+                    "--merge",
+                ],
+                capture_output=True,
+                timeout=10,
             )
         else:
             subprocess.run(
-                ["openclaw", "config", "set", "hooks.internal.entries.bootstrap-extra-files.paths",
-                 json.dumps(extra_paths), "--strict-json"],
-                capture_output=True, timeout=10,
+                [
+                    "openclaw",
+                    "config",
+                    "set",
+                    "hooks.internal.entries.bootstrap-extra-files.paths",
+                    json.dumps(extra_paths),
+                    "--strict-json",
+                ],
+                capture_output=True,
+                timeout=10,
             )
         logger.info("Configured bootstrap-extra-files paths: %s", extra_paths)
     except Exception as exc:
         logger.warning("Could not configure bootstrap-extra-files paths: %s", exc)
 
     return True
-
-

@@ -1,12 +1,11 @@
 """Profile management commands."""
+
 from __future__ import annotations
 
 import json as json_lib
 import logging
-import os
 import sys
-from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -16,11 +15,7 @@ from traderbot.cli.helpers import (
     _mask_token,
     _resolve_agent_path,
     _write_token_to_env,
-    err_console,
 )
-
-if TYPE_CHECKING:
-    from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +28,9 @@ profile_app = typer.Typer(
 
 def _install_news_ingest_timer(agent_user, interval_minutes=30, console=None):
     from traderbot.cli.cron import _install_news_ingest_timer as _f
+
     return _f(agent_user, interval_minutes, console)
+
 
 def _interactive_profile_create(console: Console, registry) -> None:
     """Walk user through profile creation with numbered selections."""
@@ -96,8 +93,12 @@ def _interactive_profile_create(console: Console, registry) -> None:
     risk_mult_str = typer.prompt("  Risk multiplier (0-1)", default="1.0")
     risk_multiplier = float(risk_mult_str) if risk_mult_str else 1.0
 
-    max_pos_str = typer.prompt("  Max position per market %", default=str(HARD_LIMITS["max_position_per_market_pct"]))
-    max_position_pct = float(max_pos_str) if max_pos_str else HARD_LIMITS["max_position_per_market_pct"]
+    max_pos_str = typer.prompt(
+        "  Max position per market %", default=str(HARD_LIMITS["max_position_per_market_pct"])
+    )
+    max_position_pct = (
+        float(max_pos_str) if max_pos_str else HARD_LIMITS["max_position_per_market_pct"]
+    )
 
     max_dl_str = typer.prompt("  Max daily loss %", default=str(HARD_LIMITS["max_daily_loss_pct"]))
     max_daily_loss_pct = float(max_dl_str) if max_dl_str else HARD_LIMITS["max_daily_loss_pct"]
@@ -105,10 +106,14 @@ def _interactive_profile_create(console: Console, registry) -> None:
     max_dd_str = typer.prompt("  Max drawdown %", default=str(HARD_LIMITS["max_drawdown_pct"]))
     max_drawdown_pct = float(max_dd_str) if max_dd_str else HARD_LIMITS["max_drawdown_pct"]
 
-    max_op_str = typer.prompt("  Max open positions", default=str(HARD_LIMITS["max_open_positions"]))
+    max_op_str = typer.prompt(
+        "  Max open positions", default=str(HARD_LIMITS["max_open_positions"])
+    )
     max_open_positions = int(max_op_str) if max_op_str else int(HARD_LIMITS["max_open_positions"])
 
-    min_liq_str = typer.prompt("  Min liquidity", default=str(HARD_LIMITS["min_liquidity_threshold"]))
+    min_liq_str = typer.prompt(
+        "  Min liquidity", default=str(HARD_LIMITS["min_liquidity_threshold"])
+    )
     min_liquidity = int(min_liq_str) if min_liq_str else int(HARD_LIMITS["min_liquidity_threshold"])
 
     min_edge_str = typer.prompt("  Min edge %", default=str(HARD_LIMITS["min_edge_pct"]))
@@ -174,7 +179,9 @@ def _interactive_profile_action(name: str, console: Console, registry) -> None:
 
     console.print(f"\n[bold]Profile: {name}[/bold] ({profile.mode})")
     console.print(f"  Description:    {profile.description}")
-    console.print(f"  Categories:     {', '.join(str(c.value) for c in profile.enabled_categories) if profile.enabled_categories else 'all'}")
+    console.print(
+        f"  Categories:     {', '.join(str(c.value) for c in profile.enabled_categories) if profile.enabled_categories else 'all'}"
+    )
     console.print(f"  Risk multiplier:{profile.risk_multiplier:.1%}")
     console.print(f"  Max position:   {profile.max_position_per_market_pct:.1%}")
     console.print(f"  Max daily loss:  {profile.max_daily_loss_pct:.1%}")
@@ -220,8 +227,14 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
     if new_desc != profile.description:
         update_kwargs["description"] = new_desc
 
-    current_cats = ", ".join(str(c.value) for c in profile.enabled_categories) if profile.enabled_categories else ""
-    new_cats = typer.prompt(f"  Categories [{current_cats or 'all'}]", default="", show_default=False)
+    current_cats = (
+        ", ".join(str(c.value) for c in profile.enabled_categories)
+        if profile.enabled_categories
+        else ""
+    )
+    new_cats = typer.prompt(
+        f"  Categories [{current_cats or 'all'}]", default="", show_default=False
+    )
     if new_cats:
         try:
             update_kwargs["enabled_categories"] = [
@@ -231,7 +244,9 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print(f"[red]Error:[/red] Invalid category: {e}")
             return
 
-    new_rm = typer.prompt(f"  Risk multiplier [{profile.risk_multiplier}]", default="", show_default=False)
+    new_rm = typer.prompt(
+        f"  Risk multiplier [{profile.risk_multiplier}]", default="", show_default=False
+    )
     if new_rm:
         try:
             update_kwargs["risk_multiplier"] = float(new_rm)
@@ -239,7 +254,11 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_mp = typer.prompt(f"  Max position per market % [{profile.max_position_per_market_pct}]", default="", show_default=False)
+    new_mp = typer.prompt(
+        f"  Max position per market % [{profile.max_position_per_market_pct}]",
+        default="",
+        show_default=False,
+    )
     if new_mp:
         try:
             update_kwargs["max_position_per_market_pct"] = float(new_mp)
@@ -247,7 +266,9 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_ml = typer.prompt(f"  Max daily loss % [{profile.max_daily_loss_pct}]", default="", show_default=False)
+    new_ml = typer.prompt(
+        f"  Max daily loss % [{profile.max_daily_loss_pct}]", default="", show_default=False
+    )
     if new_ml:
         try:
             update_kwargs["max_daily_loss_pct"] = float(new_ml)
@@ -255,7 +276,9 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_md = typer.prompt(f"  Max drawdown % [{profile.max_drawdown_pct}]", default="", show_default=False)
+    new_md = typer.prompt(
+        f"  Max drawdown % [{profile.max_drawdown_pct}]", default="", show_default=False
+    )
     if new_md:
         try:
             update_kwargs["max_drawdown_pct"] = float(new_md)
@@ -263,7 +286,9 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_op = typer.prompt(f"  Max open positions [{profile.max_open_positions}]", default="", show_default=False)
+    new_op = typer.prompt(
+        f"  Max open positions [{profile.max_open_positions}]", default="", show_default=False
+    )
     if new_op:
         try:
             update_kwargs["max_open_positions"] = int(new_op)
@@ -271,7 +296,11 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_lq = typer.prompt(f"  Min liquidity threshold [{profile.min_liquidity_threshold}]", default="", show_default=False)
+    new_lq = typer.prompt(
+        f"  Min liquidity threshold [{profile.min_liquidity_threshold}]",
+        default="",
+        show_default=False,
+    )
     if new_lq:
         try:
             update_kwargs["min_liquidity_threshold"] = int(new_lq)
@@ -279,7 +308,9 @@ def _interactive_edit_profile(name: str, profile, console: Console, registry) ->
             console.print("[red]Invalid number[/red]")
             return
 
-    new_edge = typer.prompt(f"  Min edge % [{profile.min_edge_pct}]", default="", show_default=False)
+    new_edge = typer.prompt(
+        f"  Min edge % [{profile.min_edge_pct}]", default="", show_default=False
+    )
     if new_edge:
         try:
             update_kwargs["min_edge_pct"] = float(new_edge)
@@ -318,7 +349,9 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
 
     agents = discover_agents()
     if not agents:
-        console.print("[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]")
+        console.print(
+            "[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]"
+        )
         return
 
     console.print("\n[bold]Select an agent:[/bold]")
@@ -338,7 +371,9 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
     agent_id = agent["agent_id"]
 
     console.print("\n[bold]Workspace file mode:[/bold]")
-    console.print("  1. Merge — backup existing files, then merge TraderBot templates (recommended)")
+    console.print(
+        "  1. Merge — backup existing files, then merge TraderBot templates (recommended)"
+    )
     console.print("  2. Overwrite — replace workspace files with TraderBot templates")
 
     try:
@@ -360,10 +395,14 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
             mode = "overwritten" if overwrite else "merged"
             console.print(f"[green]✓[/green] Workspace files {mode} into {agent_id}/")
         else:
-            logger.info("Agent workspace not found for '%s' — token assigned to .env only", agent_id)
+            logger.info(
+                "Agent workspace not found for '%s' — token assigned to .env only", agent_id
+            )
     except TokenAlreadyAssignedError:
         console.print(f"[yellow]Profile '{name}' already has a token assigned.[/yellow]")
-        console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
+        console.print(
+            "Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign."
+        )
         raise typer.Exit(1) from None
 
 
@@ -409,9 +448,7 @@ def _do_assign(
             else:
                 propagate_workspace_files(profile, agent_path, overwrite=overwrite)
                 mode = "overwritten" if overwrite else "merged"
-                console.print(
-                    f"[green]✓[/green] Workspace files {mode} into {agent_id}/"
-                )
+                console.print(f"[green]✓[/green] Workspace files {mode} into {agent_id}/")
 
                 try:
                     from traderbot.profiles.openclaw_config import (
@@ -421,9 +458,7 @@ def _do_assign(
 
                     enable_session_memory_hook()
                     ensure_agent_bootstrap_hook()
-                    console.print(
-                        "[green]✓[/green] OpenClaw features configured (hooks)"
-                    )
+                    console.print("[green]✓[/green] OpenClaw features configured (hooks)")
 
                     try:
                         news_result = _install_news_ingest_timer(
@@ -431,9 +466,7 @@ def _do_assign(
                             console=console,
                         )
                         if news_result.get("registered"):
-                            console.print(
-                                "[green]✓[/green] News ingestion timer installed"
-                            )
+                            console.print("[green]✓[/green] News ingestion timer installed")
                     except Exception as ni_err:
                         logger.warning("News ingest timer install failed: %s", ni_err)
                         console.print(
@@ -452,7 +485,9 @@ def _do_assign(
             logger.warning("Failed to propagate workspace files: %s", e)
     except TokenAlreadyAssignedError:
         console.print(f"[yellow]Profile '{profile_name}' already has a token assigned.[/yellow]")
-        console.print("Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign.")
+        console.print(
+            "Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign."
+        )
         raise typer.Exit(1) from None
 
 
@@ -461,7 +496,9 @@ def _interactive_assign(console: Console, registry, overwrite: bool = False) -> 
 
     profiles = registry.list_profiles()
     if not profiles:
-        console.print("[yellow]No profiles found.[/yellow] Create one with: traderbot profile create")
+        console.print(
+            "[yellow]No profiles found.[/yellow] Create one with: traderbot profile create"
+        )
         return
 
     console.print("\n[bold]Select a profile:[/bold]")
@@ -484,8 +521,12 @@ def _interactive_assign(console: Console, registry, overwrite: bool = False) -> 
 
     agents = discover_agents()
     if not agents:
-        console.print("[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]")
-        console.print(f"\n[dim]To assign manually: traderbot profile assign {profile_name} <agent_id>[/dim]")
+        console.print(
+            "[yellow]No agents found. Run 'traderbot profile discover-agents' to scan.[/yellow]"
+        )
+        console.print(
+            f"\n[dim]To assign manually: traderbot profile assign {profile_name} <agent_id>[/dim]"
+        )
         return
 
     console.print("\n[bold]Select an agent:[/bold]")
@@ -505,7 +546,9 @@ def _interactive_assign(console: Console, registry, overwrite: bool = False) -> 
     agent_id = agent["agent_id"]
 
     console.print("\n[bold]Workspace file mode:[/bold]")
-    console.print("  1. Merge — backup existing files, then merge TraderBot templates (recommended)")
+    console.print(
+        "  1. Merge — backup existing files, then merge TraderBot templates (recommended)"
+    )
     console.print("  2. Overwrite — replace workspace files with TraderBot templates")
 
     try:
@@ -610,10 +653,14 @@ def _apply_profile_update(
 
 @profile_app.command("create")
 def profile_create(
-    name: Annotated[str | None, typer.Argument(help="Profile name (omit for interactive mode)")] = None,
+    name: Annotated[
+        str | None, typer.Argument(help="Profile name (omit for interactive mode)")
+    ] = None,
     mode: Annotated[str | None, typer.Option(help="Trading mode: paper or live")] = None,
     description: Annotated[str | None, typer.Option(help="Profile description")] = None,
-    categories: Annotated[str | None, typer.Option(help="Comma-separated market categories")] = None,
+    categories: Annotated[
+        str | None, typer.Option(help="Comma-separated market categories")
+    ] = None,
     risk_multiplier: Annotated[float | None, typer.Option(help="Risk multiplier (0-1)")] = None,
     max_position_pct: Annotated[
         float | None, typer.Option(help="Max position per market %")
@@ -624,7 +671,8 @@ def profile_create(
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
     initial_balance_cents: Annotated[
-        int | None, typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)")
+        int | None,
+        typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)"),
     ] = None,
 ) -> None:
     """Create a new trading profile. Interactive if no name given; uses flags if name provided."""
@@ -640,9 +688,22 @@ def profile_create(
         _interactive_profile_create(console, registry)
         return
 
-    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier,
-                                              max_position_pct, max_daily_loss_pct, max_drawdown_pct,
-                                              max_open_positions, min_liquidity, min_edge_pct, initial_balance_cents])
+    has_flags = any(
+        v is not None
+        for v in [
+            mode,
+            description,
+            categories,
+            risk_multiplier,
+            max_position_pct,
+            max_daily_loss_pct,
+            max_drawdown_pct,
+            max_open_positions,
+            min_liquidity,
+            min_edge_pct,
+            initial_balance_cents,
+        ]
+    )
 
     if name is None:
         console.print("[dim]Use: traderbot profile create <name> [options][/dim]")
@@ -670,7 +731,8 @@ def profile_create(
         "description": description or f"{name} trading profile",
         "enabled_categories": enabled_categories,
         "risk_multiplier": risk_multiplier or 1.0,
-        "max_position_per_market_pct": max_position_pct or HARD_LIMITS["max_position_per_market_pct"],
+        "max_position_per_market_pct": max_position_pct
+        or HARD_LIMITS["max_position_per_market_pct"],
         "max_daily_loss_pct": max_daily_loss_pct or HARD_LIMITS["max_daily_loss_pct"],
         "max_drawdown_pct": max_drawdown_pct or HARD_LIMITS["max_drawdown_pct"],
         "max_open_positions": max_open_positions or int(HARD_LIMITS["max_open_positions"]),
@@ -700,7 +762,9 @@ def profile_create(
             try:
                 profile = TradingProfile(**profile_data)
                 registry.create_profile(profile)
-                console.print(f"[green]✓[/green] Created profile '{new_name}' in {profile_mode} mode")
+                console.print(
+                    f"[green]✓[/green] Created profile '{new_name}' in {profile_mode} mode"
+                )
             except ValueError as e:
                 console.print(f"[red]Error:[/red] {e}")
                 raise typer.Exit(1) from None
@@ -790,7 +854,9 @@ def profile_show(
         if profile.initial_balance_cents:
             console.print(f"  Initial Balance: ${profile.initial_balance_cents / 100:.2f}")
         if profile.enabled_categories:
-            console.print(f"\n[bold]Enabled Categories:[/bold] {', '.join(c.value for c in profile.enabled_categories)}")
+            console.print(
+                f"\n[bold]Enabled Categories:[/bold] {', '.join(c.value for c in profile.enabled_categories)}"
+            )
         else:
             console.print("\n[bold]Enabled Categories:[/bold] All")
 
@@ -821,9 +887,16 @@ def profile_delete(
 def profile_assign(
     profile_name: Annotated[str | None, typer.Argument(help="Profile name")] = None,
     agent_id: Annotated[str | None, typer.Argument(help="Agent ID or name")] = None,
-    yes: Annotated[bool, typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting")] = False,
-    overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite workspace files instead of merging")] = False,
-    force: Annotated[bool, typer.Option("--force", help="Reassign token even if profile already has one")] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Auto-apply all workspace templates without prompting"),
+    ] = False,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Overwrite workspace files instead of merging")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Reassign token even if profile already has one")
+    ] = False,
 ) -> None:
     """Assign a token to an agent for profile access.
 
@@ -841,12 +914,16 @@ def profile_assign(
 
     if profile_name is None or agent_id is None:
         if not sys.stdin.isatty():
-            console.print("[red]Error:[/red] profile_name and agent_id required in non-interactive mode")
+            console.print(
+                "[red]Error:[/red] profile_name and agent_id required in non-interactive mode"
+            )
             raise typer.Exit(1)
         _interactive_assign(console, registry, overwrite=overwrite)
         return
 
-    _do_assign(profile_name, agent_id, overwrite=overwrite, force=force, console=console, script_output=yes)
+    _do_assign(
+        profile_name, agent_id, overwrite=overwrite, force=force, console=console, script_output=yes
+    )
 
 
 @profile_app.command("revoke")
@@ -901,9 +978,7 @@ def profile_assignments(
         return
 
     if json_output:
-        masked_assignments = [
-            {**a, "token": _mask_token(a["token"])} for a in assignments
-        ]
+        masked_assignments = [{**a, "token": _mask_token(a["token"])} for a in assignments]
         print(json_lib.dumps(masked_assignments, indent=2))
     else:
         table = Table(title="Token Assignments")
@@ -941,7 +1016,8 @@ def profile_update(
     min_liquidity: Annotated[int | None, typer.Option(help="Min liquidity threshold")] = None,
     min_edge_pct: Annotated[float | None, typer.Option(help="Min edge %")] = None,
     initial_balance_cents: Annotated[
-        int | None, typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)")
+        int | None,
+        typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)"),
     ] = None,
 ) -> None:
     """Update specific fields of an existing profile.
@@ -955,12 +1031,29 @@ def profile_update(
     console = Console()
     registry = ProfileRegistry()
 
-    has_flags = any(v is not None for v in [mode, description, categories, risk_multiplier, max_position_pct, max_daily_loss_pct, max_drawdown_pct, max_open_positions, min_liquidity, min_edge_pct, initial_balance_cents])
+    has_flags = any(
+        v is not None
+        for v in [
+            mode,
+            description,
+            categories,
+            risk_multiplier,
+            max_position_pct,
+            max_daily_loss_pct,
+            max_drawdown_pct,
+            max_open_positions,
+            min_liquidity,
+            min_edge_pct,
+            initial_balance_cents,
+        ]
+    )
 
     if name is None:
         profiles = registry.list_profiles()
         if not profiles:
-            console.print("[yellow]No profiles found.[/yellow] Create one with: traderbot profile create <name>")
+            console.print(
+                "[yellow]No profiles found.[/yellow] Create one with: traderbot profile create <name>"
+            )
             raise typer.Exit(0)
 
         if not has_flags and sys.stdin.isatty():
@@ -973,14 +1066,27 @@ def profile_update(
         console.print("[bold]Available profiles:[/bold]")
         for p_name in profiles:
             console.print(f"  • {p_name}")
-        console.print("\n[dim]Use: traderbot profile update <name> [options] to update a profile[/dim]")
+        console.print(
+            "\n[dim]Use: traderbot profile update <name> [options] to update a profile[/dim]"
+        )
         raise typer.Exit(0)
 
-    _apply_profile_update(name, mode, description, categories, risk_multiplier,
-                          max_position_pct, max_daily_loss_pct, max_drawdown_pct,
-                          max_open_positions, min_liquidity, min_edge_pct,
-                          initial_balance_cents=initial_balance_cents,
-                          console=console, registry=registry)
+    _apply_profile_update(
+        name,
+        mode,
+        description,
+        categories,
+        risk_multiplier,
+        max_position_pct,
+        max_daily_loss_pct,
+        max_drawdown_pct,
+        max_open_positions,
+        min_liquidity,
+        min_edge_pct,
+        initial_balance_cents=initial_balance_cents,
+        console=console,
+        registry=registry,
+    )
 
 
 @profile_app.command("discover-agents")

@@ -418,7 +418,8 @@ class TestConcurrentWrite:
         def holding_writer():
             try:
                 lock = portalocker.Lock(
-                    session_state_path, mode="r+",
+                    session_state_path,
+                    mode="r+",
                     flags=portalocker.LockFlags.EXCLUSIVE | portalocker.LockFlags.NON_BLOCKING,
                 )
                 lock.acquire()
@@ -517,7 +518,9 @@ class TestWALFdSafety:
             reason="test",
         )
         session_file = tmp_path / "SESSION-STATE.md"
-        session_file.write_text("# Session State\n\n## Pending Actions\n\n(none)\n\n## Completed Actions\n\n(none)\n")
+        session_file.write_text(
+            "# Session State\n\n## Pending Actions\n\n(none)\n\n## Completed Actions\n\n(none)\n"
+        )
         with unittest.mock.patch("builtins.open", side_effect=OSError("permission denied")):
             with pytest.raises(OSError, match="permission denied"):
                 write_intent(session_file, entry)
@@ -533,7 +536,7 @@ class TestWALFdSafety:
 
         result = update_status(session_file, "intent-1", WalStatus.COMPLETED)
 
-        fd_after = open(session_file, "r")
+        fd_after = open(session_file)  # noqa: SIM115
         content_after = fd_after.read()
         fd_after.close()
 

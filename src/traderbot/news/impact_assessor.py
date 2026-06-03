@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class ImpactWeights(BaseModel):
     direct_relevance: Annotated[float, Field(gt=0, lt=1)] = 0.3
     source_authority: Annotated[float, Field(gt=0, lt=1)] = 0.25
@@ -34,17 +35,24 @@ class ImpactWeights(BaseModel):
 
     @model_validator(mode="after")
     def validate_sum(self) -> ImpactWeights:
-        total = self.direct_relevance + self.source_authority + self.recency + self.market_sensitivity + self.corroboration
+        total = (
+            self.direct_relevance
+            + self.source_authority
+            + self.recency
+            + self.market_sensitivity
+            + self.corroboration
+        )
         if abs(total - 1.0) > 1e-6:
             raise ValueError("Sum of impact weights must equal 1.0")
         return self
+
 
 DEFAULT_IMPACT_WEIGHTS = ImpactWeights(
     direct_relevance=0.3,
     source_authority=0.25,
     recency=0.2,
     market_sensitivity=0.15,
-    corroboration=0.1
+    corroboration=0.1,
 )
 
 # ── Impact bands ──────────────────────────────────────────────────────
@@ -103,6 +111,7 @@ class ImpactAssessor(BaseModel):
     similarity is used for relevance when available, falling back to
     keyword overlap otherwise.
     """
+
     weights: ImpactWeights = DEFAULT_IMPACT_WEIGHTS
     model_config = ConfigDict(strict=True, extra="forbid", arbitrary_types_allowed=True)
 
@@ -198,15 +207,17 @@ class ImpactAssessor(BaseModel):
             sim = _cosine_similarity(text_emb, query_emb)
             return max(0.0, min(1.0, sim))
         except Exception:
-            logger.warning("Voyage similarity failed — falling back to keyword overlap", exc_info=True)
+            logger.warning(
+                "Voyage similarity failed — falling back to keyword overlap", exc_info=True
+            )
             return None
 
     def _keyword_overlap_ratio(self, news_item: NewsItem) -> float:
         """Simple keyword overlap between title+body and ticker refs."""
         text_words = set((news_item.title + " " + news_item.body).lower().split())
-        ref_words = set(
-            " ".join(news_item.ticker_refs).lower().split()
-        ) if news_item.ticker_refs else set()
+        ref_words = (
+            set(" ".join(news_item.ticker_refs).lower().split()) if news_item.ticker_refs else set()
+        )
 
         if not ref_words:
             # No ticker refs — moderate default
@@ -271,7 +282,11 @@ class ImpactAssessor(BaseModel):
         direction: str,
     ) -> str:
         """Produce human-readable reasoning summary."""
-        corr_text = f", corroborated by {corroborating_count} additional source(s)" if corroborating_count > 0 else ""
+        corr_text = (
+            f", corroborated by {corroborating_count} additional source(s)"
+            if corroborating_count > 0
+            else ""
+        )
         return (
             f"impact={magnitude:.2f} ({direction}): "
             f"relevance={relevance:.2f}, authority={authority:.2f}, "

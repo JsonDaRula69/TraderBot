@@ -46,8 +46,13 @@ class CalibrationBundleTreatment(TreatmentInterface):
         ema_short = f"{t.ema_short:.1f}" if t.ema_short is not None else "N/A"
         ema_long = f"{t.ema_long:.1f}" if t.ema_long is not None else "N/A"
 
-        price_trend = "rising" if len(p.history) >= 2 and p.history[-1] > p.history[0] else \
-                      "falling" if len(p.history) >= 2 and p.history[-1] < p.history[0] else "flat"
+        price_trend = (
+            "rising"
+            if len(p.history) >= 2 and p.history[-1] > p.history[0]
+            else "falling"
+            if len(p.history) >= 2 and p.history[-1] < p.history[0]
+            else "flat"
+        )
 
         prior_lines = ""
         if ctx.prior.decisions:
@@ -126,29 +131,21 @@ Respond ONLY with the JSON object, no other text."""
                 f"'estimated_prob' must be numeric, got {type(estimated_prob).__name__}"
             )
         if not (0.0 <= float(estimated_prob) <= 1.0):
-            raise ValueError(
-                f"'estimated_prob' must be in [0.0, 1.0], got {estimated_prob}"
-            )
+            raise ValueError(f"'estimated_prob' must be in [0.0, 1.0], got {estimated_prob}")
 
         confidence = response.get("confidence")
         if confidence is None:
             raise ValueError("response missing 'confidence'")
         if not isinstance(confidence, (int, float)):
-            raise ValueError(
-                f"'confidence' must be numeric, got {type(confidence).__name__}"
-            )
+            raise ValueError(f"'confidence' must be numeric, got {type(confidence).__name__}")
         if not (0.0 <= float(confidence) <= 1.0):
-            raise ValueError(
-                f"'confidence' must be in [0.0, 1.0], got {confidence}"
-            )
+            raise ValueError(f"'confidence' must be in [0.0, 1.0], got {confidence}")
 
         reasoning = response.get("reasoning")
         if reasoning is None:
             raise ValueError("response missing 'reasoning'")
         if not isinstance(reasoning, str):
-            raise ValueError(
-                f"'reasoning' must be a string, got {type(reasoning).__name__}"
-            )
+            raise ValueError(f"'reasoning' must be a string, got {type(reasoning).__name__}")
 
         return ValidatedDecision(
             decision=decision,

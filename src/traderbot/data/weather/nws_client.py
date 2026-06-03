@@ -103,8 +103,7 @@ class NwsClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise NwsClientError(
-                f"NWS points endpoint returned {exc.response.status_code} "
-                f"for {lat:.4f},{lon:.4f}"
+                f"NWS points endpoint returned {exc.response.status_code} for {lat:.4f},{lon:.4f}"
             ) from exc
         except httpx.RequestError as exc:
             raise NwsClientError(
@@ -145,8 +144,7 @@ class NwsClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise NwsClientError(
-                f"NWS forecast endpoint returned {exc.response.status_code} "
-                f"for {lat:.4f},{lon:.4f}"
+                f"NWS forecast endpoint returned {exc.response.status_code} for {lat:.4f},{lon:.4f}"
             ) from exc
         except httpx.RequestError as exc:
             raise NwsClientError(
@@ -157,9 +155,7 @@ class NwsClient:
         properties = data.get("properties", {})
         periods: list[dict[str, Any]] = properties.get("periods", [])
         if not periods:
-            raise NwsClientError(
-                f"No forecast periods in NWS response for {lat:.4f},{lon:.4f}"
-            )
+            raise NwsClientError(f"No forecast periods in NWS response for {lat:.4f},{lon:.4f}")
 
         current = periods[0]
 
@@ -196,9 +192,7 @@ class NwsClient:
         forecast_date = datetime.now(UTC)
         if generated_at_str:
             with suppress(ValueError):
-                forecast_date = datetime.fromisoformat(
-                    generated_at_str.replace("Z", "+00:00")
-                )
+                forecast_date = datetime.fromisoformat(generated_at_str.replace("Z", "+00:00"))
 
         return CityForecast(
             ticker=ticker,

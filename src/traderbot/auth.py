@@ -119,12 +119,16 @@ class AuthManager:
             for env_key in env_keys:
                 file_val = _env_file_get_value(env_path, env_key)
                 if file_val is not None:
-                    logger.debug("Resolved %s/%s from %s (env var %s)", service, key, env_path, env_key)
+                    logger.debug(
+                        "Resolved %s/%s from %s (env var %s)", service, key, env_path, env_key
+                    )
                     return CredentialResult(
                         service=service, key=key, value=SecretStr(file_val), source="env"
                     )
 
-        logger.warning("Credential %s/%s not found in any source (keyring, env, .env)", service, key)
+        logger.warning(
+            "Credential %s/%s not found in any source (keyring, env, .env)", service, key
+        )
         return None
 
     def set_credential(self, service: str, key: str, value: str) -> Literal["keyring", "env"]:
@@ -268,7 +272,9 @@ class AuthManager:
             return False
         import keyring
 
-        return keyring.get_password(_keyring_service_name(service), _keyring_username(key)) is not None
+        return (
+            keyring.get_password(_keyring_service_name(service), _keyring_username(key)) is not None
+        )
 
     def _get_from_env_only(self, service: str, key: str) -> str | None:
         """Retrieve credential value from env/.env only (no keyring)."""

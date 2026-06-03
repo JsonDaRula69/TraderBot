@@ -76,8 +76,15 @@ class PinnedSSLContext(ssl.SSLContext):
         )
         self.load_default_certs()
 
-    def wrap_socket(self, sock, server_side=False, do_handshake_on_connect=True,
-                    suppress_ragged_eofs=True, server_hostname=None, session=None):
+    def wrap_socket(
+        self,
+        sock,
+        server_side=False,
+        do_handshake_on_connect=True,
+        suppress_ragged_eofs=True,
+        server_hostname=None,
+        session=None,
+    ):
         ssock = super().wrap_socket(
             sock,
             server_side=server_side,

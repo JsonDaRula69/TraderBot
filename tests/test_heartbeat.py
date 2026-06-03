@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from tests.conftest import strip_ansi
+
 from typer.testing import CliRunner
 
 from traderbot.cli import app
@@ -73,8 +75,17 @@ def _insert_decision(
             actual_result)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            ts, ticker, direction, quantity, price, 0.5,
-            confidence, 0.03, '{"all": true}', outcome, None,
+            ts,
+            ticker,
+            direction,
+            quantity,
+            price,
+            0.5,
+            confidence,
+            0.03,
+            '{"all": true}',
+            outcome,
+            None,
             actual_result,
         ),
     )
@@ -162,16 +173,14 @@ class TestPerformanceReview:
 
     def test_deviation_flag_above_expected(self):
         decisions = [
-            _make_decision(id=i, direction="yes", price=40, actual_result=True)
-            for i in range(8)
+            _make_decision(id=i, direction="yes", price=40, actual_result=True) for i in range(8)
         ]
         result = step_performance_review(self.conn, decisions)
         assert result.deviation_flag == "win_rate_above_expected"
 
     def test_deviation_flag_below_expected(self):
         decisions = [
-            _make_decision(id=i, direction="yes", price=60, actual_result=False)
-            for i in range(6)
+            _make_decision(id=i, direction="yes", price=60, actual_result=False) for i in range(6)
         ]
         result = step_performance_review(self.conn, decisions)
         assert result.deviation_flag == "win_rate_below_expected"
@@ -240,10 +249,7 @@ class TestDecisionReview:
         assert result.pending_review == ["KXBTCD-26MAR31-T55000", "KXBTCD-26MAR31-T55000"]
 
     def test_pending_review_capped_at_five(self):
-        decisions = [
-            _make_decision(id=i, ticker=f"TICK{i}", actual_result=None)
-            for i in range(8)
-        ]
+        decisions = [_make_decision(id=i, ticker=f"TICK{i}", actual_result=None) for i in range(8)]
         result = step_decision_review(decisions)
         assert len(result.pending_review) == 5
 
@@ -282,8 +288,7 @@ class TestBayesianAdaptation:
 
     def test_successful_update(self):
         decisions = [
-            _make_decision(id=i, direction="yes", price=40, actual_result=True)
-            for i in range(12)
+            _make_decision(id=i, direction="yes", price=40, actual_result=True) for i in range(12)
         ]
         config = MagicMock()
         config.min_observations = 1
@@ -294,6 +299,7 @@ class TestBayesianAdaptation:
         config.drift_consecutive_count = 3
 
         from traderbot.simulation.adaptation import BayesianAdapter
+
         adapter = BayesianAdapter(config=config)
         result = step_bayesian_adaptation(decisions, adapter=adapter)
         assert result.updated
@@ -302,8 +308,7 @@ class TestBayesianAdaptation:
 
     def test_cooldown_blocks_update(self):
         decisions = [
-            _make_decision(id=i, direction="yes", price=40, actual_result=True)
-            for i in range(12)
+            _make_decision(id=i, direction="yes", price=40, actual_result=True) for i in range(12)
         ]
         from traderbot.simulation.adaptation import BayesianAdapter, GuardrailConfig
 
@@ -429,6 +434,7 @@ class TestSystemHealth:
 
     def test_api_unavailable(self):
         import asyncio
+
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
@@ -440,7 +446,9 @@ class TestSystemHealth:
         import asyncio
 
         conn = sqlite3.connect(":memory:")
-        conn.execute("CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY, timestamp TEXT)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY, timestamp TEXT)"
+        )
         with patch.dict("sys.modules", {"traderbot.kalshi.client": None}):
             result = asyncio.run(step_system_health(conn))
         assert result.db_integrity == "ok"
@@ -492,7 +500,7 @@ class TestHeartbeatCycle:
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         assert hb_path.exists()
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "Heartbeat:" in content
         assert "Performance" in content
         assert "Adaptation" in content
@@ -510,8 +518,10 @@ class TestHeartbeatCycle:
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
         after = datetime.now(UTC)
 
-        content = hb_path.read_text()
-        ts_line = next(line for line in content.split("\n") if line.startswith("## Last Heartbeat:"))
+        content = hb_path.read_text(encoding="utf-8")
+        ts_line = next(
+            line for line in content.split("\n") if line.startswith("## Last Heartbeat:")
+        )
         ts_str = ts_line.replace("## Last Heartbeat:", "").strip()
         ts = datetime.fromisoformat(ts_str)
         assert before <= ts <= after
@@ -534,7 +544,17 @@ class TestHeartbeatCycle:
         _init_db(conn)
 
         config_path = tmp_path / "update_config.json"
-        config_path.write_text(json.dumps({"enabled": False, "check_on_startup": True, "check_interval_minutes": 360, "auto_apply": False, "include_prerelease": False}))
+        config_path.write_text(
+            json.dumps(
+                {
+                    "enabled": False,
+                    "check_on_startup": True,
+                    "check_interval_minutes": 360,
+                    "auto_apply": False,
+                    "include_prerelease": False,
+                }
+            )
+        )
         monkeypatch.setattr("traderbot.update_config.CONFIG_PATH", config_path)
 
         api_called = {"count": 0}
@@ -578,8 +598,8 @@ class TestHeartbeatCLI:
     def test_heartbeat_help(self):
         result = runner.invoke(app, ["heartbeat", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.output
-        assert "--dry-run" in result.output
+        assert "--json" in strip_ansi(result.output)
+        assert "--dry-run" in strip_ansi(result.output)
 
     def test_heartbeat_json_output(self):
         result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
@@ -594,20 +614,25 @@ class TestHeartbeatCLI:
         assert "system_health" in data
         assert "steps_completed" in data
 
-    @pytest.mark.xfail(reason="DecisionReview lacks decisions_today/rejections_today attributes (source bug in admin.py)")
+    @pytest.mark.xfail(
+        reason="DecisionReview lacks decisions_today/rejections_today attributes (source bug in admin.py)"
+    )
     def test_heartbeat_rich_output(self):
         result = runner.invoke(app, ["heartbeat", "--dry-run"])
         assert result.exit_code == 0
-        assert "Heartbeat" in result.output
-        assert "Performance" in result.output
-        assert "Adaptation" in result.output
-        assert "Circuit Breaker" in result.output
+        assert "Heartbeat" in strip_ansi(result.output)
+        assert "Performance" in strip_ansi(result.output)
+        assert "Adaptation" in strip_ansi(result.output)
+        assert "Circuit Breaker" in strip_ansi(result.output)
 
     def test_heartbeat_dry_run_flag(self):
         result = runner.invoke(app, ["heartbeat", "--json", "--dry-run"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert "dry_run" in data["adaptation"]["skipped_reason"] or "no decisions" in data["adaptation"]["skipped_reason"]
+        assert (
+            "dry_run" in data["adaptation"]["skipped_reason"]
+            or "no decisions" in data["adaptation"]["skipped_reason"]
+        )
 
     def test_heartbeat_no_dry_run(self):
         result = runner.invoke(app, ["heartbeat", "--json"])
@@ -642,9 +667,13 @@ class TestHeartbeatResultModel:
     def test_all_pydantic_strict(self):
         """Verify ConfigDict(strict=True, extra='forbid') on all models."""
         for model_cls in [
-            PerformanceReview, DecisionReview, AdaptationReview,
-            LearningPromotionReview, CircuitBreakerReview,
-            SystemHealthReview, HeartbeatResult,
+            PerformanceReview,
+            DecisionReview,
+            AdaptationReview,
+            LearningPromotionReview,
+            CircuitBreakerReview,
+            SystemHealthReview,
+            HeartbeatResult,
         ]:
             cfg = model_cls.model_config
             assert cfg.get("strict") is True, f"{model_cls.__name__} not strict"
@@ -689,10 +718,7 @@ class TestEdgeCases:
     def test_many_stale_decisions(self):
         conn = sqlite3.connect(":memory:")
         init_positions_table(conn)
-        decisions = [
-            _make_decision(id=i, actual_result=None, hours_ago=72)
-            for i in range(20)
-        ]
+        decisions = [_make_decision(id=i, actual_result=None, hours_ago=72) for i in range(20)]
         perf = step_performance_review(conn, decisions)
         # None actual_result → no wins counted for those that are executed but unresolved
         assert perf.trade_count == 20
@@ -708,7 +734,7 @@ class TestEdgeCases:
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         with patch("traderbot.heartbeat.step_circuit_breaker_check", return_value=mock_cb_result):
             asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "NORMAL" in content
         conn.close()
 
@@ -719,7 +745,7 @@ class TestEdgeCases:
 
         hb_path = tmp_path / "HEARTBEAT_DATA.md"
         asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=hb_path))
-        content = hb_path.read_text()
+        content = hb_path.read_text(encoding="utf-8")
         assert "Alerts" in content
         conn.close()
 

@@ -254,9 +254,7 @@ def require_auth() -> None:
 
     stored = _read_master_key()
     if stored is None:
-        logger.error(
-            "Master password not configured. Run: traderbot auth setup-master-password"
-        )
+        logger.error("Master password not configured. Run: traderbot auth setup-master-password")
         raise SystemExit(1)
 
     if os.environ.get("TRADERBOT_NONINTERACTIVE"):

@@ -120,17 +120,13 @@ class PortfolioService:
                     else None
                 )
 
-                price_cents = _to_cents(
-                    raw.get("price_dollars") or raw.get("price_fp") or 0
-                )
+                price_cents = _to_cents(raw.get("price_dollars") or raw.get("price_fp") or 0)
 
                 settlement_price_cents = _to_cents(
                     raw.get("settlement_price_dollars") or raw.get("settlement_price_fp") or 0
                 )
 
-                pnl_cents = _to_cents(
-                    raw.get("pnl_dollars") or raw.get("pnl_fp") or 0
-                )
+                pnl_cents = _to_cents(raw.get("pnl_dollars") or raw.get("pnl_fp") or 0)
 
                 quantity = int(raw.get("count_fp") or 0)
 

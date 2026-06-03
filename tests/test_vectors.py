@@ -24,12 +24,14 @@ def _make_mock_collection() -> MagicMock:
     col = MagicMock()
     col.upsert = MagicMock()
     col.delete = MagicMock()
-    col.query = MagicMock(return_value={
-        "ids": [[]],
-        "documents": [[]],
-        "metadatas": [[]],
-        "distances": [[]],
-    })
+    col.query = MagicMock(
+        return_value={
+            "ids": [[]],
+            "documents": [[]],
+            "metadatas": [[]],
+            "distances": [[]],
+        }
+    )
     return col
 
 
@@ -59,7 +61,10 @@ class TestVectorStoreInit:
 
     def test_chromadb_missing_raises(self, tmp_path: Path) -> None:
         store = VectorStore(persist_dir=tmp_path)
-        with patch("traderbot.db.vectors.chromadb", None), pytest.raises(ImportError, match="chromadb is not installed"):
+        with (
+            patch("traderbot.db.vectors.chromadb", None),
+            pytest.raises(ImportError, match="chromadb is not installed"),
+        ):
             _ = store.client
 
 
@@ -120,7 +125,9 @@ class TestAddDocument:
         store._client = mock_client
         embedding = _fake_embedding()
 
-        store.add_document("doc1", "test text", {"src": "test"}, embedding=embedding, collection="news")
+        store.add_document(
+            "doc1", "test text", {"src": "test"}, embedding=embedding, collection="news"
+        )
 
         col = store._collections["news"]
         col.upsert.assert_called_once_with(
@@ -159,7 +166,9 @@ class TestAddDocument:
         store._client = mock_client
 
         emb = _fake_embedding()
-        store.add_document("doc2", "text with embedding", {"source": "emb"}, embedding=emb, collection="news")
+        store.add_document(
+            "doc2", "text with embedding", {"source": "emb"}, embedding=emb, collection="news"
+        )
 
         col = store._collections["news"]
         col.upsert.assert_called_once_with(
@@ -228,7 +237,10 @@ class TestSearch:
         store._collections = {"decisions": col}
 
         results = store.search(
-            _fake_embedding(), n=5, filter_metadata={"category": "economics"}, collection="decisions",
+            _fake_embedding(),
+            n=5,
+            filter_metadata={"category": "economics"},
+            collection="decisions",
         )
 
         col.query.assert_called_once_with(
@@ -318,7 +330,10 @@ class TestChromadbOptional:
         store._client = None
         store._collections = {}
 
-        with patch("traderbot.db.vectors.chromadb", None), pytest.raises(ImportError, match="pip install"):
+        with (
+            patch("traderbot.db.vectors.chromadb", None),
+            pytest.raises(ImportError, match="pip install"),
+        ):
             _ = store.client
 
 
@@ -340,7 +355,14 @@ class TestEmbeddingDimension:
 
 class TestDefaultCollections:
     def test_default_collections_tuple(self) -> None:
-        assert DEFAULT_COLLECTIONS == ("decisions", "news", "market_patterns", "news_signals", "market_conditions", "data_points")
+        assert DEFAULT_COLLECTIONS == (
+            "decisions",
+            "news",
+            "market_patterns",
+            "news_signals",
+            "market_conditions",
+            "data_points",
+        )
 
     def test_init_collections_creates_six(self, tmp_path: Path) -> None:
         mock_client = _make_mock_client()
@@ -351,4 +373,11 @@ class TestDefaultCollections:
         store.init_collections()
 
         assert len(store._collections) == 6
-        assert set(store._collections.keys()) == {"decisions", "news", "market_patterns", "news_signals", "market_conditions", "data_points"}
+        assert set(store._collections.keys()) == {
+            "decisions",
+            "news",
+            "market_patterns",
+            "news_signals",
+            "market_conditions",
+            "data_points",
+        }

@@ -260,9 +260,7 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
         all_tickers = {ticker for (_, ticker) in final_decisions}
         price_rows = conn.execute(
             "SELECT ticker, yes_price_cents, no_price_cents FROM market_prices "
-            "WHERE timestep = 0 AND ticker IN ({})".format(
-                ",".join("?" for _ in all_tickers)
-            ),
+            "WHERE timestep = 0 AND ticker IN ({})".format(",".join("?" for _ in all_tickers)),
             list(all_tickers),
         ).fetchall()
         price_map: dict[str, tuple[int, int]] = {r[0]: (r[1], r[2]) for r in price_rows}
@@ -327,8 +325,10 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
             t_stat, p_value = _paired_ttest(treatment_pnls, ctrl_pnls)
 
         effect = _cohen_d(diffs)
-        ci = (mean_delta - 1.96 * std_delta / math.sqrt(n),
-              mean_delta + 1.96 * std_delta / math.sqrt(n))
+        ci = (
+            mean_delta - 1.96 * std_delta / math.sqrt(n),
+            mean_delta + 1.96 * std_delta / math.sqrt(n),
+        )
 
         result = ExperimentResults(
             treatment=treatment,
@@ -345,7 +345,13 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
 
         logger.info(
             "Scored %s vs %s: p=%.4f d=%.3f delta=%.2f n=%d improvement=%s",
-            treatment, control_name, p_value, effect, mean_delta, n, result.improvement,
+            treatment,
+            control_name,
+            p_value,
+            effect,
+            mean_delta,
+            n,
+            result.improvement,
         )
         if result.improvement:
             logger.info("Deployment criterion met for %s vs %s", treatment, control_name)

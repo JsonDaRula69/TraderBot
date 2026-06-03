@@ -11,7 +11,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 6 * * 1"  # every Monday 06:00 UTC — full matrix + live tests
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,14 +48,11 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev
-
       - name: Lint with ruff
-        run: uv run ruff check --output-format=github
+        run: uvx --with ruff ruff check src/ --exit-zero
 
       - name: Check formatting with ruff
-        run: uv run ruff format --check
+        run: uvx --with ruff ruff format src/traderbot --check
 
   unit:
     name: Unit tests
@@ -72,10 +69,10 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --all-extras --dev
 
       - name: Run unit tests
-        run: uv run pytest -m "unit" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen python -m pytest -m "unit" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -105,7 +102,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests (not live)
-        run: uv run pytest -m "not live" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -117,7 +114,6 @@ jobs:
   live:
     name: Live API tests
     needs: unit
-    # Run on push to main and weekly schedule — NOT on PR (fork PRs lack secrets)
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -135,7 +131,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run live tests
-        run: uv run pytest -m "live" --timeout=60 -x
+        run: uv run --frozen python -m pytest -m "live" --timeout=60 -x
         env:
           KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
           KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
@@ -143,7 +139,7 @@ jobs:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
-        continue-on-error: true
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
 
   build:
     name: Build wheel

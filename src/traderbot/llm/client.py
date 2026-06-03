@@ -64,7 +64,7 @@ class LLMClient:
             except OllamaConnectionError as exc:
                 last_exc = exc
                 if attempt < self.max_retries - 1:
-                    wait = BACKOFF_BASE * (2 ** attempt)
+                    wait = BACKOFF_BASE * (2**attempt)
                     logger.warning(
                         "LLM request failed (attempt %d/%d), retrying in %.0fs: %s",
                         attempt + 1,

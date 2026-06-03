@@ -1,7 +1,6 @@
 """Internal normalization helpers shared across kalshi modules."""
 
 import logging
-
 from datetime import UTC, datetime
 from typing import Any
 
@@ -93,7 +92,12 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
     else:
         status_val = raw_status
 
-    logger.debug("Normalized market: %s -> status=%s ticker=%s", raw.get("ticker"), status_val, raw.get("ticker"))
+    logger.debug(
+        "Normalized market: %s -> status=%s ticker=%s",
+        raw.get("ticker"),
+        status_val,
+        raw.get("ticker"),
+    )
     return Market(
         ticker=raw["ticker"],
         question=question,
@@ -115,13 +119,13 @@ def _normalize_orderbook_level(raw: list[Any]) -> OrderBookLevel:
 
 
 def _normalize_trade(raw: dict[str, Any]) -> Trade:
-    ts_val = raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("created_time", 0)
+    ts_val = (
+        raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("created_time", 0)
+    )
     if isinstance(ts_val, int):
         ts_val = _unix_to_datetime(ts_val)
 
-    price = _to_cents(
-        raw.get("price_dollars") or raw.get("price_fp") or 0
-    )
+    price = _to_cents(raw.get("price_dollars") or raw.get("price_fp") or 0)
 
     quantity = int(raw.get("count_fp") or 0)
 

@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from traderbot.cli.helpers import _resolve_db_path
+from traderbot.paths import _resolve_db_path
 from traderbot.db import get_connection
 from traderbot.db.positions import list_all
 from traderbot.profiles.models import TradingProfile as Profile
@@ -32,7 +32,9 @@ class PaperBalance:
         return self.settled_payout_cents - (self.initial_cents - self.remaining_cents)
 
 
-def compute_paper_balance(profile: Profile | None, db_path: Path | None = None) -> PaperBalance | None:
+def compute_paper_balance(
+    profile: Profile | None, db_path: Path | None = None
+) -> PaperBalance | None:
     """Compute paper portfolio balance from SQLite positions.
 
     Formula: remaining = initial_balance - cost(at open) + settlement_payouts

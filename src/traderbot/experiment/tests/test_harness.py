@@ -2,7 +2,6 @@
 
 import ast
 import sqlite3
-from datetime import datetime, UTC
 from unittest.mock import MagicMock
 
 from traderbot.db.experiment_schema import create_tables
@@ -14,7 +13,9 @@ from traderbot.llm.client import LLMClient
 def _make_llm_client() -> LLMClient:
     """Build a mock LLMClient that returns canned JSON."""
     provider = MagicMock()
-    provider.generate.return_value = '{"decision": "skip", "estimated_prob": 0.5, "confidence": 0.5, "reasoning": "mocked"}'
+    provider.generate.return_value = (
+        '{"decision": "skip", "estimated_prob": 0.5, "confidence": 0.5, "reasoning": "mocked"}'
+    )
     return LLMClient(provider=provider)
 
 
@@ -42,6 +43,7 @@ def test_harness_run_empty_db() -> None:
     llm = _make_llm_client()
     h = Harness(conn=conn, llm_client=llm, seed=42)
     from traderbot.experiment.treatments.control import ControlTreatment
+
     h.run(treatment_instances=[ControlTreatment()], run_id="test_empty")
     rows = conn.execute("SELECT COUNT(*) FROM agent_decisions").fetchone()
     assert rows[0] == 0
@@ -50,7 +52,7 @@ def test_harness_run_empty_db() -> None:
 
 def test_boundary_no_treatment_imports() -> None:
     """harness.py should not directly import treatment implementations (only shared)."""
-    with open(__file__.rsplit("tests/", 1)[0] + "harness.py", "r") as f:
+    with open(__file__.rsplit("tests/", 1)[0] + "harness.py") as f:
         source = f.read()
     tree = ast.parse(source)
     treatment_imports = []

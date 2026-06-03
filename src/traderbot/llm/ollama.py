@@ -59,17 +59,11 @@ class OllamaProvider:
                 resp = client.post(self.base_url, json=payload)
                 resp.raise_for_status()
         except httpx.ConnectError as exc:
-            raise OllamaConnectionError(
-                f"Cannot connect to Ollama at {self.base_url}"
-            ) from exc
+            raise OllamaConnectionError(f"Cannot connect to Ollama at {self.base_url}") from exc
         except httpx.TimeoutException as exc:
-            raise OllamaConnectionError(
-                f"Ollama request timed out after {self.timeout}s"
-            ) from exc
+            raise OllamaConnectionError(f"Ollama request timed out after {self.timeout}s") from exc
         except httpx.HTTPStatusError as exc:
-            raise OllamaConnectionError(
-                f"Ollama returned HTTP {exc.response.status_code}"
-            ) from exc
+            raise OllamaConnectionError(f"Ollama returned HTTP {exc.response.status_code}") from exc
 
         data = resp.json()
         return data.get("response", "")

@@ -16,14 +16,16 @@ from traderbot.kalshi.signing import auth_headers
 
 logger = logging.getLogger(__name__)
 
-VALID_CHANNELS: frozenset[str] = frozenset({
-    "ticker",
-    "orderbook_delta",
-    "market_lifecycle_v2",
-    "fill",
-    "user_orders",
-    "market_positions",
-})
+VALID_CHANNELS: frozenset[str] = frozenset(
+    {
+        "ticker",
+        "orderbook_delta",
+        "market_lifecycle_v2",
+        "fill",
+        "user_orders",
+        "market_positions",
+    }
+)
 
 
 class WebSocketConfig(BaseSettings):
@@ -110,7 +112,9 @@ class KalshiWebSocket:
 
         msg = {"id": self._message_id, "cmd": "subscribe", "params": params}
         await self._ws.send(json.dumps(msg))
-        logger.info("Subscribed to channels=%s ticker=%s", channels, market_ticker or market_tickers)
+        logger.info(
+            "Subscribed to channels=%s ticker=%s", channels, market_ticker or market_tickers
+        )
 
     async def unsubscribe(
         self,
@@ -146,7 +150,9 @@ class KalshiWebSocket:
 
         msg = {"id": self._message_id, "cmd": "unsubscribe", "params": params}
         await self._ws.send(json.dumps(msg))
-        logger.info("Unsubscribed from channels=%s ticker=%s", channels, market_ticker or market_tickers)
+        logger.info(
+            "Unsubscribed from channels=%s ticker=%s", channels, market_ticker or market_tickers
+        )
 
     async def receive(self) -> dict[str, Any]:
         """Receive the next message from the WebSocket.

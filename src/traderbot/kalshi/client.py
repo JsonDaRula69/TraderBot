@@ -51,7 +51,9 @@ class KalshiConfig(BaseSettings):
     private_key_pem: SecretStr | None = None
     private_key_path: Path | None = None
     base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
-    rate_limit_rps: float = 200.0  # token refill rate from Kalshi /account/limits; default 200 at tier
+    rate_limit_rps: float = (
+        200.0  # token refill rate from Kalshi /account/limits; default 200 at tier
+    )
     endpoint_cost: int = 10  # default token cost per request; see /account/endpoint_costs
     max_retries: int = 3
     retry_base_delay: float = 1.0
@@ -68,6 +70,7 @@ class KalshiConfig(BaseSettings):
                 # which doesn't exist inside a sandbox container. Fall back
                 # to the data directory using the filename only.
                 from traderbot.paths import get_data_dir
+
                 alt = get_data_dir() / self.private_key_path.name
                 if alt.exists():
                     return alt.read_text()
@@ -180,7 +183,13 @@ class KalshiClient:
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
             await self._rate_limiter.acquire()
-            logger.debug("Request %s %s (attempt %d/%d)", method, path, attempt + 1, self._config.max_retries + 1)
+            logger.debug(
+                "Request %s %s (attempt %d/%d)",
+                method,
+                path,
+                attempt + 1,
+                self._config.max_retries + 1,
+            )
             try:
                 if method.upper() in ("GET", "DELETE"):
                     response = await self._client.request(
@@ -198,7 +207,9 @@ class KalshiClient:
                     raise RateLimitError(f"Rate limit exceeded: {path}")
 
                 if response.status_code in (401, 403):
-                    logger.error("Auth failure on %s %s: HTTP %d", method, path, response.status_code)
+                    logger.error(
+                        "Auth failure on %s %s: HTTP %d", method, path, response.status_code
+                    )
                     raise AuthenticationError(
                         f"Auth failure on {path}: HTTP {response.status_code}"
                     )
@@ -221,7 +232,9 @@ class KalshiClient:
 
             if attempt < self._config.max_retries:
                 delay = self._config.retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
-                logger.debug("Retrying %s %s in %.2fs (attempt %d)", method, path, delay, attempt + 1)
+                logger.debug(
+                    "Retrying %s %s in %.2fs (attempt %d)", method, path, delay, attempt + 1
+                )
                 await asyncio.sleep(delay)
 
         logger.error("Max retries exceeded for %s %s", method, path)

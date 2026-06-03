@@ -1,4 +1,5 @@
 """CLI entry point — imports all sub-apps and registers them on the main typer app."""
+
 from __future__ import annotations
 
 import importlib
@@ -13,13 +14,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from traderbot.cli.auth import auth_app
-from traderbot.cli.sandbox import sandbox_app
-from traderbot.cli.profile import profile_app
-from traderbot.cli.trade import register_commands as register_trade
-from traderbot.cli.market import register_commands as register_market
-from traderbot.cli.news import register_commands as register_news
 from traderbot.cli.admin import register_commands as register_admin
+from traderbot.cli.auth import auth_app
 from traderbot.cli.data import data_app
 from traderbot.cli.helpers import (
     _LAUNCHCTL,
@@ -28,6 +24,11 @@ from traderbot.cli.helpers import (
     _check_updates_on_startup,
     app,
 )
+from traderbot.cli.market import register_commands as register_market
+from traderbot.cli.news import register_commands as register_news
+from traderbot.cli.profile import profile_app
+from traderbot.cli.sandbox import sandbox_app
+from traderbot.cli.trade import register_commands as register_trade
 from traderbot.cli.ws import ws_app
 
 logger = logging.getLogger(__name__)
@@ -37,17 +38,20 @@ logger = logging.getLogger(__name__)
 # a stale deployment can self-heal via git pull + reinstall.
 _cron_app = None
 
+
 def _get_cron_app():
     """Lazy-import cron_app to keep the update command reachable."""
     global _cron_app
     if _cron_app is None:
         try:
             from traderbot.cli.cron import cron_app
+
             _cron_app = cron_app
         except Exception as exc:
             logger.warning("Failed to import cron_app (update may be needed): %s", exc)
             return None
     return _cron_app
+
 
 # Register sub-apps
 app.add_typer(auth_app, name="auth")
@@ -66,6 +70,7 @@ app.add_typer(ws_app, name="ws")
 # Register experiment sub-app (imported from experiment module)
 try:
     from traderbot.experiment.cli import experiment_app
+
     app.add_typer(experiment_app, name="experiment")
 except Exception as exc:
     logger.debug("Failed to import experiment_app: %s", exc)
@@ -78,9 +83,15 @@ if _ca is not None:
 
 @app.command()
 def update(
-    dev: Annotated[bool, typer.Option("--dev", help="Update from dev branch instead of main")] = False,
-    check: Annotated[bool, typer.Option("--check", help="Check for update only, do not apply")] = False,
-    force: Annotated[bool, typer.Option("--force", help="Pull and apply even if versions match")] = False,
+    dev: Annotated[
+        bool, typer.Option("--dev", help="Update from dev branch instead of main")
+    ] = False,
+    check: Annotated[
+        bool, typer.Option("--check", help="Check for update only, do not apply")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Pull and apply even if versions match")
+    ] = False,
 ) -> None:
     """Check for and apply updates. Defaults to check+apply; use --check to check only."""
     from traderbot.update_config import UpdateConfig
@@ -91,12 +102,16 @@ def update(
     current = get_current_version()
 
     if check and not force:
-        result = check_for_updates(force=True, check_interval_minutes=config.check_interval_minutes, dev=dev)
+        result = check_for_updates(
+            force=True, check_interval_minutes=config.check_interval_minutes, dev=dev
+        )
         if result:
             if dev:
                 console.print(f"[yellow]Dev branch update available: {result['latest']}[/yellow]")
             else:
-                console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+                console.print(
+                    f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]"
+                )
             console.print(f"[dim]Release: {result['url']}[/dim]")
         else:
             console.print(f"[green]Already up to date (v{current}).[/green]")
@@ -111,10 +126,14 @@ def update(
             console.print("[red]✗ Update failed. Check logs for details.[/red]")
         return
 
-    result = check_for_updates(force=True, check_interval_minutes=config.check_interval_minutes, dev=dev)
+    result = check_for_updates(
+        force=True, check_interval_minutes=config.check_interval_minutes, dev=dev
+    )
     if result:
         branch_label = "dev" if dev else "main"
-        console.print(f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]")
+        console.print(
+            f"[yellow]Update available: v{result['current']} → v{result['latest']}[/yellow]"
+        )
         console.print(f"[bold]Applying update from {branch_label} branch...[/bold]")
         if apply_update(dev=dev):
             console.print("[green]✓ Update applied successfully.[/green]")
@@ -128,7 +147,9 @@ def update(
 def update_configure(
     enabled: Annotated[bool | None, typer.Option(help="Enable/disable update checking")] = None,
     check_on_startup: Annotated[bool | None, typer.Option(help="Check on startup")] = None,
-    check_interval_minutes: Annotated[int | None, typer.Option(help="Check interval in minutes")] = None,
+    check_interval_minutes: Annotated[
+        int | None, typer.Option(help="Check interval in minutes")
+    ] = None,
 ) -> None:
     """Configure update checking behavior."""
     from traderbot.update_config import UpdateConfig
@@ -170,7 +191,6 @@ def uninstall(
     remove_data = False
     remove_repo = False
 
-    
     # Step 1: Stop and remove system services
     if json_output:
         removed_services = []
@@ -186,7 +206,9 @@ def uninstall(
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
             if service_dir.exists():
-                for svc in list(service_dir.glob("traderbot-*@*.service")) + list(service_dir.glob("traderbot-*@*.timer")):
+                for svc in list(service_dir.glob("traderbot-*@*.service")) + list(
+                    service_dir.glob("traderbot-*@*.timer")
+                ):
                     unit = svc.name
                     _sp.run([_SUDO, _SYSTEMCTL, "stop", unit], capture_output=True)
                     _sp.run([_SUDO, _SYSTEMCTL, "disable", unit], capture_output=True)
@@ -204,7 +226,9 @@ def uninstall(
             # User-level systemd services (OpenClaw gateway)
             user_svc_dir = Path.home() / ".config" / "systemd" / "user"
             if user_svc_dir.exists():
-                for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
+                for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(
+                    user_svc_dir.glob("traderbot-*")
+                ):
                     unit = svc.name
                     _sp.run([_SYSTEMCTL, "--user", "stop", unit], capture_output=True)
                     _sp.run([_SYSTEMCTL, "--user", "disable", unit], capture_output=True)
@@ -221,7 +245,9 @@ def uninstall(
                     console.print("[bold]Step 1a: Remove launch daemons[/bold]")
                     for plist in plists:
                         label = plist.stem
-                        _sp.run([_SUDO, _LAUNCHCTL, "bootout", f"system/{label}"], capture_output=True)
+                        _sp.run(
+                            [_SUDO, _LAUNCHCTL, "bootout", f"system/{label}"], capture_output=True
+                        )
                         result = _sp.run([_SUDO, "rm", "-f", str(plist)], capture_output=True)
                         if result.returncode == 0:
                             console.print(f"  Removed: {label}")
@@ -229,7 +255,9 @@ def uninstall(
         elif platform.system() == "Linux":
             service_dir = Path("/etc/systemd/system")
             if service_dir.exists():
-                unit_files = list(service_dir.glob("traderbot-*@*.service")) + list(service_dir.glob("traderbot-*@*.timer"))
+                unit_files = list(service_dir.glob("traderbot-*@*.service")) + list(
+                    service_dir.glob("traderbot-*@*.timer")
+                )
                 if unit_files:
                     console.print("[bold]Step 1a: Remove systemd services and timers[/bold]")
                     for svc in unit_files:
@@ -252,7 +280,9 @@ def uninstall(
             # User-level systemd services (OpenClaw gateway)
             user_svc_dir = Path.home() / ".config" / "systemd" / "user"
             if user_svc_dir.exists():
-                user_units = list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*"))
+                user_units = list(user_svc_dir.glob("openclaw-*gateway*")) + list(
+                    user_svc_dir.glob("traderbot-*")
+                )
                 if user_units:
                     console.print("[bold]Step 1c: Remove user-level systemd services[/bold]")
                     for svc in user_units:
@@ -264,11 +294,13 @@ def uninstall(
                         removed_services.append(str(svc))
         removed.extend(removed_services)
 
-# User-level systemd services (OpenClaw gateway, TraderBot agent)
+    # User-level systemd services (OpenClaw gateway, TraderBot agent)
     if platform.system() == "Linux":
         user_svc_dir = Path.home() / ".config" / "systemd" / "user"
         if user_svc_dir.exists():
-            for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(user_svc_dir.glob("traderbot-*")):
+            for svc in list(user_svc_dir.glob("openclaw-*gateway*")) + list(
+                user_svc_dir.glob("traderbot-*")
+            ):
                 unit = svc.name
                 _sp.run([_SYSTEMCTL, "--user", "stop", unit], capture_output=True)
                 _sp.run([_SYSTEMCTL, "--user", "disable", unit], capture_output=True)
@@ -280,14 +312,23 @@ def uninstall(
     # Uninstall pip package if installed (not .venv local install)
     try:
         import traderbot as _tb_mod
+
         _tb_path = Path(_tb_mod.__file__).resolve()
         if "site-packages" in str(_tb_path):
             if json_output:
-                _sp.run([sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"], capture_output=True, timeout=30)
+                _sp.run(
+                    [sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"],
+                    capture_output=True,
+                    timeout=30,
+                )
                 removed.append("pip:traderbot")
             else:
                 if typer.confirm("  Uninstall pip package 'traderbot'?", default=True):
-                    _sp.run([sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"], capture_output=True, timeout=30)
+                    _sp.run(
+                        [sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"],
+                        capture_output=True,
+                        timeout=30,
+                    )
                     console.print("  Uninstalled pip package: traderbot")
                     removed.append("pip:traderbot")
     except Exception:
@@ -297,7 +338,11 @@ def uninstall(
     for _sl in _sl_usrs:
         if _sl.is_symlink() or _sl.exists():
             try:
-                cmd = [_SUDO, "rm", "-f", str(_sl)] if str(_sl).startswith("/usr/local") else ["rm", "-f", str(_sl)]
+                cmd = (
+                    [_SUDO, "rm", "-f", str(_sl)]
+                    if str(_sl).startswith("/usr/local")
+                    else ["rm", "-f", str(_sl)]
+                )
                 _sp.run(cmd, capture_output=True)
                 removed.append(str(_sl))
                 if not json_output:
@@ -309,9 +354,12 @@ def uninstall(
         console.print("[bold]Remove OpenClaw cron jobs[/bold]")
     cron_removed = []
     try:
-        cron_output = _sp.run(["openclaw", "cron", "list", "--json"], capture_output=True, text=True, timeout=10)
+        cron_output = _sp.run(
+            ["openclaw", "cron", "list", "--json"], capture_output=True, text=True, timeout=10
+        )
         if cron_output.returncode == 0:
             import json as _cjson
+
             cron_jobs = _cjson.loads(cron_output.stdout)
             for job in cron_jobs if isinstance(cron_jobs, list) else cron_jobs.get("jobs", []):
                 jid = job.get("id") if isinstance(job, dict) else None
@@ -328,10 +376,12 @@ def uninstall(
         if json_output:
             remove_data = True
         else:
-            console.print(f"\n[bold]Step 2: Remove user data[/bold]")
+            console.print("\n[bold]Step 2: Remove user data[/bold]")
             console.print(f"[dim]Data directory: {data_dir}[/dim]")
-            console.print("[dim]This will delete all credentials (API keys, PEM keys), ChromaDB (market data, news, signals), "
-                          "profile tokens, logs, and cached data.[/dim]")
+            console.print(
+                "[dim]This will delete all credentials (API keys, PEM keys), ChromaDB (market data, news, signals), "
+                "profile tokens, logs, and cached data.[/dim]"
+            )
             remove_data = typer.confirm("  Remove all user data?", default=False)
 
     if remove_data and data_dir.exists():
@@ -372,7 +422,9 @@ def uninstall(
             pass
         elif repo_dir.exists():
             console.print(f"\n[bold]Repository:[/bold] {repo_dir}")
-            console.print("[dim]This will permanently delete the source code and virtual environment.[/dim]")
+            console.print(
+                "[dim]This will permanently delete the source code and virtual environment.[/dim]"
+            )
             answer = typer.confirm("  Remove repository?", default=False)
             if answer:
                 remove_repo = True
@@ -390,7 +442,9 @@ def uninstall(
             try:
                 content = _sf.read_text()
                 if ".local/bin" in content:
-                    cleaned = "\n".join(line for line in content.splitlines() if ".local/bin" not in line)
+                    cleaned = "\n".join(
+                        line for line in content.splitlines() if ".local/bin" not in line
+                    )
                     _sf.write_text(cleaned + "\n")
                     removed.append(f"{_sf}:local-bin-path")
                     if not json_output:
@@ -404,9 +458,16 @@ def uninstall(
         if json_output:
             remove_oc = True
         else:
-            remove_oc = typer.confirm("  Remove OpenClaw config, cron jobs, agents, workspace (~/.openclaw)?", default=False)
+            remove_oc = typer.confirm(
+                "  Remove OpenClaw config, cron jobs, agents, workspace (~/.openclaw)?",
+                default=False,
+            )
         if remove_oc:
-            _sp.run(["openclaw", "uninstall", "--state", "--workspace", "--yes", "--non-interactive"], capture_output=True, timeout=30)
+            _sp.run(
+                ["openclaw", "uninstall", "--state", "--workspace", "--yes", "--non-interactive"],
+                capture_output=True,
+                timeout=30,
+            )
             shutil.rmtree(openclaw_dir, ignore_errors=True)
             removed.append(str(openclaw_dir))
             if not json_output:
@@ -418,7 +479,9 @@ def uninstall(
         if json_output:
             remove_npm = True
         else:
-            remove_npm = typer.confirm("  Remove OpenClaw npm package? (npm uninstall -g openclaw)", default=False)
+            remove_npm = typer.confirm(
+                "  Remove OpenClaw npm package? (npm uninstall -g openclaw)", default=False
+            )
         if remove_npm:
             # Stop gateway before removing the binary
             _sp.run(["openclaw", "gateway", "stop"], capture_output=True, timeout=30)
@@ -429,11 +492,18 @@ def uninstall(
 
     _sbx_name = "traderbot-sandbox:bookworm-slim"
     try:
-        _containers = _sp.run(["docker", "ps", "-aq", "--filter", "name=openclaw-sbx"], capture_output=True, text=True, timeout=10)
+        _containers = _sp.run(
+            ["docker", "ps", "-aq", "--filter", "name=openclaw-sbx"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         if _containers.stdout.strip():
             _remove_cont = True
             if not json_output:
-                _remove_cont = typer.confirm("  Remove orphaned OpenClaw sandbox containers?", default=False)
+                _remove_cont = typer.confirm(
+                    "  Remove orphaned OpenClaw sandbox containers?", default=False
+                )
             if _remove_cont:
                 for _cid in _containers.stdout.strip().splitlines():
                     _sp.run(["docker", "rm", "-f", _cid], capture_output=True, timeout=15)
@@ -444,11 +514,15 @@ def uninstall(
         pass
 
     try:
-        _img_res = _sp.run(["docker", "images", "-q", _sbx_name], capture_output=True, text=True, timeout=10)
+        _img_res = _sp.run(
+            ["docker", "images", "-q", _sbx_name], capture_output=True, text=True, timeout=10
+        )
         if _img_res.stdout.strip():
             _remove_img = True
             if not json_output:
-                _remove_img = typer.confirm(f"  Remove Docker sandbox image ({_sbx_name})?", default=False)
+                _remove_img = typer.confirm(
+                    f"  Remove Docker sandbox image ({_sbx_name})?", default=False
+                )
             if _remove_img:
                 _sp.run(["docker", "rmi", "-f", _sbx_name], capture_output=True, timeout=30)
                 removed.append(f"docker:{_sbx_name}")
@@ -459,7 +533,9 @@ def uninstall(
 
     # Prune Docker build cache (accumulates from repeated sandbox builds)
     try:
-        _cache_res = _sp.run(["docker", "builder", "prune", "--all", "--force"], capture_output=True, timeout=60)
+        _cache_res = _sp.run(
+            ["docker", "builder", "prune", "--all", "--force"], capture_output=True, timeout=60
+        )
         if _cache_res.returncode == 0:
             removed.append("docker:build-cache")
             if not json_output:
@@ -493,7 +569,11 @@ def uninstall(
                 print(f"  Cleaned: {t}")
 
     if json_output:
-        json_lib.dump({"removed": removed, "data_removed": remove_data, "repo_removed": remove_repo}, sys.stdout, default=str)
+        json_lib.dump(
+            {"removed": removed, "data_removed": remove_data, "repo_removed": remove_repo},
+            sys.stdout,
+            default=str,
+        )
     else:
         if not removed:
             print("Nothing to remove — TraderBot is not installed.")

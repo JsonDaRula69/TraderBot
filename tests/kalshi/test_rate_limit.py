@@ -48,6 +48,7 @@ class TestTokenBucketRateLimiter:
             await limiter.acquire()
         # Bucket should be empty now
         assert limiter._tokens < 1.0
-        # After a small delay, some tokens should have refilled
+        # After a small delay, tokens should have refilled
         await asyncio.sleep(0.05)
+        await limiter.acquire()  # triggers _refill
         assert limiter._tokens > 0.0

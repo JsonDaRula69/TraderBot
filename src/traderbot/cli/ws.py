@@ -38,8 +38,10 @@ def start() -> None:
     python = str(venv_python) if venv_python.exists() else "python3"
     proc = subprocess.Popen(
         [python, str(daemon_path)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL, start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
     )
     console.print(f"[green]WS daemon started (PID {proc.pid})[/green]")
 
@@ -74,10 +76,14 @@ def status() -> None:
     t = Table(title="WS Daemon Status")
     t.add_column("Field", style="bold")
     t.add_column("Value")
-    t.add_row("Status", "[green]CONNECTED[/green]" if s.get("connected") else "[red]DISCONNECTED[/red]")
+    t.add_row(
+        "Status", "[green]CONNECTED[/green]" if s.get("connected") else "[red]DISCONNECTED[/red]"
+    )
     t.add_row("PID", str(s.get("pid")))
     uptime_secs = time.time() - s.get("uptime", time.time())
-    t.add_row("Uptime", "%.0fs" % uptime_secs if uptime_secs < 3600 else "%.1fh" % (uptime_secs / 3600))
+    t.add_row(
+        "Uptime", "%.0fs" % uptime_secs if uptime_secs < 3600 else "%.1fh" % (uptime_secs / 3600)
+    )
     t.add_row("Cache events", str(s.get("cache_size", 0)))
     last_msg = s.get("last_msg_at")
     if last_msg:

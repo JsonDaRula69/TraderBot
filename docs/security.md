@@ -144,34 +144,50 @@ If the market's category is not in `enabled_categories`, the trade is rejected. 
 
 ### Layer 5: Token Integrity
 
-Tokens are resolved via constant-time comparison (`hmac.compare_digest`) to prevent timing attacks. Each token has a 30-day TTL with automatic expiration.
+Tokens are resolved via constant-time comparison (`hmac.compare_digest`) to prevent timing attacks.
 
 ### Layer 6: Filesystem Sandbox
 
 The agent runtime is sandboxed via OS-level read-only mounts:
 
-- **Source tree** (`src/traderbot/`): Mounted read-only (0o555) — agent cannot modify toolkit code
-- **Agent workspace** (`~/.traderbot/agent_workspace/`): Writable directory for agent outputs
-- **Sandbox enforcement**: macOS `sandbox-exec`, POSIX `chmod` fallback, or Windows ACL equivalent
+- **Agent data** (`~/.traderbot/`): Bind-mounted into Docker sandbox at `/home/traderbot/.traderbot:rw` — agent data is writable, but the source tree is not
+- **Source tree** (`~/traderbot/`): Bind-mounted into Docker sandbox at `/traderbot:ro` — agent cannot modify toolkit code
+- **Agent workspace** (`~/.openclaw/workspace/`): Bind-mounted into Docker sandbox at `/workspace:rw` — agent outputs live here
+- **Sandbox enforcement**: Docker container isolation (OpenClaw), `sandbox-exec` on macOS, POSIX `chmod` fallback
 
-This prevents a compromised agent from rewriting `risk/__init__.py` to bypass HARD_LIMITS or injecting backdoors.
+This prevents a compromised agent from rewriting `risk/__init__.py` to bypass HARD_LIMITS or injecting backdoors. The Docker sandbox is the primary enforcement mechanism; `sandbox-exec` and `chmod` are supplementary.
 
 ### Layer 7: Master Password Gate
 
-All live trading commands (`traderbot trade`, `traderbot paper`) require PBKDF2-HMAC-SHA256 authentication:
+All trading commands that invoke the risk pipeline (`traderbot trade`, `traderbot paper`) require PBKDF2-HMAC-SHA256 authentication via `master_password.py`:
 
-- **Key derivation**: 600,000 iterations, 32-byte random salt, SHA-256 digest
-- **Session tokens**: HMAC-based session tokens with 30-minute TTL
+- **Key derivation**: 600,000 iterations, 32-byte random salt, SHA-256 digest — stored at `~/.traderbot/.master_key`
+- **Session tokens**: HMAC-based session tokens with 30-minute TTL, stored in `TRADERBOT_MASTER_TOKEN` env var
+- **Auto-refresh**: proactively refreshes session within 5 minutes of expiry
+- **Auto-authentication**: reads `TRADERBOT_MASTER_PASSWORD` from `.env` for non-interactive sessions (agent subprocesses, cron jobs)
 - **Constant-time comparison**: `hmac.compare_digest` for all password checks
 - **Dev bypass**: `TRADERBOT_DEV_MODE=true` disables the gate for development
+- **CLI commands**: `traderbot auth setup-master-password`, `traderbot auth change-master-password`, `traderbot auth check-master-password`, `traderbot auth clear-session`
 
-### Layer 8: Update Signature Verification
+Public API in `master_password.py`:
 
-Auto-updates are verified with Ed25519 signatures before application:
+| Function | Purpose |
+|---|---|
+| `is_setup()` | Check if `.master_key` file exists |
+| `session_active()` | Check env for valid session token with auto-refresh |
+| `authenticate(password)` | Verify password, set session token on success |
+| `setup_master_password(password)` | Create master key file (raises on existing or <8 chars) |
+| `change_master_password(old, new)` | Authenticate old, re-salt + re-derive new |
+| `require_auth()` | Gate: checks DEV_MODE → session → auto-auth → prompt (3 attempts) |
+| `clear_session()` | Remove session token from env |
 
-- **Public key**: Configured via `TRADERBOT_UPDATE_PUBKEY_B64` or `TRADERBOT_UPDATE_PUBKEY_PATH`
-- **Verification**: `verify_release_signature()` checks GitHub release signatures before `git pull`
-- **Default**: `verify_signature=True` — aborts on failure
+### Layer 8: Token Integrity
+
+Per-token binding: each profile can have only one active token. Attempting to create a second raises `ValueError`.
+
+### Layer 9: Update Integrity
+
+Agent workspaces and cron job definitions are refreshed on update via `traderbot update`. The pipeline verifies the update source (git origin or PyPI) before applying changes.
 
 Each profile has isolated data directories under `~/.traderbot/{mode}-{name}/`:
 
@@ -184,18 +200,17 @@ An agent running with one profile token cannot access another profile's SQLite d
 
 These restrictions are enforced by the system and cannot be bypassed by the agent:
 
-1. **Cannot modify profile parameters** — Profiles are stored via env and managed only via CLI
-2. **Cannot exceed HARD_LIMITS** — Even with a custom profile, `AgentRiskLimits` ceiling enforcement prevents exceeding hard limits
+1. **Cannot modify profile parameters** — Profiles are stored in an encrypted registry (`profiles.enc`) and managed only via CLI
+2. **Cannot exceed HARD_LIMITS** — Even with a custom profile, `AgentRiskLimits` ceiling enforcement (`min()`) prevents exceeding hard limits
 3. **Cannot read another profile's credentials** — Keyring namespace isolation: profile credentials stored in `traderbot.profiles.{name}.*`, global credentials in `traderbot.{service}`
 4. **Cannot use revoked tokens** — `revoke_token()` removes the token entry immediately
-5. **Cannot bypass category filtering** — Category check is in the risk gate before sizing
+5. **Cannot bypass category filtering** — Category check is in the risk gate before sizing (`evaluate_trade()`)
 6. **Cannot access another profile's data** — Separate SQLite and ChromaDB directories per profile (`~/.traderbot/{mode}-{name}/`)
 7. **Cannot self-assign a token** — Token generation requires CLI invocation by a human
 8. **Cannot increase position size beyond profile limits** — Sized position is capped by the effective limit
-9. **Cannot modify source code** — Filesystem sandbox (read-only mounts) prevents agent from editing `src/traderbot/` files
-10. **Cannot trade without authentication** — Master password gate (PBKDF2-HMAC-SHA256) required for all live trading commands
-11. **Cannot replay old requests** — Cryptographic nonce in every API request prevents replay attacks
-12. **Cannot bypass update verification** — Ed25519 signatures required before applying auto-updates
+9. **Cannot modify source code** — Docker sandbox (read-only bind mount at `/traderbot:ro`) prevents agent from editing `src/traderbot/` files
+10. **Cannot trade without authentication** — Master password gate (`master_password.py`, PBKDF2-HMAC-SHA256, 600K iterations) required for all risk-pipeline commands
+11. **Cannot replay old requests** — Cryptographic nonce in every Kalshi API request prevents replay attacks
 
 ## Keyring Namespace Map
 

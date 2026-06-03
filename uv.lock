@@ -1806,7 +1806,6 @@ wheels = [
 
 [[package]]
 name = "traderbot"
-version = "0.10.18"
 source = { editable = "." }
 dependencies = [
     { name = "chromadb" },

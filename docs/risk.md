@@ -116,18 +116,25 @@ Position sizing uses half-Kelly (0.5 × f*) to balance growth against variance:
 # risk/sizing.py
 
 def kelly_criterion(prob: float, odds: float) -> float:
-    """f* = (b*p - q) / b where q = 1-p"""
+    """f* = (b*p - q) / b where q = 1-p. Returns 0.0 if prob ∉ (0,1) or odds ≤ 0."""
+    if prob <= 0 or prob >= 1 or odds <= 0:
+        return 0.0
     q = 1 - prob
     f = (odds * prob - q) / odds
     return max(0.0, f)
 
-def fractional_kelly(prob, odds, fraction=0.5) -> float:
+def fractional_kelly(prob: float, odds: float, fraction: float = 0.5) -> float:
+    """Full Kelly × fraction. Returns 0.0 for invalid inputs or fraction outside (0,1]."""
+    if not 0 < fraction <= 1:
+        return 0.0
     return max(0.0, kelly_criterion(prob, odds)) * fraction
 
-def confidence_scaled_size(kelly_fraction, confidence, bankroll_cents) -> int:
+def confidence_scaled_size(kelly_fraction: float, confidence: float, bankroll_cents: int) -> int:
+    """Scale Kelly fraction by confidence and bankroll. Returns cents."""
     return int(kelly_fraction * max(0.0, min(1.0, confidence)) * bankroll_cents)
 
 def sized_position_for_trade(prob, odds, confidence, bankroll_cents, max_position_cents) -> int:
+    """Full sizing pipeline: fractional Kelly → confidence scaling → cap to max."""
     sized = confidence_scaled_size(fractional_kelly(prob, odds, 0.5), confidence, bankroll_cents)
     return min(sized, max_position_cents)
 ```

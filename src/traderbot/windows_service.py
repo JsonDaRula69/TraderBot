@@ -79,13 +79,24 @@ def create_service(svc: WindowsServiceDef) -> bool:
 
     Sets auto-start, restart-on-failure, and description.
     """
-    logger.info("Creating Windows service: name=%s display='%s' bin=%s", svc.name, svc.display_name, svc.bin_path)
-    result = _sc([
-        "create", svc.name,
-        "binPath=", svc.bin_path,
-        "start=", "auto",
-        "DisplayName=", svc.display_name,
-    ])
+    logger.info(
+        "Creating Windows service: name=%s display='%s' bin=%s",
+        svc.name,
+        svc.display_name,
+        svc.bin_path,
+    )
+    result = _sc(
+        [
+            "create",
+            svc.name,
+            "binPath=",
+            svc.bin_path,
+            "start=",
+            "auto",
+            "DisplayName=",
+            svc.display_name,
+        ]
+    )
     if result.returncode != 0:
         logger.warning("Failed to create service %s: %s", svc.name, result.stderr.strip())
         return False
@@ -93,11 +104,16 @@ def create_service(svc: WindowsServiceDef) -> bool:
     if svc.description:
         _sc(["description", svc.name, svc.description])
 
-    _sc([
-        "failure", svc.name,
-        "reset=", "86400",
-        "actions=", "restart/10000/restart/30000/restart/60000",
-    ])
+    _sc(
+        [
+            "failure",
+            svc.name,
+            "reset=",
+            "86400",
+            "actions=",
+            "restart/10000/restart/30000/restart/60000",
+        ]
+    )
     logger.info("Created Windows service: %s", svc.name)
     return True
 
@@ -222,19 +238,32 @@ def create_scheduled_task(task: ScheduledTaskDef) -> bool:
 
     Equivalent to systemd timer with OnCalendar=*:0/N.
     """
-    logger.info("Creating scheduled task: name=%s interval=%dmin cmd=%s", task.task_name, task.interval_minutes, task.command)
-    result = _schtasks([
-        "/create",
-        "/tn", task.task_name,
-        "/tr", task.command,
-        "/sc", "minute",
-        "/mo", str(task.interval_minutes),
-        "/f",
-    ])
+    logger.info(
+        "Creating scheduled task: name=%s interval=%dmin cmd=%s",
+        task.task_name,
+        task.interval_minutes,
+        task.command,
+    )
+    result = _schtasks(
+        [
+            "/create",
+            "/tn",
+            task.task_name,
+            "/tr",
+            task.command,
+            "/sc",
+            "minute",
+            "/mo",
+            str(task.interval_minutes),
+            "/f",
+        ]
+    )
     if result.returncode == 0:
         logger.info("Created scheduled task: %s", task.task_name)
     else:
-        logger.warning("Failed to create scheduled task %s: %s", task.task_name, result.stderr.strip())
+        logger.warning(
+            "Failed to create scheduled task %s: %s", task.task_name, result.stderr.strip()
+        )
     return result.returncode == 0
 
 

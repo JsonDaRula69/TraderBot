@@ -8,6 +8,32 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _resolve_db_path(db_path: Path | None = None) -> Path:
+    """Resolve database path: explicit override > profile-specific > global default."""
+    from traderbot.db import DB_PATH
+    from traderbot.profiles.isolation import get_profile_db_path
+
+    if db_path is not None:
+        return db_path
+
+    from traderbot.profiles.runtime import get_current_profile
+
+    profile = get_current_profile()
+    if profile is not None:
+        return get_profile_db_path(profile, "decisions.db")
+
+    return DB_PATH
+
+
+def _with_db(db_path: Path | None, func):
+    """Run func with a database connection, handling open/close."""
+    from traderbot.db import get_connection, init_schema
+
+    with get_connection(_resolve_db_path(db_path)) as conn:
+        init_schema(conn)
+        return func(conn)
+
+
 def get_data_dir() -> Path:
     """Return the TraderBot data directory (default: ~/.traderbot)."""
     return Path.home() / ".traderbot"

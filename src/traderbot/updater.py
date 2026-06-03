@@ -34,6 +34,7 @@ def get_current_version() -> str:
         return version_file.read_text().strip().lstrip("v")
     try:
         from importlib.metadata import version
+
         return version("traderbot").lstrip("v")
     except Exception:
         return "0.0.0"
@@ -68,7 +69,9 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
         result = (tag.lstrip("v"), data.get("zipball_url", ""))
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps({"tag": result[0], "url": result[1], "ts": _time.time()}))
+            cache_path.write_text(
+                json.dumps({"tag": result[0], "url": result[1], "ts": _time.time()})
+            )
             cache_path.chmod(0o600)
         except Exception:
             pass
@@ -89,9 +92,7 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
             current = get_current_version()
             try:
                 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                cache_path.write_text(
-                    json.dumps({"tag": current, "url": "", "ts": _time.time()})
-                )
+                cache_path.write_text(json.dumps({"tag": current, "url": "", "ts": _time.time()}))
                 cache_path.chmod(0o600)
             except Exception:
                 pass
@@ -122,7 +123,11 @@ def check_for_updates(
     if not config.enabled and not force:
         return None
 
-    interval_minutes = check_interval_minutes if check_interval_minutes is not None else config.check_interval_minutes
+    interval_minutes = (
+        check_interval_minutes
+        if check_interval_minutes is not None
+        else config.check_interval_minutes
+    )
 
     # Interval guard: skip if we checked recently (unless forced)
     interval_marker = CACHE_DIR / ".update_check_ts"
@@ -148,7 +153,9 @@ def check_for_updates(
     latest_ver, url = latest
     if _version_tuple(latest_ver) > _version_tuple(current) or force:
         if not silent:
-            print(f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update.")
+            print(
+                f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update."
+            )
         result: dict = {"current": current, "latest": latest_ver, "url": url}
 
         if config.auto_apply and not silent:
@@ -163,19 +170,52 @@ def check_for_updates(
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
     repo_dir = Path(__file__).resolve().parent.parent.parent
     bootstrap = repo_dir / "install" / "traderbot-update.py"
-    if not bootstrap.exists():
-        logger.error("Bootstrap script not found at %s", bootstrap)
-        return False
-    flag = "--dev" if dev else ""
-    try:
-        result = subprocess.run([sys.executable, str(bootstrap), flag], timeout=600)
-        if result.returncode != 0:
-            logger.error("Bootstrap update failed with exit code %d", result.returncode)
+    if bootstrap.exists():
+        flag = "--dev" if dev else ""
+        try:
+            result = subprocess.run([sys.executable, str(bootstrap), flag], timeout=600)
+            if result.returncode != 0:
+                logger.error("Bootstrap update failed with exit code %d", result.returncode)
+                return False
+        except Exception as exc:
+            logger.error("Bootstrap update failed: %s", exc)
             return False
-    except Exception as exc:
-        logger.error("Bootstrap update failed: %s", exc)
+        logger.info("Update applied successfully")
+        if restart:
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        return True
+
+    # Bootstrap script not available (pip-installed user — install/ not shipped).
+    # Fall back to inline pip upgrade + backup.
+    logger.info("Standalone install detected — using pip upgrade path")
+    from traderbot.paths import get_data_dir as _get_data_dir
+
+    _data_dir = _get_data_dir()
+    _backup_dir = _data_dir / ".update_backup"
+    for _f in _data_dir.rglob("*.db"):
+        if ".update_backup" in str(_f) or ".manual_update_backup" in str(_f):
+            continue
+        _rel = _f.relative_to(_data_dir)
+        _dest = _backup_dir / _rel
+        _dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            import shutil as _shutil
+
+            _shutil.copy2(_f, _dest)
+        except Exception:
+            pass
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "traderbot"],
+            check=True,
+            timeout=300,
+        )
+    except subprocess.CalledProcessError:
+        logger.error("pip upgrade failed")
         return False
-    logger.info("Update applied successfully")
+
+    logger.info("Update applied successfully via pip")
     if restart:
         os.execv(sys.executable, [sys.executable, *sys.argv])
     return True

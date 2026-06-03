@@ -1,25 +1,15 @@
 """Shared CLI utilities — app, console, and common helpers."""
+
 from __future__ import annotations
 
-import asyncio
-import json as json_lib
 import logging
-import os
 import shutil
 import sys
-import time
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.table import Table
-
-if TYPE_CHECKING:
-    from traderbot.profiles.models import TradingProfile
-
-from traderbot.profiles.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -97,29 +87,7 @@ def main_callback(
 err_console = Console(stderr=True)
 
 
-def _resolve_db_path(db_path: Path | None = None) -> Path:
-    """Resolve database path: explicit override > profile-specific > global default."""
-    from traderbot.db import DB_PATH
-    from traderbot.profiles.isolation import get_profile_db_path
-
-    if db_path is not None:
-        return db_path
-
-    from traderbot.profiles.runtime import get_current_profile
-    profile = get_current_profile()
-    if profile is not None:
-        return get_profile_db_path(profile, "decisions.db")
-
-    return DB_PATH
-
-
-def _with_db(db_path, func):
-    """Run func with a database connection, handling open/close."""
-    from traderbot.db import get_connection, init_schema
-
-    with get_connection(_resolve_db_path(db_path)) as conn:
-        init_schema(conn)
-        return func(conn)
+from traderbot.paths import _resolve_db_path, _with_db  # noqa: F401 — re-exported for backward compatibility
 
 
 def _get_strategy(name: str):
@@ -208,6 +176,10 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
         Path.home() / ".openclaw" / "workspace",
     ]
     for candidate in candidates:
-        if candidate.exists() and candidate.is_dir() and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists()):
+        if (
+            candidate.exists()
+            and candidate.is_dir()
+            and ((candidate / "IDENTITY.md").exists() or (candidate / "TOOLS.md").exists())
+        ):
             return candidate
     return None

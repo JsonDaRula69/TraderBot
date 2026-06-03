@@ -13,7 +13,13 @@ def test_creates_all_tables() -> None:
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     ).fetchall()
     table_names = {r[0] for r in rows}
-    expected = {"markets", "forecast_snapshots", "market_prices", "settlement_actuals", "agent_decisions"}
+    expected = {
+        "markets",
+        "forecast_snapshots",
+        "market_prices",
+        "settlement_actuals",
+        "agent_decisions",
+    }
     assert expected.issubset(table_names), f"Missing tables: {expected - table_names}"
     conn.close()
 
@@ -47,7 +53,17 @@ def test_foreign_keys() -> None:
     conn.execute(
         "INSERT INTO markets (ticker, question, city, city_prefix, lat, lon, timezone, "
         "resolution_date, close_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("NYC-25C", "Will NYC hit 25C?", "New York", "NYC", 40.7, -74.0, "EST", "2025-07-01", "2025-06-30T23:00"),
+        (
+            "NYC-25C",
+            "Will NYC hit 25C?",
+            "New York",
+            "NYC",
+            40.7,
+            -74.0,
+            "EST",
+            "2025-07-01",
+            "2025-06-30T23:00",
+        ),
     )
     conn.execute(
         "INSERT INTO forecast_snapshots (ticker, forecast_temp_f, source, days_before, snapshot_date) "

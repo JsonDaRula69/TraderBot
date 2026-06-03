@@ -4,6 +4,8 @@ from typer.testing import CliRunner
 
 from traderbot.cli import app
 
+from tests.conftest import strip_ansi
+
 runner = CliRunner()
 
 
@@ -20,9 +22,9 @@ class TestSandboxHelp:
     def test_sandbox_exit_help(self) -> None:
         result = runner.invoke(app, ["sandbox", "exit", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.output
+        assert "--json" in strip_ansi(result.output)
 
     def test_sandbox_status_help(self) -> None:
         result = runner.invoke(app, ["sandbox", "status", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.output
+        assert "--json" in strip_ansi(result.output)

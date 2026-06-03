@@ -177,7 +177,7 @@ class NewsClassifier:
         matched: set[NewsCategory] = set()
         hits = 0
         for keyword, categories in _KEYWORD_CATEGORIES.items():
-            if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
+            if re.search(r"\b" + re.escape(keyword) + r"\b", text_lower):
                 matched.update(categories)
                 hits += 1
         return matched, hits
@@ -187,7 +187,7 @@ class NewsClassifier:
         text_lower = text.lower()
         cat_hits: dict[NewsCategory, int] = {}
         for keyword, categories in _KEYWORD_CATEGORIES.items():
-            if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
+            if re.search(r"\b" + re.escape(keyword) + r"\b", text_lower):
                 for cat in categories:
                     if cat in _KALSHI_CATEGORIES:
                         cat_hits[cat] = cat_hits.get(cat, 0) + 1
@@ -205,7 +205,13 @@ class NewsClassifier:
             category = next(iter(matched))
             # More keyword hits → higher confidence (capped at 0.95)
             confidence = min(0.82 + 0.04 * (hits - 1), 0.95)
-            logger.debug("Keyword classify: text=%.50s -> %s (confidence=%.2f, hits=%d)", text, category.value, confidence, hits)
+            logger.debug(
+                "Keyword classify: text=%.50s -> %s (confidence=%.2f, hits=%d)",
+                text,
+                category.value,
+                confidence,
+                hits,
+            )
             return ClassificationResult(
                 category=category,
                 confidence=confidence,
@@ -331,7 +337,10 @@ class NewsClassifier:
                 category=emb_result.category,
             )
 
-        if emb_result is not None and _CONFIDENCE_RERANK_LOW <= emb_result.confidence < _CONFIDENCE_RERANK_HIGH:
+        if (
+            emb_result is not None
+            and _CONFIDENCE_RERANK_LOW <= emb_result.confidence < _CONFIDENCE_RERANK_HIGH
+        ):
             # Step 3: Use reranker for disambiguation
             rr_result = self._rerank_classify(text)
             if rr_result is not None:
@@ -405,7 +414,10 @@ class NewsClassifier:
                 return None
             return emb_result
 
-        if emb_result is not None and _CONFIDENCE_RERANK_LOW <= emb_result.confidence < _CONFIDENCE_RERANK_HIGH:
+        if (
+            emb_result is not None
+            and _CONFIDENCE_RERANK_LOW <= emb_result.confidence < _CONFIDENCE_RERANK_HIGH
+        ):
             # Step 3: Reranker
             rr_result = self._rerank_classify(text)
             if rr_result is not None:

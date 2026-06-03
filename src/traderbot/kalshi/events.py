@@ -69,5 +69,7 @@ class EventsService:
         data = response.json()
         raw = data.get("event", data)
         normalized = _normalize_event(raw)
-        logger.info("Fetched event: ticker=%s markets_count=%d", event_ticker, normalized.markets_count)
+        logger.info(
+            "Fetched event: ticker=%s markets_count=%d", event_ticker, normalized.markets_count
+        )
         return normalized

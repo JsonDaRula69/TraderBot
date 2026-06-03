@@ -85,7 +85,9 @@ def _migrate_legacy_db(profile: TradingProfile) -> None:
             dst.commit()
             dst.close()
             src.close()
-            logger.info("Migrated %d bytes from %s to %s", legacy_db.stat().st_size, legacy_db, new_db)
+            logger.info(
+                "Migrated %d bytes from %s to %s", legacy_db.stat().st_size, legacy_db, new_db
+            )
             return
         except Exception:
             logger.warning("DB migration from %s failed (non-fatal)", legacy_db, exc_info=True)
@@ -113,4 +115,3 @@ def ensure_profile_dirs(profile: TradingProfile) -> None:
     (base / "audit").mkdir(parents=True, exist_ok=True)
 
     _migrate_legacy_db(profile)
-

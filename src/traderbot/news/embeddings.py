@@ -47,6 +47,7 @@ class VoyageClient(BaseModel):
         api_key = os.environ.get("VOYAGE_API_KEY")
         if not api_key:
             from traderbot.paths import get_data_dir
+
             env_path = get_data_dir() / ".env"
             if env_path.exists():
                 for line in env_path.read_text().splitlines():
@@ -151,7 +152,11 @@ class VoyageClient(BaseModel):
                     logger.warning("Voyage embed chunk returned no embeddings")
                     return None
             except Exception:
-                logger.warning("Voyage embed_batch() failed at chunk %d/%d", i // _EMBED_BATCH_SIZE + 1, (len(texts) + _EMBED_BATCH_SIZE - 1) // _EMBED_BATCH_SIZE)
+                logger.warning(
+                    "Voyage embed_batch() failed at chunk %d/%d",
+                    i // _EMBED_BATCH_SIZE + 1,
+                    (len(texts) + _EMBED_BATCH_SIZE - 1) // _EMBED_BATCH_SIZE,
+                )
                 return None
 
         return all_embeddings

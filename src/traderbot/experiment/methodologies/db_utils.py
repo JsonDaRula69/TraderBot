@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def select_markets(
@@ -10,14 +10,12 @@ def select_markets(
     markets_per_cell: int = 2,
     seed: int = 42,
 ) -> dict[str, list[str]]:
-    rows = conn.execute(
-        "SELECT ticker, city_prefix, resolution_date FROM markets"
-    ).fetchall()
+    rows = conn.execute("SELECT ticker, city_prefix, resolution_date FROM markets").fetchall()
 
     if not rows:
         return {}
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     prefix_tickers: dict[str, dict[str, list[str]]] = {}
 
     for ticker, city_prefix, resolution_date in rows:
@@ -32,9 +30,7 @@ def select_markets(
             bucket = "7-14d"
         else:
             bucket = "gt14d"
-        prefix_tickers.setdefault(
-            city_prefix, {"lt7d": [], "7-14d": [], "gt14d": []}
-        )
+        prefix_tickers.setdefault(city_prefix, {"lt7d": [], "7-14d": [], "gt14d": []})
         prefix_tickers[city_prefix][bucket].append(ticker)
 
     rng = random.Random(seed)

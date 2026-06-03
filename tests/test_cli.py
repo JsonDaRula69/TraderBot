@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timezone
 from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from tests.conftest import strip_ansi
+
 import pytest
 from typer.testing import CliRunner
 
@@ -15,8 +17,6 @@ from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.risk import TradeResult
 
 runner = CliRunner()
-
-
 class TestMainHelp:
     def test_help_succeeds(self):
         result = runner.invoke(app, ["--help"])
@@ -42,15 +42,14 @@ class TestNewsCommand:
     def test_news_help(self):
         result = runner.invoke(app, ["news", "--help"])
         assert result.exit_code == 0
-        assert "--category" in result.output
-        assert "--limit" in result.output
-        assert "--source" in result.output
-        assert "--json" in result.output
+        assert "--category" in strip_ansi(result.output)
+        assert "--limit" in strip_ansi(result.output)
+        assert "--source" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_news_no_api_keys_json(self):
         mock_agg = _make_mock_aggregator([])
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
         ):
             result = runner.invoke(app, ["news", "--json"])
@@ -62,7 +61,6 @@ class TestNewsCommand:
     def test_news_no_api_keys_rich(self):
         mock_agg = _make_mock_aggregator([])
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
         ):
             result = runner.invoke(app, ["news"])
@@ -208,8 +206,8 @@ class TestNewsCommand:
         ):
             result = runner.invoke(app, ["news"])
             assert result.exit_code == 0
-            assert "News Feed" in result.output
-            assert "economics" in result.output
+            assert "News Feed" in strip_ansi(result.output)
+            assert "economics" in strip_ansi(result.output)
             assert "newsapi" in result.output.lower()
 
     @pytest.mark.unit
@@ -222,15 +220,15 @@ class TestNewsCommand:
         ):
             result = runner.invoke(app, ["news"])
             assert result.exit_code == 0
-            assert "No news items found" in result.output
+            assert "No news items found" in strip_ansi(result.output)
 
 
 class TestSentimentCommand:
     def test_sentiment_help(self):
         result = runner.invoke(app, ["sentiment", "--help"])
         assert result.exit_code == 0
-        assert "TICKER" in result.output
-        assert "--json" in result.output
+        assert "TICKER" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_sentiment_with_mock_items_json(self):
@@ -297,7 +295,7 @@ class TestSentimentCommand:
         ):
             result = runner.invoke(app, ["sentiment", "BTC"])
             assert result.exit_code == 0
-            assert "BTC" in result.output
+            assert "BTC" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_sentiment_no_news_found_json(self):
@@ -322,7 +320,6 @@ class TestSentimentCommand:
         mock_impact.impact_confidence = 0.0
 
         with (
-            patch.dict("os.environ", {}, clear=True),
             patch("traderbot.news.sources.NewsAggregator", return_value=mock_agg),
             patch("traderbot.news.impact_assessor.ImpactAssessor.assess", return_value=mock_impact),
         ):
@@ -380,8 +377,8 @@ class TestScan:
         ):
             result = runner.invoke(app, ["scan"])
             assert result.exit_code == 0
-            assert "KXBTCD-26MAR31-T55000" in result.output
-            assert "BTC above $55k?" in result.output
+            assert "KXBTCD-26MAR31-T55000" in strip_ansi(result.output)
+            assert "BTC above $55k?" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_scan_json_with_mock_markets(self):
@@ -456,8 +453,8 @@ class TestAnalyze:
         ):
             result = runner.invoke(app, ["analyze", "KXBTCD-26MAR31-T55000"])
             assert result.exit_code == 0
-            assert "KXBTCD-26MAR31-T55000" in result.output
-            assert "BTC above $55k?" in result.output
+            assert "KXBTCD-26MAR31-T55000" in strip_ansi(result.output)
+            assert "BTC above $55k?" in strip_ansi(result.output)
             assert "implied" in result.output.lower() or "Implied" in result.output
 
     @pytest.mark.unit
@@ -527,7 +524,7 @@ class TestSignals:
     def test_signals_default(self):
         result = runner.invoke(app, ["signals"])
         assert result.exit_code == 0
-        assert "Signal generation" in result.output
+        assert "Signal generation" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_signals_json(self):
@@ -558,6 +555,7 @@ class TestSignals:
 class TestTrade:
     def test_trade_rejected_with_defaults(self):
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -581,6 +579,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
         ):
             result = runner.invoke(
                 app, ["trade", "TEST-TICKER", "--direction", "yes", "--quantity", "1", "--price", "50", "--no-confirm"]
@@ -590,6 +589,7 @@ class TestTrade:
 
     def test_trade_json_output(self):
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -613,6 +613,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=0, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
         ):
             result = runner.invoke(
                 app,
@@ -639,6 +640,7 @@ class TestTrade:
     def test_trade_executed(self):
         """Mock evaluate_trade to return non-zero sized amount, verify 'executed' output."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -657,6 +659,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
@@ -671,6 +674,7 @@ class TestTrade:
     def test_trade_executed_json(self):
         """Mock evaluate_trade to return non-zero sized amount, verify JSON output has 'executed'."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState
+        from traderbot.paper import PaperBalance
 
         market = Market(
             ticker="TEST-TICKER",
@@ -689,6 +693,7 @@ class TestTrade:
             patch("traderbot.risk.evaluate_trade_full", return_value=TradeResult(sized_position_cents=5000, direction="yes")),
             patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=MagicMock(get_state=MagicMock(return_value=CircuitBreakerState()), _secret_file=MagicMock())),
             patch("traderbot.profiles.runtime.get_current_profile", return_value=MagicMock(paper_mode=True)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.master_password.require_auth"),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
@@ -704,6 +709,8 @@ class TestTrade:
     def test_trade_command_passes_risk_checks_with_live_data(self):
         """With mocked MarketService returning realistic data, trade should pass liquidity and edge checks."""
         from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
+        from traderbot.paper import PaperBalance
+        from traderbot.profiles.models import TradingProfile
 
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
@@ -721,7 +728,24 @@ class TestTrade:
         )
         portfolio = PortfolioState(portfolio_value_cents=100000, peak_value_cents=100000, current_positions_value_cents=0, today_realized_loss_cents=0, today_unrealized_loss_cents=0, open_positions_count=0)
 
+        profile = TradingProfile(
+            name="test",
+            mode="paper",
+            description="Test profile",
+            risk_multiplier=1.0,
+            max_position_per_market_pct=0.5,
+            max_daily_loss_pct=0.2,
+            max_drawdown_pct=0.5,
+            max_open_positions=10,
+            min_liquidity_threshold=1,
+            min_edge_pct=0.01,
+            initial_balance_cents=100000,
+        )
+
         with (
+            patch("traderbot.profiles.runtime.get_current_profile", return_value=profile),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
+            patch("traderbot.cli.trade.compute_paper_balance", return_value=PaperBalance(initial_cents=100000, cost_at_risk_cents=0, settled_payout_cents=0, remaining_cents=100000, open_position_count=0)),
             patch("traderbot.kalshi.client.KalshiClient"),
             patch("traderbot.kalshi.markets.MarketService.get_market", new=AsyncMock(return_value=market)),
             patch("traderbot.kalshi.markets.MarketService.get_orderbook", new=AsyncMock(return_value=orderbook)),
@@ -768,7 +792,7 @@ class TestPositions:
 
         result = runner.invoke(app, ["positions", "--db", str(db)])
         assert result.exit_code == 0
-        assert "KXBTCD-26MAR31-T55000" in result.output
+        assert "KXBTCD-26MAR31-T55000" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_positions_with_data_json(self, tmp_path):
@@ -840,8 +864,8 @@ class TestAudit:
 
         result = runner.invoke(app, ["audit", "--db", str(db)])
         assert result.exit_code == 0
-        assert "TEST-MKT" in result.output
-        assert "Decision Audit" in result.output
+        assert "TEST-MKT" in strip_ansi(result.output)
+        assert "Decision Audit" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_audit_with_decisions_json(self, tmp_path):
@@ -910,7 +934,7 @@ class TestAudit:
 
         result = runner.invoke(app, ["audit", "--db", str(db), "--ticker", "TEST-MKT"])
         assert result.exit_code == 0
-        assert "TEST-MKT" in result.output
+        assert "TEST-MKT" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_audit_by_outcome(self, tmp_path):
@@ -943,7 +967,7 @@ class TestAudit:
 
         result = runner.invoke(app, ["audit", "--db", str(db), "--outcome", "executed"])
         assert result.exit_code == 0
-        assert "TEST-MKT" in result.output
+        assert "TEST-MKT" in strip_ansi(result.output)
 
 
 class TestHeartbeat:
@@ -960,7 +984,7 @@ class TestHeartbeat:
         with patch("traderbot.heartbeat.run_heartbeat_cycle", return_value=mock_result):
             result = runner.invoke(app, ["heartbeat"])
             assert result.exit_code == 0
-            assert "Heartbeat" in result.output
+            assert "Heartbeat" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_heartbeat_json(self):
@@ -986,9 +1010,9 @@ class TestCronSetup:
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run"])
             assert result.exit_code == 0
-            assert "decision_loop" in result.output
-            assert "heartbeat_loop" in result.output
-            assert "news_ingest" in result.output
+            assert "decision_loop" in strip_ansi(result.output)
+            assert "heartbeat_loop" in strip_ansi(result.output)
+            assert "news_ingest" in strip_ansi(result.output)
 
     def test_cron_setup_dry_run_json(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
@@ -1011,7 +1035,7 @@ class TestCronSetup:
                 ["cron", "setup", "--agent", "test-agent", "--heartbeat-every", "30m", "--dry-run", "--json"],
             )
             assert result.exit_code == 0
-            assert "heartbeat_loop" in result.output
+            assert "heartbeat_loop" in strip_ansi(result.output)
 
     def test_cron_setup_skip_heartbeat_config(self, tmp_path):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
@@ -1110,7 +1134,7 @@ class TestCronSetup:
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"])
             assert result.exit_code == 0
-            assert "*/5" in result.output
+            assert "*/5" in strip_ansi(result.output)
 
     def test_cron_setup_news_loop_passes_event_arg(self, tmp_path):
         config_dir = tmp_path / ".openclaw"
@@ -1195,7 +1219,7 @@ class TestHalt:
         with patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=breaker):
             result = runner.invoke(app, ["halt", "--force"])
             assert result.exit_code == 0
-            assert "FULL_STOP" in result.output
+            assert "FULL_STOP" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_halt_force_json(self, tmp_path):
@@ -1240,25 +1264,25 @@ class TestHalt:
         with patch("traderbot.risk.circuit_breaker.CircuitBreaker", return_value=breaker):
             result = runner.invoke(app, ["halt"])
             assert result.exit_code == 0
-            assert "Test reason" in result.output
+            assert "Test reason" in strip_ansi(result.output)
 
 
 class TestBacktestCommand:
     def test_backtest_help(self):
         result = runner.invoke(app, ["backtest", "--help"])
         assert result.exit_code == 0
-        assert "--strategy" in result.output
-        assert "--from" in result.output
-        assert "--to" in result.output
-        assert "--bankroll" in result.output
-        assert "--db" in result.output
-        assert "--json" in result.output
+        assert "--strategy" in strip_ansi(result.output)
+        assert "--from" in strip_ansi(result.output)
+        assert "--to" in strip_ansi(result.output)
+        assert "--bankroll" in strip_ansi(result.output)
+        assert "--db" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_backtest_no_api(self):
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
             result = runner.invoke(app, ["backtest"])
             assert result.exit_code == 0
-            assert "API connection required" in result.output
+            assert "API connection required" in strip_ansi(result.output)
 
     def test_backtest_no_api_json(self):
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
@@ -1292,7 +1316,7 @@ class TestBacktestCommand:
         ):
             result = runner.invoke(app, ["backtest", "--db", str(tmp_path / "test.db")])
             assert result.exit_code == 0
-            assert "Backtest" in result.output
+            assert "Backtest" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_backtest_json_with_mock(self, tmp_path):
@@ -1329,10 +1353,10 @@ class TestPaperCommand:
     def test_paper_help(self):
         result = runner.invoke(app, ["paper", "--help"])
         assert result.exit_code == 0
-        assert "--strategy" in result.output
-        assert "--duration" in result.output
-        assert "--db" in result.output
-        assert "--json" in result.output
+        assert "--strategy" in strip_ansi(result.output)
+        assert "--duration" in strip_ansi(result.output)
+        assert "--db" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_paper_no_api(self):
@@ -1342,7 +1366,7 @@ class TestPaperCommand:
         ):
             result = runner.invoke(app, ["paper"])
             assert result.exit_code == 0
-            assert "Kalshi API connection required" in result.output
+            assert "Kalshi API connection required" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_paper_no_api_json(self):
@@ -1362,16 +1386,16 @@ class TestPerformanceCommand:
     def test_performance_help(self):
         result = runner.invoke(app, ["performance", "--help"])
         assert result.exit_code == 0
-        assert "--db" in result.output
-        assert "--from" in result.output
-        assert "--to" in result.output
-        assert "--json" in result.output
+        assert "--db" in strip_ansi(result.output)
+        assert "--from" in strip_ansi(result.output)
+        assert "--to" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_performance_empty_db(self, tmp_path):
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["performance", "--db", str(db)])
         assert result.exit_code == 0
-        assert "Performance Summary" in result.output
+        assert "Performance Summary" in strip_ansi(result.output)
 
     def test_performance_empty_db_json(self, tmp_path):
         db = tmp_path / "test.db"
@@ -1410,8 +1434,8 @@ class TestPerformanceCommand:
 
         result = runner.invoke(app, ["performance", "--db", str(db)])
         assert result.exit_code == 0
-        assert "Performance Summary" in result.output
-        assert "3" in result.output
+        assert "Performance Summary" in strip_ansi(result.output)
+        assert "3" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_performance_with_decisions_json(self, tmp_path):
@@ -1451,19 +1475,19 @@ class TestCompareCommand:
     def test_compare_help(self):
         result = runner.invoke(app, ["compare", "--help"])
         assert result.exit_code == 0
-        assert "--profiles" in result.output
-        assert "--strategy" in result.output
-        assert "--from" in result.output
-        assert "--to" in result.output
-        assert "--bankroll" in result.output
-        assert "--db" in result.output
-        assert "--json" in result.output
+        assert "--profiles" in strip_ansi(result.output)
+        assert "--strategy" in strip_ansi(result.output)
+        assert "--from" in strip_ansi(result.output)
+        assert "--to" in strip_ansi(result.output)
+        assert "--bankroll" in strip_ansi(result.output)
+        assert "--db" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_compare_no_api(self):
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
             result = runner.invoke(app, ["compare"])
             assert result.exit_code == 0
-            assert "API connection required" in result.output
+            assert "API connection required" in strip_ansi(result.output)
 
     def test_compare_no_api_json(self):
         with patch("traderbot.kalshi.client.KalshiClient", side_effect=Exception("no api")):
@@ -1525,7 +1549,7 @@ class TestCompareCommand:
                 app, ["compare", "--profiles", "Conservative,Aggressive", "--db", str(tmp_path / "test.db")]
             )
             assert result.exit_code == 0
-            assert "Profile Comparison" in result.output
+            assert "Profile Comparison" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_compare_json_with_mock_profiles(self, tmp_path):
@@ -1568,8 +1592,8 @@ class TestBootstrapCommand:
     def test_bootstrap_help(self):
         result = runner.invoke(app, ["bootstrap", "--help"])
         assert result.exit_code == 0
-        assert "--dry-run" in result.output
-        assert "--json" in result.output
+        assert "--dry-run" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_bootstrap_dry_run(self):
         """Bootstrap --dry-run validates without side effects."""
@@ -1586,7 +1610,7 @@ class TestBootstrapCommand:
         ):
             result = runner.invoke(app, ["bootstrap", "--dry-run"])
             assert result.exit_code == 0
-            assert "Bootstrap" in result.output
+            assert "Bootstrap" in strip_ansi(result.output)
             assert "data" in result.output.lower() or "kalshi" in result.output.lower()
 
     def test_bootstrap_dry_run_json(self):
@@ -1636,17 +1660,17 @@ class TestLearnings:
     def test_learnings_help(self):
         result = runner.invoke(app, ["learnings", "--help"])
         assert result.exit_code == 0
-        assert "--status" in result.output
-        assert "--category" in result.output
-        assert "--promote" in result.output
-        assert "--db" in result.output
-        assert "--json" in result.output
+        assert "--status" in strip_ansi(result.output)
+        assert "--category" in strip_ansi(result.output)
+        assert "--promote" in strip_ansi(result.output)
+        assert "--db" in strip_ansi(result.output)
+        assert "--json" in strip_ansi(result.output)
 
     def test_learnings_empty_db(self, tmp_path):
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["learnings", "--db", str(db)])
         assert result.exit_code == 0
-        assert "No patterns found" in result.output
+        assert "No patterns found" in strip_ansi(result.output)
 
     def test_learnings_empty_db_json(self, tmp_path):
         db = tmp_path / "test.db"
@@ -1670,9 +1694,9 @@ class TestLearnings:
 
         result = runner.invoke(app, ["learnings", "--db", str(db)])
         assert result.exit_code == 0
-        assert "High volume" in result.output
-        assert "MarketBehavior" in result.output
-        assert "Learned Patterns" in result.output
+        assert "High volume" in strip_ansi(result.output)
+        assert "MarketBehavior" in strip_ansi(result.output)
+        assert "Learned Patterns" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_learnings_with_patterns_json(self, tmp_path):
@@ -1707,7 +1731,7 @@ class TestLearnings:
 
         result = runner.invoke(app, ["learnings", "--db", str(db), "--category", "RiskSignal"])
         assert result.exit_code == 0
-        assert "Risk pattern" in result.output
+        assert "Risk pattern" in strip_ansi(result.output)
         assert "MarketBehavior" not in result.output
 
     @pytest.mark.unit
@@ -1724,7 +1748,7 @@ class TestLearnings:
 
         result = runner.invoke(app, ["learnings", "--db", str(db), "--status", "deprecated"])
         assert result.exit_code == 0
-        assert "Old pattern" in result.output
+        assert "Old pattern" in strip_ansi(result.output)
 
     @pytest.mark.unit
     def test_learnings_promote_not_found(self, tmp_path):

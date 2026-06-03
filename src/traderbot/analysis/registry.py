@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from typing import Annotated, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)

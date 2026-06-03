@@ -50,8 +50,16 @@ def test_to_json_keys() -> None:
     )
     j = r.to_json()
     expected_keys = {
-        "treatment", "control", "delta_profit", "t_stat", "p_value",
-        "effect_size", "ci_low", "ci_high", "n_markets", "improvement",
+        "treatment",
+        "control",
+        "delta_profit",
+        "t_stat",
+        "p_value",
+        "effect_size",
+        "ci_low",
+        "ci_high",
+        "n_markets",
+        "improvement",
     }
     assert set(j.keys()) == expected_keys
 
@@ -59,6 +67,7 @@ def test_to_json_keys() -> None:
 def test_score_run_empty_db() -> None:
     """score_run on a DB with no decisions should return []."""
     import sqlite3
+
     from traderbot.db.experiment_schema import create_tables
 
     conn = sqlite3.connect(":memory:")
@@ -67,7 +76,9 @@ def test_score_run_empty_db() -> None:
     # score_run connects to a file path, so use a temp file for this test
     conn.close()
 
-    import tempfile, os
+    import os
+    import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_file = f.name
     try:

@@ -8,7 +8,7 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 |---|---|
 | **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
 | **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
-| **Rate limit** | Default 20 rps (configurable via `KALSHI_RATE_LIMIT_RPS` env var) |
+| **Rate limit** | Default 20 rps (configurable via `KALSHI_RATE_LIMIT_RPS` env var). Token bucket refill rate: `rate_limit_rps / endpoint_cost` — each endpoint costs 10 tokens, so effective rps = 200 / 10 = 20. Configure KALSHI_RATE_LIMIT_RPS with the *token refill rate* (not the desired requests-per-second). |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
 
 ## Authentication
@@ -100,14 +100,50 @@ Kalshi does **not** provide pre-aggregated candlestick/OHLCV data. To reconstruc
 
 **Data volume consideration**: Popular markets can have tens of thousands of trades. Plan for pagination and local caching.
 
-## Client Usage
+## Client Architecture
 
 Our `kalshi/client.py` implements direct HTTP calls with:
 
 - **Per-request RSA-PSS auth** — `auth_headers()` signs each request via `signing.py`
 - **Automatic retry** with exponential backoff (handles transient 5xx errors)
-- **Token bucket rate limiter** — respects configured req/sec, queues requests when approaching limit
-- **Type normalization** — converts raw API responses to our Pydantic models
+- **Token bucket rate limiter** — `TokenBucketRateLimiter` with async `acquire()`. Default 20 rps (configurable). Burst capacity = 2× rate. Acquire blocks via `asyncio.sleep(1/rate)`.
+- **Type normalization** — `_normalize.py` bridges V1/V2 API differences: `_to_cents()` (dollars→cents), `_map_category()` (16 raw strings→14 `MarketCategory` enum values), `_normalize_market()` (handles `_fp` suffix, `title` vs `question`, `state` vs `status`)
+- **MarketDataCache** — TTL-gated in-memory cache (30s orderbook, 60s market) with SQLite settlement store
+
+### Provider Layer
+
+The `provider.py` module defines a `MarketDataProvider` protocol with immutable snapshot types:
+
+| Symbol | Description |
+|---|---|
+| `MarketSnapshot` | Immutable market state: ticker, status, open_interest_cents, close_time, settlement_result |
+| `OrderBookSnapshot` | Immutable order book with yes/no bid levels |
+| `SettlementResult` | Settlement outcome: ticker, outcome (bool), settled_at |
+| `ProdDataProvider` | Production impl — backs to `KalshiClient` + optional `MarketDataCache`. Supports batch methods with semaphore-limited concurrency (5 concurrent, 200ms delay between chunks) |
+| `MockDataProvider` | Pre-configured dicts for tests and simulation |
+
+### Service Layer
+
+| Service | Exported? | Methods |
+|---|---|---|
+| `MarketService` | Yes | `get_market`, `get_orderbook`, `get_portfolio`, `list_markets` |
+| `EventsService` | Yes | `get_events` (paginated, filterable by state), `get_event` |
+| `ExchangeService` | Yes | `get_status` — returns `ExchangeStatus(is_open, description, active_markets)` |
+| `PortfolioService` | Yes | `get_balance`, `get_cached_balance` (hourly TTL with stale-on-error), `get_positions`, `get_fills`, `get_settlements` |
+| `TradingService` | Yes | `place_order`, `cancel_order`, `get_orders` |
+| `HistoryService` | Internal | `get_cutoffs`, `get_historical_trades`, `get_settled_markets` |
+
+### Caching Architecture
+
+Three-tier caching for market data:
+
+| Tier | Module | TTL | Content |
+|---|---|---|---|
+| **In-memory TTL** | `cache.py` | 30s (orderbook), 60s (market) | Request-level market/orderbook snapshots + SQLite settlement store |
+| **WebSocket daemon** | `ws_daemon.py` | Real-time (WebSocket push) | Persistent daemon subscribing to `market_lifecycle_v2` and `ticker` channels; writes `event_category_cache.json` |
+| **WebSocket cache reader** | `ws_cache.py` | 30s ticker TTL | Read-side accessors: `get_ticker_price()`, `get_ticker_prices()`, `get_cache_stats()` |
+
+The WebSocket daemon runs as a standalone process (`python -m traderbot.kalshi.ws_daemon`) with exponential reconnect backoff (5s initial, 60s max). It seeds the event→category mapping from the REST API on startup.
 
 ```python
 # Intended usage pattern

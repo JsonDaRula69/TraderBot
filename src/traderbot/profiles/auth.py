@@ -128,7 +128,9 @@ class ProfileAuthStore:
             svc = _profile_keyring_service(self._profile.name, service)
             val = keyring.get_password(svc, _keyring_username("api_key"))
             if val:
-                logger.info("Using %s key for profile '%s' from keyring", service, self._profile.name)
+                logger.info(
+                    "Using %s key for profile '%s' from keyring", service, self._profile.name
+                )
                 return (val, "")
 
         # 2. Environment variables and .env file

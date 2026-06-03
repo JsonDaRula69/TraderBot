@@ -114,11 +114,13 @@ def _discover_from_agent_dirs() -> list[dict[str, str]]:
             continue
         identity = get_agent_identity(str(agent_dir))
         if identity:
-            results.append({
-                "agent_id": identity["agent_id"],
-                "name": identity["name"],
-                "path": str(agent_dir),
-            })
+            results.append(
+                {
+                    "agent_id": identity["agent_id"],
+                    "name": identity["name"],
+                    "path": str(agent_dir),
+                }
+            )
 
     logger.debug("Discovered %d agents from agent dirs", len(results))
     return results
@@ -133,19 +135,23 @@ def _discover_from_workspaces(workspace_dir: str) -> list[dict[str, str]]:
         for agent_path in list_agent_dirs(path):
             identity = get_agent_identity(agent_path)
             if identity:
-                results.append({
-                    "agent_id": identity["agent_id"],
-                    "name": identity["name"],
-                    "path": agent_path,
-                })
+                results.append(
+                    {
+                        "agent_id": identity["agent_id"],
+                        "name": identity["name"],
+                        "path": agent_path,
+                    }
+                )
 
         identity = get_agent_identity(path)
         if identity:
-            results.append({
-                "agent_id": identity["agent_id"],
-                "name": identity["name"],
-                "path": path,
-            })
+            results.append(
+                {
+                    "agent_id": identity["agent_id"],
+                    "name": identity["name"],
+                    "path": path,
+                }
+            )
 
     logger.debug("Discovered %d agents from workspaces", len(results))
     return results
@@ -178,15 +184,9 @@ def get_agent_identity(agent_path: str) -> dict[str, str] | None:
         return None
 
     agent_id_match = re.search(
-        r'-\s*\*\*\s*agent\s+id\s*\*\*\s*:\s*(.+?)(?:\n|$)',
-        content,
-        re.IGNORECASE
+        r"-\s*\*\*\s*agent\s+id\s*\*\*\s*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE
     )
-    name_match = re.search(
-        r'-\s*\*\*\s*name\s*\*\*\s*:\s*(.+?)(?:\n|$)',
-        content,
-        re.IGNORECASE
-    )
+    name_match = re.search(r"-\s*\*\*\s*name\s*\*\*\s*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE)
 
     if not agent_id_match or not name_match:
         return None

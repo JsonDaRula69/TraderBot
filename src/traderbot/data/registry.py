@@ -26,9 +26,7 @@ def register_provider(name: str, cls: type[BaseDataProvider]) -> None:
     from traderbot.data.base_provider import BaseDataProvider
 
     if not issubclass(cls, BaseDataProvider):
-        raise TypeError(
-            f"Provider {cls.__name__} must subclass BaseDataProvider"
-        )
+        raise TypeError(f"Provider {cls.__name__} must subclass BaseDataProvider")
     _registry[name] = cls
     logger.info("Registered provider '%s' -> %s", name, cls.__name__)
 

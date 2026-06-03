@@ -40,6 +40,7 @@ def _default_heartbeat_path() -> Path:
     Check if HEARTBEAT_DATA.md exists at CWD first — if yes, use that directly.
     """
     from pathlib import Path as _Path
+
     cwd = _Path.cwd()
     if (cwd / "HEARTBEAT_DATA.md").exists() and not (cwd / "AGENTS.md").exists():
         # We're inside the sandbox workspace — the workspace root IS CWD
@@ -235,7 +236,9 @@ def step_decision_review(
 
     correct = 0
     for d in closed:
-        if (d.direction == "yes" and d.actual_result is True) or (d.direction == "no" and d.actual_result is False):
+        if (d.direction == "yes" and d.actual_result is True) or (
+            d.direction == "no" and d.actual_result is False
+        ):
             correct += 1
 
     accuracy = correct / len(closed) if closed else 0.0
@@ -267,7 +270,8 @@ def step_bayesian_adaptation(
         return AdaptationReview(skipped_reason="no executed decisions")
 
     successes = sum(
-        1 for d in executed
+        1
+        for d in executed
         if (d.direction == "yes" and d.actual_result is True)
         or (d.direction == "no" and d.actual_result is False)
     )
@@ -373,9 +377,7 @@ async def step_system_health(
 
     # Data freshness: check age of most recent decision
     try:
-        row = db_conn.execute(
-            "SELECT MAX(timestamp) as latest FROM decisions"
-        ).fetchone()
+        row = db_conn.execute("SELECT MAX(timestamp) as latest FROM decisions").fetchone()
         if row is not None and row[0] is not None:
             latest = datetime.fromisoformat(row[0])
             age_hours = (datetime.now(UTC) - latest).total_seconds() / 3600
@@ -396,11 +398,14 @@ async def step_system_health(
 
         client = KalshiClient()  # auto-resolve auth from profile/env
         try:
-            response = await asyncio.wait_for(client.get("/events", params={"limit": 1}), timeout=5.0)
+            response = await asyncio.wait_for(
+                client.get("/events", params={"limit": 1}), timeout=5.0
+            )
             status = response.json() if hasattr(response, "json") else response
             api_ok = isinstance(status, dict) and status.get("status") == "alive"
             if api_ok:
                 from traderbot.kalshi.portfolio import PortfolioService
+
                 ps = PortfolioService(client)
                 balance_data = await ps.get_cached_balance()
                 if balance_data:
@@ -484,7 +489,9 @@ async def run_heartbeat_cycle(
     # Step 7: Update check (respects user-configured interval and enabled flag via UpdateConfig)
     update_result = check_for_updates()
     if update_result:
-        logger.info("Update available: v%s → v%s", update_result["current"], update_result["latest"])
+        logger.info(
+            "Update available: v%s → v%s", update_result["current"], update_result["latest"]
+        )
     steps_completed.append("update_check")
 
     result = HeartbeatResult(
@@ -606,5 +613,5 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
 {alert_lines}
 """
 
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     logger.info("Heartbeat written to %s", path)

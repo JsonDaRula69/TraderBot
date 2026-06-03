@@ -61,6 +61,10 @@ traderbot = "traderbot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
+exclude = ["tests", "experiments"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["tests", "experiments", ".github", ".openclaw"]
 
 [tool.uv]
 constraint-dependencies = ["onnxruntime<1.24"]
@@ -69,6 +73,7 @@ constraint-dependencies = ["onnxruntime<1.24"]
 target-version = "py312"
 line-length = 100
 src = ["src"]
+exclude = ["experiments", "install", ".openclaw", "docs", "skills", "src/traderbot/experiment/tests"]
 
 [tool.ruff.lint]
 select = [
@@ -84,6 +89,17 @@ select = [
     "RUF",  # ruff-specific
 ]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/traderbot/analysis/*.py" = ["E402"]
+"src/traderbot/risk/*.py" = ["E402"]
+"src/traderbot/cli/*.py" = ["E402"]
+"src/traderbot/kalshi/*.py" = ["E402"]
+"src/traderbot/db/*.py" = ["E402"]
+"src/traderbot/profiles/*.py" = ["E402"]
+"src/traderbot/news/*.py" = ["E402"]
+"src/traderbot/data/*.py" = ["E402"]
+"src/traderbot/experiment/*.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["traderbot"]

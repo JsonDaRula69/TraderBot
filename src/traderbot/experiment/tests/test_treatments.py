@@ -56,22 +56,26 @@ def test_calibration_bundle_treatment() -> None:
 def test_calibration_validate_response() -> None:
     """validate_response: valid JSON -> ValidatedDecision, invalid -> ValueError."""
     t = CalibrationBundleTreatment()
-    valid = t.validate_response({
-        "decision": "buy_yes",
-        "estimated_prob": 0.7,
-        "confidence": 0.6,
-        "reasoning": "Looks good",
-    })
+    valid = t.validate_response(
+        {
+            "decision": "buy_yes",
+            "estimated_prob": 0.7,
+            "confidence": 0.6,
+            "reasoning": "Looks good",
+        }
+    )
     assert isinstance(valid, ValidatedDecision)
     assert valid.decision == "buy_yes"
 
     try:
-        t.validate_response({
-            "decision": "sell_everything",
-            "estimated_prob": 0.7,
-            "confidence": 0.6,
-            "reasoning": "bad",
-        })
+        t.validate_response(
+            {
+                "decision": "sell_everything",
+                "estimated_prob": 0.7,
+                "confidence": 0.6,
+                "reasoning": "bad",
+            }
+        )
         assert False, "Should have raised ValueError"
     except ValueError:
         pass

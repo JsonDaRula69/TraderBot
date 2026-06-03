@@ -49,6 +49,7 @@ def init_table(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
     columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
     if column not in columns:
@@ -76,7 +77,12 @@ def upsert(conn: sqlite3.Connection, position: Position) -> None:
         ),
     )
     conn.commit()
-    logger.info("Upserted position %s: qty=%d price=%d", position.ticker, position.quantity, position.avg_price)
+    logger.info(
+        "Upserted position %s: qty=%d price=%d",
+        position.ticker,
+        position.quantity,
+        position.avg_price,
+    )
 
 
 def get(conn: sqlite3.Connection, ticker: str) -> DbPosition | None:

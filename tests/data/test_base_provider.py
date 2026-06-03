@@ -64,7 +64,7 @@ class TestNoDeprecatedEcmwfIfens:
             for fn in filenames:
                 if fn.endswith(".py"):
                     path = os.path.join(dirpath, fn)
-                    with open(path) as f:
+                    with open(path, encoding="utf-8") as f:
                         for i, line in enumerate(f, 1):
                             if "ecmwf_ifens" in line:
                                 found.append((path, i))

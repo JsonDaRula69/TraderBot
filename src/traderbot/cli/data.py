@@ -1,6 +1,9 @@
 """Data pipeline commands: forecasts, signals, and historical bias."""
+
 from __future__ import annotations
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import asyncio
@@ -95,7 +98,9 @@ def forecasts_cmd(
             str(ecmwf),
             str(gem),
             str(ens.get("spread", "N/A")),
-            f"{ens.get('agreement_score', 'N/A'):.2f}" if isinstance(ens.get("agreement_score"), float) else "N/A",
+            f"{ens.get('agreement_score', 'N/A'):.2f}"
+            if isinstance(ens.get("agreement_score"), float)
+            else "N/A",
         )
     console.print(table)
 
@@ -115,9 +120,23 @@ def signals_cmd(
     from traderbot.data.weather.signals import WeatherSignalEngine
 
     console = Console()
-    cities = ["New York", "Chicago", "Los Angeles", "Phoenix", "Seattle",
-              "Denver", "Houston", "Miami", "Atlanta", "Boston",
-              "Dallas", "Philadelphia", "Minneapolis", "Detroit", "San Francisco"]
+    cities = [
+        "New York",
+        "Chicago",
+        "Los Angeles",
+        "Phoenix",
+        "Seattle",
+        "Denver",
+        "Houston",
+        "Miami",
+        "Atlanta",
+        "Boston",
+        "Dallas",
+        "Philadelphia",
+        "Minneapolis",
+        "Detroit",
+        "San Francisco",
+    ]
 
     try:
         provider = WeatherDataProvider()
@@ -148,25 +167,21 @@ def signals_cmd(
     table.add_column("Confidence", justify="right")
     for r in results:
         direction = r.get("direction", "neutral")
-        direction_style = {"yes": "green", "no": "red", "neutral": "yellow"}.get(
-            direction, ""
-        )
+        direction_style = {"yes": "green", "no": "red", "neutral": "yellow"}.get(direction, "")
         table.add_row(
             r.get("ticker", "?"),
             f"[{direction_style}]{direction}[/{direction_style}]",
-            f'{r.get("estimated_prob", 0):.3f}',
-            f'{r.get("market_prob", 0):.3f}',
+            f"{r.get('estimated_prob', 0):.3f}",
+            f"{r.get('market_prob', 0):.3f}",
             str(r.get("edge_cents", 0)),
-            f'{r.get("confidence", 0):.2f}',
+            f"{r.get('confidence', 0):.2f}",
         )
     console.print(table)
 
 
 @data_app.command("bias")
 def bias_cmd(
-    city: Annotated[
-        str, typer.Argument(help="City code (e.g. NYC, CHI, LA)")
-    ],
+    city: Annotated[str, typer.Argument(help="City code (e.g. NYC, CHI, LA)")],
     days: Annotated[
         int, typer.Option("--days", help="Days of history to analyze (default: 90)")
     ] = 90,
@@ -191,9 +206,7 @@ def bias_cmd(
 
     try:
         provider = WeatherDataProvider()
-        result = asyncio.run(
-            provider.get_historical_bias(city=city_code, days=days)
-        )
+        result = asyncio.run(provider.get_historical_bias(city=city_code, days=days))
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
@@ -212,13 +225,11 @@ def bias_cmd(
         "neutral": "yellow",
     }.get(direction, "")
 
-    table = Table(
-        title=f"Historical Forecast Bias — {result.get('city', city_code)}"
-    )
+    table = Table(title=f"Historical Forecast Bias — {result.get('city', city_code)}")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="white")
-    table.add_row("Mean Error (°F)", f'{result.get("mean_error", 0):+.2f}')
-    table.add_row("MAE (°F)", f'{result.get("mae", 0):.2f}')
+    table.add_row("Mean Error (°F)", f"{result.get('mean_error', 0):+.2f}")
+    table.add_row("MAE (°F)", f"{result.get('mae', 0):.2f}")
     table.add_row(
         "Direction",
         f"[{direction_style}]{direction}[/{direction_style}]",

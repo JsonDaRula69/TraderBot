@@ -199,12 +199,10 @@ class ProdDataProvider:
             raise ProdAPIError(f"Kalshi API authentication failed: {exc}") from exc
 
         yes_bids = tuple(
-            OrderBookLevelSnapshot(price_cents=lvl.price, size=lvl.size)
-            for lvl in ob.yes_bids
+            OrderBookLevelSnapshot(price_cents=lvl.price, size=lvl.size) for lvl in ob.yes_bids
         )
         no_bids = tuple(
-            OrderBookLevelSnapshot(price_cents=lvl.price, size=lvl.size)
-            for lvl in ob.no_bids
+            OrderBookLevelSnapshot(price_cents=lvl.price, size=lvl.size) for lvl in ob.no_bids
         )
 
         snapshot = OrderBookSnapshot(

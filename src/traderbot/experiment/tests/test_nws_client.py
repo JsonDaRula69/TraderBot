@@ -4,7 +4,6 @@ Verifies _resolve_city(), _CITY_MAP, and _KALSHI_CITY_MAP work correctly
 in the weather provider module.
 """
 
-import pytest
 
 from traderbot.data.weather.provider import (
     _CITY_ALIASES,
@@ -164,16 +163,10 @@ class TestKalshiCityMap:
     def test_kalshi_coords_match_city_map(self) -> None:
         """Coordinates in _KALSHI_CITY_MAP must match _CITY_MAP for each city."""
         for ticker, (name, klat, klon, _tz) in _KALSHI_CITY_MAP.items():
-            assert name in _CITY_MAP, (
-                f"Kalshi city '{name}' (from {ticker}) not in _CITY_MAP"
-            )
+            assert name in _CITY_MAP, f"Kalshi city '{name}' (from {ticker}) not in _CITY_MAP"
             cmap_lat, cmap_lon = _CITY_MAP[name]
-            assert klat == cmap_lat, (
-                f"{name}: Kalshi lat {klat} != CITY_MAP lat {cmap_lat}"
-            )
-            assert klon == cmap_lon, (
-                f"{name}: Kalshi lon {klon} != CITY_MAP lon {cmap_lon}"
-            )
+            assert klat == cmap_lat, f"{name}: Kalshi lat {klat} != CITY_MAP lat {cmap_lat}"
+            assert klon == cmap_lon, f"{name}: Kalshi lon {klon} != CITY_MAP lon {cmap_lon}"
 
 
 class TestCityAliases:

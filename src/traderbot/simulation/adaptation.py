@@ -357,7 +357,9 @@ def update_normal_normal(prior: NormalParams, observations: NormalObservations) 
     return NormalParams(mu=posterior_mu, sigma_sq=posterior_sigma_sq)
 
 
-def update_gamma_exponential(prior: GammaParams, observations: ExponentialObservations) -> GammaParams:
+def update_gamma_exponential(
+    prior: GammaParams, observations: ExponentialObservations
+) -> GammaParams:
     """Gamma-Exponential conjugate update for momentum decay rate.
 
     Prior: Gamma(alpha, beta) — rate parametrization
@@ -479,7 +481,11 @@ class BayesianAdapter:
         self._update_timestamps = AdapterStateStore.timestamps_to_datetime(loaded.update_timestamps)
         self._drift_counts = dict(loaded.drift_counts)
         self._distribution_states = dict(loaded.distribution_states)
-        logger.debug("Loaded adapter state from %s (%d timestamps)", self._state_path, len(self._update_timestamps))
+        logger.debug(
+            "Loaded adapter state from %s (%d timestamps)",
+            self._state_path,
+            len(self._update_timestamps),
+        )
 
     def _persist_state(self) -> None:
         """Write current state to disk via atomic write."""
@@ -511,7 +517,9 @@ class BayesianAdapter:
                 return end - now
         return None
 
-    def _compute_direction(self, old_value: float, new_value: float) -> Literal["increase", "decrease", "maintain"]:
+    def _compute_direction(
+        self, old_value: float, new_value: float
+    ) -> Literal["increase", "decrease", "maintain"]:
         """Determine adaptation direction."""
         if new_value > old_value:
             return "increase"
@@ -520,7 +528,9 @@ class BayesianAdapter:
         return "maintain"
 
     @staticmethod
-    def _compute_confidence(prior_variance: float, posterior_variance: float, variance_reset: bool) -> float:
+    def _compute_confidence(
+        prior_variance: float, posterior_variance: float, variance_reset: bool
+    ) -> float:
         """Confidence from 0 to 1 based on variance reduction. Reset → 0."""
         if variance_reset:
             return 0.0
@@ -563,7 +573,9 @@ class BayesianAdapter:
         if human_review:
             reasoning += " [DRIFT FLAG]"
 
-        confidence = self._compute_confidence(prior.variance, raw_posterior.variance, variance_reset)
+        confidence = self._compute_confidence(
+            prior.variance, raw_posterior.variance, variance_reset
+        )
 
         return AdaptationResult(
             category=category,
@@ -571,7 +583,11 @@ class BayesianAdapter:
             magnitude=magnitude,
             confidence=confidence,
             reasoning=reasoning,
-            updated_params={"alpha": raw_posterior.alpha, "beta": raw_posterior.beta, "mean": clamped_mean},
+            updated_params={
+                "alpha": raw_posterior.alpha,
+                "beta": raw_posterior.beta,
+                "mean": clamped_mean,
+            },
             method=UpdateMethod.BETA_BINOMIAL,
             human_review=human_review,
             variance_reset=variance_reset,
@@ -624,7 +640,11 @@ class BayesianAdapter:
         max_change = max(abs(n - o) for o, n in zip(old_means, clamped_means, strict=True))
         magnitude = max_change if max_change > 0 else 1e-10
 
-        confidence = 0.0 if variance_reset else min(raw_posterior.concentration / (raw_posterior.concentration + 10.0), 1.0)
+        confidence = (
+            0.0
+            if variance_reset
+            else min(raw_posterior.concentration / (raw_posterior.concentration + 10.0), 1.0)
+        )
 
         reasoning = f"Dirichlet-Multinomial update: weights {old_means} → {clamped_means}"
         if variance_reset:
@@ -681,7 +701,9 @@ class BayesianAdapter:
         self._persist_state()
 
         magnitude = abs(clamped_mu - old_mu) if clamped_mu != old_mu else 1e-10
-        confidence = self._compute_confidence(prior.sigma_sq, raw_posterior.sigma_sq, variance_reset)
+        confidence = self._compute_confidence(
+            prior.sigma_sq, raw_posterior.sigma_sq, variance_reset
+        )
 
         reasoning = f"Normal-Normal update: N({prior.mu},{prior.sigma_sq}) → N({raw_posterior.mu},{raw_posterior.sigma_sq})"
         if variance_reset:
@@ -733,7 +755,9 @@ class BayesianAdapter:
         self._persist_state()
 
         magnitude = abs(clamped_mean - old_mean) if clamped_mean != old_mean else 1e-10
-        confidence = self._compute_confidence(prior.variance, raw_posterior.variance, variance_reset)
+        confidence = self._compute_confidence(
+            prior.variance, raw_posterior.variance, variance_reset
+        )
 
         reasoning = f"Gamma-Exponential update: Gamma({prior.alpha},{prior.beta}) → Gamma({raw_posterior.alpha},{raw_posterior.beta})"
         if variance_reset:
@@ -747,7 +771,11 @@ class BayesianAdapter:
             magnitude=magnitude,
             confidence=confidence,
             reasoning=reasoning,
-            updated_params={"alpha": raw_posterior.alpha, "beta": raw_posterior.beta, "mean": clamped_mean},
+            updated_params={
+                "alpha": raw_posterior.alpha,
+                "beta": raw_posterior.beta,
+                "mean": clamped_mean,
+            },
             method=UpdateMethod.GAMMA_EXPONENTIAL,
             human_review=human_review,
             variance_reset=variance_reset,
