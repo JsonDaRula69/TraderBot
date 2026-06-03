@@ -305,7 +305,7 @@ _SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json`. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
+        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. The --recover flag calls breaker.check() with fresh metrics, triggering auto-recovery per docs/risk.md — SLOW auto-recovers to NORMAL when daily_loss drops below 1%, HALT auto-recovers when daily_loss drops below 2%. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
     },
     {
         "name": "experiment-check",
@@ -343,7 +343,7 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json`. If circuit breaker is SLOW or worse, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
+        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. The --recover flag calls breaker.check() with fresh metrics, triggering auto-recovery per docs/risk.md. If circuit breaker is still SLOW or worse after recovery check, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
     },
     {
         "name": "news-scan",
