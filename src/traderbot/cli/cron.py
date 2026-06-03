@@ -369,7 +369,7 @@ _AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
         "name": "settlement-monitor",
         "cron_expr": "0 * * * *",
         "session": "isolated",
-        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`. If settlement check fails (e.g. 401), write to `.learnings/ERRORS.md`.",
+        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`. Then run `traderbot data record-bias --city NYC,CHI,LA,PHX,SEA --json` for each settled market's city to record forecast-vs-actual bias. If settlement check fails (e.g. 401), write to `.learnings/ERRORS.md`.",
     },
     {
         "name": "auth-check",
