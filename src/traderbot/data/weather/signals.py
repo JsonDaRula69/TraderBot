@@ -177,7 +177,12 @@ class WeatherSignalEngine(BaseSignalEngine):
 
         bias_adjustment = self._query_bias_adjustment(fc.city)
         base_confidence = min(abs(edge), 0.5) / 0.5
-        confidence = base_confidence * agreement_mult * (1.0 - abs(bias_adjustment))
+
+        phantom_mult, phantom_flag = self._detect_phantom_edge(
+            forecast_temp, market.threshold, market_prob, agreement_mult, ticker
+        )
+
+        confidence = base_confidence * agreement_mult * (1.0 - abs(bias_adjustment)) * phantom_mult
         confidence = max(0.0, min(1.0, confidence))
 
         return TradingSignal(
@@ -189,6 +194,7 @@ class WeatherSignalEngine(BaseSignalEngine):
             confidence=round(confidence, 4),
             model_consensus=round(consensus_score, 4) if consensus_score is not None else 0.5,
             bias_adjustment=round(bias_adjustment, 4),
+            phantom_edge_flag=phantom_flag,
             reasoning=(
                 f"{fc.city}: forecast={forecast_temp}°F, threshold={market.threshold}°F "
                 f"({market.strike_type}), est={estimated_prob:.3f}, "
@@ -196,6 +202,53 @@ class WeatherSignalEngine(BaseSignalEngine):
                 f"consensus={consensus_score or 'N/A'}, bias_adj={bias_adjustment:.3f}"
             ),
         )
+
+    def _detect_phantom_edge(
+        self,
+        forecast_temp: float,
+        threshold: float,
+        market_prob: float,
+        agreement_mult: float,
+        ticker: str,
+    ) -> tuple[float, str | None]:
+        """Detect phantom edge conditions and return (penalty_multiplier, flag_reason).
+
+        Penalties compound multiplicatively with a floor of 0.1.
+        Returns (1.0, None) when no phantom edge conditions are detected.
+        """
+        penalty = 1.0
+        flags: list[str] = []
+
+        # 1. Logistic asymptote: forecast far from threshold
+        temp_diff = abs(forecast_temp - threshold)
+        if temp_diff > 30:
+            flags.append(f"logistic_asymptote:temp_diff={temp_diff:.0f}°F")
+            penalty *= 0.5
+
+        # 2. Low model consensus
+        if agreement_mult < 0.5:
+            flags.append(f"low_consensus:mult={agreement_mult:.2f}")
+            penalty *= 0.4
+
+        # 3. Missing/empty orderbook (market_prob fell back to 0.5)
+        ob = self._orderbooks.get(ticker)
+        if ob is None:
+            flags.append("missing_orderbook")
+            penalty *= 0.6
+
+        # 4. Wide bid-ask spread (>10¢)
+        if ob is not None and ob.yes_bids and ob.no_bids:
+            best_bid = max(b.price for b in ob.yes_bids)
+            best_ask = min(b.price for b in ob.no_bids)
+            spread = abs(best_ask - best_bid)
+            if spread > 10:
+                flags.append(f"wide_spread:spread={spread}¢")
+                penalty *= 0.7
+
+        if not flags:
+            return (1.0, None)
+
+        return (max(penalty, 0.1), ";".join(flags))
 
     def _get_market_prob(self, ticker: str) -> float:
         """Extract market-implied probability from the order book for a ticker.
