@@ -11,9 +11,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from traderbot.paths import _resolve_db_path
 from traderbot.db import get_connection
 from traderbot.db.positions import list_all
+from traderbot.paths import _resolve_db_path
 from traderbot.profiles.models import TradingProfile as Profile
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,24 @@ def compute_paper_balance(
         remaining_cents=remaining,
         open_position_count=open_count,
     )
+
+
+def position_value_for_ticker(
+    profile: Profile | None, ticker: str, db_path: Path | None = None
+) -> int:
+    """Compute current position value (cost at risk) for a specific ticker.
+
+    Returns the total cost (avg_price * quantity) for positions matching ticker,
+    or 0 if the profile is not paper mode or no position exists for that ticker.
+    """
+    if not profile or not profile.paper_mode:
+        return 0
+    resolved = _resolve_db_path(db_path)
+    with get_connection(resolved) as conn:
+        for pos in list_all(conn):
+            if pos.ticker == ticker:
+                return pos.avg_price * pos.quantity
+    return 0
 
 
 def remaining_balance(profile: Profile | None, db_path: Path | None = None) -> int:

@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.table import Table
 
 from traderbot.cli.helpers import _get_strategy
+from traderbot.paper import compute_paper_balance, position_value_for_ticker
 from traderbot.paths import _resolve_db_path, _with_db
-from traderbot.paper import compute_paper_balance
 from traderbot.risk.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
@@ -368,12 +368,15 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         breaker = CircuitBreaker()
 
+        ticker_position_value = position_value_for_ticker(profile, ticker)
+
         try:
             result = evaluate_trade_full(
                 trade_request=trade_req,
                 portfolio=portfolio,
                 breaker=breaker,
                 profile=profile,
+                per_ticker_position_value_cents=ticker_position_value,
             )
         except RiskCheckError as e:
             if json_output:
@@ -1031,7 +1034,6 @@ def register_commands(parent_app: typer.Typer) -> None:
     ) -> None:
         """Show performance metrics and P&L."""
 
-        from traderbot.cli.helpers import _get_strategy
         from traderbot.db.decisions import list_by_date_range
         from traderbot.profiles.runtime import get_current_profile
 

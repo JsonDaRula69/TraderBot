@@ -49,6 +49,61 @@ class TestCheckPositionLimit:
         assert not result.passed
 
 
+class TestPerMarketPositionLimit:
+    """Per-market position limit: current_position_value(ticker) + order <= 5% of portfolio.
+
+    Uses the per_ticker_position_value_cents parameter to limit only the
+    relevant ticker's position, not the aggregate portfolio position.
+    """
+
+    def test_new_market_accepted_when_others_are_full(self):
+        """3 markets at 4% each, new trade in 4th market at 2% → PASSES (4th market has 0+2 < 5%)."""
+        portfolio_value = 100_000_00
+        order_value = int(portfolio_value * 0.02)  # 2% order
+        result = check_position_limit(
+            0,  # aggregate current_positions_value_cents (high because other markets)
+            order_value,
+            portfolio_value,
+            per_ticker_position_value_cents=0,  # no position in this specific ticker yet
+        )
+        assert result.passed, (
+            "New market should pass per-market check even when other markets are full"
+        )
+
+    def test_same_market_rejected_when_near_limit(self):
+        """Market at 4.5%, new trade in same market at 1% → REJECTED (4.5+1 > 5%)."""
+        portfolio_value = 100_000_00
+        order_value = int(portfolio_value * 0.01)  # 1% order
+        existing_in_ticker = int(portfolio_value * 0.045)  # 4.5% existing
+        result = check_position_limit(
+            0,  # aggregate (not used when per_ticker is provided)
+            order_value,
+            portfolio_value,
+            per_ticker_position_value_cents=existing_in_ticker,
+        )
+        assert not result.passed, "Same-market order exceeding 5% should be rejected"
+
+    def test_same_market_accepted_below_limit(self):
+        """Market at 3%, new trade in same market at 1% → PASSES (3+1 < 5%)."""
+        portfolio_value = 100_000_00
+        order_value = int(portfolio_value * 0.01)  # 1% order
+        existing_in_ticker = int(portfolio_value * 0.03)  # 3% existing
+        result = check_position_limit(
+            0,
+            order_value,
+            portfolio_value,
+            per_ticker_position_value_cents=existing_in_ticker,
+        )
+        assert result.passed
+
+    def test_portfolio_wide_aggregate_still_used_when_no_per_ticker(self):
+        """When per_ticker_position_value_cents is NOT provided, falls back to aggregate."""
+        portfolio_value = 100_000_00  # $100,000
+        limit_5pct = int(portfolio_value * 0.05)  # $5,000
+        result = check_position_limit(1_000_00, 500_00, portfolio_value)
+        assert result.passed
+
+
 class TestCheckDailyLoss:
     def test_passes_at_exact_boundary(self):
         limit = int(PORTFOLIO_VALUE * 0.02)
