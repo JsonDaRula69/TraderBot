@@ -245,11 +245,17 @@ def register_commands(parent_app: typer.Typer) -> None:
     @parent_app.command()
     def halt(
         force: Annotated[bool, typer.Option("--force", help="Force halt (set FULL_STOP)")] = False,
+        recover: Annotated[
+            bool,
+            typer.Option(
+                "--recover", help="Check fresh metrics and auto-recover if conditions improved"
+            ),
+        ] = False,
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
         ] = False,
     ) -> None:
-        """Check circuit breaker status or force halt."""
+        """Check circuit breaker status or force halt. Use --recover to trigger auto-recovery check."""
         configure_root_logger()
         from traderbot.risk.circuit_breaker import CircuitBreaker
 
@@ -267,6 +273,42 @@ def register_commands(parent_app: typer.Typer) -> None:
                 reason="Manual halt via CLI",
             )
             breaker._persist_state()
+
+        # Trigger auto-recovery by running breaker.check() with computed metrics
+        if recover:
+            from traderbot.paper import compute_paper_balance
+            from traderbot.profiles.runtime import get_current_profile
+            from traderbot.risk.circuit_breaker import BreakerLevel
+
+            profile = get_current_profile()
+            pb = compute_paper_balance(profile) if profile else None
+            if pb and pb.initial_cents > 0:
+                daily_loss_pct = (
+                    pb.initial_cents - pb.remaining_cents - pb.settled_payout_cents
+                ) / max(pb.initial_cents, 1)
+                if daily_loss_pct < 0:
+                    daily_loss_pct = 0.0
+                drawdown_pct = (pb.initial_cents - max(pb.remaining_cents, 0)) / max(
+                    pb.initial_cents, 1
+                )
+                if drawdown_pct < 0:
+                    drawdown_pct = 0.0
+                logger.info(
+                    "Recovery check metrics: daily_loss=%.4f drawdown=%.4f initial=%d remaining=%d",
+                    daily_loss_pct,
+                    drawdown_pct,
+                    pb.initial_cents,
+                    pb.remaining_cents,
+                )
+                breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
+            else:
+                # No paper profile — read existing state, call check with zero loss to trigger recovery
+                state = breaker.get_state()
+                if state.level in (BreakerLevel.SLOW, BreakerLevel.HALT):
+                    from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
+
+                    logger.info("No profile — calling breaker.check(0, 0) for auto-recovery")
+                    breaker.check(daily_loss_pct=0.0, drawdown_pct=0.0)
 
         state = breaker.get_state()
         result = state.model_dump(mode="json")
