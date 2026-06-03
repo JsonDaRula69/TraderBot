@@ -827,6 +827,564 @@ Status: REJECTED
 Status: EXECUTED
 Status: EXECUTED
 Status: REJECTED
+### WAL-D22307EF
+- Timestamp: 2026-06-02T23:59:07.632462+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-BE30A78F
+- Timestamp: 2026-06-03T00:00:01.104717+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-2BCC34BE
+- Timestamp: 2026-06-03T00:09:21.250253+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-CFD94490
+- Timestamp: 2026-06-03T00:09:21.450693+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-2A31FD83
+- Timestamp: 2026-06-03T00:09:21.552576+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3A1F51DD
+- Timestamp: 2026-06-03T00:09:21.653445+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-91849C8F
+- Timestamp: 2026-06-03T00:11:28.118878+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-7DBE71EA
+- Timestamp: 2026-06-03T00:14:51.239728+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-5A04B0BE
+- Timestamp: 2026-06-03T00:16:54.897223+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3EA7040C
+- Timestamp: 2026-06-03T00:19:08.147794+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-526716E8
+- Timestamp: 2026-06-03T02:05:00.599354+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3E33E8D0
+- Timestamp: 2026-06-03T02:05:00.786049+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-ED95DF78
+- Timestamp: 2026-06-03T02:05:00.889278+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-E87C49FD
+- Timestamp: 2026-06-03T02:05:00.989762+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-BCE77850
+- Timestamp: 2026-06-03T02:05:01.106851+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-34AF90ED
+- Timestamp: 2026-06-03T02:05:59.024025+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-95C93604
+- Timestamp: 2026-06-03T02:05:59.213180+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-0E0A8D95
+- Timestamp: 2026-06-03T02:05:59.318229+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3E732BD6
+- Timestamp: 2026-06-03T02:05:59.423049+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-227F5D92
+- Timestamp: 2026-06-03T02:05:59.524060+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-D382801C
+- Timestamp: 2026-06-03T02:08:21.584519+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-42D661E8
+- Timestamp: 2026-06-03T02:08:21.759796+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-9DBBF649
+- Timestamp: 2026-06-03T02:08:21.858053+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-FE596B0B
+- Timestamp: 2026-06-03T02:08:21.962574+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-278A41C0
+- Timestamp: 2026-06-03T02:20:05.604444+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-184A9D8A
+- Timestamp: 2026-06-03T02:46:14.369005+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-164DDC48
+- Timestamp: 2026-06-03T02:46:14.601695+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-BF699092
+- Timestamp: 2026-06-03T02:46:14.722754+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-103B9474
+- Timestamp: 2026-06-03T02:46:14.856223+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3286AE29
+- Timestamp: 2026-06-03T02:46:14.979567+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-D51FB0DF
+- Timestamp: 2026-06-03T03:56:34.360004+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-9C3753E9
+- Timestamp: 2026-06-03T03:56:34.698315+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-8CE39C10
+- Timestamp: 2026-06-03T03:56:34.800634+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-F6736F54
+- Timestamp: 2026-06-03T03:56:46.758720+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-78E63432
+- Timestamp: 2026-06-03T03:56:47.073624+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-25D09334
+- Timestamp: 2026-06-03T03:56:47.182535+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-712447AE
+- Timestamp: 2026-06-03T03:57:11.616200+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-BB8BAA87
+- Timestamp: 2026-06-03T03:57:11.630262+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-04EA7F65
+- Timestamp: 2026-06-03T03:57:38.848200+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-29544CBB
+- Timestamp: 2026-06-03T03:57:45.341190+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-D4AF53C8
+- Timestamp: 2026-06-03T03:57:45.679436+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-39B4D59F
+- Timestamp: 2026-06-03T03:57:45.799037+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-3C13FE3D
+- Timestamp: 2026-06-03T03:59:12.283147+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-C6082868
+- Timestamp: 2026-06-03T03:59:12.610034+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-85C1D4B4
+- Timestamp: 2026-06-03T03:59:12.725998+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-6DB99860
+- Timestamp: 2026-06-03T03:59:12.838965+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-843DBEDA
+- Timestamp: 2026-06-03T03:59:12.945111+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-AD3C284E
+- Timestamp: 2026-06-03T04:00:30.950828+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-4A54D8D6
+- Timestamp: 2026-06-03T04:00:31.265610+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-9E18E11D
+- Timestamp: 2026-06-03T04:00:31.370160+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-592E3E1A
+- Timestamp: 2026-06-03T04:00:31.478346+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-434377C4
+- Timestamp: 2026-06-03T04:00:31.581378+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-D6E6F9FE
+- Timestamp: 2026-06-03T04:01:32.340286+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-2DCD485C
+- Timestamp: 2026-06-03T04:01:32.518328+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-30DCCC07
+- Timestamp: 2026-06-03T04:11:11.470663+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-E11AFC4F
+- Timestamp: 2026-06-03T04:11:11.798998+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-52E7FDEA
+- Timestamp: 2026-06-03T04:11:11.904659+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-CE685632
+- Timestamp: 2026-06-03T04:31:00.366021+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-94359AB3
+- Timestamp: 2026-06-03T04:31:00.485737+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-73E1E75A
+- Timestamp: 2026-06-03T04:31:50.202705+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-76EEAC2A
+- Timestamp: 2026-06-03T04:31:50.510288+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-0D5F6D33
+- Timestamp: 2026-06-03T04:31:50.699401+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-B2C34126
+- Timestamp: 2026-06-03T04:32:07.579772+00:00
+- Action: BUY YES 1 KXBTCD-26MAR31-T55000 @ 60¢
+- Reason: trade yes KXBTCD-26MAR31-T55000 @ 60¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-120F8854
+- Timestamp: 2026-06-03T04:32:07.584697+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+Status: REJECTED
+Status: EXECUTED
+Status: REJECTED
+Status: EXECUTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+Status: REJECTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+### WAL-43615148
+- Timestamp: 2026-06-03T04:54:12.360576+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+### WAL-52A5F5BB
+- Timestamp: 2026-06-03T04:54:12.665488+00:00
+- Action: BUY YES 1 TEST-TICKER @ 50¢
+- Reason: trade yes TEST-TICKER @ 50¢
+- Signal: (none)
+- Risk: (none)
+- Confidence: 0.50
+- Status: PENDING
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
+Status: REJECTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
 ## Completed Actions
 
 _No activity yet._

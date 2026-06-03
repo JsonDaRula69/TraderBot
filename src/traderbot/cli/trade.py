@@ -1031,6 +1031,7 @@ def register_commands(parent_app: typer.Typer) -> None:
     ) -> None:
         """Show performance metrics and P&L."""
 
+        from traderbot.cli.helpers import _get_strategy
         from traderbot.db.decisions import list_by_date_range
         from traderbot.profiles.runtime import get_current_profile
 
