@@ -23,7 +23,7 @@ The installers run four phases:
 
 1. **OS detection** — detects the platform and version
 2. **Dependency installation** — platform-specific package setup (Python 3.12, git, uv)
-3. **TraderBot install** — downloads from GitHub, installs via pip/uv
+3. **TraderBot install** — tries `pip install traderbot` first (PyPI), falls back to `git clone` + `uv sync`
 4. **Interactive config** — profile creation, API keys, agent assignment
 
 ### Prerequisites

@@ -446,3 +446,116 @@ Store decision embeddings in ChromaDB for natural language retrieval. Instead of
 3. ChromaDB returns semantically similar decision IDs ranked by cosine similarity
 4. Agent retrieves full decision records from SQLite via `decision_id`
 5. Agent reviews historical decisions, forms hypothesis, decides action
+
+## Fleet Improvement Pipeline
+
+The self-learning pipeline doesn't stop at the agent level — it feeds into a fleet-wide improvement cycle that involves sysadmin cron jobs, GitHub issues, CI validation, and deployment.
+
+### Architecture Overview
+
+```
+Agent (category)                Sysadmin                        GitHub / CI
+─────────────────              ─────────                       ────────────
+
+1. DISCOVER pattern
+   → .learnings/LEARNINGS.md
+   ─────────────────────────► 2. PROMOTE (Recurrence >= 3)
+                                  → PENDING_REVIEW status
+                             3. DESIGN experiment
+                                  → test-lab/backlog.md
+                                  → QUEUED status
+                             4. EXECUTE (every 6h cron)
+                                  → traderbot backtest + compare
+                                  → RUNNING → VALIDATED or REJECTED
+                             5. EVALUATE against deployment bar:
+                                  Sharpe >= 1.0, win rate >= +5pp,
+                                  sample size >= 30
+                                      │
+                        ┌─────────────┴─────────────┐
+                        ▼                           ▼
+              Code change needed?          Profile param change?
+                        │                           │
+                        ▼                           ▼
+                  6. FILE GITHUB ISSUE       6. DEPLOY via
+                     via 🐙 github skill       traderbot profile update
+                     with reproduction         → archive in results/
+                     steps + labels            → notify agent
+                        │
+                        ▼
+                  7. CI validates (PR)
+                     → lint → unit → matrix → build
+                     → merge on pass
+```
+
+### Cron Job Triggers
+
+Three sysadmin cron jobs instruct agents to file GitHub issues:
+
+| Cron Job | Schedule | Source | Label | Trigger |
+|---|---|---|---|---|
+| `experiment-execution` | Every 6h | `test-lab/backlog.md` | `enhancement,experiment` | Validated experiment requires code change |
+| `learning-review` | Every 6h | `.learnings/ERRORS.md` | `bug` | Confirmed bug in code |
+| | | `.learnings/FEATURE_REQUESTS.md` | `enhancement` | Confirmed missing capability |
+| `pipeline-health` | Every 6h | systemd/ChromaDB/WS daemon health | (auto) | Pipeline failure requiring code fix |
+
+When a code change is NOT needed (profile param changes only), the sysadmin deploys directly via `traderbot profile update` without a GitHub issue.
+
+### GitHub Issues
+
+Issues are filed by the sysadmin agent via the 🐙 github skill (OpenClaw tool) into the `JsonDaRula69/TraderBot` repository. Templates enforce structured reporting:
+
+| Template | Fields | Linked Source |
+|---|---|---|
+| [Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) | Version, command, observed/expected, env, reproduction steps, related ERRORS.md entries | `.learnings/ERRORS.md` |
+| [Feature Request](.github/ISSUE_TEMPLATE/feature_request.md) | Category (from `LearningCategory`), current state, proposed change, expected benefit, implementation sketch, related backlog entries | `.learnings/FEATURE_REQUESTS.md`, `test-lab/backlog.md` |
+
+### CI Validation Pipeline
+
+Every commit must go through a Pull Request. The CI pipeline runs in this order:
+
+1. **frozen-check**: validates `uv.lock` is fresh (`uv sync --frozen`)
+2. **lint**: ruff lint + format check (`ruff check`, `ruff format --check`)
+3. **unit**: fast unit tests (`-m "unit"`) with coverage upload — gates subsequent jobs
+4. **test**: full matrix (ubuntu-latest / macos-latest / windows-latest) — `-m "not live"`
+5. **live**: API smoke tests — runs only on push to main (secrets unavailable on fork PRs)
+6. **build**: builds wheel + verifies `pip install` works
+
+Branch protection on `main` requires:
+- All 6 status checks pass
+- Branch is up-to-date with main
+- For `jsondarula`: auto-merge bypasses review requirement
+- For external contributors: 1 approving review required
+- Force pushes blocked
+
+### PR Template Checklist
+
+Every PR includes a checklist:
+- [ ] Tests pass (`uv run pytest -m "not live"`)
+- [ ] Ruff lint + format clean
+- [ ] VERSION bumped
+- [ ] CHANGELOG.md updated
+- [ ] Regression test written for bug fixes
+- [ ] Cron/heartbeat changes verified with `--dry-run`
+- [ ] Config changes use stable CLI (`openclaw config set`)
+- [ ] Deployed to macpro-linux and verified
+
+### Deployment Bar (Experiment Validation Gate)
+
+Before any experiment result is deployed (as either a profile param update or a GitHub issue):
+
+| Criterion | Threshold | Fails → |
+|---|---|---|
+| Sharpe ratio | >= 1.0 | REJECT in backlog.md |
+| Win rate improvement | >= +5 percentage points vs control | REJECT |
+| Sample size | >= 30 trades per treatment | REJECT (add replicates) |
+| Code change required? | Must be confirmed design vs param-only | FILE ISSUE vs DEPLOY |
+
+### Which Improvements Go Through This Pipeline
+
+| Source | Destination | Mechanism |
+|---|---|---|
+| Agent LEARNINGS.md patterns (Recurrence >= 3) | Experiment backlog (DISCOVERED) | Heartbeat cron promotes to PENDING_REVIEW → sysadmin designs experiment |
+| ERRORS.md entries (confirmed bugs) | GitHub issue (label: bug) | learning-review cron files issue with reproduction steps |
+| FEATURE_REQUESTS.md entries (confirmed gaps) | GitHub issue (label: enhancement) | learning-review cron files issue with investigation results |
+| Pipeline health failures (stale data, missing timers) | GitHub issue or direct fix | pipeline-health cron diagnoses and either files issue or runs fix |
+| Profile param experiments (validated) | Direct deploy via `traderbot profile update` | experiment-execution cron runs backtest → on pass → DEPLOY with agent notification |

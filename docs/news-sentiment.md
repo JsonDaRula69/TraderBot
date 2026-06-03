@@ -104,49 +104,17 @@ The pipeline continues with degraded capability rather than failing. All degrade
 
 `news/sources.py` — unified interface for multiple data providers.
 
-### NewsAPI
-
-| Detail | Value |
-|---|---|
-| **Coverage** | 50,000+ sources worldwide |
-| **Update frequency** | Near real-time (minutes) |
-| **Rate limit** | 100/day (free), 1000/day (developer) |
-| **Strength** | Broad coverage, structured data, good for political/economic news |
-| **Weakness** | Paid tier needed for high-frequency queries; no social media |
-
-Use for: Political events, economic indicators, general news that maps to Kalshi categories like economics, politics, weather.
-
-### X/Twitter API
-
-| Detail | Value |
-|---|---|
-| **Coverage** | Real-time social — often first to break news |
-| **Update frequency** | Streaming (real-time) |
-| **Rate limit** | Varies by tier (basic: 10,000 tweets/month read) |
-| **Strength** | Speed — news breaks here first; sentiment from replies/likes |
-| **Weakness** | Noisy, requires filtering; API access increasingly restricted |
-
-Use for: Breaking news detection, real-time sentiment shifts, journalist/pundit reactions that signal market movement.
-
-### Reddit RSS
-
-| Detail | Value |
-|---|---|
-| **Coverage** | Discussion-oriented; slower but deeper analysis |
-| **Update frequency** | Polling every 5-15 minutes |
-| **Rate limit** | 60 requests/minute (RSS), 100/min (API) |
-| **Strength** | Community analysis, early indicators of narrative shifts |
-| **Weakness** | Slow, not a breaking news source; requires subreddit curation |
-
-Use for: Subreddit-specific monitoring (r/politics, r/economics, r/weather) for narrative shifts and community consensus signals.
-
-### Source Priority for Speed
-
-For latency-sensitive prediction market trading:
-
-1. **X/Twitter** — fastest to break news, but noisiest
-2. **NewsAPI** — structured, reliable, minutes behind Twitter
-3. **Reddit** — slowest but provides depth and community consensus
+| Source | Coverage | Key | Rate Limit | Strength | Weakness |
+|---|---|---|---|---|---|---|
+| **NewsAPI** | 50,000+ sources worldwide | `NEWSAPI_API_KEY` | 100/day (free), 1000/day (developer) | Broad coverage, structured data | Paid tier for high-frequency |
+| **Reddit RSS** | Discussion-based communities | None | 60 req/min (RSS) | Community analysis, narrative shifts | Slow, no breaking news |
+| **Open-Meteo** | Global weather data | None | Unlimited (free) | Reliable forecasts, no key | Weather only |
+| **NWS Alerts** | US weather alerts (13 states) | None | Unlimited (public) | Official, authoritative | US-only |
+| **FRED** | Economic indicators | `FRED_API_KEY` | 120 req/min | Authoritative economic data | US-focused |
+| **CoinGecko** | Crypto market data | None (free tier) | 50 req/min | Broad crypto coverage | Crypto only |
+| **OpenWeatherMap** | Weather conditions | `OPENWEATHER_API_KEY` | 1,000/day (free) | Real-time conditions | Weather only |
+| **TheSportsDB** | Sports events/scores | None | Free tier | Sports coverage | Sports only |
+| **Google Trends** | Search interest data | None | Rate-limited | Real-time interest signals | Trend data only |
 
 ## Classifier
 
@@ -157,14 +125,21 @@ For latency-sensitive prediction market trading:
 The `MarketCategory` enum defines the supported news classification categories, mapping directly to Kalshi's market categories:
 
 ```python
-class MarketCategory(str, Enum):
+class MarketCategory(StrEnum):
     ECONOMICS = "economics"
     POLITICS = "politics"
     WEATHER = "weather"
     SPORTS = "sports"
-    CULTURE = "culture"
-    TECHNOLOGY = "technology"
-    SCIENCE = "science"
+    SCIENCE_AND_TECHNOLOGY = "science_and_technology"
+    CRYPTO = "crypto"
+    COMMODITIES = "commodities"
+    COMPANIES = "companies"
+    ELECTIONS = "elections"
+    ENTERTAINMENT = "entertainment"
+    FINANCIALS = "financials"
+    HEALTH = "health"
+    SOCIAL = "social"
+    MENTIONS = "mentions"
 ```
 
 Each category has:
@@ -226,13 +201,18 @@ The registry pattern allows:
 Kalshi organizes markets into broad categories:
 
 | Category | Example Markets |
-|---|---|
+|---|---|---|
 | **Economics** | Fed rate decisions, GDP, unemployment, inflation |
 | **Politics** | Elections, legislation, Supreme Court, appointments |
 | **Weather** | Hurricane season, temperature records, snowfall |
-| **Culture** | Box office, awards, sports championships |
-| **Technology** | Crypto prices, tech earnings, product launches |
-| **Science** | Space launches, disease outbreaks |
+| **Crypto** | Bitcoin price, crypto market cap |
+| **Commodities** | Oil, gold, agricultural prices |
+| **Companies** | Earnings reports, stock performance |
+| **Elections** | Political candidates, ballot measures |
+| **Entertainment** | Box office, awards, sports championships |
+| **Financials** | Interest rates, credit markets |
+| **Health** | Disease outbreaks, public health |
+| **Social** | Public opinion, social trends |
 
 ### Classification Approach
 
@@ -350,16 +330,13 @@ Most news is irrelevant to any given prediction market. A celebrity divorce does
 
 Each news source has a domain authority score per category. Higher authority means the source is more reliable for that category:
 
-| Source | ECONOMICS | POLITICS | WEATHER | SPORTS | CULTURE | TECHNOLOGY | SCIENCE |
-|---|---|---|---|---|---|---|---|
+| Source | ECONOMICS | POLITICS | WEATHER | SPORTS | CRYPTO | COMMODITIES | COMPANIES |
+|---|---|---|---|---|---|---|---|---|
 | **Federal Reserve** | 1.0 | 0.7 | 0.1 | 0.0 | 0.0 | 0.3 | 0.1 |
 | **Reuters/Bloomberg** | 0.9 | 0.8 | 0.3 | 0.2 | 0.3 | 0.7 | 0.5 |
-| **NWS/NOAA** | 0.1 | 0.0 | 1.0 | 0.1 | 0.0 | 0.1 | 0.7 |
-| **ESPN** | 0.0 | 0.1 | 0.0 | 1.0 | 0.3 | 0.1 | 0.0 |
-| **arXiv/Nature** | 0.3 | 0.1 | 0.2 | 0.0 | 0.1 | 0.6 | 1.0 |
+| **NWS/NOAA** | 0.1 | 0.0 | 1.0 | 0.1 | 0.0 | 0.1 | 0.0 |
+| **Reddit** | 0.2 | 0.3 | 0.2 | 0.4 | 0.5 | 0.3 | 0.2 |
 | **General News (NewsAPI)** | 0.5 | 0.5 | 0.3 | 0.3 | 0.4 | 0.4 | 0.3 |
-| **Twitter/X** | 0.3 | 0.6 | 0.2 | 0.5 | 0.5 | 0.4 | 0.1 |
-| **Reddit** | 0.2 | 0.3 | 0.2 | 0.4 | 0.5 | 0.3 | 0.1 |
 
 Domain authority is used as a multiplier in the impact score formula. A Fed statement scored at 0.8 impact with 1.0 economics authority gets 0.8 × 1.0 = 0.8 net impact. A random tweet scored at 0.8 impact with 0.3 economics authority gets 0.8 × 0.3 = 0.24 net impact.
 

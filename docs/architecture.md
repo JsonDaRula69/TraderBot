@@ -6,32 +6,38 @@ TraderBot's architecture is built around one principle: **the toolkit is a dumb 
 
 The agent operates via independent isolated cron jobs registered via `openclaw cron add --session isolated`, each with a distinct responsibility. This replaces the old monolithic "three-loop" design (Decision/Heartbeat/News) with isolated, collision-free execution.
 
-### Agent Cron Jobs (8 jobs)
+### Agent Cron Jobs (10 jobs)
 
 Registered via `traderbot cron setup-heartbeat-tasks`:
 
 | Job Name | Schedule | Command | Purpose |
-|---|---|---|---|
+|---|---|---|---|---|
 | `circuit-breaker-check` | `*/30 * * * *` | `traderbot halt --json` | Check circuit breaker state; surface SLOW/CRITICAL alerts |
+| `decision-loop` | `*/5 * * * *` | `traderbot paper momentum --no-confirm --json` | Agent trading decision cycle |
 | `data-forecast-check` | `*/30 * * * *` | `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` | Verify NWS and ensemble data availability |
 | `news-scan` | `*/30 * * * *` | `traderbot news-context weather --json` | Scan for NHC advisories, NWS warnings, emergency declarations |
+| `news-ingest` | `*/30 * * * *` | `traderbot news-ingest --json` | News + data point ingestion |
 | `position-health` | `0 * * * *` | `traderbot positions --json` | Check positions with settlement < 48h, drawdown > 5% |
 | `settlement-monitor` | `0 * * * *` | `traderbot check-settlements --json` | Check for recently settled markets and update positions DB |
-| `performance-review` | `0 */6 * * *` | `traderbot heartbeat --json` | Review drawdown, win rate, learning promotions |
+| `heartbeat-review` | `0 */6 * * *` | `traderbot heartbeat --json` | Performance review, drawdown, win rate, learning promotions |
 | `learning-promotion` | `0 */6 * * *` | `traderbot learnings --promote` | Promote recurring learnings (Recurrence-Count >= 3) |
-| `pipeline-health` | `0 */6 * * *` | `systemctl list-timers --all \| grep traderbot` | Verify data pipeline timers are active and data is fresh |
+| `experiment-execution` | `0 */6 * * *` | `traderbot experiment run --treatments control,calibration_bundle --replicates 3` | Execute scheduled experiments |
 
-All agent cron jobs use `--session isolated` for collision-free execution. The `settlement-monitor` job is explicitly marked isolated in its job definition.
+All agent cron jobs use `--session isolated` for collision-free execution.
 
-### Sysadmin Cron Setup (3 jobs)
+### Sysadmin Cron Setup (7 jobs)
 
-The `traderbot cron setup` command registers legacy-format loops as isolated cron jobs:
+The `traderbot cron setup-heartbeat-tasks` command registers isolated cron jobs for the sysadmin role:
 
-| Job Name | Schedule | Session | Purpose |
-|---|---|---|---|
-| `decision_loop` | `*/5 * * * *` | isolated | Agent trading decision cycle |
-| `heartbeat_loop` | `0 */6 * * *` | isolated | Performance review and adaptation |
-| `news_ingest` | `*/30 * * * *` | isolated | News and data point ingestion |
+| Job Name | Schedule | Purpose |
+|---|---|---|
+| `circuit-breaker-check` | `*/30 * * * *` | Check fleet-wide circuit breaker across all agents |
+| `experiment-check` | `0 */6 * * *` | Review pending experiment proposals from agents |
+| `experiment-execution` | `0 */6 * * *` | Execute queued experiments and deploy validated changes |
+| `auth-check` | `0 * * * *` | Verify all API credentials are resolvable |
+| `learning-review` | `0 */6 * * *` | Cross-reference learnings, file GitHub issues |
+| `pipeline-health` | `0 */6 * * *` | Verify systemd timers, ChromaDB data_points, WS daemon |
+| `performance-review` | `0 */6 * * *` | Fleet P&L review, win rates, risk threshold checks |
 
 ### Offline Data Pipelines (systemd timers)
 
@@ -49,6 +55,129 @@ The `traderbot cron setup` command registers legacy-format loops as isolated cro
 └───────────────┬───────────────────────────────────────────────┘
                 │ calls via exec
                 ▼
+ 
+## Infrastructure Modules (Root Package)
+
+The root `traderbot/` package contains 11 modules that don't belong to any single subsystem:
+
+| Module | Purpose | Key Functions |
+|---|---|---|
+| `auth.py` | Credential management via OS keyring with .env fallback | `AuthManager` — get/set/delete/migrate credentials |
+| `master_password.py` | PBKDF2-HMAC-SHA256 gate for trade commands | `require_auth()`, `setup_master_password()`, `authenticate()`, `session_active()` |
+| `paper.py` | Paper balance computation | `PaperBalance`, `compute_paper_balance()` |
+| `wal.py` | Write-ahead log for crash-safe execution | `write_intent()`, `update_status()`, `scan_pending()`, `reconcile()` |
+| `sandbox.py` | Application-level filesystem sandbox | `Sandbox` — macOS sandbox-exec + POSIX chmod fallback |
+| `paths.py` | Data directory resolution | `get_data_dir()`, `get_audit_dir()`, `get_chroma_dir()` |
+| `fileops.py` | Cross-platform file operations | `lock_file()`, `unlock_file()`, `set_file_owner_only()` |
+| `logging_config.py` | Structured logging helpers | `configure_root_logger()`, `get_logger()`, `log_market_event()` |
+| `platform_compat.py` | Platform detection & service management | `get_platform()`, `is_darwin()`, `get_service_manager_label()`, `systemd_remove_services()` |
+| `update_config.py` | Update configuration model | `UpdateConfig` — check_interval, auto_apply |
+| `updater.py` | Version management & auto-update | `fetch_latest_version()`, `check_for_updates()`, `apply_update()` |
+| `heartbeat.py` | Self-review cycle | `run_heartbeat_cycle()`, heartbeat loop for performance review |
+| `learning.py` | Learning log manager | Read/write/promote .learnings entries |
+| `cron_loops.py` | Legacy decision/heartbeat/news loop definitions | `DecisionLoopPayload`, `HeartbeatLoopPayload`, `NewsLoopPayload`, `LOOP_DEFINITIONS` |
+
+### LLM Client (`traderbot.llm`)
+
+The `llm/` package abstracts LLM inference for experiment harnesses and agents:
+
+| Module | Symbol | Purpose |
+|---|---|---|
+| `client.py` | `LLMClient` | High-level client with exponential-backoff retry (default 3 retries, 1s/2s/4s backoff) |
+| `client.py` | `LLMProvider` (Protocol) | Structural type for providers: `generate(prompt: str) -> str` |
+| `client.py` | `LLMClientError` | Raised on permanent failure or retry exhaustion |
+| `ollama.py` | `OllamaProvider` | Concrete provider via httpx POST to `http://localhost:11434/api/generate` (model, base_url, timeout configurable) |
+| `ollama.py` | `OllamaConnectionError` | Raised on connect timeout, DNS failure, or HTTP error from Ollama server |
+
+**Retry policy**: Only `OllamaConnectionError` is retryable (transient). Any other `Exception` fails immediately as `LLMClientError`. The retry loop uses blocking `time.sleep()` — the client is synchronous.
+
+**Usage in experiments** (experiment/harness.py): The harness wires `OllamaProvider(model=X) → LLMClient(provider) → Harness(conn, llm_client, seed)`. On `LLMClientError`, the harness skips the current (treatment, ticker, timestep) cell — no decision is recorded for that cell.
+
+## Kalshi Exchange Integration (`traderbot.kalshi`)
+
+The `kalshi/` package has 15 modules organized into four architectural layers:
+
+### Layer 1: Provider Protocol & Snapshots
+
+`provider.py` defines the `MarketDataProvider` protocol with two implementations:
+
+| Symbol | Type | Purpose |
+|---|---|---|
+| `MarketSnapshot` | frozen dataclass | Immutable market state: ticker, status, open_interest, close_time, settlement |
+| `OrderBookSnapshot` | frozen dataclass | Immutable order book: yes/no bid levels |
+| `SettlementResult` | frozen dataclass | Market settlement: ticker, outcome, settled_at |
+| `MarketDataProvider` | Protocol | Async interface: `get_market()`, `get_orderbook()`, `get_settlement()` |
+| `MarketDataCache` | Protocol | Sync interface: `get/set_market`, `get/set_orderbook` |
+| `ProdDataProvider` | class | Production impl — backs to KalshiClient + optional cache. Batch methods with semaphore (5 concurrent, 200ms delay) |
+| `MockDataProvider` | class | Pre-configured dicts — used in tests and simulation |
+
+### Layer 2: Service Layer
+
+Stateless service classes wrapping `KalshiClient`:
+
+| Service | Exported? | Methods |
+|---|---|---|
+| `MarketService` | Yes | `get_market()`, `get_orderbook()`, `get_portfolio()`, `list_markets()` |
+| `EventsService` | Yes | `get_events()` (paginated, filterable by state), `get_event()` |
+| `ExchangeService` | Yes | `get_status()` — returns ExchangeStatus (is_open, description, active_markets) |
+| `PortfolioService` | Yes | `get_balance()`, `get_cached_balance()` (hourly TTL), `get_positions()`, `get_fills()`, `get_settlements()` |
+| `TradingService` | Yes | `place_order()`, `cancel_order()`, `get_orders()` |
+| `HistoryService` | Internal | `get_cutoffs()`, `get_historical_trades()`, `get_settled_markets()` |
+
+### Layer 3: Caching Architecture
+
+Three-tier caching:
+
+| Tier | Module | TTL | Content |
+|---|---|---|---|
+| **In-memory TTL** | `cache.py` | 30s (orderbook), 60s (market) | `MarketDataCache` — request-level market/orderbook snapshots + SQLite settlement store |
+| **WebSocket daemon** | `ws_daemon.py` | Real-time (WebSocket push) | Persistent daemon subscribing to `market_lifecycle_v2` and `ticker` channels; writes `event_category_cache.json` |
+| **WebSocket cache reader** | `ws_cache.py` | 30s ticker TTL | Read-side accessors: `get_ticker_price()`, `get_ticker_prices()`, `get_cache_stats()` |
+
+The daemon (`python -m traderbot.kalshi.ws_daemon`) is a standalone CLI process that maintains the JSON cache with exponential reconnect backoff (5s initial, 60s max).
+
+### Layer 4: Rate Limiting & Normalization
+
+| Module | Purpose |
+|---|---|
+| `rate_limit.py` | `TokenBucketRateLimiter` — async token bucket with burst capacity (default 2× rate). `acquire()` blocks via `asyncio.sleep(1/rate)`. |
+| `_normalize.py` | Internal helpers bridging V1/V2 API: `_to_cents()` (dollars→cents), `_map_category()` (16 raw strings→14 MarketCategory enum), `_normalize_market()` (handles `_fp` suffix, `title` vs `question`, `state` vs `status`, `finalized→settled` mapping) |
+
+## Profiles Subsystem (`traderbot.profiles`)
+
+The profiles subsystem has 14 files organized around a single dependency chain:
+
+```
+env var → token → profile name → encrypted registry → TradingProfile model → isolated paths + resolved credentials + risk limits
+```
+
+### Dependency Chain
+
+| Step | Module | Function | Output |
+|---|---|---|---|
+| 1 | `runtime.py` | `get_current_profile()` | Reads `TRADERBOT_PROFILE_TOKEN` env var → `resolve_token()` → `ProfileRegistry.get_profile()` |
+| 2 | `tokens.py` | `resolve_token()` | Constant-time token lookup in encrypted `tokens.enc`. Returns `(profile_name, agent_id)` or None. |
+| 3 | `registry.py` | `ProfileRegistry.get_profile()` | Fernet-decrypted CRUD on `profiles.enc`. Returns `TradingProfile` model. |
+| 4 | `config.py` | `resolve_kalshi_credentials()` | Keyring-first fallback chain (profile keyring → profile env → global keyring → global env/.env). |
+| 5 | `isolation.py` | `get_profile_db_path()` | Returns `~/.traderbot/{mode}-{name}/db/{db_name}` — per-agent isolation. |
+| 6 | `risk/agent_limits.py` | `AgentRiskLimits` | Ceiling enforcement: `min(profile_param, HARD_LIMITS[key])` for max thresholds. |
+
+### Full Module Inventory
+
+| Module | Public API | Purpose |
+|---|---|---|
+| `models.py` | `TradingProfile` (13 fields + 3 computed + `is_category_enabled()`) | Foundational model — all risk params, mode, categories |
+| `tokens.py` | `generate_token()`, `assign_token()`, `resolve_token()`, `revoke_token()`, `list_assignments()`, `rotate_token()`, `TokenAlreadyAssignedError` | Full token lifecycle. 30-day TTL, encrypted Fernet storage, constant-time comparison |
+| `registry.py` | `ProfileRegistry` — `create_profile()`, `get_profile()`, `list_profiles()`, `delete_profile()`, `update_profile()`, `profile_exists()` | Encrypted CRUD on `profiles.enc`. Key auto-generated via `O_CREAT\|O_EXCL` race-safe write |
+| `auth.py` | `ProfileAuthStore` — `get_credentials()`, `set_credentials()`, `delete_credentials()` | Per-profile keyring storage under `traderbot.profiles.{name}.{service}` |
+| `config.py` | `resolve_kalshi_credentials()`, `resolve_newsapi_key()`, `resolve_openweather_key()`, `resolve_fred_key()` | Keyring-first credential resolution with multi-location fallback |
+| `runtime.py` | `get_current_profile()`, `load_profile_config()`, `get_runtime_context()` | Runtime profile + config resolution |
+| `isolation.py` | `get_profile_db_path()`, `get_profile_chroma_path()`, `get_profile_audit_path()`, `ensure_profile_dirs()` | Per-agent filesystem isolation with legacy DB migration |
+| `sysadmin.py` | `create_sysadmin_profile()` | Factory for sysadmin profile (all categories, minimal risk) |
+| `discovery.py` | `discover_agents()`, `get_agent_identity()`, `list_agent_dirs()` | OpenClaw agent discovery from config + agent dirs + workspaces |
+| `injection.py` | `propagate_workspace_files()` (other 3 stubs are NO-OP) | Deploy workspace templates via merge strategies |
+| `injection_strategies.py` | `InjectionStrategy` enum, `fenced_merge()`, `init_if_missing()`, `inject_profile_into_identity()`, `inject_agents_block()`, `inject_soul_block()` | Non-destructive file merge via HTML-comment fenced markers |
+| `openclaw_config.py` | `ensure_agent_bootstrap_hook()`, `enable_session_memory_hook()`, `get_openclaw_version()` | OpenClaw hook deployment and config management |
 
 ## Docker Sandbox for Category Agents
 
@@ -100,8 +229,8 @@ The `traderbot` CLI binary is available inside the container at `/traderbot/.ven
 
 `traderbot update` (Python CLI) and `traderbot-installer.sh --update` execute the same pipeline:
 
-1. **git pull** from origin
-2. **pip install -e .** (reinstall the package)
+1. **pip upgrade** or **git pull** — detects install mode (pip-installed → `pip install --upgrade traderbot`; git-installed → `git pull`)
+2. **pip install -e .** (reinstall package, git mode only)
 3. **Refresh workspace files** (overwrite templates, preserve USER.md/MEMORY.md/SESSION-STATE.md/.learnings/)
 4. **Rebuild Docker sandbox image** (if Docker available)
 5. **Re-apply OpenClaw sandbox config keys** (binds, dangerouslyAllowExternalBindSources, mode)
@@ -616,7 +745,7 @@ class NewsSource(StrEnum):
     NWS_ALERTS = "nws_alerts"
 ```
 
-Sources requiring API keys: `OPENWEATHERMAP`, `FRED`. All others use public endpoints or don't require keys.
+Sources requiring API keys: `NEWSAPI`, `OPENWEATHERMAP`, `FRED`. All others use public endpoints or don't require keys.
 
 ### StrategyProfile Model
 
