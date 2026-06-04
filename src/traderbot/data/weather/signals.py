@@ -17,6 +17,7 @@ from traderbot.db import get_connection
 from traderbot.db.forecast_bias import query_bias as _query_bias
 
 if TYPE_CHECKING:
+    from traderbot.data.weather.provider import WeatherDataProvider
     from traderbot.experiment.shared import MarketData
     from traderbot.kalshi.models import OrderBook
 
@@ -98,15 +99,22 @@ class WeatherSignalEngine(BaseSignalEngine):
     Order books are passed separately via ``orderbooks`` and matched by ticker.
     """
 
-    def __init__(self, orderbooks: dict[str, OrderBook] | None = None) -> None:
+    def __init__(
+        self,
+        orderbooks: dict[str, OrderBook] | None = None,
+        provider: WeatherDataProvider | None = None,
+    ) -> None:
         """Create a WeatherSignalEngine.
 
         Args:
             orderbooks: Optional mapping of Kalshi ticker → OrderBook.
                 When provided, market-implied probabilities are extracted from
                 live bid data. When omitted, a neutral 0.50 is used.
+            provider: Optional WeatherDataProvider for fetching model consensus.
+                When omitted, lazy-initialized on first use.
         """
         self._orderbooks: dict[str, OrderBook] = orderbooks or {}
+        self._provider: WeatherDataProvider | None = provider
 
     def set_orderbooks(self, orderbooks: dict[str, OrderBook]) -> None:
         """Replace the order-book lookup used for market-probability extraction."""
@@ -263,15 +271,50 @@ class WeatherSignalEngine(BaseSignalEngine):
         except (ValueError, AttributeError):
             return 0.5
 
-    @staticmethod
-    def _get_consensus_score(ticker: str) -> float | None:
-        """Retrieve the latest cached model-consensus agreement score.
+    def _get_or_init_provider(self):
+        """Lazy-initialize the WeatherDataProvider if not provided."""
+        if self._provider is None:
+            from traderbot.data.weather.provider import WeatherDataProvider
 
-        Stub: returns None, indicating no cached consensus is available.
-        In production, this would query a consensus cache populated by
-        WeatherDataProvider.get_model_consensus().
+            self._provider = WeatherDataProvider()
+        return self._provider
+
+    def _get_consensus_score(self, ticker: str) -> float | None:
+        """Retrieve model-consensus agreement score from the weather provider.
+
+        Uses the injected WeatherDataProvider to fetch real ensemble consensus.
+        Falls back to 0.5 when:
+        - The ticker's city is not in the known mapping
+        - The provider returns consensus with only 1 model (unreliable)
+        - Any error occurs during fetching
         """
-        return None
+        city = _TICKER_TO_CITY.get(ticker)
+        if city is None:
+            logger.debug("No city mapping for ticker=%s — consensus fallback to 0.5", ticker)
+            return 0.5
+
+        try:
+            provider = self._get_or_init_provider()
+            import asyncio
+
+            consensus = asyncio.run(provider.get_model_consensus(city))
+            if len(consensus.models_used) <= 1:
+                logger.debug(
+                    "Single model consensus for city=%s (%s) — fallback to 0.5",
+                    city,
+                    consensus.models_used,
+                )
+                return 0.5
+            logger.debug(
+                "Consensus for %s: score=%.3f models=%s",
+                city,
+                consensus.agreement_score,
+                consensus.models_used,
+            )
+            return consensus.agreement_score
+        except Exception:
+            logger.exception("Consensus fetch failed for ticker=%s city=%s", ticker, city)
+            return 0.5
 
     @staticmethod
     def _query_bias_adjustment(city: str, model: str = "nws", days: int = 90) -> float:
