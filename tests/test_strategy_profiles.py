@@ -159,7 +159,7 @@ class TestProfilesProduceDifferentResults:
     """Conservative positions must be smaller than Aggressive positions."""
 
     async def test_conservative_smaller_than_aggressive(self, tmp_path: Path) -> None:
-        small_bankroll = 400_000  # $4,000 — large enough that conservative risk sizing allows trades
+        small_bankroll = 90_000  # $900 — conservative (7.5% limit) caps qty below signal; aggressive (12%) takes full signal
         market = _make_market(
             ticker="KX-DIFF",
             settlement_result=True,

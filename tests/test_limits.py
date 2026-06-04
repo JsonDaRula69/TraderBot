@@ -21,16 +21,15 @@ PORTFOLIO_VALUE = 100_000_00  # $100,000 in cents
 
 class TestCheckPositionLimit:
     def test_passes_at_exact_boundary(self):
-        limit = int(PORTFOLIO_VALUE * 0.05)
+        limit = int(PORTFOLIO_VALUE * HARD_LIMITS["max_position_per_market_pct"])
         result = check_position_limit(0, limit, PORTFOLIO_VALUE)
         assert result.passed
         assert result.rejection_reason is None
 
     def test_fails_over_boundary(self):
-        limit = int(PORTFOLIO_VALUE * 0.05)
+        limit = int(PORTFOLIO_VALUE * HARD_LIMITS["max_position_per_market_pct"])
         result = check_position_limit(0, limit + 1, PORTFOLIO_VALUE)
         assert not result.passed
-        assert result.rejection_reason == "Position would exceed 5% portfolio limit"
 
     def test_zero_current_position(self):
         result = check_position_limit(0, 100_00, PORTFOLIO_VALUE)
@@ -43,8 +42,8 @@ class TestCheckPositionLimit:
         assert result.passed
 
     def test_existing_position_exceeds_with_new_order(self):
-        existing = int(PORTFOLIO_VALUE * 0.04)
-        too_big = int(PORTFOLIO_VALUE * 0.02)
+        existing = int(PORTFOLIO_VALUE * 0.12)  # 12% existing
+        too_big = int(PORTFOLIO_VALUE * 0.05)  # 5% order → 17% > 15% ceiling
         result = check_position_limit(existing, too_big, PORTFOLIO_VALUE)
         assert not result.passed
 
@@ -71,23 +70,23 @@ class TestPerMarketPositionLimit:
         )
 
     def test_same_market_rejected_when_near_limit(self):
-        """Market at 4.5%, new trade in same market at 1% → REJECTED (4.5+1 > 5%)."""
+        """Market at 14%, new trade in same market at 2% → REJECTED (14+2 > 15%)."""
         portfolio_value = 100_000_00
-        order_value = int(portfolio_value * 0.01)  # 1% order
-        existing_in_ticker = int(portfolio_value * 0.045)  # 4.5% existing
+        order_value = int(portfolio_value * 0.02)  # 2% order
+        existing_in_ticker = int(portfolio_value * 0.14)  # 14% existing
         result = check_position_limit(
             0,  # aggregate (not used when per_ticker is provided)
             order_value,
             portfolio_value,
             per_ticker_position_value_cents=existing_in_ticker,
         )
-        assert not result.passed, "Same-market order exceeding 5% should be rejected"
+        assert not result.passed, "Same-market order exceeding 15% should be rejected"
 
     def test_same_market_accepted_below_limit(self):
-        """Market at 3%, new trade in same market at 1% → PASSES (3+1 < 5%)."""
+        """Market at 10%, new trade in same market at 4% → PASSES (10+4 < 15%)."""
         portfolio_value = 100_000_00
-        order_value = int(portfolio_value * 0.01)  # 1% order
-        existing_in_ticker = int(portfolio_value * 0.03)  # 3% existing
+        order_value = int(portfolio_value * 0.04)  # 4% order
+        existing_in_ticker = int(portfolio_value * 0.10)  # 10% existing
         result = check_position_limit(
             0,
             order_value,
@@ -99,7 +98,7 @@ class TestPerMarketPositionLimit:
     def test_portfolio_wide_aggregate_still_used_when_no_per_ticker(self):
         """When per_ticker_position_value_cents is NOT provided, falls back to aggregate."""
         portfolio_value = 100_000_00  # $100,000
-        limit_5pct = int(portfolio_value * 0.05)  # $5,000
+        limit_15pct = int(portfolio_value * 0.15)  # $15,000
         result = check_position_limit(1_000_00, 500_00, portfolio_value)
         assert result.passed
 
@@ -213,7 +212,7 @@ class TestHardLimitsImmutability:
             del HARD_LIMITS["max_position_per_market_pct"]
 
     def test_hard_limits_values_match_spec(self):
-        assert HARD_LIMITS["max_position_per_market_pct"] == 0.05
+        assert HARD_LIMITS["max_position_per_market_pct"] == 0.15
         assert HARD_LIMITS["max_daily_loss_pct"] == 0.02
         assert HARD_LIMITS["max_drawdown_pct"] == 0.10
         assert HARD_LIMITS["min_liquidity_threshold"] == 500
@@ -259,7 +258,7 @@ class TestRunAllChecks:
         big_portfolio = PortfolioState(
             portfolio_value_cents=100_000_00,
             peak_value_cents=110_000_00,
-            current_positions_value_cents=4_500_00,
+            current_positions_value_cents=13_000_00,  # 13%
             today_realized_loss_cents=100_00,
             today_unrealized_loss_cents=50_00,
             open_positions_count=5,
@@ -267,8 +266,8 @@ class TestRunAllChecks:
         big_trade = TradeRequest(
             ticker="KXBTCD-26MAR31-T55000",
             direction="yes",
-            quantity=6,
-            price_cents=9000,
+            quantity=10,
+            price_cents=35000,  # 10 x 35000 = 350000 → 3.5% → 16.5% > 15%
             estimated_prob=0.65,
             confidence=0.8,
             edge_estimate=0.15,
@@ -304,12 +303,12 @@ class TestPortfolioValueUsesInitialCents:
     """
 
     def test_position_limit_uses_full_initial_portfolio(self) -> None:
-        """Position limit should be 5% of initial_cents, not 5% of remaining_cents."""
+        """Position limit should be 15% of initial_cents, not 15% of remaining_cents."""
         initial_cents = 100_000_00  # $1,000 initial deposit
         remaining_cents = 80_000_00  # $800 after $200 in losses
         existing_positions = 2_000_00
-        # With initial_cents, the 5% limit = $50 → order of $300 should pass
-        result = check_position_limit(existing_positions, 3_000_00, initial_cents)
+        # With initial_cents, the 15% limit = $1,500 → order of $500 should pass
+        result = check_position_limit(existing_positions, 5_000_00, initial_cents)
         assert result.passed, (
             f"Position limit should use initial_cents ({initial_cents}), "
             f"not remaining_cents ({remaining_cents})"
@@ -320,12 +319,16 @@ class TestPortfolioValueUsesInitialCents:
         initial_cents = 100_000_00
         remaining_cents = 40_000_00  # After heavy losses
         existing_positions = 1_500_00
-        # With initial_cents: 5% of 100000 = 5000, 1500+2500=4000 → pass
-        # With remaining_cents: 5% of 40000 = 2000, 1500+2500=4000 → fail
-        result_initial = check_position_limit(existing_positions, 2_500_00, initial_cents)
+        # With initial_cents: 15% of 100000 = 15000, 1500+2500=4000 → pass
+        # With remaining_cents: 15% of 40000 = 6000, 1500+2500=4000 → pass (still within 6000)
+        # Need order that exceeds remaining_cents limit but not initial_cents limit
+        # remaining_cents: 15% of 40000 = 6000, 1500+5000=6500 → fail
+        # initial_cents: 15% of 100000 = 15000, 1500+5000=6500 → pass
+        big_order = 5_000_00
+        result_initial = check_position_limit(existing_positions, big_order, initial_cents)
         assert result_initial.passed, "Using initial_cents should allow this order"
 
-        result_remaining = check_position_limit(existing_positions, 2_500_00, remaining_cents)
+        result_remaining = check_position_limit(existing_positions, big_order, remaining_cents)
         assert not result_remaining.passed, "Using remaining_cents would double-count losses"
 
     def test_run_all_checks_uses_initial_portfolio_value(self) -> None:

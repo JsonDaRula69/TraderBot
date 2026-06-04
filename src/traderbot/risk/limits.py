@@ -16,7 +16,7 @@ from traderbot.kalshi.models import PortfolioState, RiskCheckResult, TradeReques
 # MappingProxyType is not itself a generic type usable in annotations.
 HARD_LIMITS: Final[dict[str, float | int]] = MappingProxyType(
     {
-        "max_position_per_market_pct": 0.05,
+        "max_position_per_market_pct": 0.15,
         "max_daily_loss_pct": 0.02,
         "max_drawdown_pct": 0.10,
         "min_liquidity_threshold": 500,

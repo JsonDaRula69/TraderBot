@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- HARD_LIMITS max_position_per_market_pct ceiling raised from 5% to 15% (issue #73)
+
 ### Fixed
 
 - Installer Phase 2 now configures `tools.sessions.visibility: agent` and `tools.agentToAgent.enabled: true` for fresh installs (PR #82)
