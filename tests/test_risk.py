@@ -30,13 +30,13 @@ class TestCheckPositionLimit:
 
     def test_fails_when_exceeding_limit(self) -> None:
         result = check_position_limit(
-            current_position_value_cents=4_000_00,
-            order_value_cents=1_500_00,
+            current_position_value_cents=12_000_00,
+            order_value_cents=5_000_00,
             portfolio_value_cents=100_000_00,
         )
         max_allowed = 100_000_00 * HARD_LIMITS["max_position_per_market_pct"]
         assert result.passed is False
-        assert result.current_value == 5_500_00
+        assert result.current_value == 17_000_00
         assert result.limit_value == max_allowed
 
     def test_custom_limits(self) -> None:
@@ -51,7 +51,7 @@ class TestCheckPositionLimit:
         assert result.limit_value == 10_000_00
 
     def test_zero_portfolio_value_rejects(self) -> None:
-        """Portfolio value of 0 means 5% of 0 = 0, any order exceeds."""
+        """Portfolio value of 0 means 15% of 0 = 0, any order exceeds."""
         result = check_position_limit(
             current_position_value_cents=0,
             order_value_cents=1_00,

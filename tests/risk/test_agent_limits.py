@@ -35,7 +35,7 @@ def profile_at_hard_limits() -> TradingProfile:
         description="Aggressive profile",
         enabled_categories=[],
         risk_multiplier=1.0,
-        max_position_per_market_pct=0.05,  # At HARD_LIMITS
+        max_position_per_market_pct=0.15,  # At new HARD_LIMITS
         max_daily_loss_pct=0.02,  # At HARD_LIMITS
         max_drawdown_pct=0.10,  # At HARD_LIMITS
         max_open_positions=20,  # At HARD_LIMITS
