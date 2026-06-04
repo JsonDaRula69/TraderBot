@@ -167,6 +167,28 @@ def check_for_updates(
     return None
 
 
+def _ensure_openclaw_visibility() -> None:
+    """Apply OpenClaw session visibility and inter-agent config.
+
+    Mirrors the installer's Phase 2 configuration so these settings
+    are re-applied on every update. Idempotent — safe to run multiple times.
+    """
+    try:
+        subprocess.run(
+            ["openclaw", "config", "set", "tools.sessions.visibility", "agent"],
+            capture_output=True,
+            timeout=15,
+        )
+        subprocess.run(
+            ["openclaw", "config", "set", "tools.agentToAgent.enabled", "true", "--strict-json"],
+            capture_output=True,
+            timeout=15,
+        )
+        logger.info("OpenClaw visibility config applied")
+    except Exception as exc:
+        logger.warning("Failed to apply OpenClaw visibility config: %s", exc)
+
+
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
     repo_dir = Path(__file__).resolve().parent.parent.parent
     bootstrap = repo_dir / "install" / "traderbot-update.py"
@@ -180,6 +202,7 @@ def apply_update(restart: bool = False, dev: bool = False, verify_signature: boo
         except Exception as exc:
             logger.error("Bootstrap update failed: %s", exc)
             return False
+        _ensure_openclaw_visibility()
         logger.info("Update applied successfully")
         if restart:
             os.execv(sys.executable, [sys.executable, *sys.argv])

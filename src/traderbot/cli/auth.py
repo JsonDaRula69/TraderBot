@@ -89,11 +89,19 @@ def auth_check(
     validate: Annotated[
         bool, typer.Option("--validate", help="Validate credentials against Kalshi API")
     ] = False,
+    validate_scopes: Annotated[
+        bool,
+        typer.Option(
+            "--validate-scopes",
+            help="Full scope validation: tests authenticated endpoints and reports scope coverage",
+        ),
+    ] = False,
 ) -> None:
     """Verify KALSHI_API_KEY is configured (keyring, .env, or environment).
 
-    With --validate, also tests the credentials against the Kalshi API
-    (/exchange/status) to confirm they are valid, not just present.
+    With --validate, tests credentials against the unauthenticated /exchange/status endpoint.
+    With --validate-scopes, also probes authenticated endpoints (/portfolio/balance,
+    /portfolio/settlements) to verify API key scope covers portfolio:read and trading.
     """
     console = Console()
     from traderbot.auth import AuthManager
@@ -107,42 +115,106 @@ def auth_check(
 
     key_found = bool(key and key.strip())
 
-    output: dict[str, object] = {"status": "ok" if key_found else "missing", "key_found": key_found}
+    output: dict[str, object] = {
+        "status": "ok" if key_found else "missing",
+        "key_found": key_found,
+    }
 
-    if key_found and validate:
+    if key_found and (validate or validate_scopes):
         try:
             import asyncio
 
             from traderbot.kalshi.client import AuthenticationError, KalshiClient
 
-            async def _test_auth() -> int:
+            async def _test_endpoints() -> dict[str, object]:
                 client = KalshiClient()
-                resp = await client.get("/exchange/status")
-                await client.close()
-                return resp.status_code
+                results: dict[str, object] = {}
 
-            status_code = asyncio.run(_test_auth())
-            api_valid = status_code == 200
-            output["api_valid"] = api_valid
+                # Unauthenticated endpoint
+                try:
+                    resp = await client.get("/exchange/status")
+                    results["exchange_status"] = resp.status_code == 200
+                except Exception as exc:
+                    results["exchange_status"] = False
+                    results["exchange_status_error"] = str(exc)
+
+                if validate_scopes:
+                    # Authenticated endpoint: portfolio balance
+                    try:
+                        resp = await client.get("/portfolio/balance")
+                        results["portfolio_balance"] = resp.status_code == 200
+                        if resp.status_code == 401:
+                            results["portfolio_balance_error"] = (
+                                "INCORRECT_API_KEY_SIGNATURE: API key and PEM private key don't match. "
+                                "Run `traderbot auth set-kalshi` to re-register your credentials."
+                            )
+                    except AuthenticationError as exc:
+                        results["portfolio_balance"] = False
+                        results["portfolio_balance_error"] = (
+                            f"INCORRECT_API_KEY_SIGNATURE: {exc}. "
+                            "Run `traderbot auth set-kalshi` to re-register your credentials."
+                        )
+                    except Exception as exc:
+                        results["portfolio_balance"] = False
+                        results["portfolio_balance_error"] = str(exc)
+
+                    # Authenticated endpoint: portfolio settlements
+                    try:
+                        resp = await client.get("/portfolio/settlements")
+                        results["portfolio_settlements"] = resp.status_code == 200
+                        if resp.status_code == 401:
+                            results["portfolio_settlements_error"] = (
+                                "INCORRECT_API_KEY_SIGNATURE: API key and PEM private key don't match. "
+                                "Run `traderbot auth set-kalshi` to re-register your credentials."
+                            )
+                    except AuthenticationError as exc:
+                        results["portfolio_settlements"] = False
+                        results["portfolio_settlements_error"] = (
+                            f"INCORRECT_API_KEY_SIGNATURE: {exc}. "
+                            "Run `traderbot auth set-kalshi` to re-register your credentials."
+                        )
+                    except Exception as exc:
+                        results["portfolio_settlements"] = False
+                        results["portfolio_settlements_error"] = str(exc)
+
+                await client.close()
+                return results
+
+            endpoint_results = asyncio.run(_test_endpoints())
+            output.update(endpoint_results)
         except (AuthenticationError, Exception) as exc:
             output["api_valid"] = False
             output["error"] = str(exc)
 
     if json_output:
-        print(json_lib.dumps(output))
+        json_lib.dump(output, sys.stdout, default=str)
         return
 
     if key_found:
         console.print("[green]OK: KALSHI_API_KEY configured[/green]")
         if validate:
-            if output.get("api_valid"):
-                console.print("[green]Kalshi API: credentials valid[/green]")
+            if output.get("exchange_status"):
+                console.print("[green]Kalshi API: /exchange/status OK[/green]")
             else:
                 console.print(
-                    f"[red]Kalshi API: credentials invalid — {output.get('error', 'unknown error')}[/red]"
+                    f"[red]Kalshi API: /exchange/status failed — {output.get('exchange_status_error', 'unknown error')}[/red]"
                 )
+        if validate_scopes:
+            if output.get("portfolio_balance"):
                 console.print(
-                    "[yellow]Regenerate your API key from the Kalshi dashboard with trade and portfolio:read scopes.[/yellow]"
+                    "[green]✅ Authenticated: /portfolio/balance OK (portfolio:read scope)[/green]"
+                )
+            else:
+                console.print(
+                    f"[red]❌ Authenticated: /portfolio/balance failed — {output.get('portfolio_balance_error', 'unknown error')}[/red]"
+                )
+            if output.get("portfolio_settlements"):
+                console.print(
+                    "[green]✅ Authenticated: /portfolio/settlements OK (portfolio:read scope)[/green]"
+                )
+            else:
+                console.print(
+                    f"[red]❌ Authenticated: /portfolio/settlements failed — {output.get('portfolio_settlements_error', 'unknown error')}[/red]"
                 )
     else:
         console.print("[red]Missing: KALSHI_API_KEY not found in .env or environment[/red]")
