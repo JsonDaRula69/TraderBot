@@ -7,6 +7,7 @@ import sqlite3
 
 pytest_plugins = ["tests.integration_conftest"]
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +19,32 @@ from traderbot.kalshi.provider import (
     SettlementResult,
 )
 from traderbot.simulation.paper_trader import PaperSlippageModel, PaperTrader
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _restore_workspace_templates():
+    """Snapshot git-tracked workspace templates before tests; restore after.
+
+    Tests that invoke heartbeat or WAL code can mutate HEARTBEAT_DATA.md
+    and SESSION-STATE.md via module-level default paths. This fixture
+    snapshots both files before the session and restores them on teardown,
+    ensuring the git-tracked templates stay in their original state.
+    """
+    from traderbot.paths import get_workspace_dir, WORKSPACE_TEMPLATE_FILES
+
+    ws = get_workspace_dir()
+    snapshots: dict[str, bytes] = {}
+
+    for name in WORKSPACE_TEMPLATE_FILES:
+        target = ws / name
+        if target.exists():
+            snapshots[name] = target.read_bytes()
+
+    yield
+
+    for name, content in snapshots.items():
+        target = ws / name
+        target.write_bytes(content)
 
 # ---------------------------------------------------------------------------
 # Re-apply existing fixtures (kept from original conftest) — they are still

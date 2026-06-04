@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+WORKSPACE_TEMPLATE_FILES: list[str] = [
+    "HEARTBEAT_DATA.md",
+    "SESSION-STATE.md",
+]
 
 
 def _resolve_db_path(db_path: Path | None = None) -> Path:
@@ -132,3 +138,76 @@ def list_all_data_paths() -> list[Path]:
                     if candidate.exists():
                         paths.append(candidate)
     return paths
+
+
+def reset_workspace_templates(workspace_dir: Path | None = None) -> list[Path]:
+    """Restore workspace template files to their deployable baseline state.
+
+    Strips runtime data that accumulates from tests or CLI usage:
+    - HEARTBEAT_DATA.md: resets the ``Last Heartbeat`` timestamp
+    - SESSION-STATE.md: strips bare WAL status lines appended after the
+      last structured WAL entry
+    """
+    ws = workspace_dir or get_workspace_dir()
+    restored: list[Path] = []
+
+    hb_path = ws / "HEARTBEAT_DATA.md"
+    if hb_path.exists():
+        content = hb_path.read_text(encoding="utf-8")
+        original = content
+        content = re.sub(
+            r"## Last Heartbeat:.*",
+            "## Last Heartbeat: (not yet run)",
+            content,
+        )
+        if content != original:
+            hb_path.write_text(content, encoding="utf-8")
+            restored.append(hb_path)
+
+    ss_path = ws / "SESSION-STATE.md"
+    if ss_path.exists():
+        content = ss_path.read_text(encoding="utf-8")
+        original = content
+        content = _strip_bare_wal_status(content)
+        if content != original:
+            ss_path.write_text(content, encoding="utf-8")
+            restored.append(ss_path)
+
+    return restored
+
+
+def _strip_bare_wal_status(content: str) -> str:
+    """Strip bare WAL status lines that appear after the last structured entry.
+
+    Runtime code like ``update_status`` appends bare ``Status: REJECTED`` lines
+    after the last WAL entry.  These are not part of the template.  Bare lines
+    that appear *between* WAL entries (part of the template) are preserved.
+
+    A bare line starts with ``Status:`` but not ``- Status:``.  The last
+    structured WAL marker is ``### WAL-``.  Everything after that marker
+    (and before the next ``## `` heading) that is a bare ``Status:`` line
+    gets removed.
+    """
+    lines = content.split("\n")
+    last_wal_idx = -1
+    for i, line in enumerate(lines):
+        if line.startswith("### WAL-"):
+            last_wal_idx = i
+
+    if last_wal_idx == -1:
+        return content
+
+    next_heading_idx = len(lines)
+    for i in range(last_wal_idx + 1, len(lines)):
+        if lines[i].startswith("## "):
+            next_heading_idx = i
+            break
+
+    cleaned = []
+    for i, line in enumerate(lines):
+        if last_wal_idx < i < next_heading_idx:
+            if line.startswith("Status:") and not line.startswith("- Status:"):
+                continue
+        cleaned.append(line)
+
+    return "\n".join(cleaned)
