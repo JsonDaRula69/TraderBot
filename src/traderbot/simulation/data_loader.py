@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.kalshi.models import Market, Trade
@@ -231,24 +232,76 @@ class DataLoader:
             )
         self._conn.commit()
 
-    async def _fetch_all_markets(self) -> list[Market]:
+    async def _fetch_all_markets(
+        self,
+        after: date | None = None,
+        before: date | None = None,
+    ) -> list[Market]:
+        import asyncio
+
+        if after is not None or before is not None:
+            logger.warning(
+                "Date filtering not yet supported by get_settled_markets; "
+                "fetching all settled markets and filtering in-memory"
+            )
+
         all_markets: list[Market] = []
         cursor: str | None = None
+        page = 0
         while True:
-            response = await self._history.get_settled_markets(cursor=cursor)
+            page += 1
+            try:
+                response = await self._history.get_settled_markets(cursor=cursor)
+            except httpx.HTTPStatusError as exc:
+                logger.error(
+                    "Markets pagination error: status=%d url=%s page=%d",
+                    exc.response.status_code,
+                    exc.request.url,
+                    page,
+                )
+                break
             all_markets.extend(response.markets)
             cursor = response.cursor
             if cursor is None:
                 break
+            await asyncio.sleep(0.3)
+
+        if after is not None:
+            all_markets = [m for m in all_markets if m.close_time.date() >= after]
+        if before is not None:
+            all_markets = [m for m in all_markets if m.close_time.date() <= before]
+
         return all_markets
 
-    async def _fetch_all_trades(self, ticker: str) -> list[Trade]:
+    async def _fetch_all_trades(
+        self,
+        ticker: str,
+        after: datetime | None = None,
+        before: datetime | None = None,
+    ) -> list[Trade]:
+        import asyncio
+
         all_trades: list[Trade] = []
         cursor: str | None = None
+        page = 0
         while True:
-            response = await self._history.get_historical_trades(ticker, cursor=cursor)
+            page += 1
+            try:
+                response = await self._history.get_historical_trades(
+                    ticker, cursor=cursor, after=after, before=before
+                )
+            except httpx.HTTPStatusError as exc:
+                logger.error(
+                    "Trades pagination error: status=%d url=%s page=%d ticker=%s",
+                    exc.response.status_code,
+                    exc.request.url,
+                    page,
+                    ticker,
+                )
+                break
             all_trades.extend(response.trades)
             cursor = response.cursor
             if cursor is None:
                 break
+            await asyncio.sleep(0.3)
         return all_trades

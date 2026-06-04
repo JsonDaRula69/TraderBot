@@ -184,7 +184,7 @@ class TestGetTrades:
 
         assert len(result) == 1
         assert result[0].ticker == "KX-TEST"
-        mock_history.get_historical_trades.assert_called_once_with("KX-TEST", cursor=None)
+        mock_history.get_historical_trades.assert_called_once_with("KX-TEST", cursor=None, after=None, before=None)
 
     async def test_uses_cache_on_second_call(
         self, loader: DataLoader, mock_history: AsyncMock
