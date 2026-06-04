@@ -1611,6 +1611,8 @@ prompt_sandbox_docker() {
     openclaw config set agents.defaults.sandbox.backend docker 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.scope agent 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.workspaceAccess rw 2>/dev/null || true
+    openclaw config set tools.sessions.visibility agent 2>/dev/null || true
+    openclaw config set tools.agentToAgent.enabled true --strict-json 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.image traderbot-sandbox:bookworm-slim 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.network bridge 2>/dev/null || true
     openclaw config set agents.defaults.sandbox.docker.readOnlyRoot true 2>/dev/null || true
