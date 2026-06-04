@@ -57,22 +57,30 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) 
 
 
 def upsert(conn: sqlite3.Connection, position: Position) -> None:
-    """Insert or replace a position by its unique ticker, preserving existing pnl_cents."""
+    """Insert or accumulate a position by ticker, preserving existing pnl_cents.
+
+    Multiple calls for the same ticker accumulate quantity and compute
+    a weighted-average price, enabling position scaling (e.g., 50 then 1
+    on same ticker → qty=51). Uses ON CONFLICT DO UPDATE instead of
+    INSERT OR REPLACE so earlier quantities are not lost.
+    """
     now = datetime.now(UTC).isoformat()
-    existing = conn.execute(
-        "SELECT pnl_cents FROM positions WHERE ticker = ?", (position.ticker,)
-    ).fetchone()
-    pnl_cents = existing["pnl_cents"] if existing else 0
     conn.execute(
-        """INSERT OR REPLACE INTO positions
+        """INSERT INTO positions
            (ticker, quantity, avg_price, settlement_result, pnl_cents, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(ticker) DO UPDATE SET
+               quantity = quantity + excluded.quantity,
+               avg_price = (quantity * avg_price + excluded.quantity * excluded.avg_price)
+                           / (quantity + excluded.quantity),
+               pnl_cents = pnl_cents,
+               updated_at = excluded.updated_at""",
         (
             position.ticker,
             position.quantity,
             position.avg_price,
             position.settlement_result,
-            pnl_cents,
+            0,
             now,
         ),
     )

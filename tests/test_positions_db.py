@@ -64,15 +64,16 @@ class TestCrud:
             result = get(conn, "KX-TEST")
         assert result is None
 
-    def test_upsert_updates_existing(self, tmp_path: Path) -> None:
+    def test_upsert_accumulates_on_second_call(self, tmp_path: Path) -> None:
+        """Multiple calls for same ticker accumulate qty and compute weighted avg."""
         db_file = tmp_path / "test.db"
         with get_connection(db_file) as conn:
             init_schema(conn)
             upsert(conn, _make_position(quantity=10, avg_price=50))
             upsert(conn, _make_position(quantity=20, avg_price=60))
             result = get(conn, "KX-TEST")
-        assert result.quantity == 20
-        assert result.avg_price == 60
+        assert result.quantity == 30
+        assert result.avg_price == (50 * 10 + 60 * 20) // 30  # 56
 
 
 class TestUpdateAvgPrice:
