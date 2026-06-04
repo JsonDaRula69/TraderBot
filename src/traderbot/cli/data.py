@@ -236,3 +236,124 @@ def bias_cmd(
     )
     table.add_row("Sample Size", str(result.get("sample_size", 0)))
     console.print(table)
+
+
+@data_app.command("record-bias")
+def record_bias_cmd(
+    city: Annotated[
+        str,
+        typer.Option("--city", help="City code (e.g. NYC, CHI, LA). Repeatable."),
+    ] = "NYC",
+    forecast_date: Annotated[
+        str | None,
+        typer.Option("--date", help="Forecast date in YYYY-MM-DD format (default: today)"),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+) -> None:
+    """Record forecast bias by comparing NWS forecasts to actual temperatures.
+
+    Fetches the NWS forecast and the actual high temperature from Open-Meteo
+    for each city, then records the comparison in the forecast_bias SQLite
+    table for bias tracking and adjustment.
+    """
+    console = Console()
+    from datetime import UTC, datetime
+
+    from traderbot.data.weather.provider import _CITY_MAP, WeatherDataProvider, _resolve_city
+
+    city_codes = [c.strip().upper() for c in city.split(",") if c.strip()]
+    target_date = forecast_date or datetime.now(UTC).strftime("%Y-%m-%d")
+
+    try:
+        provider = WeatherDataProvider()
+        results: list[dict] = []
+        for cc in city_codes:
+            resolved = _resolve_city(cc)
+            if resolved is None or resolved not in _CITY_MAP:
+                logger.warning("Unknown city: %s", cc)
+                results.append({"city": cc, "status": "skipped", "reason": "unknown city"})
+                continue
+
+            # Fetch NWS forecast
+            forecasts = asyncio.run(provider.get_forecasts([resolved]))
+            fc = forecasts.get(resolved)
+            forecast_high = fc.high_temp_f if fc else None
+
+            # Fetch actual temperature from Open-Meteo archive API
+            lat, lon = _CITY_MAP[resolved]
+
+            async def _fetch_actual(lat: float, lon: float) -> float | None:
+                import httpx
+
+                archive_url = "https://archive-api.open-meteo.com/v1/archive"
+                params = {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "daily": "temperature_2m_max",
+                    "start_date": target_date,
+                    "end_date": target_date,
+                    "temperature_unit": "fahrenheit",
+                    "timezone": "America/New_York",
+                }
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.get(archive_url, params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    daily = data.get("daily", {})
+                    actual_temps = daily.get("temperature_2m_max", [])
+                    return actual_temps[0] if actual_temps else None
+
+            actual_high = asyncio.run(_fetch_actual(lat, lon))
+
+            if forecast_high is None or actual_high is None:
+                logger.warning(
+                    "Missing data for %s: forecast=%s actual=%s", cc, forecast_high, actual_high
+                )
+                results.append(
+                    {"city": cc, "status": "skipped", "reason": "missing forecast or actual data"}
+                )
+                continue
+
+            from traderbot.db import get_connection as _get_conn
+
+            with _get_conn() as conn:
+                from traderbot.db.forecast_bias import init_table as _init_bias_table
+                from traderbot.db.forecast_bias import record_forecast as _record
+
+                _init_bias_table(conn)
+                _record(
+                    conn,
+                    city=resolved,
+                    forecast_high_f=forecast_high,
+                    actual_high_f=actual_high,
+                )
+                results.append(
+                    {
+                        "city": cc,
+                        "status": "recorded",
+                        "forecast_high_f": forecast_high,
+                        "actual_high_f": actual_high,
+                        "error_f": actual_high - forecast_high,
+                    }
+                )
+    except Exception as exc:
+        if json_output:
+            json_lib.dump({"error": str(exc)}, sys.stdout)
+        else:
+            err_console.print(f"[red]Record bias failed:[/red] {exc}")
+        raise typer.Exit(code=1) from None
+
+    if json_output:
+        json_lib.dump({"results": results}, sys.stdout, default=str)
+        return
+
+    console.print("[bold]Forecast Bias Recording[/bold]")
+    for r in results:
+        status_style = "green" if r["status"] == "recorded" else "yellow"
+        console.print(f"  [{status_style}]{r['city']}: {r['status']}[/{status_style}]")
+        if r["status"] == "recorded":
+            console.print(
+                f"    Forecast: {r['forecast_high_f']}°F  Actual: {r['actual_high_f']}°F  Error: {r['error_f']:+.1f}°F"
+            )
