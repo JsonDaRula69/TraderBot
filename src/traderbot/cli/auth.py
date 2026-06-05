@@ -10,7 +10,7 @@ import json as json_lib
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -296,11 +296,26 @@ def auth_check_master_password(
 
 
 @auth_app.command("set-kalshi")
-def auth_set_kalshi() -> None:
+def auth_set_kalshi(
+    api_key: Annotated[
+        Optional[str], typer.Option("--api-key", help="API key (non-interactive)")
+    ] = None,
+    pem: Annotated[
+        Optional[str], typer.Option("--pem", help="PEM key path (non-interactive)")
+    ] = None,
+) -> None:
     """Store Kalshi credentials in OS keyring (or .env fallback).
 
     Always prompts for both API key and PEM — ignores any existing values
     in .env so you can rotate credentials without manual cleanup.
+
+    The PEM key is saved to a file (kalshi_key.pem) and referenced by path
+    in .env. The PEM content is NOT stored inline in .env because python-dotenv
+    does not support multi-line values — storing inline truncates to the first
+    line, breaking every authenticated API call.
+
+    Use --api-key and --pem together for non-interactive (cron) usage.
+    The --pem flag takes a file path; the PEM content is read from that file.
     """
     from traderbot.auth import AuthManager
     from traderbot.paths import get_data_dir
@@ -309,31 +324,57 @@ def auth_set_kalshi() -> None:
     env_path = get_data_dir() / ".env"
     pem_file = get_data_dir() / "kalshi_key.pem"
 
-    api_key = typer.prompt("KALSHI_API_KEY")
-    console.print("[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]")
-    private_key_pem = sys.stdin.read().strip()
-    if not private_key_pem:
-        console.print("[red]Error:[/red] No PEM key provided.")
+    if api_key is not None and pem is not None:
+        # Non-interactive mode: both flags provided
+        console.print(
+            "[yellow]Warning: API key provided via CLI argument — may be visible in process listings and shell history.[/yellow]"
+        )
+        pem_path = Path(pem)
+        if not pem_path.is_file():
+            console.print(f"[red]Error:[/red] PEM file not found: {pem}")
+            raise typer.Exit(1)
+        private_key_pem = pem_path.read_text(encoding="utf-8").strip()
+        if not private_key_pem or "PRIVATE KEY" not in private_key_pem:
+            console.print("[red]Error:[/red] PEM file does not contain a valid private key.")
+            raise typer.Exit(1)
+    elif api_key is not None or pem is not None:
+        # Only one flag provided — ambiguous, require both
+        console.print(
+            "[red]Error:[/red] Both --api-key and --pem are required for non-interactive mode."
+        )
         raise typer.Exit(1)
+    else:
+        # Interactive mode: prompt for both
+        api_key = typer.prompt("KALSHI_API_KEY")
+        console.print("[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]")
+        private_key_pem = sys.stdin.read().strip()
+        if not private_key_pem:
+            console.print("[red]Error:[/red] No PEM key provided.")
+            raise typer.Exit(1)
+
     pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
     pem_file.chmod(0o600)
-    # Write KALSHI_PRIVATE_KEY_PATH to .env (replace existing if any)
+    # Write KALSHI_PRIVATE_KEY_PATH to .env, strip any stale PEM lines
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    new_lines = [l for l in old_lines if not l.startswith("KALSHI_PRIVATE_KEY_PATH=")]
+    new_lines = [
+        l
+        for l in old_lines
+        if not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
+        and not l.startswith("KALSHI_PRIVATE_KEY_PEM=")
+    ]
     new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")
     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
-    pem_source = mgr.set_credential("kalshi", "private_key_pem", private_key_pem)
 
     console.print(f"[green]✓[/green] KALSHI_API_KEY stored in {api_source}")
-    console.print(f"[green]✓[/green] KALSHI_PRIVATE_KEY stored in {pem_source}")
-    if api_source == ".env" or pem_source == ".env":
-        console.print("[yellow]Keyring unavailable; credentials stored in .env file.[/yellow]")
+    console.print(
+        "[yellow]KALSHI_PRIVATE_KEY stored in kalshi_key.pem (referenced by KALSHI_PRIVATE_KEY_PATH in .env).[/yellow]"
+    )
 
 
 @auth_app.command("migrate")

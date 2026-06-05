@@ -59,8 +59,6 @@ class KalshiConfig(BaseSettings):
     retry_base_delay: float = 1.0
 
     def resolve_private_key(self) -> str:
-        if self.private_key_pem is not None:
-            return self.private_key_pem.get_secret_value()
         if self.private_key_path is not None:
             try:
                 return self.private_key_path.read_text()
@@ -75,6 +73,8 @@ class KalshiConfig(BaseSettings):
                 if alt.exists():
                     return alt.read_text()
                 raise
+        if self.private_key_pem is not None:
+            return self.private_key_pem.get_secret_value()
         raise ConfigurationError(
             "No private key configured. Set KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH."
         )
