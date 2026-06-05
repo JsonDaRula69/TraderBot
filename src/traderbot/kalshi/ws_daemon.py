@@ -207,7 +207,9 @@ async def _seed_from_rest() -> tuple[dict[str, str], list[str]]:
                 params["cursor"] = cursor
             resp = await client.get("/markets", **params)
             if resp.status_code == 429:
-                logger.warning("REST market seed rate limited — collected %d so far", len(all_markets))
+                logger.warning(
+                    "REST market seed rate limited — collected %d so far", len(all_markets)
+                )
                 break
             if resp.status_code != 200:
                 logger.warning("REST market seed failed: %d", resp.status_code)
@@ -227,7 +229,9 @@ async def _seed_from_rest() -> tuple[dict[str, str], list[str]]:
             break
 
     await client.close()
-    logger.info("Seeded %d events and %d market tickers from REST", len(all_events), len(all_markets))
+    logger.info(
+        "Seeded %d events and %d market tickers from REST", len(all_events), len(all_markets)
+    )
     return all_events, all_markets
 
 
@@ -259,14 +263,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
         # Record seed tickers for orderbook_delta subscription
         for t in seed_tickers:
             ob_subscribed.add(t)
-        _save_cache({
-            "map": current_map,
-            "tickers": current_tickers,
-            "orderbooks": current_orderbooks,
-            "fills": current_fills,
-            "orders": current_orders,
-            "positions": current_positions,
-        })
+        _save_cache(
+            {
+                "map": current_map,
+                "tickers": current_tickers,
+                "orderbooks": current_orderbooks,
+                "fills": current_fills,
+                "orders": current_orders,
+                "positions": current_positions,
+            }
+        )
     else:
         # Pre-populate ob_subscribed from existing orderbook keys and known tickers
         ob_subscribed.update(current_orderbooks.keys())
@@ -313,8 +319,14 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                     batch_size = 100
                     for i in range(0, len(tickers_list), batch_size):
                         batch = tickers_list[i : i + batch_size]
-                        await _send_sub(ws, {"channels": ["orderbook_delta"], "market_tickers": batch})
-                        logger.info("Subscribed orderbook_delta for %d tickers (batch %d)", len(batch), i // batch_size + 1)
+                        await _send_sub(
+                            ws, {"channels": ["orderbook_delta"], "market_tickers": batch}
+                        )
+                        logger.info(
+                            "Subscribed orderbook_delta for %d tickers (batch %d)",
+                            len(batch),
+                            i // batch_size + 1,
+                        )
 
                 # Read acks for all subscriptions
                 for _ in range(msg_id):
@@ -346,11 +358,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                                 "open_interest": data.get("open_interest"),
                                 "updated_at": now,
                             }
-                            _save_cache({
-                                "map": current_map, "tickers": current_tickers,
-                                "orderbooks": current_orderbooks, "fills": current_fills,
-                                "orders": current_orders, "positions": current_positions,
-                            })
+                            _save_cache(
+                                {
+                                    "map": current_map,
+                                    "tickers": current_tickers,
+                                    "orderbooks": current_orderbooks,
+                                    "fills": current_fills,
+                                    "orders": current_orders,
+                                    "positions": current_positions,
+                                }
+                            )
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
 
@@ -363,11 +380,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
 
                         if ticker and category:
                             current_map[ticker] = category
-                            _save_cache({
-                                "map": current_map, "tickers": current_tickers,
-                                "orderbooks": current_orderbooks, "fills": current_fills,
-                                "orders": current_orders, "positions": current_positions,
-                            })
+                            _save_cache(
+                                {
+                                    "map": current_map,
+                                    "tickers": current_tickers,
+                                    "orderbooks": current_orderbooks,
+                                    "fills": current_fills,
+                                    "orders": current_orders,
+                                    "positions": current_positions,
+                                }
+                            )
                             logger.debug("Cache updated: %s → %s (%s)", ticker, category, lifecycle)
 
                         # If this ticker has markets and we haven't subscribed
@@ -375,13 +397,20 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                         if ticker and ticker not in ob_subscribed:
                             ob_subscribed.add(ticker)
                             try:
-                                await _send_sub(ws, {
-                                    "channels": ["orderbook_delta"],
-                                    "market_tickers": [ticker],
-                                })
-                                logger.info("Dynamic orderbook_delta sub for new ticker: %s", ticker)
+                                await _send_sub(
+                                    ws,
+                                    {
+                                        "channels": ["orderbook_delta"],
+                                        "market_tickers": [ticker],
+                                    },
+                                )
+                                logger.info(
+                                    "Dynamic orderbook_delta sub for new ticker: %s", ticker
+                                )
                             except Exception as exc:
-                                logger.warning("Failed to sub orderbook_delta for %s: %s", ticker, exc)
+                                logger.warning(
+                                    "Failed to sub orderbook_delta for %s: %s", ticker, exc
+                                )
 
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
@@ -404,11 +433,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                                 ob["no_bids"] = data["no"]
                             ob["updated_at"] = now
                             current_orderbooks[tkr] = ob
-                            _save_cache({
-                                "map": current_map, "tickers": current_tickers,
-                                "orderbooks": current_orderbooks, "fills": current_fills,
-                                "orders": current_orders, "positions": current_positions,
-                            })
+                            _save_cache(
+                                {
+                                    "map": current_map,
+                                    "tickers": current_tickers,
+                                    "orderbooks": current_orderbooks,
+                                    "fills": current_fills,
+                                    "orders": current_orders,
+                                    "positions": current_positions,
+                                }
+                            )
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
 
@@ -427,11 +461,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                         # Trim to max history
                         if len(current_fills) > _MAX_FILL_HISTORY:
                             current_fills = current_fills[-_MAX_FILL_HISTORY:]
-                        _save_cache({
-                            "map": current_map, "tickers": current_tickers,
-                            "orderbooks": current_orderbooks, "fills": current_fills,
-                            "orders": current_orders, "positions": current_positions,
-                        })
+                        _save_cache(
+                            {
+                                "map": current_map,
+                                "tickers": current_tickers,
+                                "orderbooks": current_orderbooks,
+                                "fills": current_fills,
+                                "orders": current_orders,
+                                "positions": current_positions,
+                            }
+                        )
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
 
@@ -446,18 +485,27 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                             oid = str(order_data.get("order_id", ""))
                             if oid:
                                 current_orders[oid] = {
-                                    "ticker": order_data.get("ticker", order_data.get("market_ticker", "")),
+                                    "ticker": order_data.get(
+                                        "ticker", order_data.get("market_ticker", "")
+                                    ),
                                     "status": order_data.get("status", ""),
                                     "side": order_data.get("side", ""),
-                                    "remaining": order_data.get("remaining", order_data.get("unfilled", 0)),
+                                    "remaining": order_data.get(
+                                        "remaining", order_data.get("unfilled", 0)
+                                    ),
                                     "filled": order_data.get("filled", 0),
                                     "updated_at": now,
                                 }
-                        _save_cache({
-                            "map": current_map, "tickers": current_tickers,
-                            "orderbooks": current_orderbooks, "fills": current_fills,
-                            "orders": current_orders, "positions": current_positions,
-                        })
+                        _save_cache(
+                            {
+                                "map": current_map,
+                                "tickers": current_tickers,
+                                "orderbooks": current_orderbooks,
+                                "fills": current_fills,
+                                "orders": current_orders,
+                                "positions": current_positions,
+                            }
+                        )
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
 
@@ -465,7 +513,9 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                     if channel == "market_positions":
                         data = msg.get("msg", msg)
                         # May be a single position or list
-                        positions_raw = data.get("positions", [data]) if isinstance(data, dict) else data
+                        positions_raw = (
+                            data.get("positions", [data]) if isinstance(data, dict) else data
+                        )
                         if not isinstance(positions_raw, list):
                             positions_raw = [positions_raw]
                         for pos_data in positions_raw:
@@ -478,11 +528,16 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                                     "current_price": pos_data.get("current_price", 0),
                                     "updated_at": now,
                                 }
-                        _save_cache({
-                            "map": current_map, "tickers": current_tickers,
-                            "orderbooks": current_orderbooks, "fills": current_fills,
-                            "orders": current_orders, "positions": current_positions,
-                        })
+                        _save_cache(
+                            {
+                                "map": current_map,
+                                "tickers": current_tickers,
+                                "orderbooks": current_orderbooks,
+                                "fills": current_fills,
+                                "orders": current_orders,
+                                "positions": current_positions,
+                            }
+                        )
                         _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
                         continue
 
