@@ -99,9 +99,8 @@ def auth_check(
 ) -> None:
     """Verify KALSHI_API_KEY is configured (keyring, .env, or environment).
 
-    With --validate, tests credentials against the unauthenticated /exchange/status endpoint.
-    With --validate-scopes, also probes authenticated endpoints (/portfolio/balance,
-    /portfolio/settlements) to verify API key scope covers portfolio:read and trading.
+    With --validate, tests credentials against the authenticated /portfolio/balance endpoint.
+    With --validate-scopes, also probes /portfolio/settlements to verify scope coverage.
     """
     console = Console()
     from traderbot.auth import AuthManager
@@ -130,34 +129,26 @@ def auth_check(
                 client = KalshiClient()
                 results: dict[str, object] = {}
 
-                # Unauthenticated endpoint
+                # Authenticated endpoint: portfolio balance
                 try:
-                    resp = await client.get("/exchange/status")
-                    results["exchange_status"] = resp.status_code == 200
-                except Exception as exc:
-                    results["exchange_status"] = False
-                    results["exchange_status_error"] = str(exc)
-
-                if validate_scopes:
-                    # Authenticated endpoint: portfolio balance
-                    try:
-                        resp = await client.get("/portfolio/balance")
-                        results["portfolio_balance"] = resp.status_code == 200
-                        if resp.status_code == 401:
-                            results["portfolio_balance_error"] = (
-                                "INCORRECT_API_KEY_SIGNATURE: API key and PEM private key don't match. "
-                                "Run `traderbot auth set-kalshi` to re-register your credentials."
-                            )
-                    except AuthenticationError as exc:
-                        results["portfolio_balance"] = False
+                    resp = await client.get("/portfolio/balance")
+                    results["portfolio_balance"] = resp.status_code == 200
+                    if resp.status_code == 401:
                         results["portfolio_balance_error"] = (
-                            f"INCORRECT_API_KEY_SIGNATURE: {exc}. "
+                            "INCORRECT_API_KEY_SIGNATURE: API key and PEM private key don't match. "
                             "Run `traderbot auth set-kalshi` to re-register your credentials."
                         )
-                    except Exception as exc:
-                        results["portfolio_balance"] = False
-                        results["portfolio_balance_error"] = str(exc)
+                except AuthenticationError as exc:
+                    results["portfolio_balance"] = False
+                    results["portfolio_balance_error"] = (
+                        f"INCORRECT_API_KEY_SIGNATURE: {exc}. "
+                        "Run `traderbot auth set-kalshi` to re-register your credentials."
+                    )
+                except Exception as exc:
+                    results["portfolio_balance"] = False
+                    results["portfolio_balance_error"] = str(exc)
 
+                if validate_scopes:
                     # Authenticated endpoint: portfolio settlements
                     try:
                         resp = await client.get("/portfolio/settlements")
@@ -193,11 +184,11 @@ def auth_check(
     if key_found:
         console.print("[green]OK: KALSHI_API_KEY configured[/green]")
         if validate:
-            if output.get("exchange_status"):
-                console.print("[green]Kalshi API: /exchange/status OK[/green]")
+            if output.get("portfolio_balance"):
+                console.print("[green]Authenticated: /portfolio/balance OK[/green]")
             else:
                 console.print(
-                    f"[red]Kalshi API: /exchange/status failed — {output.get('exchange_status_error', 'unknown error')}[/red]"
+                    f"[red]Authenticated: /portfolio/balance failed — {output.get('portfolio_balance_error', 'unknown error')}[/red]"
                 )
         if validate_scopes:
             if output.get("portfolio_balance"):
@@ -355,23 +346,24 @@ def auth_set_kalshi(
     pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
     pem_file.chmod(0o600)
-    # Write KALSHI_PRIVATE_KEY_PATH to .env, strip any stale PEM lines
+    # Write both KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PATH to .env
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     new_lines = [
         l
         for l in old_lines
-        if not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
+        if not l.startswith("KALSHI_API_KEY=")
+        and not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
         and not l.startswith("KALSHI_PRIVATE_KEY_PEM=")
     ]
+    new_lines.append(f"KALSHI_API_KEY={api_key}")
     new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")
     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
-
-    console.print(f"[green]✓[/green] KALSHI_API_KEY stored in {api_source}")
+    console.print(f"[green]✓[/green] KALSHI_API_KEY stored in {api_source} (and .env)")
     console.print(
         "[yellow]KALSHI_PRIVATE_KEY stored in kalshi_key.pem (referenced by KALSHI_PRIVATE_KEY_PATH in .env).[/yellow]"
     )
