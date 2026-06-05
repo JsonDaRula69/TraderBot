@@ -95,7 +95,21 @@ class TestFetchLatestVersion:
                 result = fetch_latest_version()
         assert result is None
 
-    def test_403_with_stale_cache_returns_stale(self) -> None:
+    def test_handles_corrupted_tags_gracefully(self) -> None:
+        """Tags with trailing garbage should be skipped, not crash."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {"ref": "refs/tags/v0.15.07", "object": {"sha": "abc"}},
+            {"ref": "refs/tags/v0.15.06", "object": {"sha": "abc"}},
+            {"ref": "refs/tags/v0.10.156)", "object": {"sha": "abc"}},
+            {"ref": "refs/tags/v0.10.155", "object": {"sha": "abc"}},
+        ]
+        with patch("traderbot.updater.httpx.get", return_value=mock_response):
+            with patch("traderbot.updater.Path.exists", return_value=False):
+                result = fetch_latest_version()
+        assert result is not None
+        assert result[0] == "0.15.07"
         cache_data = json.dumps({"tag": "0.08.00", "url": "", "ts": time.time() - 200})
         mock_response = MagicMock()
         mock_response.status_code = 403
