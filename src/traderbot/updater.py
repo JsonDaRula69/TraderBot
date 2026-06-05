@@ -170,9 +170,7 @@ def check_for_updates(
         return None
 
     if not silent:
-        print(
-            f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update."
-        )
+        print(f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update.")
     result: dict = {"current": current, "latest": latest_ver, "url": url}
 
     if config.auto_apply and not silent:

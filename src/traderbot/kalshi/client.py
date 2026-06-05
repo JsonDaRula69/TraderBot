@@ -263,7 +263,9 @@ class KalshiClient:
                 )
 
         last_exc: Exception | None = None
-        rate_limiter = self._read_limiter if method.upper() in ("GET", "DELETE") else self._write_limiter
+        rate_limiter = (
+            self._read_limiter if method.upper() in ("GET", "DELETE") else self._write_limiter
+        )
         for attempt in range(self._config.max_retries + 1):
             await rate_limiter.acquire()
             logger.debug(
