@@ -120,7 +120,7 @@ def _extract_openclaw_calls() -> list[dict]:
     calls: list[dict] = []
     for py_file in SRC_DIR.rglob("*.py"):
         try:
-            tree = ast.parse(py_file.read_text())
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
 
@@ -300,13 +300,13 @@ class TestOpenClawDocExists:
         )
 
     def test_doc_contains_cron_add(self) -> None:
-        text = DEP_DOCS.read_text()
+        text = DEP_DOCS.read_text(encoding="utf-8")
         assert "openclaw cron add" in text, (
             "Dep_Docs missing 'openclaw cron add' examples"
         )
 
     def test_doc_contains_cron_flag(self) -> None:
-        text = DEP_DOCS.read_text()
+        text = DEP_DOCS.read_text(encoding="utf-8")
         assert '--cron "0 7 * * *"' in text, (
             "Dep_Docs missing --cron flag examples"
         )

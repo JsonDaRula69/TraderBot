@@ -165,7 +165,7 @@ def _extract_kalshi_endpoints() -> list[dict]:
     calls: list[dict] = []
     for py_file in sorted(KALSHI_SRC.rglob("*.py")):
         try:
-            tree = ast.parse(py_file.read_text())
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
 
@@ -240,7 +240,7 @@ class TestKalshiDocExists:
 
     def test_doc_exists(self) -> None:
         assert KALSHI_DOCS.is_file(), f"Kalshi doc not found at {KALSHI_DOCS}"
-        text = KALSHI_DOCS.read_text()
+        text = KALSHI_DOCS.read_text(encoding="utf-8")
         assert "/markets" in text, "Dep_Docs missing /markets endpoint"
         assert "Get Balance" in text, "Dep_Docs missing /portfolio/balance (Get Balance)"
 
@@ -292,7 +292,7 @@ class TestKalshiClientEndpointCalls:
         py_files = sorted(KALSHI_SRC.rglob("*.py"))
         for py_file in py_files:
             try:
-                tree = ast.parse(py_file.read_text())
+                tree = ast.parse(py_file.read_text(encoding="utf-8"))
             except SyntaxError:
                 continue
             for node in ast.walk(tree):
