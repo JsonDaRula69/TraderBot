@@ -27,10 +27,19 @@ GITHUB_RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 REPO_DIR = Path.home() / "traderbot"
 VENV_BIN = REPO_DIR / ".venv" / "bin"
 PYTHON = VENV_BIN / "python3"
+TRADERBOT_CLI = VENV_BIN / "traderbot"
+
+# npm global bin is not inherited by subprocesses — openclaw CLI lives there
+NPM_GLOBAL_BIN = str(Path.home() / ".npm-global" / "bin")
+_UPDATER_ENV: dict[str, str] = {**os.environ}
+_UPDATER_PATH = f"{NPM_GLOBAL_BIN}:{_UPDATER_ENV.get('PATH', '')}"
+if NPM_GLOBAL_BIN not in _UPDATER_ENV.get("PATH", ""):
+    _UPDATER_ENV["PATH"] = _UPDATER_PATH
 
 
 def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     kwargs.setdefault("timeout", 120)
+    kwargs.setdefault("env", _UPDATER_ENV)
     logger.info("  $ %s", " ".join(cmd))
     return subprocess.run(cmd, **kwargs)
 
@@ -155,19 +164,21 @@ export default handler;
 
 
 def _reregister_cron_jobs() -> None:
-    if not (PYTHON.is_file()):
+    if not (TRADERBOT_CLI.is_file()):
         return
     # Main agent (sysadmin) — learning-pipeline, error-logger, health-check, gateway-health
-    _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
-          "--agent", "main", "--role", "sysadmin", "--replace"], capture_output=True)
+    _run([str(TRADERBOT_CLI), "cron", "setup",
+          "--agent", "main", "--role", "sysadmin", "--replace",
+          "--json"], capture_output=True, env=_UPDATER_ENV)
     # Category agents (traders) — decision-loop, position-review, forecast-check, circuit-breaker, health-check
     agents_root = Path.home() / ".openclaw" / "agents"
     if agents_root.is_dir():
         for agent_dir in agents_root.iterdir():
             if agent_dir.name == "main" or not (agent_dir / "agent").is_dir():
                 continue
-            _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
-                  "--agent", agent_dir.name, "--role", "trader", "--replace"], capture_output=True)
+            _run([str(TRADERBOT_CLI), "cron", "setup",
+                  "--agent", agent_dir.name, "--role", "trader", "--replace",
+                  "--json"], capture_output=True, env=_UPDATER_ENV)
 
 
 def _kill_ws_daemon() -> None:
