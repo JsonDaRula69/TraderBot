@@ -56,13 +56,8 @@ def get_ticker_prices(tickers: list[str]) -> dict[str, dict]:
     return result
 
 
-def get_orderbook(ticker: str) -> list[dict] | None:
-    """Return cached orderbook entries for a ticker, or None if stale/missing.
-
-    Returns a list of price-level dicts with keys: price, yes_bid_size,
-    no_bid_size, side (\"buy\" or \"sell\"), or whichever shape the
-    orderbook_delta channel provides.
-    """
+def get_orderbook(ticker: str) -> dict | None:
+    """Return cached orderbook (yes_bids, no_bids) for a ticker, or None if stale/missing."""
     data = _load_cache()
     obs = data.get("orderbooks", {})
     ob = obs.get(ticker)
@@ -71,7 +66,10 @@ def get_orderbook(ticker: str) -> list[dict] | None:
     updated = ob.get("updated_at", 0)
     if time.time() - updated > _ORDERBOOK_CACHE_TTL:
         return None
-    return ob.get("entries", [])
+    return {
+        "yes_bids": ob.get("yes_bids", []),
+        "no_bids": ob.get("no_bids", []),
+    }
 
 
 def get_fills(limit: int = 50) -> list[dict]:
