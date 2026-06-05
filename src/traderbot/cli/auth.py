@@ -355,23 +355,24 @@ def auth_set_kalshi(
     pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
     pem_file.chmod(0o600)
-    # Write KALSHI_PRIVATE_KEY_PATH to .env, strip any stale PEM lines
+    # Write both KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PATH to .env
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     new_lines = [
         l
         for l in old_lines
-        if not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
+        if not l.startswith("KALSHI_API_KEY=")
+        and not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
         and not l.startswith("KALSHI_PRIVATE_KEY_PEM=")
     ]
+    new_lines.append(f"KALSHI_API_KEY={api_key}")
     new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")
     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
-
-    console.print(f"[green]✓[/green] KALSHI_API_KEY stored in {api_source}")
+    console.print(f"[green]✓[/green] KALSHI_API_KEY stored in {api_source} (and .env)")
     console.print(
         "[yellow]KALSHI_PRIVATE_KEY stored in kalshi_key.pem (referenced by KALSHI_PRIVATE_KEY_PATH in .env).[/yellow]"
     )
