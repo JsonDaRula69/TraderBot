@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,22 @@ _EVENT_CACHE_PAGE_DELAY = 0.3  # seconds between pagination requests
 _event_category_cache: dict[str, str] = {}
 _event_cache_ts: float = 0.0
 _event_cache_lock = asyncio.Lock()
+
+_BUCKET_SUFFIX_RE = re.compile(r"-(?:T|B)\d+(\.\d+)?$")
+
+
+def _is_bucket_ticker(ticker: str) -> bool:
+    """Return True if *ticker* is a bucket-type tier ticker (e.g. KXHIGHLAX-26JUN05-T76)."""
+    return bool(_BUCKET_SUFFIX_RE.search(ticker))
+
+
+def _extract_base_ticker(ticker: str) -> str:
+    """Strip the bucket suffix from a tier ticker, returning the event ticker.
+
+    KXHIGHLAX-26JUN05-T76 → KXHIGHLAX-26JUN05
+    KXHIGHLAX-26JUN05-B95.5 → KXHIGHLAX-26JUN05
+    """
+    return _BUCKET_SUFFIX_RE.sub("", ticker)
 
 
 def _event_cache_path() -> Path:
@@ -131,6 +148,8 @@ class MarketService:
 
     async def get_market(self, ticker: str) -> Market:
         response = await self._client.get(f"/markets/{ticker}", timeout=30)
+        if response.status_code == 404 and _is_bucket_ticker(ticker):
+            return await self._get_market_from_event(ticker)
         response.raise_for_status()
         data = response.json()
         market_raw = data.get("market", data)
@@ -150,6 +169,64 @@ class MarketService:
         no_bids = [_normalize_orderbook_level(level) for level in no_raw]
 
         return OrderBook(yes_bids=yes_bids, no_bids=no_bids)
+
+    async def _get_market_from_event(self, ticker: str) -> Market:
+        """Fallback for bucket tickers: derive a Market from the parent event.
+
+        Bucket tickers like KXHIGHLAX-26JUN05-T76 return 404 from
+        ``GET /markets/{ticker}`` because Kalshi doesn't expose them directly.
+        This method extracts the event ticker, fetches the event, and
+        synthesises a Market object with available metadata.
+        """
+        from datetime import datetime as dt
+
+        logger = logging.getLogger(__name__)
+        base_ticker = _extract_base_ticker(ticker)
+        logger.info(
+            "Bucket ticker %s not found directly; falling back to event %s", ticker, base_ticker
+        )
+
+        resp = await self._client.get(f"/events/{base_ticker}", timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            ev = data.get("event", data)
+            question = ev.get("title", ev.get("subtitle", ticker))
+            category_str = ev.get("category")
+            close_time_raw = ev.get("close_time", ev.get("expiration_time"))
+            if isinstance(close_time_raw, int):
+                close_time_val = dt.fromtimestamp(close_time_raw)
+            elif isinstance(close_time_raw, str):
+                try:
+                    close_time_val = dt.fromisoformat(close_time_raw.replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    close_time_val = dt.fromtimestamp(0)
+            else:
+                close_time_val = dt.fromtimestamp(0)
+
+            return Market(
+                ticker=ticker,
+                question=question,
+                outcome_prices=["0.50", "0.50"],
+                volume=0,
+                open_interest=0,
+                close_time=close_time_val,
+                status="open",
+                event_ticker=base_ticker,
+                category=category_str,
+                market_category=_map_category(category_str) if category_str else None,
+            )
+
+        resp2 = await self._client.get("/markets", timeout=30, event_ticker=base_ticker, limit=1)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            markets_raw = data2.get("markets", [])
+            if markets_raw:
+                return _normalize_market(markets_raw[0])
+
+        raise ValueError(
+            f"Bucket ticker '{ticker}' not found: /markets/{ticker} returned 404 "
+            f"and fallback to event '{base_ticker}' also failed"
+        )
 
     async def get_recent_trades(
         self,
@@ -247,6 +324,9 @@ class MarketService:
                 break
             if limit and len(all_markets) >= limit:
                 break
+
+            # Inter-page delay to prevent Kalshi 429 rate limiting
+            await asyncio.sleep(0.15)
 
         if limit and len(all_markets) > limit:
             all_markets = all_markets[:limit]
