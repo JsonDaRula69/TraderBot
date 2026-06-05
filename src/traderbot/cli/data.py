@@ -33,6 +33,13 @@ def forecasts_cmd(
             help="Comma-separated city codes (e.g. NYC,LA,CHI)",
         ),
     ] = "NYC,LA,CHI",
+    station: Annotated[
+        str | None,
+        typer.Option(
+            "--station",
+            help="ICAO airport station code (e.g. KLGA, KLAX) — overrides city-center coords",
+        ),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
@@ -45,7 +52,7 @@ def forecasts_cmd(
 
     try:
         provider = WeatherDataProvider()
-        forecasts = asyncio.run(provider.get_forecasts(city_list))
+        forecasts = asyncio.run(provider.get_forecasts(city_list, station=station))
         # Fetch ensemble consensus for each city
         consensus_map: dict[str, dict] = {}
         for city in forecasts:

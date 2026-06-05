@@ -37,6 +37,49 @@ _CITY_MAP: dict[str, tuple[str, float, float, str]] = {
     "KXHIGHTSF": ("San Francisco", 37.77, -122.42, "America/Los_Angeles"),
 }
 
+# Station name — override lat/lon for the Kalshi settlement station.
+_KALSHI_STATION_MAP: dict[str, str] = {
+    "KXHIGHNY": "KLGA",
+    "KXHIGHPHIL": "KPHL",
+    "KXHIGHTPHX": "KPHX",
+    "KXHIGHTMIN": "KMSP",
+    "KXHIGHTSEA": "KSEA",
+    "KXHIGHTCHI": "KORD",
+    "KXHIGHTHOU": "KIAH",
+    "KXHIGHTLA": "KLAX",
+    "KXHIGHTMIA": "KMIA",
+    "KXHIGHTDEN": "KDEN",
+    "KXHIGHTATL": "KATL",
+    "KXHIGHTBOS": "KBOS",
+    "KXHIGHTDAL": "KDAL",
+    "KXHIGHTDET": "KDTW",
+    "KXHIGHTSF": "KSFO",
+}
+
+# Station ICAO → (lat, lon)
+_STATION_COORDS: dict[str, tuple[float, float]] = {
+    "KLGA": (40.77, -73.87),
+    "KJFK": (40.64, -73.78),
+    "KLAX": (33.94, -118.41),
+    "KORD": (41.98, -87.90),
+    "KMDW": (41.79, -87.75),
+    "KPHX": (33.43, -112.01),
+    "KSEA": (47.44, -122.31),
+    "KDAL": (32.85, -96.85),
+    "KDFW": (32.90, -97.04),
+    "KMIA": (25.79, -80.29),
+    "KBOS": (42.36, -71.01),
+    "KDEN": (39.86, -104.67),
+    "KIAH": (29.98, -95.34),
+    "KHOU": (29.65, -95.28),
+    "KATL": (33.64, -84.43),
+    "KDTW": (42.21, -83.35),
+    "KSFO": (37.62, -122.38),
+    "KMSP": (44.88, -93.22),
+    "KPHL": (39.87, -75.24),
+    "KPIT": (40.49, -80.23),
+}
+
 # Regex to extract strike value from question text like "Will NYC high be above 72°F?"
 _STRIKE_RE = re.compile(r"(\d+)\s*°?\s*F", re.IGNORECASE)
 
@@ -157,6 +200,10 @@ async def _populate_async(db_path: str, max_markets: int, category: str | None) 
             continue
 
         city_name, lat, lon, tz = city_info
+        # Override lat/lon with station coordinates for Kalshi settlement accuracy
+        station_code = _KALSHI_STATION_MAP.get(prefix)
+        if station_code and station_code in _STATION_COORDS:
+            lat, lon = _STATION_COORDS[station_code]
         strike_value = _parse_strike_value(market.question)
         strike_type = market.strike_type or _parse_strike_type(market.question)
         yes_price = _yes_price_dollars(market)

@@ -52,6 +52,47 @@ _CITY_MAP: dict[str, tuple[float, float]] = {
     "San Francisco": (37.77, -122.42),
 }
 
+_STATION_MAP: dict[str, tuple[float, float]] = {
+    "KLGA": (40.77, -73.87),
+    "KJFK": (40.64, -73.78),
+    "KLAX": (33.94, -118.41),
+    "KORD": (41.98, -87.90),
+    "KMDW": (41.79, -87.75),
+    "KPHX": (33.43, -112.01),
+    "KSEA": (47.44, -122.31),
+    "KDAL": (32.85, -96.85),
+    "KDFW": (32.90, -97.04),
+    "KMIA": (25.79, -80.29),
+    "KBOS": (42.36, -71.01),
+    "KDEN": (39.86, -104.67),
+    "KIAH": (29.98, -95.34),
+    "KHOU": (29.65, -95.28),
+    "KATL": (33.64, -84.43),
+    "KDTW": (42.21, -83.35),
+    "KSFO": (37.62, -122.38),
+    "KMSP": (44.88, -93.22),
+    "KPHL": (39.87, -75.24),
+    "KPIT": (40.49, -80.23),
+}
+
+_KALSHI_STATION_MAP: dict[str, str] = {
+    "KXHIGHNY": "KLGA",
+    "KXHIGHPHIL": "KPHL",
+    "KXHIGHTPHX": "KPHX",
+    "KXHIGHTMIN": "KMSP",
+    "KXHIGHTSEA": "KSEA",
+    "KXHIGHTCHI": "KORD",
+    "KXHIGHTHOU": "KIAH",
+    "KXHIGHTLA": "KLAX",
+    "KXHIGHTMIA": "KMIA",
+    "KXHIGHTDEN": "KDEN",
+    "KXHIGHTATL": "KATL",
+    "KXHIGHTBOS": "KBOS",
+    "KXHIGHTDAL": "KDAL",
+    "KXHIGHTDET": "KDTW",
+    "KXHIGHTSF": "KSFO",
+}
+
 # Short-code aliases for CLI convenience
 _CITY_ALIASES: dict[str, str] = {
     "NYC": "New York",
@@ -160,11 +201,15 @@ class WeatherDataProvider(BaseDataProvider):
     #  BaseDataProvider interface
     # ------------------------------------------------------------------
 
-    async def get_forecasts(self, cities: list[str]) -> dict[str, CityForecast]:
+    async def get_forecasts(
+        self, cities: list[str], station: str | None = None
+    ) -> dict[str, CityForecast]:
         """Fetch NWS forecasts for a list of cities, warming Open-Meteo ensemble in parallel.
 
         Args:
             cities: List of city names or short codes (e.g. 'New York', 'NYC', 'KXHIGHNY').
+            station: Optional ICAO airport station code (e.g. KLGA, KLAX). When provided,
+                overrides the city-center coordinates with airport coordinates.
 
         Returns:
             Dict mapping resolved city name to its CityForecast (sourced from NWS).
@@ -181,7 +226,10 @@ class WeatherDataProvider(BaseDataProvider):
             return {}
 
         # Launch NWS forecast fetches for every resolved city.
-        nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
+        if station is not None:
+            nws_tasks = [self._nws.get_forecast(0, 0, station=station) for c in resolved]
+        else:
+            nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
             self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved

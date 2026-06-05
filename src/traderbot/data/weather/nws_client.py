@@ -39,6 +39,48 @@ _CITY_MAP: dict[str, tuple[float, float]] = {
     "San Francisco": (37.77, -122.42),
 }
 
+_STATION_MAP: dict[str, tuple[float, float]] = {
+    "KLGA": (40.77, -73.87),
+    "KJFK": (40.64, -73.78),
+    "KLAX": (33.94, -118.41),
+    "KORD": (41.98, -87.90),
+    "KMDW": (41.79, -87.75),
+    "KPHX": (33.43, -112.01),
+    "KSEA": (47.44, -122.31),
+    "KDAL": (32.85, -96.85),
+    "KDFW": (32.90, -97.04),
+    "KMIA": (25.79, -80.29),
+    "KBOS": (42.36, -71.01),
+    "KDEN": (39.86, -104.67),
+    "KIAH": (29.98, -95.34),
+    "KHOU": (29.65, -95.28),
+    "KATL": (33.64, -84.43),
+    "KDTW": (42.21, -83.35),
+    "KSFO": (37.62, -122.38),
+    "KMSP": (44.88, -93.22),
+    "KPHL": (39.87, -75.24),
+    "KPIT": (40.49, -80.23),
+}
+
+# Map Kalshi weather ticker prefixes to ICAO airport station codes
+_KALSHI_STATION_MAP: dict[str, str] = {
+    "KXHIGHNY": "KLGA",
+    "KXHIGHPHIL": "KPHL",
+    "KXHIGHTPHX": "KPHX",
+    "KXHIGHTMIN": "KMSP",
+    "KXHIGHTSEA": "KSEA",
+    "KXHIGHTCHI": "KORD",
+    "KXHIGHTHOU": "KIAH",
+    "KXHIGHTLA": "KLAX",
+    "KXHIGHTMIA": "KMIA",
+    "KXHIGHTDEN": "KDEN",
+    "KXHIGHTATL": "KATL",
+    "KXHIGHTBOS": "KBOS",
+    "KXHIGHTDAL": "KDAL",
+    "KXHIGHTDET": "KDTW",
+    "KXHIGHTSF": "KSFO",
+}
+
 GridpointCache = dict[str, dict[str, Any]]
 
 
@@ -130,7 +172,17 @@ class NwsClient:
         self._cache_dirty = True
         return result
 
-    async def get_forecast(self, lat: float, lon: float) -> CityForecast:
+    async def get_forecast(
+        self, lat: float, lon: float, station: str | None = None
+    ) -> CityForecast:
+        """Fetch NWS forecast. If *station* is provided, use its coordinates."""
+        if station is not None:
+            coords = _STATION_MAP.get(station)
+            if coords is None:
+                available = ", ".join(sorted(_STATION_MAP))
+                raise NwsClientError(f"Unknown station '{station}'. Available: {available}")
+            lat, lon = coords
+
         gridpoint = await self.resolve_gridpoint(lat, lon)
         forecast_url = gridpoint.get("forecast_url", "")
         if not forecast_url:
