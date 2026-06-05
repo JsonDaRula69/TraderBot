@@ -28,24 +28,26 @@ logger = logging.getLogger(__name__)
 # Per https://docs.kalshi.com: /markets, /events, /series, /exchange/status
 # are public — auth headers are optional and sending them wastes rate-limit
 # token budget on 401 error handling.
-_PUBLIC_ENDPOINTS: frozenset[str] = frozenset({
-    "/exchange/status",
-    "/markets",
-    "/markets/trades",
-    "/markets/{ticker}",
-    "/markets/{ticker}/orderbook",
-    "/markets/{ticker}/candlesticks",
-    "/markets/orderbooks",
-    "/events",
-    "/events/{event_ticker}",
-    "/events/{event_ticker}/candlesticks",
-    "/events/{event_ticker}/metadata",
-    "/events/multivariate",
-    "/series",
-    "/series/{ticker}",
-    "/multivariate/event-collections",
-    "/multivariate/event-collections/{ticker}",
-})
+_PUBLIC_ENDPOINTS: frozenset[str] = frozenset(
+    {
+        "/exchange/status",
+        "/markets",
+        "/markets/trades",
+        "/markets/{ticker}",
+        "/markets/{ticker}/orderbook",
+        "/markets/{ticker}/candlesticks",
+        "/markets/orderbooks",
+        "/events",
+        "/events/{event_ticker}",
+        "/events/{event_ticker}/candlesticks",
+        "/events/{event_ticker}/metadata",
+        "/events/multivariate",
+        "/series",
+        "/series/{ticker}",
+        "/multivariate/event-collections",
+        "/multivariate/event-collections/{ticker}",
+    }
+)
 
 
 class ConfigurationError(Exception):
@@ -247,7 +249,9 @@ class KalshiClient:
                 _ = self._config.api_key.get_secret_value()
                 headers = self._build_auth_headers(method, path)
             except (ConfigurationError, Exception):
-                logger.debug("No credentials available for public endpoint %s — skipping auth", path)
+                logger.debug(
+                    "No credentials available for public endpoint %s — skipping auth", path
+                )
 
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):
