@@ -77,10 +77,11 @@ class KalshiConfig(BaseSettings):
     private_key_pem: SecretStr | None = None
     private_key_path: Path | None = None
     base_url: str = "https://external-api.kalshi.com/trade-api/v2"
-    rate_limit_rps: float = (
-        200.0  # token refill rate from Kalshi /account/limits; default 200 at tier
-    )
-    endpoint_cost: int = 10  # default token cost per request; see /account/endpoint_costs
+    read_budget_tokens: float = 200.0
+    write_budget_tokens: float = 100.0
+    read_burst_capacity: float = 200.0
+    write_burst_capacity: float = 100.0
+    endpoint_cost: float = 10.0
     max_retries: int = 3
     retry_base_delay: float = 1.0
 
@@ -177,8 +178,16 @@ class KalshiClient:
                 config = KalshiConfig()  # type: ignore[call-arg]
 
         self._config = config
-        effective_rps = config.rate_limit_rps / config.endpoint_cost
-        self._rate_limiter = TokenBucketRateLimiter(tokens_per_second=effective_rps)
+        read_rps = config.read_budget_tokens / config.endpoint_cost
+        write_rps = config.write_budget_tokens / config.endpoint_cost
+        self._read_limiter = TokenBucketRateLimiter(
+            tokens_per_second=read_rps,
+            burst_capacity=int(config.read_burst_capacity / config.endpoint_cost),
+        )
+        self._write_limiter = TokenBucketRateLimiter(
+            tokens_per_second=write_rps,
+            burst_capacity=int(config.write_burst_capacity / config.endpoint_cost),
+        )
         self._client = httpx.AsyncClient(
             base_url=self._config.base_url,
             verify=create_pinned_ssl_context(),
@@ -254,8 +263,11 @@ class KalshiClient:
                 )
 
         last_exc: Exception | None = None
+        rate_limiter = (
+            self._read_limiter if method.upper() in ("GET", "DELETE") else self._write_limiter
+        )
         for attempt in range(self._config.max_retries + 1):
-            await self._rate_limiter.acquire()
+            await rate_limiter.acquire()
             logger.debug(
                 "Request %s %s (attempt %d/%d)",
                 method,

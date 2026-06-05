@@ -1267,9 +1267,9 @@ class TestCronSetup:
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
             result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run"])
             assert result.exit_code == 0
-            assert "decision_loop" in strip_ansi(result.output)
-            assert "heartbeat_loop" in strip_ansi(result.output)
-            assert "news_ingest" in strip_ansi(result.output)
+            assert "test-agent-decision_loop" in strip_ansi(result.output)
+            assert "test-agent-heartbeat_loop" in strip_ansi(result.output)
+            assert "test-agent-news_ingest" in strip_ansi(result.output)
 
     def test_cron_setup_dry_run_json(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
@@ -1283,9 +1283,9 @@ class TestCronSetup:
             data = json.loads(json_line)
             assert isinstance(data, list)
             names = [loop["name"] for loop in data]
-            assert "decision_loop" in names
-            assert "heartbeat_loop" in names
-        assert "news_ingest" in names
+            assert "test-agent-decision_loop" in names
+            assert "test-agent-heartbeat_loop" in names
+            assert "test-agent-news_ingest" in names
 
     def test_cron_setup_custom_interval(self, tmp_path):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
@@ -1458,7 +1458,7 @@ class TestCronSetup:
             result = runner.invoke(app, ["cron", "setup", "--agent", "my-agent", "--json"])
             assert result.exit_code == 0
 
-        news_call = next((c for c in calls if "--name" in c and "news_ingest" in c), None)
+        news_call = next((c for c in calls if "--name" in c and "my-agent-news_ingest" in c), None)
         assert news_call is not None
         assert "--message" in news_call
 

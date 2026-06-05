@@ -641,19 +641,19 @@ def cron_setup(
 
     cron_jobs = [
         {
-            "name": "decision_loop",
+            "name": f"{agent_id}-decision_loop",
             "cron_expr": "*/5 * * * *",
             "session": "isolated",
             "message": decision_payload.message,
         },
         {
-            "name": "heartbeat_loop",
+            "name": f"{agent_id}-heartbeat_loop",
             "cron_expr": "0 */6 * * *",
             "session": "isolated",
             "message": heartbeat_payload.message,
         },
         {
-            "name": "news_ingest",
+            "name": f"{agent_id}-news_ingest",
             "cron_expr": "*/30 * * * *",
             "session": "isolated",
             "message": news_payload.message,
