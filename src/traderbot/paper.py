@@ -26,6 +26,11 @@ class PaperBalance:
     settled_payout_cents: int
     remaining_cents: int
     open_position_count: int
+    mark_to_market_cents: int = 0
+
+    @property
+    def portfolio_value_cents(self) -> int:
+        return self.remaining_cents + self.mark_to_market_cents
 
     @property
     def net_pnl_cents(self) -> int:

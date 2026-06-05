@@ -202,7 +202,7 @@ class WeatherDataProvider(BaseDataProvider):
     # ------------------------------------------------------------------
 
     async def get_forecasts(
-        self, cities: list[str], station: str | None = None
+        self, cities: list[str], station: str | None = None, offset: int = 0
     ) -> dict[str, CityForecast]:
         """Fetch NWS forecasts for a list of cities, warming Open-Meteo ensemble in parallel.
 
@@ -210,6 +210,7 @@ class WeatherDataProvider(BaseDataProvider):
             cities: List of city names or short codes (e.g. 'New York', 'NYC', 'KXHIGHNY').
             station: Optional ICAO airport station code (e.g. KLGA, KLAX). When provided,
                 overrides the city-center coordinates with airport coordinates.
+            offset: Day offset for multi-day forecasts (0 = current, 1 = tomorrow, etc.).
 
         Returns:
             Dict mapping resolved city name to its CityForecast (sourced from NWS).
@@ -227,12 +228,12 @@ class WeatherDataProvider(BaseDataProvider):
 
         # Launch NWS forecast fetches for every resolved city.
         if station is not None:
-            nws_tasks = [self._nws.get_forecast(0, 0, station=station) for c in resolved]
+            nws_tasks = [self._nws.get_forecast(0, 0, station=station, offset=offset) for c in resolved]
         else:
-            nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
+            nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset) for c in resolved]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
-            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
+            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset) for c in resolved
         ]
 
         nws_results = await asyncio.gather(*nws_tasks, return_exceptions=True)
@@ -251,11 +252,49 @@ class WeatherDataProvider(BaseDataProvider):
         logger.info("get_forecasts: %d/%d cities succeeded", success_count, len(resolved))
         return forecasts
 
-    async def get_model_consensus(self, city: str) -> ModelConsensus:
+    async def get_all_forecasts(
+        self, cities: list[str], station: str | None = None
+    ) -> dict[str, list[CityForecast]]:
+        """Return all available NWS forecast periods for each city.
+
+        Args:
+            cities: List of city names or short codes.
+            station: Optional ICAO airport station code.
+
+        Returns:
+            Dict mapping city name to list of CityForecast for all periods.
+        """
+        resolved: list[str] = []
+        for c in cities:
+            name = _resolve_city(c)
+            if name:
+                resolved.append(name)
+            else:
+                logger.warning("Unknown city input: %s", c)
+        if not resolved:
+            return {}
+
+        if station is not None:
+            tasks = [self._nws.get_all_forecasts(0, 0, station=station) for _ in resolved]
+        else:
+            tasks = [self._nws.get_all_forecasts(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        forecasts: dict[str, list[CityForecast]] = {}
+        for city, result in zip(resolved, results, strict=True):
+            if isinstance(result, Exception):
+                logger.error("NWS all-forecasts failed for %s: %s", city, result)
+            elif isinstance(result, list):
+                forecasts[city] = result
+
+        return forecasts
+
+    async def get_model_consensus(self, city: str, offset: int = 0) -> ModelConsensus:
         """Query Open-Meteo ensemble (GFS, ECMWF, GEM) and aggregate statistics.
 
         Args:
             city: City name to get consensus for.
+            offset: Day offset into multi-day forecast (0 = today, 1 = tomorrow, etc.).
 
         Returns:
             ModelConsensus with mean_temp, std_dev, spread, agreement_score.
@@ -268,7 +307,7 @@ class WeatherDataProvider(BaseDataProvider):
         if coords is None:
             raise ValueError(f"Unknown city: {city}")
 
-        ensemble_data = await self._fetch_open_meteo_ensemble(*coords)
+        ensemble_data = await self._fetch_open_meteo_ensemble(*coords, offset=offset)
 
         runs: list[EnsembleRun] = []
         now = datetime.now()
@@ -277,10 +316,11 @@ class WeatherDataProvider(BaseDataProvider):
             suffix = f"temperature_2m_max_{model_name}"
             temps: list[float] = ensemble_data.get("daily", {}).get(suffix, [])
             if temps:
+                idx = min(offset, len(temps) - 1) if temps else 0
                 runs.append(
                     EnsembleRun(
                         model_name=model_name,
-                        forecast_temp_f=float(temps[0]),
+                        forecast_temp_f=float(temps[idx]),
                         valid_time=now,
                     )
                 )
@@ -348,10 +388,13 @@ class WeatherDataProvider(BaseDataProvider):
     #  Internal helpers
     # ------------------------------------------------------------------
 
-    async def _fetch_open_meteo_ensemble(self, lat: float, lon: float) -> dict[str, Any]:
+    async def _fetch_open_meteo_ensemble(
+        self, lat: float, lon: float, offset: int = 0
+    ) -> dict[str, Any]:
         """Hit the Open-Meteo ensemble endpoint for GFS, ECMWF, GEM daily max temps.
 
         Returns the raw JSON response keyed by model name.
+        *offset* selects a non-current day in the multi-day response (0=first day).
         """
         params = {
             "latitude": lat,

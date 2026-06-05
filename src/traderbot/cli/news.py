@@ -10,6 +10,7 @@ import asyncio
 import json as json_lib
 import os
 import sys
+import time
 from datetime import datetime
 from typing import Annotated
 
@@ -425,6 +426,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         ],
         hours: Annotated[int, typer.Option("--hours", "-h", help="Look back window in hours")] = 48,
         limit: Annotated[int, typer.Option("--limit", "-l", help="Max data points to return")] = 10,
+        freshness_threshold: Annotated[
+            int | None,
+            typer.Option("--freshness-threshold", help="Exit code 1 if newest data > N hours old"),
+        ] = None,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
         """Query data point readings for a market category.
@@ -433,6 +438,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         indicators, crypto prices, sports scores) stored by the offline
         ingestion pipeline. Useful for pre-trade context on weather,
         economics, and other data-driven markets.
+
+        When --freshness-threshold is set, exits with code 1 if the
+        newest data point is older than N hours. In --json mode, adds
+        a "stale" field instead (exit code 0).
         """
         from traderbot.news.ingest import get_data_points
 
@@ -442,6 +451,14 @@ def register_commands(parent_app: typer.Typer) -> None:
         if json_output:
             import json as _json
 
+            if freshness_threshold is not None and ctx["count"] > 0:
+                now = time.time()
+                newest = max(
+                    dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", [])
+                )
+                stale = (now - newest) / 3600 > freshness_threshold
+                ctx["freshness_hours"] = round((now - newest) / 3600, 1) if newest else None
+                ctx["stale"] = stale
             _json.dump(ctx, sys.stdout, default=str)
             return
 
@@ -449,10 +466,26 @@ def register_commands(parent_app: typer.Typer) -> None:
             console.print(
                 f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]"
             )
+            if freshness_threshold is not None:
+                sys.exit(1)
             return
 
         console.print(f"[bold]Data Points:[/bold] {category} — last {hours}h")
         console.print(f"  Readings: {ctx['count']}")
+
+        if freshness_threshold is not None:
+            now = time.time()
+            newest = max(
+                dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", [])
+            )
+            age_hours = (now - newest) / 3600 if newest else float("inf")
+            if age_hours > freshness_threshold:
+                console.print(
+                    f"[red]STALE:[/red] Newest data is {age_hours:.1f}h old (threshold: {freshness_threshold}h)"
+                )
+                sys.exit(1)
+            console.print(f"  Freshness: {age_hours:.1f}h (threshold: {freshness_threshold}h)")
+
         console.print()
 
         for dp in ctx["data_points"]:

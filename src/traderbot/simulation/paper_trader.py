@@ -136,6 +136,7 @@ class PaperTrader:
         self._cache = cache
         self._settlement = settlement_verifier
         self._realized_pnl_cents = 0
+        self._peak_value_cents = initial_cash_cents
         _init_paper_positions_table(db_conn)
 
     @property
@@ -286,9 +287,11 @@ class PaperTrader:
         except Exception:
             logger.info("Cache miss for %s — using OI=0", ticker)
 
+        portfolio_value = self._cash_cents + self._position_value_cents()
+        self._peak_value_cents = max(portfolio_value, self._peak_value_cents)
         portfolio = PortfolioState(
-            portfolio_value_cents=self._cash_cents,
-            peak_value_cents=self._cash_cents,
+            portfolio_value_cents=portfolio_value,
+            peak_value_cents=self._peak_value_cents,
             current_positions_value_cents=self._position_value_cents(),
             today_realized_loss_cents=max(0, -self._realized_pnl_cents),
             today_unrealized_loss_cents=0,

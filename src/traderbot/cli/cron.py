@@ -338,7 +338,7 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "position-review",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot check-settlements --json` then `traderbot data record-bias --city NYC,CHI,LA,PHX,SEA --json` for settled markets. Then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin.",
+        "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin.",
     },
     {
         "name": "forecast-check",
