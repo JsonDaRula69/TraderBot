@@ -24,6 +24,31 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Public Kalshi endpoints that don't require authentication.
+# Per https://docs.kalshi.com: /markets, /events, /series, /exchange/status
+# are public — auth headers are optional and sending them wastes rate-limit
+# token budget on 401 error handling.
+_PUBLIC_ENDPOINTS: frozenset[str] = frozenset(
+    {
+        "/exchange/status",
+        "/markets",
+        "/markets/trades",
+        "/markets/{ticker}",
+        "/markets/{ticker}/orderbook",
+        "/markets/{ticker}/candlesticks",
+        "/markets/orderbooks",
+        "/events",
+        "/events/{event_ticker}",
+        "/events/{event_ticker}/candlesticks",
+        "/events/{event_ticker}/metadata",
+        "/events/multivariate",
+        "/series",
+        "/series/{ticker}",
+        "/multivariate/event-collections",
+        "/multivariate/event-collections/{ticker}",
+    }
+)
+
 
 class ConfigurationError(Exception):
     """Raised when required configuration is missing."""
@@ -170,6 +195,30 @@ class KalshiClient:
         """
         return urlparse(base_url).path.rstrip("/") + "/" + relative_path.lstrip("/")
 
+    @staticmethod
+    def _is_public_path(path: str) -> bool:
+        """Check if a relative path matches a public (unauthenticated) endpoint.
+
+        Handles path parameters by normalizing variable segments to ``{param}``.
+        """
+        if path in _PUBLIC_ENDPOINTS:
+            return True
+        segments = path.strip("/").split("/")
+        for public in _PUBLIC_ENDPOINTS:
+            pub_segs = public.strip("/").split("/")
+            if len(segments) != len(pub_segs):
+                continue
+            match = True
+            for s, p in zip(segments, pub_segs):
+                if p.startswith("{") and p.endswith("}"):
+                    continue
+                if s != p:
+                    match = False
+                    break
+            if match:
+                return True
+        return False
+
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
         full_path = self._full_api_path(self._config.base_url, path)
         return auth_headers(
@@ -188,10 +237,21 @@ class KalshiClient:
     ) -> httpx.Response:
         """Core request handler with rate limiting, retry, and RSA-PSS auth.
 
-        Acquires the rate-limit semaphore, injects signed auth headers,
+        Acquires the rate-limit semaphore, injects signed auth headers
+        for authenticated endpoints (public endpoints skip signing),
         and retries with exponential backoff + jitter on transient errors.
         """
-        headers = self._build_auth_headers(method, path)
+        headers = {}
+        if not self._is_public_path(path):
+            headers = self._build_auth_headers(method, path)
+        elif self._config.api_key:
+            try:
+                _ = self._config.api_key.get_secret_value()
+                headers = self._build_auth_headers(method, path)
+            except (ConfigurationError, Exception):
+                logger.debug(
+                    "No credentials available for public endpoint %s — skipping auth", path
+                )
 
         last_exc: Exception | None = None
         for attempt in range(self._config.max_retries + 1):

@@ -21,6 +21,7 @@
 - [Get RFQs](https://docs.kalshi.com/api-reference/communications/get-rfqs.md): Endpoint for getting RFQs
 - [Get Event](https://docs.kalshi.com/api-reference/events/get-event.md): Endpoint for getting data about an event by its ticker. An event represents a real-world occurrence that can be traded on, such as an election, sports game, or economic indicator release. Events contain one or more markets where users can place trades on different outcomes. All events are accessible…
 - [Get Event Candlesticks](https://docs.kalshi.com/api-reference/events/get-event-candlesticks.md): End-point for returning aggregated data across all markets corresponding to an event.
+- [Get Event Fee Changes](https://docs.kalshi.com/api-reference/events/get-event-fee-changes.md): Event fees are an override layered on top of the parent series' fee structure. If `fee_type_override` and `fee_multiplier_override` are null, that indicates the override is cleared.
 - [Get Event Forecast Percentile History](https://docs.kalshi.com/api-reference/events/get-event-forecast-percentile-history.md): Endpoint for getting the historical raw and formatted forecast numbers for an event at specific percentiles.
 - [Get Event Metadata](https://docs.kalshi.com/api-reference/events/get-event-metadata.md): Endpoint for getting metadata about an event by its ticker.  Returns only the metadata information for an event.
 - [Get Events](https://docs.kalshi.com/api-reference/events/get-events.md): Get all events. This endpoint excludes multivariate events. To retrieve multivariate events, use the GET /events/multivariate endpoint. All events are accessible through this endpoint, even if their associated markets are older than the historical cutoff.
@@ -29,7 +30,7 @@
 - [Get Exchange Schedule](https://docs.kalshi.com/api-reference/exchange/get-exchange-schedule.md): Endpoint for getting the exchange schedule.
 - [Get Exchange Status](https://docs.kalshi.com/api-reference/exchange/get-exchange-status.md): Endpoint for getting the exchange status.
 - [Get Series Fee Changes](https://docs.kalshi.com/api-reference/exchange/get-series-fee-changes.md)
-- [Get User Data Timestamp](https://docs.kalshi.com/api-reference/exchange/get-user-data-timestamp.md): There is typically a short delay before exchange events are reflected in the API endpoints. Whenever possible, combine API responses to PUT/POST/DELETE requests with websocket data to obtain the most accurate view of the exchange state. This endpoint provides an approximate indication of when the da…
+- [Get User Data Timestamp](https://docs.kalshi.com/api-reference/exchange/get-user-data-timestamp.md): There is typically a short delay before exchange events are reflected in the API endpoints. Whenever possible, combine API responses to PUT/POST/DELETE requests with WebSocket data to obtain the most accurate view of the exchange state. This endpoint provides an approximate indication of when the da…
 - [Get FCM Orders](https://docs.kalshi.com/api-reference/fcm/get-fcm-orders.md): Endpoint for FCM members to get orders filtered by subtrader ID. This endpoint requires FCM member access level and allows filtering orders by subtrader ID.
 - [Get FCM Positions](https://docs.kalshi.com/api-reference/fcm/get-fcm-positions.md): Endpoint for FCM members to get market positions filtered by subtrader ID. This endpoint requires FCM member access level and allows filtering positions by subtrader ID.
 - [Get Historical Cutoff Timestamps](https://docs.kalshi.com/api-reference/historical/get-historical-cutoff-timestamps.md): Returns the cutoff timestamps that define the boundary between **live** and **historical** data.
@@ -38,7 +39,7 @@
 - [Get Historical Market Candlesticks](https://docs.kalshi.com/api-reference/historical/get-historical-market-candlesticks.md): Endpoint for fetching historical candlestick data for markets that have been archived from the live data set. Time period length of each candlestick in minutes. Valid values: 1 (1 minute), 60 (1 hour), 1440 (1 day).
 - [Get Historical Markets](https://docs.kalshi.com/api-reference/historical/get-historical-markets.md): Endpoint for getting markets that have been archived to the historical database. Filters are mutually exclusive.
 - [Get Historical Orders](https://docs.kalshi.com/api-reference/historical/get-historical-orders.md): Endpoint for getting orders that have been archived to the historical database.
-- [Get Historical Trades](https://docs.kalshi.com/api-reference/historical/get-historical-trades.md): Endpoint for getting all historical trades for all markets. Trades that were filled before the historical cutoff are available via this endpoint. See [Historical Data](https://docs.kalshi.com/getting_started/historical_data) for details.
+- [Get Historical Trades](https://docs.kalshi.com/api-reference/historical/get-historical-trades.md): Endpoint for getting all historical trades for all markets. Trades that were filled before the historical cutoff are available via this endpoint. Block trades are included by default and identified by the `is_block_trade` field; use the `is_block_trade` query parameter to filter by block / non-block…
 - [Get Incentives](https://docs.kalshi.com/api-reference/incentive-programs/get-incentives.md): List incentives with optional filters. Incentives are rewards programs for trading activity on specific markets.
 - [Get Game Stats](https://docs.kalshi.com/api-reference/live-data/get-game-stats.md): Get play-by-play game statistics for a specific milestone. Supported sports: Pro Football, College Football, Pro Basketball, College Men's Basketball, College Women's Basketball, WNBA, Soccer, Pro Hockey, and Pro Baseball. Returns null for unsupported milestone types or milestones without a Sportrad…
 - [Get Live Data](https://docs.kalshi.com/api-reference/live-data/get-live-data.md): Get live data for a specific milestone.
@@ -52,7 +53,7 @@
 - [Get Multiple Market Orderbooks](https://docs.kalshi.com/api-reference/market/get-multiple-market-orderbooks.md): Endpoint for getting the current order books for multiple markets in a single request. The order book shows all active bid orders for both yes and no sides of a binary market. It returns yes bids and no bids only (no asks are returned). This is because in binary markets, a bid for yes at price X is…
 - [Get Series](https://docs.kalshi.com/api-reference/market/get-series.md): Endpoint for getting data about a specific series by its ticker.  A series represents a template for recurring events that follow the same format and rules (e.g., "Monthly Jobs Report", "Weekly Initial Jobless Claims", "Daily Weather in NYC"). Series define the structure, settlement sources, and met…
 - [Get Series List](https://docs.kalshi.com/api-reference/market/get-series-list.md): Endpoint for getting data about multiple series with specified filters.  A series represents a template for recurring events that follow the same format and rules (e.g., "Monthly Jobs Report", "Weekly Initial Jobless Claims", "Daily Weather in NYC"). This endpoint allows you to browse and discover a…
-- [Get Trades](https://docs.kalshi.com/api-reference/market/get-trades.md): Endpoint for getting all trades for all markets. A trade represents a completed transaction between two users on a specific market. Each trade includes the market ticker, price, quantity, and timestamp information. This endpoint returns a paginated response. Use the 'limit' parameter to control page…
+- [Get Trades](https://docs.kalshi.com/api-reference/market/get-trades.md): Endpoint for getting all trades for all markets. A trade represents a completed transaction between two users on a specific market. Each trade includes the market ticker, price, quantity, and timestamp information. Block trades are included in the response by default and identified by the `is_block_…
 - [Get Milestone](https://docs.kalshi.com/api-reference/milestone/get-milestone.md): Endpoint for getting data about a specific milestone by its ID.
 - [Get Milestones](https://docs.kalshi.com/api-reference/milestone/get-milestones.md): Minimum start date to filter milestones. Format: RFC3339 timestamp
 - [Create Market In Multivariate Event Collection](https://docs.kalshi.com/api-reference/multivariate/create-market-in-multivariate-event-collection.md): Endpoint for creating an individual market in a multivariate event collection. This endpoint must be hit at least once before trading or looking up a market. Users are limited to 5000 creations per week.
@@ -101,6 +102,14 @@
 - [Get Structured Target](https://docs.kalshi.com/api-reference/structured-targets/get-structured-target.md): Endpoint for getting data about a specific structured target by its ID.
 - [Get Structured Targets](https://docs.kalshi.com/api-reference/structured-targets/get-structured-targets.md): Page size (min: 1, max: 2000)
 - [API Changelog](https://docs.kalshi.com/changelog/index.md): Stay updated with API changes and version history
+- [Authentication & Sessions](https://docs.kalshi.com/fix-margin/authentication.md): API key creation, logon, session lifecycle, and message retransmission
+- [Connectivity](https://docs.kalshi.com/fix-margin/connectivity.md): Endpoints, transport configuration, and rate limits for the Kalshi Margin FIX API
+- [Drop Copy Session](https://docs.kalshi.com/fix-margin/drop-copy.md): Recover missed margin execution reports and query historical order events
+- [Error Handling](https://docs.kalshi.com/fix-margin/error-handling.md): Understanding and handling errors on margin FIX sessions
+- [Listener Sessions](https://docs.kalshi.com/fix-margin/listener-sessions.md): Real-time read-only feed of margin execution reports from your trading session
+- [Market Data](https://docs.kalshi.com/fix-margin/market-data.md): Request margin order book snapshots and incremental updates through FIX
+- [Order Entry](https://docs.kalshi.com/fix-margin/order-entry.md): Submit, modify, and cancel margin orders through FIX messages
+- [Order Groups](https://docs.kalshi.com/fix-margin/order-groups.md): Manage order groups for automatic position management
 - [Authentication & Sessions](https://docs.kalshi.com/fix/authentication.md): API key creation, logon, session lifecycle, and message retransmission
 - [Changelog](https://docs.kalshi.com/fix/changelog.md): Version history and updates for the Kalshi FIX API
 - [Common Components](https://docs.kalshi.com/fix/common-components.md): Standard header, trailer, and shared components across all FIX messages
@@ -108,6 +117,7 @@
 - [Drop Copy Session](https://docs.kalshi.com/fix/drop-copy.md): Recover missed execution reports and query historical order events
 - [Error Handling](https://docs.kalshi.com/fix/error-handling.md): Understanding and handling errors in the FIX protocol
 - [Listener Sessions](https://docs.kalshi.com/fix/listener-sessions.md): Real-time read-only feed of execution reports from your trading session
+- [Market Data](https://docs.kalshi.com/fix/market-data.md): Request order book snapshots and incremental updates through FIX
 - [Market Settlement](https://docs.kalshi.com/fix/market-settlement.md): Settlement reports for market outcomes and position resolution
 - [Order Entry](https://docs.kalshi.com/fix/order-entry.md): Submit, modify, and cancel orders through FIX messages
 - [Order Groups](https://docs.kalshi.com/fix/order-groups.md): Manage order groups for automatic position management
@@ -124,6 +134,7 @@
 - [Market Lifecycle](https://docs.kalshi.com/getting_started/market_lifecycle.md): How markets move from creation to settlement
 - [Market Settlement](https://docs.kalshi.com/getting_started/market_settlement.md): How market outcomes are determined and positions are resolved
 - [Order direction (outcome_side and book_side)](https://docs.kalshi.com/getting_started/order_direction.md): How direction is expressed on Order, Fill, and Trade responses, and how to migrate from the legacy action/side fields.
+- [Order Groups](https://docs.kalshi.com/getting_started/order_groups.md): Automatic order cancellation based on rolling contract limits
 - [Orderbook Responses](https://docs.kalshi.com/getting_started/orderbook_responses.md): Understanding Kalshi orderbook structure and binary prediction market mechanics
 - [Understanding Pagination](https://docs.kalshi.com/getting_started/pagination.md): Learn how to navigate through large datasets using cursor-based pagination
 - [Quick Start: Authenticated Requests](https://docs.kalshi.com/getting_started/quick_start_authenticated_requests.md): Three simple steps to make your first authenticated API request to Kalshi
@@ -134,36 +145,60 @@
 - [Request for Quote (RFQ)](https://docs.kalshi.com/getting_started/rfqs.md): How the Kalshi RFQ system works
 - [Targets & Milestones](https://docs.kalshi.com/getting_started/targets_and_milestones.md): Using milestones and structured targets in the Trade API
 - [Kalshi Glossary](https://docs.kalshi.com/getting_started/terms.md): Core terminology used in the Kalshi exchange
-- [ApiKeys](https://docs.kalshi.com/python-sdk/api/ApiKeysApi.md): Python SDK methods for ApiKeys operations
-- [Communications](https://docs.kalshi.com/python-sdk/api/CommunicationsApi.md): Python SDK methods for Communications operations
-- [Events](https://docs.kalshi.com/python-sdk/api/EventsApi.md): Python SDK methods for Events operations
-- [Exchange](https://docs.kalshi.com/python-sdk/api/ExchangeApi.md): Python SDK methods for Exchange operations
-- [Markets](https://docs.kalshi.com/python-sdk/api/MarketsApi.md): Python SDK methods for Markets operations
-- [Milestones](https://docs.kalshi.com/python-sdk/api/MilestonesApi.md): Python SDK methods for Milestones operations
-- [MultivariateCollections](https://docs.kalshi.com/python-sdk/api/MultivariateCollectionsApi.md): Python SDK methods for MultivariateCollections operations
-- [Portfolio](https://docs.kalshi.com/python-sdk/api/PortfolioApi.md): Python SDK methods for Portfolio operations
-- [Series](https://docs.kalshi.com/python-sdk/api/SeriesApi.md): Python SDK methods for Series operations
-- [StructuredTargets](https://docs.kalshi.com/python-sdk/api/StructuredTargetsApi.md): Python SDK methods for StructuredTargets operations
-- [Kalshi SDKs](https://docs.kalshi.com/sdks/overview.md): Official SDKs for integrating with the Kalshi API
-- [Python SDK Quick Start](https://docs.kalshi.com/sdks/python/quickstart.md): Get started with the Kalshi Python SDK
-- [TypeScript SDK Quick Start](https://docs.kalshi.com/sdks/typescript/quickstart.md): Get started with the Kalshi TypeScript SDK
-- [ApiKeys](https://docs.kalshi.com/typescript-sdk/api/ApiKeysApi.md): TypeScript SDK methods for ApiKeys operations
-- [Communications](https://docs.kalshi.com/typescript-sdk/api/CommunicationsApi.md): TypeScript SDK methods for Communications operations
-- [Events](https://docs.kalshi.com/typescript-sdk/api/EventsApi.md): TypeScript SDK methods for Events operations
-- [Exchange](https://docs.kalshi.com/typescript-sdk/api/ExchangeApi.md): TypeScript SDK methods for Exchange operations
-- [Markets](https://docs.kalshi.com/typescript-sdk/api/MarketsApi.md): TypeScript SDK methods for Markets operations
-- [Milestones](https://docs.kalshi.com/typescript-sdk/api/MilestonesApi.md): TypeScript SDK methods for Milestones operations
-- [MultivariateCollections](https://docs.kalshi.com/typescript-sdk/api/MultivariateCollectionsApi.md): TypeScript SDK methods for MultivariateCollections operations
-- [Portfolio](https://docs.kalshi.com/typescript-sdk/api/PortfolioApi.md): TypeScript SDK methods for Portfolio operations
-- [Series](https://docs.kalshi.com/typescript-sdk/api/SeriesApi.md): TypeScript SDK methods for Series operations
-- [StructuredTargets](https://docs.kalshi.com/typescript-sdk/api/StructuredTargetsApi.md): TypeScript SDK methods for StructuredTargets operations
+- [Perps API](https://docs.kalshi.com/margin.md): Getting started with Kalshi's perpetual-futures (perps) trading API
+- [Get Enabled Status](https://docs.kalshi.com/margin-rest/exchange/get-enabled-status.md): Endpoint for checking if margin trading is enabled for the authenticated user.
+- [Get Exchange Status](https://docs.kalshi.com/margin-rest/exchange/get-exchange-status.md): Endpoint for getting the margin exchange status.
+- [Get FCM Orders](https://docs.kalshi.com/margin-rest/fcm/get-fcm-orders.md): Endpoint for FCM members to get margin orders filtered by subtrader ID. This endpoint requires FCM member access level and allows filtering margin orders by subtrader ID.
+- [Get Fee Tiers](https://docs.kalshi.com/margin-rest/fees/get-fee-tiers.md): Endpoint for retrieving the margin fee tiers for the authenticated direct margin user. Returns a map of margin market tickers to their fee tier strings.
+- [Get Funding History](https://docs.kalshi.com/margin-rest/funding/get-funding-history.md): Endpoint for retrieving the authenticated user's historical margin funding payments joined with funding rates for a specific market, or across all markets when ticker is empty, over an inclusive UTC date range.
+- [Get Funding Rate Estimate](https://docs.kalshi.com/margin-rest/funding/get-funding-rate-estimate.md): Returns the estimated funding rate for the current, in-progress funding period. The value is a time-weighted average of the premium index computed over `[last_funding_time, now)`, so it continues to move as new data accumulates through the window and is only finalized at `next_funding_time`.
+- [Get Historical Funding Rates](https://docs.kalshi.com/margin-rest/funding/get-historical-funding-rates.md): Endpoint for retrieving historical margin funding rates for a market, or across all markets when ticker is empty.
+- [Get Market](https://docs.kalshi.com/margin-rest/market/get-market.md): Endpoint for fetching a margin market with trading stats (price, volume, open interest).
+- [Get Market Candlesticks](https://docs.kalshi.com/margin-rest/market/get-market-candlesticks.md): Endpoint for fetching candlestick data for a margin market.
+- [Get Market Orderbook](https://docs.kalshi.com/margin-rest/market/get-market-orderbook.md): Endpoint for getting the orderbook for a margin market.
+- [Get Markets](https://docs.kalshi.com/margin-rest/market/get-markets.md): Endpoint for listing available margin markets.
+- [Get Trades](https://docs.kalshi.com/margin-rest/market/get-trades.md): Endpoint for retrieving public margin trades for a given market ticker. Returns a paginated response. Use the cursor value from the previous response to get the next page.
+- [Create Order Group](https://docs.kalshi.com/margin-rest/order-groups/create-order-group.md): Creates a new order group on the margin exchange with a contracts limit measured over a rolling window. When the limit is hit, all orders in the group are cancelled and no new orders can be placed until reset.
+- [Delete Order Group](https://docs.kalshi.com/margin-rest/order-groups/delete-order-group.md): Deletes an order group on the margin exchange and cancels all orders within it.
+- [Get Order Group](https://docs.kalshi.com/margin-rest/order-groups/get-order-group.md): Retrieves details for a single order group on the margin exchange including all order IDs and auto-cancel status.
+- [Get Order Groups](https://docs.kalshi.com/margin-rest/order-groups/get-order-groups.md): Retrieves all order groups for the authenticated user on the margin exchange.
+- [Reset Order Group](https://docs.kalshi.com/margin-rest/order-groups/reset-order-group.md): Resets the order group matched contracts counter to zero on the margin exchange, allowing new orders to be placed again after the limit was hit.
+- [Trigger Order Group](https://docs.kalshi.com/margin-rest/order-groups/trigger-order-group.md): Triggers the order group on the margin exchange, canceling all orders in the group and preventing new orders until the group is reset.
+- [Update Order Group Limit](https://docs.kalshi.com/margin-rest/order-groups/update-order-group-limit.md): Updates the order group contracts limit on the margin exchange. If the updated limit would immediately trigger the group, all orders in the group are canceled and the group is triggered.
+- [Amend Order](https://docs.kalshi.com/margin-rest/orders/amend-order.md): Endpoint for amending the price and/or max number of fillable contracts in an existing margin order.
+- [Cancel Order](https://docs.kalshi.com/margin-rest/orders/cancel-order.md): Endpoint for canceling an order. Cancels all remaining resting contracts and returns the canceled order details.
+- [Create Order](https://docs.kalshi.com/margin-rest/orders/create-order.md): Endpoint for submitting orders in a market.
+- [Decrease Order](https://docs.kalshi.com/margin-rest/orders/decrease-order.md): Endpoint for decreasing the number of contracts in an existing order. Exactly one of `reduce_by` or `reduce_to` must be provided. Canceling an order is equivalent to decreasing to zero.
+- [Get Order](https://docs.kalshi.com/margin-rest/orders/get-order.md): Endpoint for retrieving a specific margin order.
+- [Get Orders](https://docs.kalshi.com/margin-rest/orders/get-orders.md): Endpoint for listing margin orders with optional filtering.
+- [Create Subaccount](https://docs.kalshi.com/margin-rest/portfolio/create-subaccount.md): Creates a new subaccount for the authenticated user in the margin exchange. Subaccounts are numbered sequentially starting from 1. Maximum 32 subaccounts per user.
+- [Get Balance](https://docs.kalshi.com/margin-rest/portfolio/get-balance.md): Endpoint for retrieving the balance breakdown for the authenticated direct margin user. Returns cash balance (aggregate and per-subaccount), position value, total balance, and maintenance margin requirement.
+- [Get Fills](https://docs.kalshi.com/margin-rest/portfolio/get-fills.md): Endpoint for retrieving the authenticated user's margin fills.
+- [Get Positions](https://docs.kalshi.com/margin-rest/portfolio/get-positions.md): Endpoint for retrieving the authenticated user's margin positions.
+- [Intra Account Transfer](https://docs.kalshi.com/margin-rest/portfolio/intra-account-transfer.md): Endpoint for transferring funds within the same account. This endpoint is currently not available.
+- [Transfer Between Subaccounts](https://docs.kalshi.com/margin-rest/portfolio/transfer-between-subaccounts.md): Transfers funds between the authenticated user's margin subaccounts. Use 0 for the primary account, or 1-32 for numbered subaccounts.
+- [Get Notional Risk Limit](https://docs.kalshi.com/margin-rest/risk/get-notional-risk-limit.md): Endpoint for retrieving the notional value risk limit for the authenticated margin user.
+- [Get Risk](https://docs.kalshi.com/margin-rest/risk/get-risk.md): Endpoint for retrieving leverage and liquidation price data for the authenticated direct margin user. Returns account-level leverage plus per-position leverage and liquidation prices, grouped by subaccount and market.
+- [Get Risk Parameters](https://docs.kalshi.com/margin-rest/risk/get-risk-parameters.md): Returns system-wide margin risk parameters including liquidation thresholds and per-market initial margin multipliers.
+- [Connection Keep-Alive](https://docs.kalshi.com/margin-ws/websockets/connection-keep-alive.md): Kalshi sends Ping frames every 10 seconds with body `heartbeat`. Clients should respond with Pong frames.
+- [Market Ticker](https://docs.kalshi.com/margin-ws/websockets/market-ticker.md): Margin market updates are delivered on a single channel. `ticker` messages include price, top-of-book size, volume, open-interest, and optional reference/mark prices.
+- [Order Group Updates](https://docs.kalshi.com/margin-ws/websockets/order-group-updates.md): Real-time order group lifecycle and limit updates. Requires authentication.
+- [Orderbook Updates](https://docs.kalshi.com/margin-ws/websockets/orderbook-updates.md): Real-time margin orderbook price-level changes.
+- [Public Trades](https://docs.kalshi.com/margin-ws/websockets/public-trades.md): Public notifications for executed margin trades.
+- [User Fills](https://docs.kalshi.com/margin-ws/websockets/user-fills.md): Private fill notifications for the authenticated user on the margin exchange.
+- [User Orders](https://docs.kalshi.com/margin-ws/websockets/user-orders.md): Private order created/updated notifications for the authenticated user on the margin exchange.
+- [WebSocket Connection](https://docs.kalshi.com/margin-ws/websockets/websocket-connection.md): Main WebSocket connection endpoint. Authentication is required during the WebSocket handshake.
+- [Price Banding](https://docs.kalshi.com/margin/price-banding.md): How price banding works for Kalshi margin markets
+- [Kalshi SDKs](https://docs.kalshi.com/sdks/overview.md): Official Python and TypeScript SDKs for the Kalshi API
+- [WebSocket API](https://docs.kalshi.com/websockets.md): Trade API WebSocket endpoint and schema reference
+- [CF Benchmarks Value Feed](https://docs.kalshi.com/websockets/cfbenchmarks-value.md): How to subscribe to and consume cfbenchmarks_value over the Predictions API WebSocket
 - [Communications](https://docs.kalshi.com/websockets/communications.md): Real-time Request for Quote (RFQ) and quote notifications. Requires authentication.
 - [Connection Keep-Alive](https://docs.kalshi.com/websockets/connection-keep-alive.md): WebSocket control frames for connection management.
-- [Market & Event Lifecycle](https://docs.kalshi.com/websockets/market-&-event-lifecycle.md): Market state changes and event creation notifications.
+- [Market & Event Lifecycle](https://docs.kalshi.com/websockets/market-and-event-lifecycle.md): Market state changes and event creation notifications.
 - [Market Positions](https://docs.kalshi.com/websockets/market-positions.md): Real-time updates of your positions in markets. Requires authentication.
 - [Market Ticker](https://docs.kalshi.com/websockets/market-ticker.md): Market price, volume, and open interest updates.
 - [Multivariate Lookups (Deprecated)](https://docs.kalshi.com/websockets/multivariate-lookups-deprecated.md): Deprecated: this channel predates RFQs and should not be used for new integrations.
-- [Multivariate Market & Event Lifecycle](https://docs.kalshi.com/websockets/multivariate-market-&-event-lifecycle.md): Multivariate event (MVE) market state changes and event creation notifications.
+- [Multivariate Market & Event Lifecycle](https://docs.kalshi.com/websockets/multivariate-market-and-event-lifecycle.md): Multivariate event (MVE) market state changes and event creation notifications.
 - [Order Group Updates](https://docs.kalshi.com/websockets/order-group-updates.md): Real-time order group lifecycle and limit updates. Requires authentication.
 - [Orderbook Updates](https://docs.kalshi.com/websockets/orderbook-updates.md): Real-time orderbook price level changes. Provides incremental updates to maintain a live orderbook.
 - [Public Trades](https://docs.kalshi.com/websockets/public-trades.md): Public trade notifications when trades occur.
@@ -175,8 +210,10 @@
 ## OpenAPI Specs
 
 - [openapi](https://docs.kalshi.com/openapi.yaml)
+- [perps_openapi](https://docs.kalshi.com/perps_openapi.yaml)
 - [perps_scm_openapi](https://docs.kalshi.com/perps_scm_openapi.yaml)
 
 ## AsyncAPI Specs
 
+- [perps_asyncapi](https://docs.kalshi.com/perps_asyncapi.yaml)
 - [asyncapi](https://docs.kalshi.com/asyncapi.yaml)
