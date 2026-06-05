@@ -154,7 +154,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             asyncio.run(_analyze_realtime(ticker, console, json_output))
             return
 
-        from traderbot.kalshi.markets import MarketService
+        from traderbot.kalshi.markets import MarketService, _is_bucket_ticker
 
         try:
             from traderbot.kalshi.client import KalshiClient
@@ -163,6 +163,10 @@ def register_commands(parent_app: typer.Typer) -> None:
             service = MarketService(client)
 
             async def _fetch(ticker: str):
+                if _is_bucket_ticker(ticker) and not json_output:
+                    console.print(
+                        "[yellow]Warning: Bucket ticker — showing event-level data[/yellow]"
+                    )
                 market = await service.get_market(ticker)
                 orderbook = await service.get_orderbook(ticker)
                 await client.close()
