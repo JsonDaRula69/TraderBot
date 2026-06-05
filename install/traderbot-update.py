@@ -174,7 +174,19 @@ def _reregister_cron_jobs() -> None:
                   "--agent", agent_dir.name, "--replace"], capture_output=True)
 
 
+def _kill_ws_daemon() -> None:
+    """Kill any running ws_daemon processes before restart."""
+    try:
+        subprocess.run(
+            ["pkill", "-f", "ws_daemon.py"],
+            capture_output=True, timeout=10,
+        )
+    except Exception:
+        pass
+
+
 def _restart_ws_daemon() -> None:
+    _kill_ws_daemon()
     daemon = REPO_DIR / "src" / "traderbot" / "kalshi" / "ws_daemon.py"
     if daemon.is_file():
         # Non-blocking Popen — daemon manages its own lifecycle
