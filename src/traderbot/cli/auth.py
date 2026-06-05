@@ -297,7 +297,11 @@ def auth_check_master_password(
 
 @auth_app.command("set-kalshi")
 def auth_set_kalshi() -> None:
-    """Store Kalshi credentials in OS keyring (or .env fallback)."""
+    """Store Kalshi credentials in OS keyring (or .env fallback).
+
+    Always prompts for both API key and PEM — ignores any existing values
+    in .env so you can rotate credentials without manual cleanup.
+    """
     from traderbot.auth import AuthManager
     from traderbot.paths import get_data_dir
 
@@ -305,40 +309,21 @@ def auth_set_kalshi() -> None:
     env_path = get_data_dir() / ".env"
     pem_file = get_data_dir() / "kalshi_key.pem"
 
-    api_key = None
-    private_key_pem = None
-    if env_path.exists():
-        env_content = env_path.read_text(encoding="utf-8")
-        for line in env_content.splitlines():
-            if line.startswith("KALSHI_API_KEY="):
-                api_key = line.split("=", 1)[1].strip().strip("'\"")
-            elif line.startswith("KALSHI_PRIVATE_KEY_PATH="):
-                p = line.split("=", 1)[1].strip().strip("'\"")
-                f = Path(p)
-                if f.exists():
-                    private_key_pem = f.read_text(encoding="utf-8")
-            elif line.startswith("KALSHI_PRIVATE_KEY_PEM="):
-                v = line.split("=", 1)[1].strip().strip("'\"")
-                if v:
-                    private_key_pem = v
-
-    if not api_key:
-        api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
-    if not private_key_pem:
-        # Write PEM to file instead of inline in .env
-        console.print(
-            "[dim]Enter the full multi-line PEM key (paste entire block, Ctrl+D when done):[/dim]"
-        )
-        private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM (paste block)", hide_input=True)
-        pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
-        pem_file.chmod(0o600)
-        # Write KALSHI_PRIVATE_KEY_PATH to .env
-        env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with env_path.open("a", encoding="utf-8") as f:
-            f.write(f"\nKALSHI_PRIVATE_KEY_PATH={pem_file}\n")
-        console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
-        console.print("[green]✓[/green] KALSHI_PRIVATE_KEY_PATH added to .env")
+    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
+    console.print(
+        "[dim]Enter the full multi-line PEM key (paste entire block, Ctrl+D when done):[/dim]"
+    )
+    private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM (paste block)", hide_input=True)
+    pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
+    pem_file.chmod(0o600)
+    # Write KALSHI_PRIVATE_KEY_PATH to .env (replace existing if any)
+    env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    new_lines = [l for l in old_lines if not l.startswith("KALSHI_PRIVATE_KEY_PATH=")]
+    new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    console.print(f"[green]✓[/green] RSA key saved to {pem_file}")
 
     mgr = AuthManager()
     api_source = mgr.set_credential("kalshi", "api_key", api_key)
