@@ -59,7 +59,17 @@ class PortfolioService:
         cursor: str | None = None,
         limit: int = 100,
     ) -> list[Position]:
-        """Return open positions, optionally filtered by ticker."""
+        """Return open positions, optionally filtered by ticker. WS cache primary, REST fallback."""
+        from traderbot.kalshi.ws_cache import get_positions as get_cached_positions
+
+        cached = get_cached_positions()
+        if cached:
+            if ticker and ticker in cached:
+                pos = cached[ticker]
+                return [Position(**pos)]
+            if not ticker:
+                return [Position(**p) for p in cached.values()]
+
         params: dict[str, Any] = {"limit": limit}
         if ticker is not None:
             params["ticker"] = ticker
@@ -79,7 +89,14 @@ class PortfolioService:
         cursor: str | None = None,
         limit: int = 100,
     ) -> list[Fill]:
-        """Return fill history, optionally filtered by ticker."""
+        """Return fill history, optionally filtered by ticker. WS cache primary, REST fallback."""
+        from traderbot.kalshi.ws_cache import get_fills as get_cached_fills
+
+        if not cursor and not ticker:
+            cached = get_cached_fills(limit=limit)
+            if cached:
+                return [Fill(**f) for f in cached]
+
         params: dict[str, Any] = {"limit": limit}
         if ticker is not None:
             params["ticker"] = ticker

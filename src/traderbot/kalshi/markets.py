@@ -22,6 +22,7 @@ from traderbot.kalshi.models import (
     OrderBook,
     TradeListResponse,
 )
+from traderbot.kalshi.ws_cache import get_event_category
 
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
@@ -156,6 +157,18 @@ class MarketService:
         return _normalize_market(market_raw)
 
     async def get_orderbook(self, ticker: str, depth: int = 10) -> OrderBook:
+        # Primary: try WS cache first
+        from traderbot.kalshi.ws_cache import get_orderbook as get_cached_ob
+
+        cached = get_cached_ob(ticker)
+        if cached is not None:
+            yes_raw = cached.get("yes_bids", [])
+            no_raw = cached.get("no_bids", [])
+            yes_bids = [_normalize_orderbook_level(level) for level in yes_raw[:depth]]
+            no_bids = [_normalize_orderbook_level(level) for level in no_raw[:depth]]
+            return OrderBook(yes_bids=yes_bids, no_bids=no_bids)
+
+        # Fallback: REST API
         response = await self._client.get(f"/markets/{ticker}/orderbook", timeout=30, depth=depth)
         response.raise_for_status()
         data = response.json()

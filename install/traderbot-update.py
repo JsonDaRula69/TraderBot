@@ -157,21 +157,17 @@ export default handler;
 def _reregister_cron_jobs() -> None:
     if not (PYTHON.is_file()):
         return
-    # Main agent (sysadmin) — decision/heartbeat/news loops + heartbeat tasks
+    # Main agent (sysadmin) — learning-pipeline, error-logger, health-check, gateway-health
     _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
-          "--agent", "main", "--replace"], capture_output=True)
-    _run([str(PYTHON), "-m", "traderbot", "cron", "setup-heartbeat-tasks",
           "--agent", "main", "--role", "sysadmin", "--replace"], capture_output=True)
-    # Category agents
+    # Category agents (traders) — decision-loop, position-review, forecast-check, circuit-breaker, health-check
     agents_root = Path.home() / ".openclaw" / "agents"
     if agents_root.is_dir():
         for agent_dir in agents_root.iterdir():
             if agent_dir.name == "main" or not (agent_dir / "agent").is_dir():
                 continue
             _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
-                  "--agent", agent_dir.name, "--replace"], capture_output=True)
-            _run([str(PYTHON), "-m", "traderbot", "cron", "setup-heartbeat-tasks",
-                  "--agent", agent_dir.name, "--replace"], capture_output=True)
+                  "--agent", agent_dir.name, "--role", "trader", "--replace"], capture_output=True)
 
 
 def _kill_ws_daemon() -> None:

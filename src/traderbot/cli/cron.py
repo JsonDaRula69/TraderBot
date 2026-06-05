@@ -301,95 +301,54 @@ def _remove_news_ingest_timer(
         pass
 
 
-_SYSADMIN_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
+_SYSADMIN_CRON_JOBS: list[dict[str, str]] = [
     {
-        "name": "circuit-breaker-check",
-        "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. The --recover flag calls breaker.check() with fresh metrics, triggering auto-recovery per docs/risk.md — SLOW auto-recovers to NORMAL when daily_loss drops below 1%, HALT auto-recovers when daily_loss drops below 2%. Check fleet-wide circuit breaker across all agents. If HALT or FULL_STOP, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. If level is degraded, investigate which agent is responsible.",
-    },
-    {
-        "name": "experiment-check",
+        "name": "learning-pipeline",
         "cron_expr": "0 */6 * * *",
-        "message": "Read each agent's SESSION-STATE.md via sessions_history. Check Pending Actions for experiment proposals marked DESIGNED or PROPOSED. Acknowledge receipt, add to test-lab/backlog.md, update SESSION-STATE.md with status.",
+        "message": "Read each agent's `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. Then check test-lab/backlog.md for QUEUED experiments — move one to RUNNING, execute backtest, validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30). If requires code change: file GitHub issue with full experiment design, test results, and expected benefit (labels: enhancement, experiment). If profile param only: DEPLOY via `traderbot profile update`, notify target agent via `sessions_send`. Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
     },
     {
-        "name": "experiment-execution",
-        "cron_expr": "0 */6 * * *",
-        "message": "Check test-lab/backlog.md for QUEUED experiments. Move one to RUNNING. Execute backtest or compare. Validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30 trades per backlog.md). If the fix requires a code change (not a profile param update): use the 🐙 github skill to file a GitHub issue in the JsonDaRula69/TraderBot repo with full experiment design, test results, and expected benefit. Label: enhancement, experiment. If it's a profile param update only: DEPLOY via `traderbot profile update`. If pass (profile): DEPLOY, if fail: REJECT with reason in backlog.md. If DEPLOYED, use `sessions_send` to notify the target agent: 'Profile param X updated from Y to Z — recalibrate conviction calculations accordingly.' Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
+        "name": "error-logger",
+        "cron_expr": "*/15 * * * *",
+        "message": "Read each category agent's `.learnings/ERRORS.md` and `.learnings/FEATURE_REQUESTS.md`. For each unresolved entry: investigate by reproducing the error or verifying the capability gap. Cross-reference against experiment backlog to avoid duplicates. If confirmed as a new bug or valid feature gap: use the github skill to file a GitHub issue in JsonDaRula69/TraderBot with investigation results, reproduction steps, and proposed fix. Labels: bug for ERRORS.md, enhancement for FEATURE_REQUESTS.md. Mark the entry as INVESTIGATED. Do NOT create issues for behavioral learnings (LEARNINGS.md entries) — those go through experiment pipeline.",
     },
     {
-        "name": "auth-check",
+        "name": "health-check",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot auth check --json`. Verify all API credentials are resolvable. If Kalshi credentials are missing or invalid, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human — this blocks all trading.",
+        "message": "Run `traderbot auth check --json`. Verify all API credentials are resolvable. If Kalshi credentials missing or invalid, write to `.learnings/ERRORS.md` and surface CRITICAL alert to human. Also run `traderbot heartbeat --json` — review fleet P&L, agent win rates, drawdown. If anomalies found, write to `.learnings/ERRORS.md` with details.",
     },
     {
-        "name": "learning-review",
+        "name": "gateway-health",
         "cron_expr": "0 */6 * * *",
-        "message": "Cross-reference PENDING_REVIEW learnings across agents against experiment backlog. Identify any pattern the backlog doesn't cover. Surface duplicates or conflicts. Then read each category agent's `.learnings/ERRORS.md` and `.learnings/FEATURE_REQUESTS.md`. For each unresolved entry: investigate by reproducing the error or verifying the capability gap. If confirmed: use the 🐙 github skill to file a GitHub issue in JsonDaRula69/TraderBot with investigation results, reproduction steps, and proposed fix. Use labels: bug for ERRORS.md, enhancement for FEATURE_REQUESTS.md. Mark the entry as INVESTIGATED in the agent's file. Do NOT create GitHub issues for agent behavioral learnings (LEARNINGS.md entries) — those go through the experiment backlog pipeline.",
-    },
-    {
-        "name": "pipeline-health",
-        "cron_expr": "0 */6 * * *",
-        "message": "Check: (1) systemd timers via `systemctl list-timers --all | grep traderbot`, (2) ChromaDB data_points collection count > 0 via `traderbot data-points weather --json --count`, (3) WS daemon via `traderbot ws status`. Run backfill if stale. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. If any issue requires a code change, use the 🐙 github skill to file a GitHub issue with reproduction steps.",
-    },
-    {
-        "name": "performance-review",
-        "cron_expr": "0 */6 * * *",
-        "message": "Run `traderbot heartbeat --json`. Review fleet P&L, agent win rates, drawdown across all assigned profiles. Check if any agent exceeds risk thresholds. If anomalies found, write to `.learnings/ERRORS.md` with details. Surface anomalies to human. Do not trade — do not touch order book.",
+        "message": "Check: (1) systemd timers via `systemctl list-timers --all | grep traderbot`, (2) ChromaDB data_points count via `traderbot data-points weather --json --count`, (3) WS daemon via `traderbot ws status`. Run backfill if stale. For each issue, write to `.learnings/ERRORS.md` (failures), `.learnings/FEATURE_REQUESTS.md` (missing capabilities), or `.learnings/LEARNINGS.md` (recurring patterns). If requires code change, file GitHub issue with reproduction steps.",
     },
 ]
 
-_AGENT_HEARTBEAT_CRON_JOBS: list[dict[str, str]] = [
+_TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. The --recover flag calls breaker.check() with fresh metrics, triggering auto-recovery per docs/risk.md. If circuit breaker is still SLOW or worse after recovery check, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
-    },
-    {
-        "name": "news-scan",
-        "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot news-context weather --json`. Check for NHC advisories, NWS warnings, emergency declarations. If any active, write to `.learnings/ERRORS.md` and surface alert to sysadmin.",
-    },
-    {
-        "name": "data-forecast-check",
-        "cron_expr": "15,45 * * * *",
-        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. If fallback also fails, write to `.learnings/ERRORS.md`. Log status.",
+        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
     },
     {
         "name": "decision-loop",
         "cron_expr": "*/5 * * * *",
-        "message": "Run the full trading decision cycle: 1) `traderbot scan --category weather --limit 50 --json 2>/dev/null` — if empty, retry once after 30s. If still empty: this is a SYSTEM ERROR (rate limited, credential failure, API outage), NOT a normal market closure. Kalshi weather markets always exist. Log full diagnostic in `.learnings/ERRORS.md` with the exact error output and skip to step 10. 2) Filter by horizon (0-7 day). 3) `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. 4) Model consensus check (spread < 2°F = high conviction, > 5°F = halve position). 5) Compute edge for top 5 contracts by volume near NWS forecast values. 6) `traderbot data bias <CITY> --days 90 --json` for bias adjustment. 7) `traderbot analyze <TICKER> --json` on the 3 most promising candidates. 8) `traderbot news-context weather --json` for advisories. 9) If risk pipeline passes and edge >= profile threshold: trade. Position sizing = profile risk_multiplier * conviction_score * available_balance, capped at max-position-pct. 10) Log every decision in SESSION-STATE.md — whether traded or skipped with reason.",
+        "message": "Full trading decision cycle: 1) `traderbot scan --category weather --limit 50 --json` — if empty, retry once after 30s; if still empty log SYSTEM ERROR to `.learnings/ERRORS.md`. 2) Filter by horizon (0-7 day). 3) `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. 4) Model consensus check (spread < 2°F = high conviction, > 5°F = halve position). 5) Compute edge for top 5 contracts by volume near NWS forecast. 6) `traderbot data bias <CITY> --days 90 --json`. 7) `traderbot analyze <TICKER> --json` on top 3. 8) `traderbot news-context weather --json` for advisories. 9) If risk passes and edge >= threshold: trade. Position sizing = risk_multiplier * conviction * available_balance, capped at max-position-pct. 10) Log every decision in SESSION-STATE.md.",
     },
     {
-        "name": "position-health",
+        "name": "position-review",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot positions --json`. Check positions with settlement < 48h. Check drawdown > 5%. If any at-risk positions found, write to `.learnings/ERRORS.md` with ticker and risk detail. Surface to sysadmin.",
+        "message": "Run `traderbot check-settlements --json` then `traderbot data record-bias --city NYC,CHI,LA,PHX,SEA --json` for settled markets. Then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin.",
     },
     {
-        "name": "settlement-monitor",
+        "name": "forecast-check",
+        "cron_expr": "15,45 * * * *",
+        "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. If fallback also fails, write to `.learnings/ERRORS.md`. Log status.",
+    },
+    {
+        "name": "health-check",
         "cron_expr": "0 * * * *",
-        "session": "isolated",
-        "message": "Check for recently settled markets and update positions DB. Run `traderbot check-settlements --json`. Then run `traderbot data record-bias --city NYC,CHI,LA,PHX,SEA --json` for each settled market's city to record forecast-vs-actual bias. If settlement check fails (e.g. 401), write to `.learnings/ERRORS.md`.",
-    },
-    {
-        "name": "auth-check",
-        "cron_expr": "0 * * * *",
-        "message": "Run `traderbot auth check --json`. Verify Kalshi credentials are resolvable. If missing or invalid, write to `.learnings/ERRORS.md` and surface CRITICAL alert to sysadmin — cannot trade without valid credentials.",
-    },
-    {
-        "name": "performance-review",
-        "cron_expr": "0 */6 * * *",
-        "message": "Run `traderbot heartbeat --json`. Check drawdown > 3%, win rate < 40% over 30+ trades. If anomalies found, write to `.learnings/ERRORS.md` with details. Surface any issues to sysadmin.",
-    },
-    {
-        "name": "learning-promotion",
-        "cron_expr": "0 */6 * * *",
-        "message": "Read `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. For each newly promoted entry, spawn an experiment-design sub-agent via `sessions_spawn` with the full pattern details, context, profile params, and SESSION-STATE.md. The sub-agent should return a complete experiment design (hypothesis, target parameter, current/proposed values, backtest params, success criteria). Log the design in SESSION-STATE.md Pending Actions.",
-    },
-    {
-        "name": "pipeline-health",
-        "cron_expr": "0 */6 * * *",
-        "message": "Check: (1) systemd timers — `systemctl list-timers --all | grep traderbot`, (2) ChromaDB — `traderbot data-points weather --json --count`, (3) WS daemon — `traderbot ws status`. For each issue found, write to the appropriate file: `.learnings/ERRORS.md` for active failures, `.learnings/FEATURE_REQUESTS.md` for missing capabilities, `.learnings/LEARNINGS.md` for recurring patterns. Surface summary to sysadmin.",
+        "message": "Run `traderbot auth check --json` — verify Kalshi credentials resolvable, surface alert if missing. Run `traderbot heartbeat --json` — check drawdown > 3%, win rate < 40% over 30+ trades. Write anomalies to `.learnings/ERRORS.md` and surface to sysadmin.",
     },
 ]
 
@@ -448,46 +407,45 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
     return removed
 
 
-@cron_app.command("setup-heartbeat-tasks")
-def cron_setup_heartbeat_tasks(
+@cron_app.command("setup")
+def cron_setup(
     agent_id: Annotated[
         str,
-        typer.Option("--agent", help="OpenClaw agent ID to register heartbeat tasks for"),
+        typer.Option("--agent", help="OpenClaw agent ID to register cron jobs for"),
     ],
     role: Annotated[
         str,
         typer.Option(
             "--role",
-            help="Agent role: 'sysadmin' for fleet oversight, 'agent' for category trading",
+            help="Agent role: 'sysadmin' or 'trader'",
         ),
-    ] = "agent",
-    skip_heartbeat_config: Annotated[
-        bool,
-        typer.Option(
-            "--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"
-        ),
-    ] = False,
+    ] = "trader",
     replace: Annotated[
         bool,
-        typer.Option("--replace", help="Remove existing heartbeat tasks first, then re-register"),
+        typer.Option("--replace", help="Remove existing cron jobs first, then re-register"),
     ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Output as JSON"),
     ] = False,
 ) -> None:
-    """Register each heartbeat task as an isolated cron job.
+    """Register cron jobs for an agent based on its role.
 
-    Each task runs in its own isolated cron session — zero collision with
-    trading or other tasks. Use --role sysadmin for fleet oversight agents
-    (circuit breaker, experiment management, pipeline health only, no trading
-    commands) or --role agent (default) for category trading agents (includes
-    data forecasts, news, positions, learning promotion). Pass --replace to
-    remove any existing heartbeat tasks before registering anew — this
-    prevents duplicate cron entries from re-runs of this command.
+    Sysadmin role (main) gets: learning-pipeline, error-logger, health-check,
+    gateway-health — no trading commands.
+
+    Trader role (weather, crypto, etc.) gets: decision-loop, position-review,
+    forecast-check, circuit-breaker-check, health-check.
+
+    Pass --replace to remove any existing jobs before registering anew —
+    this prevents duplicate entries from re-runs of this command.
     """
     console = Console()
     results: list[dict[str, str | bool]] = []
+
+    if role not in ("sysadmin", "trader"):
+        console.print(f"[red]Error:[/red] Invalid role '{role}'. Must be 'sysadmin' or 'trader'.")
+        raise typer.Exit(1)
 
     if not shutil.which("openclaw"):
         console.print("[red]Error:[/red] openclaw CLI not found in PATH")
@@ -496,7 +454,7 @@ def cron_setup_heartbeat_tasks(
     if replace:
         _remove_cron_jobs_by_name(agent_id)
 
-    jobs = _SYSADMIN_HEARTBEAT_CRON_JOBS if role == "sysadmin" else _AGENT_HEARTBEAT_CRON_JOBS
+    jobs = _SYSADMIN_CRON_JOBS if role == "sysadmin" else _TRADER_CRON_JOBS
     for job in jobs:
         job_name = f"{agent_id}-{job['name']}"
         # Remove any existing job with this name before re-adding (avoids duplicates)
@@ -527,194 +485,11 @@ def cron_setup_heartbeat_tasks(
         json_lib.dump(results, sys.stdout, indent=2)
         return
 
-    console.print("[bold]Heartbeat Task Registration[/bold]")
+    console.print(f"[bold]Cron setup ({role})[/bold]")
     for r in results:
         status = "[green]✓[/green]" if r["registered"] else "[red]✗[/red]"
         console.print(f"  {status} {r['name']}")
-    console.print("\nAll tasks run in isolated cron sessions. No collision with trading.")
-
-
-@cron_app.command("remove-heartbeat-tasks")
-def cron_remove_heartbeat_tasks(
-    agent_id: Annotated[
-        str,
-        typer.Option("--agent", help="OpenClaw agent ID to remove heartbeat tasks for"),
-    ],
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Output as JSON"),
-    ] = False,
-) -> None:
-    """Remove all registered heartbeat cron tasks for an agent."""
-    removed = _remove_cron_jobs_by_name(agent_id)
-
-    if json_output:
-        json_lib.dump({"removed": removed}, sys.stdout, indent=2)
-        return
-
-    console = Console()
-    for name in removed:
-        console.print(f"  [green]✓[/green] Removed {name}")
-    if not removed:
-        console.print("[yellow]No heartbeat tasks found to remove.[/yellow]")
-
-
-@cron_app.command("setup")
-def cron_setup(
-    agent_id: Annotated[
-        str,
-        typer.Option("--agent", help="OpenClaw agent ID to register loops for"),
-    ],
-    channel: Annotated[
-        str | None,
-        typer.Option(
-            "--channel", help="Delivery channel for announce (e.g. telegram, slack, whatsapp)"
-        ),
-    ] = None,
-    to: Annotated[
-        str | None,
-        typer.Option(
-            "--to", help="Delivery target (chat ID for telegram, E.164 phone for whatsapp)"
-        ),
-    ] = None,
-    heartbeat_interval: Annotated[
-        str,
-        typer.Option("--heartbeat-every", help="Heartbeat interval (e.g. 30m, 1h, 6h)"),
-    ] = "6h",
-    news_ingest_interval: Annotated[
-        int | None,
-        typer.Option(
-            "--news-ingest-every", help="News ingestion interval in minutes. 0=disable, omit=skip"
-        ),
-    ] = None,
-    skip_heartbeat_config: Annotated[
-        bool,
-        typer.Option(
-            "--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"
-        ),
-    ] = False,
-    replace: Annotated[
-        bool,
-        typer.Option("--replace", help="Remove existing cron jobs first, then re-register"),
-    ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Show what would be registered without executing"),
-    ] = False,
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Output as JSON"),
-    ] = False,
-) -> None:
-    """Register decision, heartbeat, and news cron loops with OpenClaw for an agent.
-
-    Pass --replace to remove any existing cron jobs before registering anew —
-    this prevents duplicate cron entries from re-runs of this command.
-    """
-    from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload, NewsLoopPayload
-
-    console = Console()
-
-    if bool(channel) ^ bool(to):
-        console.print(
-            "[red]Error:[/red] Both --channel and --to are required when either is provided."
-        )
-        raise typer.Exit(1)
-
-    results: list[dict[str, str | bool]] = []
-
-    if not dry_run:
-        if not shutil.which("openclaw"):
-            console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-            console.print("Install OpenClaw first: https://github.com/openclaw/openclaw")
-            raise typer.Exit(1)
-
-        # channel/to validated by XOR check above — either both provided or neither
-        bool(channel and to)  # implicit announce when channel+to provided
-
-    if replace:
-        _remove_cron_jobs_by_name(agent_id)
-
-    decision_payload = DecisionLoopPayload()
-    heartbeat_payload = HeartbeatLoopPayload()
-    news_payload = NewsLoopPayload(topic="impact", impact_score=0.7)
-
-    cron_jobs = [
-        {
-            "name": f"{agent_id}-decision_loop",
-            "cron_expr": "*/5 * * * *",
-            "session": "isolated",
-            "message": decision_payload.message,
-        },
-        {
-            "name": f"{agent_id}-heartbeat_loop",
-            "cron_expr": "0 */6 * * *",
-            "session": "isolated",
-            "message": heartbeat_payload.message,
-        },
-        {
-            "name": f"{agent_id}-news_ingest",
-            "cron_expr": "*/30 * * * *",
-            "session": "isolated",
-            "message": news_payload.message,
-        },
-    ]
-
-    for job in cron_jobs:
-        cmd_args = [
-            "--name",
-            job["name"],
-            "--cron",
-            job["cron_expr"],
-            "--session",
-            job["session"],
-            "--message",
-            job["message"],
-            "--agent",
-            agent_id,
-        ]
-        if channel and to:
-            cmd_args += ["--channel", channel, "--to", to]
-
-        if dry_run:
-            console.print(f"[dim][dry-run][/dim] openclaw cron add {' '.join(cmd_args)}")
-            results.append({"name": job["name"], "registered": True, "dry_run": True})
-        else:
-            exit_code, output = _run_openclaw_cron_add(cmd_args)
-            ok = exit_code == 0
-            results.append(
-                {
-                    "name": job["name"],
-                    "registered": ok,
-                    "exit_code": exit_code,
-                    "output": output,
-                }
-            )
-
-    if not dry_run:
-        if not skip_heartbeat_config:
-            hb_ok = _write_heartbeat_config(agent_id, heartbeat_interval)
-            results.append({"name": "heartbeat_config", "registered": hb_ok})
-
-        if news_ingest_interval is not None and news_ingest_interval > 0:
-            timer_result = _install_news_ingest_timer(
-                agent_id, interval_minutes=news_ingest_interval, console=console
-            )
-            results.append(timer_result)
-
-    if json_output:
-        json_lib.dump(results, sys.stdout, default=str)
-        return
-
-    for r in results:
-        name = r.get("name", "?")
-        if r.get("dry_run"):
-            console.print(f"[dim][dry-run][/dim] {name}")
-        elif r.get("registered"):
-            console.print(f"[green]✓[/green] {name}")
-        else:
-            console.print(
-                f"[red]✗[/red] {name}: {r.get('output', r.get('error', 'unknown error'))}"
-            )
-
-    console.print(f"\n[bold]✓[/bold] Cron setup complete for agent '{agent_id}'")
+    if not results:
+        console.print("[yellow]No jobs registered.[/yellow]")
+    else:
+        console.print(f"\n[bold]✓[/bold] Cron setup complete for agent '{agent_id}'")

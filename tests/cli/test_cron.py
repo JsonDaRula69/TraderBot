@@ -16,28 +16,24 @@ class TestCronHelp:
         assert "cron" in result.output.lower() or "setup" in result.output.lower()
 
     def test_setup_heartbeat_tasks_help(self) -> None:
-        result = runner.invoke(app, ["cron", "setup-heartbeat-tasks", "--help"])
+        result = runner.invoke(app, ["cron", "setup", "--help"])
         assert result.exit_code == 0
         assert "--agent" in strip_ansi(result.output)
         assert "--role" in strip_ansi(result.output)
 
-    def test_remove_heartbeat_tasks_help(self) -> None:
-        result = runner.invoke(app, ["cron", "remove-heartbeat-tasks", "--help"])
+    def test_cron_setup_role_sysadmin_help(self) -> None:
+        result = runner.invoke(app, ["cron", "setup", "--help"])
         assert result.exit_code == 0
-        assert "--agent" in strip_ansi(result.output)
+        assert "--role" in strip_ansi(result.output)
 
 
 class TestSysadminCronNoDuplicates:
-    """Regression: _SYSADMIN_HEARTBEAT_CRON_JOBS must not contain duplicate names.
-
-    Bug: a previous version had duplicate entries causing double registration
-    of cron jobs on every setup-heartbeat-tasks run.
-    """
+    """Regression: _SYSADMIN_CRON_JOBS must not contain duplicate names."""
 
     def test_sysadmin_cron_jobs_no_duplicate_names(self) -> None:
-        from traderbot.cli.cron import _SYSADMIN_HEARTBEAT_CRON_JOBS
+        from traderbot.cli.cron import _SYSADMIN_CRON_JOBS
 
-        names = [j["name"] for j in _SYSADMIN_HEARTBEAT_CRON_JOBS]
+        names = [j["name"] for j in _SYSADMIN_CRON_JOBS]
         assert len(names) == len(set(names)), (
             f"Duplicate cron job names: {[n for n in names if names.count(n) > 1]}"
         )

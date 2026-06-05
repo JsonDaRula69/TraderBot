@@ -1263,63 +1263,41 @@ class TestHeartbeat:
 
 
 class TestCronSetup:
-    def test_cron_setup_dry_run(self):
+    def test_cron_setup_sysadmin_json(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--dry-run"])
-            assert result.exit_code == 0
-            assert "test-agent-decision_loop" in strip_ansi(result.output)
-            assert "test-agent-heartbeat_loop" in strip_ansi(result.output)
-            assert "test-agent-news_ingest" in strip_ansi(result.output)
+            with patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")):
+                result = runner.invoke(
+                    app, ["cron", "setup", "--agent", "test-agent", "--role", "sysadmin", "--json"]
+                )
+                assert result.exit_code == 0
+                data = json.loads(result.output)
+                assert isinstance(data, list)
+                names = [j["name"] for j in data]
+                assert "learning-pipeline" in names
+                assert "error-logger" in names
+                assert "health-check" in names
+                assert "gateway-health" in names
 
-    def test_cron_setup_dry_run_json(self):
+    def test_cron_setup_trader_json(self):
         with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(
-                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
-            )
-            assert result.exit_code == 0
-            lines = result.output.strip().split("\n")
-            json_line = next((line.strip() for line in lines if line.strip().startswith("[")), None)
-            assert json_line is not None
-            data = json.loads(json_line)
-            assert isinstance(data, list)
-            names = [loop["name"] for loop in data]
-            assert "test-agent-decision_loop" in names
-            assert "test-agent-heartbeat_loop" in names
-            assert "test-agent-news_ingest" in names
+            with patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")):
+                result = runner.invoke(
+                    app, ["cron", "setup", "--agent", "test-agent", "--role", "trader", "--json"]
+                )
+                assert result.exit_code == 0
+                data = json.loads(result.output)
+                assert isinstance(data, list)
+                names = [j["name"] for j in data]
+                assert "decision-loop" in names
+                assert "position-review" in names
+                assert "forecast-check" in names
+                assert "circuit-breaker-check" in names
+                assert "health-check" in names
 
-    def test_cron_setup_custom_interval(self, tmp_path):
-        with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(
-                app,
-                [
-                    "cron",
-                    "setup",
-                    "--agent",
-                    "test-agent",
-                    "--heartbeat-every",
-                    "30m",
-                    "--dry-run",
-                    "--json",
-                ],
-            )
-            assert result.exit_code == 0
-            assert "heartbeat_loop" in strip_ansi(result.output)
-
-    def test_cron_setup_skip_heartbeat_config(self, tmp_path):
-        with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(
-                app,
-                [
-                    "cron",
-                    "setup",
-                    "--agent",
-                    "test-agent",
-                    "--skip-heartbeat-config",
-                    "--dry-run",
-                    "--json",
-                ],
-            )
-            assert result.exit_code == 0
+    def test_cron_setup_invalid_role(self):
+        result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--role", "invalid"])
+        assert result.exit_code == 1
+        assert "Invalid role" in result.output
 
     def test_cron_setup_no_openclaw(self):
         with patch("traderbot.cli.cron.shutil.which", return_value=None):
@@ -1327,118 +1305,48 @@ class TestCronSetup:
             assert result.exit_code == 1
             assert "openclaw" in result.output.lower()
 
-    def test_cron_setup_channel_without_to_errors(self):
-        result = runner.invoke(
-            app, ["cron", "setup", "--agent", "test-agent", "--channel", "telegram", "--dry-run"]
-        )
-        assert result.exit_code == 1
-        assert "channel" in result.output.lower() or "to" in result.output.lower()
+    def test_cron_setup_replace_calls_remove(self):
+        """Verify --replace triggers removal before registration."""
+        remove_calls = []
 
-    def test_cron_setup_to_without_channel_errors(self):
-        result = runner.invoke(
-            app, ["cron", "setup", "--agent", "test-agent", "--to", "+15555550123", "--dry-run"]
-        )
-        assert result.exit_code == 1
-        assert "channel" in result.output.lower() or "to" in result.output.lower()
-
-    def test_cron_setup_with_channel_and_to_dry_run(self):
-        result = runner.invoke(
-            app,
-            [
-                "cron",
-                "setup",
-                "--agent",
-                "test-agent",
-                "--channel",
-                "telegram",
-                "--to",
-                "+15555550123",
-                "--dry-run",
-            ],
-        )
-        assert result.exit_code == 0
-
-    def test_cron_setup_with_channel_and_to_passes_args(self, tmp_path):
-        config_dir = tmp_path / ".openclaw"
-        config_dir.mkdir()
-
-        calls = []
-
-        def mock_cron_add(args):
-            calls.append(args)
-            return (0, "ok")
+        def mock_remove(name, exact=False):
+            remove_calls.append((name, exact))
+            return []
 
         with (
-            patch("traderbot.cli.cron.Path.home", return_value=tmp_path),
             patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"),
-            patch("traderbot.cli.cron._run_openclaw_cron_add", side_effect=mock_cron_add),
+            patch("traderbot.cli.cron._remove_cron_jobs_by_name", side_effect=mock_remove),
+            patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")),
         ):
-            result = runner.invoke(
-                app,
-                [
-                    "cron",
-                    "setup",
-                    "--agent",
-                    "my-agent",
-                    "--channel",
-                    "telegram",
-                    "--to",
-                    "+15555550123",
-                    "--json",
-                ],
+            runner.invoke(
+                app, ["cron", "setup", "--agent", "test-agent", "--role", "sysadmin", "--replace", "--json"]
             )
-            assert result.exit_code == 0
-        for call_args in calls:
-            assert "--channel" in call_args
-            assert "telegram" in call_args
-            assert "--to" in call_args
-            assert "+15555550123" in call_args
+        assert any("test-agent" in c[0] for c in remove_calls)
 
-    def test_cron_setup_writes_heartbeat_config(self, tmp_path):
-        config_dir = tmp_path / ".openclaw"
-        config_dir.mkdir()
-        config_file = config_dir / "openclaw.json"
-
+    def test_cron_setup_default_role_is_trader(self):
         with (
-            patch("traderbot.cli.cron.Path.home", return_value=tmp_path),
+            patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"),
+            patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")),
+        ):
+            result = runner.invoke(app, ["cron", "setup", "--agent", "test-agent", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            names = [j["name"] for j in data]
+            assert "decision-loop" in names  # trader role has decision-loop
+
+    def test_cron_setup_trader_jobs_have_correct_exprs(self):
+        with (
             patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"),
             patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")),
         ):
             result = runner.invoke(
-                app,
-                ["cron", "setup", "--agent", "my-agent", "--json"],
+                app, ["cron", "setup", "--agent", "test-agent", "--role", "trader", "--json"]
             )
             assert result.exit_code == 0
-
-        if config_file.exists():
-            config = json.loads(config_file.read_text())
-            if "agents" in config and "list" in config["agents"]:
-                agents_list = config["agents"]["list"]
-                agent_entry = next((a for a in agents_list if a.get("id") == "my-agent"), None)
-                if agent_entry and "heartbeat" in agent_entry:
-                    assert agent_entry["heartbeat"]["every"] == "6h"
-
-    def test_cron_setup_dry_run_news_loop_event(self):
-        with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(
-                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
-            )
-            assert result.exit_code == 0
-            lines = result.output.strip().split("\n")
-            json_line = next((line.strip() for line in lines if line.strip().startswith("[")), None)
-            if json_line:
-                data = json.loads(json_line)
-                news_loops = [l for l in data if l["name"] == "news_ingest"]
-                if news_loops:
-                    assert news_loops[0].get("event") == "impact" or "impact" in result.output
-
-    def test_cron_setup_decision_loop_247_cron(self):
-        with patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"):
-            result = runner.invoke(
-                app, ["cron", "setup", "--agent", "test-agent", "--dry-run", "--json"]
-            )
-            assert result.exit_code == 0
-            assert "*/5" in strip_ansi(result.output)
+            data = json.loads(result.output)
+            names = [j["name"] for j in data]
+            assert "decision-loop" in names
+            assert "circuit-breaker-check" in names
 
     def test_cron_setup_news_loop_passes_event_arg(self, tmp_path):
         config_dir = tmp_path / ".openclaw"
@@ -1455,12 +1363,14 @@ class TestCronSetup:
             patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"),
             patch("traderbot.cli.cron._run_openclaw_cron_add", side_effect=mock_cron_add),
         ):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "my-agent", "--json"])
+            result = runner.invoke(app, ["cron", "setup", "--agent", "my-agent", "--role", "trader", "--json"])
             assert result.exit_code == 0
 
-        news_call = next((c for c in calls if "--name" in c and "my-agent-news_ingest" in c), None)
-        assert news_call is not None
-        assert "--message" in news_call
+        decision_call = next(
+            (c for c in calls if "--name" in c and any("my-agent-decision" in a for a in c)), None
+        )
+        assert decision_call is not None
+        assert "--message" in decision_call
 
     def test_cron_setup_no_openclaw_shows_fallback(self):
         with patch("traderbot.cli.cron.shutil.which", return_value=None):
