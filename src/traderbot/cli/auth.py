@@ -310,9 +310,7 @@ def auth_set_kalshi() -> None:
     pem_file = get_data_dir() / "kalshi_key.pem"
 
     api_key = typer.prompt("KALSHI_API_KEY")
-    console.print(
-        "[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]"
-    )
+    console.print("[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]")
     private_key_pem = sys.stdin.read().strip()
     if not private_key_pem:
         console.print("[red]Error:[/red] No PEM key provided.")
