@@ -41,7 +41,10 @@ def get_current_version() -> str:
 
 
 def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | None:
-    """Fetch latest release version from GitHub, cached locally to avoid 403 rate limits.
+    """Fetch latest version tag from GitHub, cached locally to avoid 403 rate limits.
+
+    Uses the Git tags API (not releases/latest) so every commit-tagged version
+    is visible regardless of whether a GitHub Release was created.
 
     Caches the result to ``CACHE_DIR / .update_cache.json`` for *cache_ttl_seconds*
     (default 1 hour). Subsequent calls within the TTL return the cached value
@@ -58,20 +61,25 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
         except Exception:
             pass
 
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/git/refs/tags"
     try:
         resp = httpx.get(url, timeout=15)
         resp.raise_for_status()
-        data = resp.json()
-        tag = data.get("tag_name", "")
-        if not tag or not tag.startswith("v"):
+        refs = resp.json()
+        tags = []
+        for ref in refs:
+            ref_path = ref.get("ref", "")
+            tag_name = ref_path.removeprefix("refs/tags/")
+            if tag_name.startswith("v"):
+                tags.append(tag_name)
+        if not tags:
             return None
-        result = (tag.lstrip("v"), data.get("zipball_url", ""))
+        tags.sort(key=lambda t: Version(t.lstrip("v")), reverse=True)
+        latest_tag = tags[0]
+        result = (latest_tag.lstrip("v"), "")
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(
-                json.dumps({"tag": result[0], "url": result[1], "ts": _time.time()})
-            )
+            cache_path.write_text(json.dumps({"tag": result[0], "url": "", "ts": _time.time()}))
             cache_path.chmod(0o600)
         except Exception:
             pass

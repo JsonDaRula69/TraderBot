@@ -309,11 +309,12 @@ def auth_set_kalshi() -> None:
     env_path = get_data_dir() / ".env"
     pem_file = get_data_dir() / "kalshi_key.pem"
 
-    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
-    console.print(
-        "[dim]Enter the full multi-line PEM key (paste entire block, Ctrl+D when done):[/dim]"
-    )
-    private_key_pem = typer.prompt("KALSHI_PRIVATE_KEY_PEM (paste block)", hide_input=True)
+    api_key = typer.prompt("KALSHI_API_KEY")
+    console.print("[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]")
+    private_key_pem = sys.stdin.read().strip()
+    if not private_key_pem:
+        console.print("[red]Error:[/red] No PEM key provided.")
+        raise typer.Exit(1)
     pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
     pem_file.chmod(0o600)

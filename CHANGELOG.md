@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `traderbot auth set-kalshi` now always prompts for credentials instead of silently re-using .env values — enables credential rotation without manual cleanup
+- `traderbot auth set-kalshi` PEM prompt now uses `sys.stdin.read()` instead of `typer.prompt()` to capture multi-line PEM blocks — single-line prompt was truncating pasted keys (PR #93)
+- `traderbot update` version comparison now uses Git tags API (`/git/refs/tags`) instead of `releases/latest` — `releases/latest` only returns GitHub Releases (created on tag push), so every version between Release creation and the next tag push appeared as "Update available: v0.15.NN → v0.15.00" (PR #94)
 - `_reregister_cron_jobs()` in update pipeline now calls both `cron setup --replace` and `cron setup-heartbeat-tasks --replace` for every agent — previously only heartbeat tasks were re-registered (PR #89)
 - `cron setup` was passing `--schedule` (wrong flag) and positional `agent_id` (wrong position) to `openclaw cron add` — now passes `--cron` and `--agent` correctly, which was why decision/heartbeat/news loops never registered (PR #90)
 - Installer Phase 2 now configures `tools.sessions.visibility: agent` and `tools.agentToAgent.enabled: true` for fresh installs (PR #82)
