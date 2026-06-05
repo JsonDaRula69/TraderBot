@@ -228,12 +228,18 @@ class WeatherDataProvider(BaseDataProvider):
 
         # Launch NWS forecast fetches for every resolved city.
         if station is not None:
-            nws_tasks = [self._nws.get_forecast(0, 0, station=station, offset=offset) for c in resolved]
+            nws_tasks = [
+                self._nws.get_forecast(0, 0, station=station, offset=offset) for c in resolved
+            ]
         else:
-            nws_tasks = [self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset) for c in resolved]
+            nws_tasks = [
+                self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset)
+                for c in resolved
+            ]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
-            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset) for c in resolved
+            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset)
+            for c in resolved
         ]
 
         nws_results = await asyncio.gather(*nws_tasks, return_exceptions=True)
@@ -277,7 +283,9 @@ class WeatherDataProvider(BaseDataProvider):
         if station is not None:
             tasks = [self._nws.get_all_forecasts(0, 0, station=station) for _ in resolved]
         else:
-            tasks = [self._nws.get_all_forecasts(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved]
+            tasks = [
+                self._nws.get_all_forecasts(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
+            ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         forecasts: dict[str, list[CityForecast]] = {}

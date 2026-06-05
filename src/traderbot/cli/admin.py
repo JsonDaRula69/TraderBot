@@ -286,6 +286,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             # Mark-to-market: fetch current prices for open positions so drawdown
             # reflects position market value, not just cash at risk.
             if pb and pb.open_position_count > 0:
+
                 async def _fetch_mtm() -> int:
                     from traderbot.db import get_connection
                     from traderbot.db.positions import list_open_positions
@@ -318,9 +319,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 if daily_loss_pct < 0:
                     daily_loss_pct = 0.0
                 portfolio_value = max(pb.portfolio_value_cents, 0)
-                drawdown_pct = (pb.initial_cents - portfolio_value) / max(
-                    pb.initial_cents, 1
-                )
+                drawdown_pct = (pb.initial_cents - portfolio_value) / max(pb.initial_cents, 1)
                 if drawdown_pct < 0:
                     drawdown_pct = 0.0
                 logger.info(

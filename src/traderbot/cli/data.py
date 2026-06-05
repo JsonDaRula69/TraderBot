@@ -452,7 +452,9 @@ def settle_paper_cmd(
         for p in positions:
             table.add_row(p.ticker, str(p.quantity), str(p.avg_price))
         console.print(table)
-        console.print(f"\n[yellow]{len(positions)} positions would be checked for settlement.[/yellow]")
+        console.print(
+            f"\n[yellow]{len(positions)} positions would be checked for settlement.[/yellow]"
+        )
         return
 
     try:

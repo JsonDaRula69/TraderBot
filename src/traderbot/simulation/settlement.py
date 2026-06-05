@@ -32,9 +32,18 @@ _TICKER_RE = re.compile(
 )
 
 _MONTH_ABBR: dict[str, int] = {
-    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4,
-    "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8,
-    "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+    "JAN": 1,
+    "FEB": 2,
+    "MAR": 3,
+    "APR": 4,
+    "MAY": 5,
+    "JUN": 6,
+    "JUL": 7,
+    "AUG": 8,
+    "SEP": 9,
+    "OCT": 10,
+    "NOV": 11,
+    "DEC": 12,
 }
 
 
@@ -61,7 +70,9 @@ def _parse_kalshi_ticker(ticker: str) -> tuple[str, int, int, int, str, float] |
     return (prefix, year, month, dd, strike_type, strike_val)
 
 
-async def _settle_weather_bets(conn: Any, bets: list[tuple[Any, tuple[str, int, int, int, str, float]]]) -> int:
+async def _settle_weather_bets(
+    conn: Any, bets: list[tuple[Any, tuple[str, int, int, int, str, float]]]
+) -> int:
     """Settle weather bets using Open-Meteo archive API for actual temperatures.
 
     Works without Kalshi auth. Queries the archive API for the actual high
@@ -115,12 +126,18 @@ async def _settle_weather_bets(conn: Any, bets: list[tuple[Any, tuple[str, int, 
             # YES position wins if actual temp > strike threshold
             won = actual_high > strike_val
 
-            pnl_cents = (100 - pos.avg_price) * pos.quantity if won else (0 - pos.avg_price) * pos.quantity
+            pnl_cents = (
+                (100 - pos.avg_price) * pos.quantity if won else (0 - pos.avg_price) * pos.quantity
+            )
             update_settlement(conn, pos.ticker, won, pnl_cents)
             settled += 1
             logger.info(
                 "Settled %s: actual=%.1f strike=%.1f won=%s pnl=%d",
-                pos.ticker, actual_high, strike_val, won, pnl_cents,
+                pos.ticker,
+                actual_high,
+                strike_val,
+                won,
+                pnl_cents,
             )
 
     return settled
@@ -161,7 +178,9 @@ async def _settle_kalshi_bets(
             try:
                 market = await service.get_market(pos.ticker)
             except Exception:
-                logger.warning("Failed to fetch market %s from Kalshi API", pos.ticker, exc_info=True)
+                logger.warning(
+                    "Failed to fetch market %s from Kalshi API", pos.ticker, exc_info=True
+                )
                 continue
 
             if market.settlement_result is None:
@@ -174,7 +193,9 @@ async def _settle_kalshi_bets(
             settled += 1
             logger.info(
                 "Settled %s via Kalshi: result=%s pnl=%d",
-                pos.ticker, market.settlement_result, pnl_cents,
+                pos.ticker,
+                market.settlement_result,
+                pnl_cents,
             )
 
     return settled
@@ -238,6 +259,7 @@ def auto_settle_paper_positions(
             return total
 
     return asyncio.run(_run())
+
 
 _SWEEP_WINDOW = timedelta(minutes=30)
 _SEMAPHORE_LIMIT = 5

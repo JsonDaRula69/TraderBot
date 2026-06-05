@@ -453,9 +453,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
             if freshness_threshold is not None and ctx["count"] > 0:
                 now = time.time()
-                newest = max(
-                    dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", [])
-                )
+                newest = max(dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", []))
                 stale = (now - newest) / 3600 > freshness_threshold
                 ctx["freshness_hours"] = round((now - newest) / 3600, 1) if newest else None
                 ctx["stale"] = stale
@@ -475,9 +473,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         if freshness_threshold is not None:
             now = time.time()
-            newest = max(
-                dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", [])
-            )
+            newest = max(dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", []))
             age_hours = (now - newest) / 3600 if newest else float("inf")
             if age_hours > freshness_threshold:
                 console.print(
