@@ -51,7 +51,10 @@ class TestFetchLatestVersion:
     def test_success_returns_version_and_url(self) -> None:
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"tag_name": "v0.09.00", "zipball_url": "https://github.com/JsonDaRula69/TraderBot/archive/v0.09.00.zip"}
+        mock_response.json.return_value = [
+            {"ref": "refs/tags/v0.09.00", "node_id": "abc", "url": "", "object": {"sha": "abc", "type": "commit", "url": ""}},
+            {"ref": "refs/tags/v0.08.00", "node_id": "abc", "url": "", "object": {"sha": "abc", "type": "commit", "url": ""}},
+        ]
         cache_file = MagicMock()
         cache_file.exists.return_value = False
         with patch("traderbot.updater.httpx.get", return_value=mock_response):
@@ -59,10 +62,10 @@ class TestFetchLatestVersion:
                 result = fetch_latest_version()
         assert result is not None
         assert result[0] == "0.09.00"
-        assert "v0.09.00" in result[1]
+        assert result[1] == ""
 
     def test_uses_cache_within_ttl(self) -> None:
-        cache_data = json.dumps({"tag": "0.09.00", "url": "https://example.com", "ts": time.time()})
+        cache_data = json.dumps({"tag": "0.09.00", "url": "", "ts": time.time()})
         with patch("traderbot.updater.Path.exists", return_value=True):
             with patch.object(Path, "read_text", return_value=cache_data):
                 result = fetch_latest_version(cache_ttl_seconds=3600)
@@ -70,10 +73,12 @@ class TestFetchLatestVersion:
         assert result[0] == "0.09.00"
 
     def test_ignores_expired_cache(self) -> None:
-        cache_data = json.dumps({"tag": "0.08.00", "url": "https://example.com", "ts": time.time() - 7200})
+        cache_data = json.dumps({"tag": "0.08.00", "url": "", "ts": time.time() - 7200})
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"tag_name": "v0.09.00", "zipball_url": "https://example.com/v0.09.00.zip"}
+        mock_response.json.return_value = [
+            {"ref": "refs/tags/v0.09.00", "object": {"sha": "abc"}},
+        ]
         with patch("traderbot.updater.Path.exists", return_value=True):
             with patch.object(Path, "read_text", return_value=cache_data):
                 with patch("traderbot.updater.httpx.get", return_value=mock_response):
@@ -91,7 +96,7 @@ class TestFetchLatestVersion:
         assert result is None
 
     def test_403_with_stale_cache_returns_stale(self) -> None:
-        cache_data = json.dumps({"tag": "0.08.00", "url": "https://example.com", "ts": time.time() - 200})
+        cache_data = json.dumps({"tag": "0.08.00", "url": "", "ts": time.time() - 200})
         mock_response = MagicMock()
         mock_response.status_code = 403
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError("403", request=MagicMock(), response=mock_response)
