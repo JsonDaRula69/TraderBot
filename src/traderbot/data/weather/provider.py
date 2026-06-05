@@ -274,9 +274,8 @@ class WeatherDataProvider(BaseDataProvider):
         now = datetime.now()
 
         for model_name in _OM_MODELS:
-            model_section = ensemble_data.get(model_name, {})
-            daily = model_section.get("daily", {})
-            temps: list[float] = daily.get("temperature_2m_max", [])
+            suffix = f"temperature_2m_max_{model_name}"
+            temps: list[float] = ensemble_data.get("daily", {}).get(suffix, [])
             if temps:
                 runs.append(
                     EnsembleRun(
