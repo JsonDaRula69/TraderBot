@@ -92,8 +92,8 @@ This file defines conventions for AI-assisted development of this project. All A
 
 ## Testing Discipline
 
-- **Run before committing changes**: execute `uv run pytest -m "not live"` before every commit. All tests must pass.
-- **Run before merging PR**: CI runs the full pipeline automatically. Verify all required status checks pass on the PR.
+- **Run relevant tests before committing**: execute only the tests that cover the modified code paths. Use `-k` to filter (e.g. `uv run pytest -m "not live" -k "cron"` for cron changes). Do NOT run the full suite locally — that's what CI is for.
+- **Full suite runs in CI**: every PR triggers the complete pipeline (lint → unit → matrix → build). Verify all required status checks pass on the PR before merging.
 - **Markers**: use the standard marker taxonomy defined in `pyproject.toml`:
   - `unit` — pure unit tests with no external dependencies (fastest). Run via: `uv run pytest -m "unit"`
   - `integration` — tests with mocked external services

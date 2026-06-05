@@ -166,20 +166,21 @@ def check_for_updates(
         pass
 
     latest_ver, url = latest
-    if _version_tuple(latest_ver) > _version_tuple(current) or force:
-        if not silent:
-            print(
-                f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update."
-            )
-        result: dict = {"current": current, "latest": latest_ver, "url": url}
+    if not _version_tuple(latest_ver) > _version_tuple(current):
+        return None
 
-        if config.auto_apply and not silent:
-            if apply_update(dev=dev):
-                logger.info("Auto-update applied: v%s → v%s", current, latest_ver)
-            else:
-                logger.warning("Auto-update failed: v%s → v%s", current, latest_ver)
-        return result
-    return None
+    if not silent:
+        print(
+            f"Update available: v{current} → v{latest_ver}. Run 'traderbot update' to update."
+        )
+    result: dict = {"current": current, "latest": latest_ver, "url": url}
+
+    if config.auto_apply and not silent:
+        if apply_update(dev=dev):
+            logger.info("Auto-update applied: v%s → v%s", current, latest_ver)
+        else:
+            logger.warning("Auto-update failed: v%s → v%s", current, latest_ver)
+    return result
 
 
 def _ensure_openclaw_visibility() -> None:

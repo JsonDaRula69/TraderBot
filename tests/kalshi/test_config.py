@@ -17,7 +17,8 @@ class TestEnvKalshiConfig:
     def test_defaults(self) -> None:
         config = EnvKalshiConfig()
         assert config.base_url == "https://external-api.kalshi.com/trade-api/v2"
-        assert config.rate_limit_rps == 20.0
+        assert config.read_budget_tokens == 200.0
+        assert config.write_budget_tokens == 100.0
         assert config.max_retries == 3
         assert config.retry_base_delay == 1.0
 
@@ -39,11 +40,13 @@ class TestEnvKalshiConfig:
         assert api_key is not None
         assert len(api_key) > 0
 
-    def test_rate_limit_validation(self) -> None:
-        config = EnvKalshiConfig(rate_limit_rps=-1)
-        assert config.rate_limit_rps == 20.0
-        config = EnvKalshiConfig(rate_limit_rps=0)
-        assert config.rate_limit_rps == 20.0
+    def test_rate_limit_defaults(self) -> None:
+        config = EnvKalshiConfig()
+        assert config.read_budget_tokens == 200.0
+        assert config.read_burst_capacity == 200.0
+        assert config.write_budget_tokens == 100.0
+        assert config.write_burst_capacity == 100.0
+        assert config.endpoint_cost == 10.0
 
     def test_resolve_api_key_from_init(self) -> None:
         config = EnvKalshiConfig(api_key="test-key-123")
