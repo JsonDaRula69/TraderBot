@@ -593,6 +593,10 @@ def cron_setup(
             "--skip-heartbeat-config", help="Skip writing heartbeat config to openclaw.json"
         ),
     ] = False,
+    replace: Annotated[
+        bool,
+        typer.Option("--replace", help="Remove existing cron jobs first, then re-register"),
+    ] = False,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Show what would be registered without executing"),
@@ -602,7 +606,11 @@ def cron_setup(
         typer.Option("--json", help="Output as JSON"),
     ] = False,
 ) -> None:
-    """Register decision, heartbeat, and news cron loops with OpenClaw for an agent."""
+    """Register decision, heartbeat, and news cron loops with OpenClaw for an agent.
+
+    Pass --replace to remove any existing cron jobs before registering anew —
+    this prevents duplicate cron entries from re-runs of this command.
+    """
     from traderbot.cron_loops import DecisionLoopPayload, HeartbeatLoopPayload, NewsLoopPayload
 
     console = Console()
@@ -623,6 +631,9 @@ def cron_setup(
 
         # channel/to validated by XOR check above — either both provided or neither
         bool(channel and to)  # implicit announce when channel+to provided
+
+    if replace:
+        _remove_cron_jobs_by_name(agent_id)
 
     decision_payload = DecisionLoopPayload()
     heartbeat_payload = HeartbeatLoopPayload()

@@ -157,7 +157,9 @@ export default handler;
 def _reregister_cron_jobs() -> None:
     if not (PYTHON.is_file()):
         return
-    # Main agent (sysadmin)
+    # Main agent (sysadmin) — decision/heartbeat/news loops + heartbeat tasks
+    _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
+          "--agent", "main", "--replace"], capture_output=True)
     _run([str(PYTHON), "-m", "traderbot", "cron", "setup-heartbeat-tasks",
           "--agent", "main", "--role", "sysadmin", "--replace"], capture_output=True)
     # Category agents
@@ -166,6 +168,8 @@ def _reregister_cron_jobs() -> None:
         for agent_dir in agents_root.iterdir():
             if agent_dir.name == "main" or not (agent_dir / "agent").is_dir():
                 continue
+            _run([str(PYTHON), "-m", "traderbot", "cron", "setup",
+                  "--agent", agent_dir.name, "--replace"], capture_output=True)
             _run([str(PYTHON), "-m", "traderbot", "cron", "setup-heartbeat-tasks",
                   "--agent", agent_dir.name, "--replace"], capture_output=True)
 
