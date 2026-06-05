@@ -309,7 +309,7 @@ def auth_set_kalshi() -> None:
     env_path = get_data_dir() / ".env"
     pem_file = get_data_dir() / "kalshi_key.pem"
 
-    api_key = typer.prompt("KALSHI_API_KEY", hide_input=True)
+    api_key = typer.prompt("KALSHI_API_KEY")
     console.print(
         "[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]"
     )
