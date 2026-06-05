@@ -8,6 +8,7 @@ import random
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, SecretStr
@@ -50,7 +51,7 @@ class KalshiConfig(BaseSettings):
     api_key: SecretStr
     private_key_pem: SecretStr | None = None
     private_key_path: Path | None = None
-    base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
+    base_url: str = "https://external-api.kalshi.com/trade-api/v2"
     rate_limit_rps: float = (
         200.0  # token refill rate from Kalshi /account/limits; default 200 at tier
     )
@@ -158,12 +159,24 @@ class KalshiClient:
             verify=create_pinned_ssl_context(),
         )
 
+    @staticmethod
+    def _full_api_path(base_url: str, relative_path: str) -> str:
+        """Compute the full API-relative path from a base URL and relative path.
+
+        Kalshi requires signing the full path from the API root (e.g.
+        ``/trade-api/v2/portfolio/balance``), not the client-relative path
+        (``/portfolio/balance``). See Kalshi docs: "Sign the full request
+        path from the API root."
+        """
+        return urlparse(base_url).path.rstrip("/") + "/" + relative_path.lstrip("/")
+
     def _build_auth_headers(self, method: str, path: str) -> dict[str, str]:
+        full_path = self._full_api_path(self._config.base_url, path)
         return auth_headers(
             self._config.api_key.get_secret_value(),
             self._config.resolve_private_key(),
             method,
-            path,
+            full_path,
         )
 
     async def _request(
