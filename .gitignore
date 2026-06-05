@@ -58,3 +58,4 @@ kalshi-starter-code-python/
 test-keys.txt
 *.xml
 state-ses_*.xml
+.omo/

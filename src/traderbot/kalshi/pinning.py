@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives import serialization
 logger = logging.getLogger(__name__)
 
 # Kalshi API SPKI pin — SHA-256 of DER-encoded SubjectPublicKeyInfo, base64-encoded.
-# To regenerate: openssl s_client -connect api.elections.kalshi.com:443 \
+# To regenerate: openssl s_client -connect external-api.kalshi.com:443 \
 #   | openssl x509 -pubkey -noout \
 #   | openssl pkey -pubin -outform DER \
 #   | openssl dgst -sha256 -binary \

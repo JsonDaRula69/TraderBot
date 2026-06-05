@@ -16,7 +16,7 @@ _HAS_KALSHI_CREDS = bool(
 class TestEnvKalshiConfig:
     def test_defaults(self) -> None:
         config = EnvKalshiConfig()
-        assert config.base_url == "https://api.elections.kalshi.com/trade-api/v2"
+        assert config.base_url == "https://external-api.kalshi.com/trade-api/v2"
         assert config.rate_limit_rps == 20.0
         assert config.max_retries == 3
         assert config.retry_base_delay == 1.0

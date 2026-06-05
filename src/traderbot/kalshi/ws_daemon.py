@@ -52,7 +52,7 @@ logging.basicConfig(
 logger = logging.getLogger("ws-daemon")
 
 CACHE_PATH = get_data_dir() / "event_category_cache.json"
-WS_URL = "wss://api.elections.kalshi.com/trade-api/ws/v2"
+WS_URL = "wss://external-api-ws.kalshi.com/trade-api/ws/v2"
 RECONNECT_DELAY = 5.0
 MAX_RECONNECT_DELAY = 60.0
 PING_INTERVAL = 15.0

@@ -41,7 +41,7 @@ class WebSocketConfig(BaseSettings):
 
     api_key: SecretStr
     private_key_pem: SecretStr | None = None
-    base_url: str = "wss://api.elections.kalshi.com/trade-api/ws/v2"
+    base_url: str = "wss://external-api-ws.kalshi.com/trade-api/ws/v2"
 
     def resolve_private_key(self) -> str:
         if self.private_key_pem is not None:
