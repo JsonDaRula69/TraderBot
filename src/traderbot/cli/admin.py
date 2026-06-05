@@ -282,23 +282,55 @@ def register_commands(parent_app: typer.Typer) -> None:
 
             profile = get_current_profile()
             pb = compute_paper_balance(profile) if profile else None
+
+            # Mark-to-market: fetch current prices for open positions so drawdown
+            # reflects position market value, not just cash at risk.
+            if pb and pb.open_position_count > 0:
+
+                async def _fetch_mtm() -> int:
+                    from traderbot.db import get_connection
+                    from traderbot.db.positions import list_open_positions
+                    from traderbot.kalshi.client import KalshiClient
+                    from traderbot.kalshi.markets import MarketService
+                    from traderbot.paths import _resolve_db_path
+
+                    client = KalshiClient()
+                    svc = MarketService(client)
+                    resolved = _resolve_db_path(None)
+                    with get_connection(resolved) as conn:
+                        positions = list_open_positions(conn)
+                    mtm = 0
+                    for pos in positions:
+                        try:
+                            market = await svc.get_market(pos.ticker)
+                            price_cents = int(float(market.outcome_prices[0]) * 100)
+                            mtm += price_cents * pos.quantity
+                        except Exception:
+                            pass
+                    await client.close()
+                    return mtm
+
+                pb.mark_to_market_cents = asyncio.run(_fetch_mtm())
+
             if pb and pb.initial_cents > 0:
                 daily_loss_pct = (
                     pb.initial_cents - pb.remaining_cents - pb.settled_payout_cents
                 ) / max(pb.initial_cents, 1)
                 if daily_loss_pct < 0:
                     daily_loss_pct = 0.0
-                drawdown_pct = (pb.initial_cents - max(pb.remaining_cents, 0)) / max(
-                    pb.initial_cents, 1
-                )
+                portfolio_value = max(pb.portfolio_value_cents, 0)
+                drawdown_pct = (pb.initial_cents - portfolio_value) / max(pb.initial_cents, 1)
                 if drawdown_pct < 0:
                     drawdown_pct = 0.0
                 logger.info(
-                    "Recovery check metrics: daily_loss=%.4f drawdown=%.4f initial=%d remaining=%d",
+                    "Recovery check metrics: daily_loss=%.4f drawdown=%.4f initial=%d remaining=%d "
+                    "mtm=%d portfolio_value=%d",
                     daily_loss_pct,
                     drawdown_pct,
                     pb.initial_cents,
                     pb.remaining_cents,
+                    pb.mark_to_market_cents,
+                    portfolio_value,
                 )
                 breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
             else:

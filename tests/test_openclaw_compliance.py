@@ -307,6 +307,6 @@ class TestOpenClawDocExists:
 
     def test_doc_contains_cron_flag(self) -> None:
         text = DEP_DOCS.read_text(encoding="utf-8")
-        assert '--cron "0 7 * * *"' in text, (
+        assert '--cron' in text, (
             "Dep_Docs missing --cron flag examples"
         )

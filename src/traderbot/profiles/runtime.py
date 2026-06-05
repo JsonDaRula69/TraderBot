@@ -115,7 +115,7 @@ def load_profile_config(
         "max_daily_loss_pct": limits.max_daily_loss_pct,
         "max_drawdown_pct": limits.max_drawdown_pct,
         "max_open_positions": limits.max_open_positions,
-        "min_liquidity_threshold": limits.min_liquidity_threshold,
+        "min_liquidity_threshold": limits.min_liquidity_threshold(),
         "min_edge_pct": limits.min_edge_pct,
     }
 

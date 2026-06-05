@@ -53,7 +53,7 @@ def test_profile_below_hard_limits(profile_below_hard_limits: TradingProfile) ->
     assert limits.max_daily_loss_pct == 0.01
     assert limits.max_drawdown_pct == 0.05
     assert limits.max_open_positions == 10
-    assert limits.min_liquidity_threshold == 2000
+    assert limits.min_liquidity_threshold() == 2000
     assert limits.min_edge_pct == 0.05
 
 
@@ -66,7 +66,7 @@ def test_profile_at_hard_limits(profile_at_hard_limits: TradingProfile) -> None:
     assert limits.max_daily_loss_pct == HARD_LIMITS["max_daily_loss_pct"]
     assert limits.max_drawdown_pct == HARD_LIMITS["max_drawdown_pct"]
     assert limits.max_open_positions == HARD_LIMITS["max_open_positions"]
-    assert limits.min_liquidity_threshold == HARD_LIMITS["min_liquidity_threshold"]
+    assert limits.min_liquidity_threshold() == HARD_LIMITS["min_liquidity_threshold"]
     assert limits.min_edge_pct == HARD_LIMITS["min_edge_pct"]
 
 
@@ -87,9 +87,6 @@ def test_properties_immutable(profile_below_hard_limits: TradingProfile) -> None
         limits.max_open_positions = 50  # type: ignore
 
     with pytest.raises(AttributeError):
-        limits.min_liquidity_threshold = 500  # type: ignore
-
-    with pytest.raises(AttributeError):
         limits.min_edge_pct = 0.01  # type: ignore
 
 
@@ -98,7 +95,7 @@ def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile)
     # Profile has 2000, HARD_LIMITS has 500
     # Should use 2000 (the higher, more restrictive value)
     limits = AgentRiskLimits(profile_below_hard_limits)
-    assert limits.min_liquidity_threshold == 2000
+    assert limits.min_liquidity_threshold() == 2000
 
     # Create profile with liquidity at HARD_LIMITS floor
     profile_low_liquidity = TradingProfile(
@@ -116,7 +113,7 @@ def test_min_liquidity_uses_max_logic(profile_below_hard_limits: TradingProfile)
     )
     limits_low = AgentRiskLimits(profile_low_liquidity)
     # Should use HARD_LIMITS value (500) since it's the max
-    assert limits_low.min_liquidity_threshold == 500
+    assert limits_low.min_liquidity_threshold() == 500
 
 
 def test_min_edge_uses_max_logic(profile_below_hard_limits: TradingProfile) -> None:

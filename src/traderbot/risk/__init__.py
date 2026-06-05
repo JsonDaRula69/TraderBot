@@ -116,6 +116,10 @@ def evaluate_trade_full(
         return TradeResult(sized_position_cents=0, direction=trade_request.direction)
 
     # Compute effective limits: profile-aware if profile is set, otherwise HARD_LIMITS
+    # FUTURE: compute market_age_hours from trade_request.market_created_at
+    # and pass it to min_liquidity_threshold() for time-decay on newly listed markets.
+    # For now, market_age_hours is always None (full default behavior).
+    market_age_hours: float | None = None
     if profile is not None:
         from traderbot.risk.agent_limits import AgentRiskLimits
 
@@ -124,7 +128,7 @@ def evaluate_trade_full(
             "max_position_per_market_pct": agent_limits.max_position_per_market_pct,
             "max_daily_loss_pct": agent_limits.max_daily_loss_pct,
             "max_drawdown_pct": agent_limits.max_drawdown_pct,
-            "min_liquidity_threshold": agent_limits.min_liquidity_threshold,
+            "min_liquidity_threshold": agent_limits.min_liquidity_threshold(market_age_hours),
             "max_open_positions": agent_limits.max_open_positions,
             "min_edge_pct": agent_limits.min_edge_pct,
         }

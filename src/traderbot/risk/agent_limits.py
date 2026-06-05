@@ -71,16 +71,29 @@ class AgentRiskLimits:
             int(HARD_LIMITS["max_open_positions"]),
         )
 
-    @property
-    def min_liquidity_threshold(self) -> int:
+    def min_liquidity_threshold(self, market_age_hours: float | None = None) -> int:
         """Minimum market liquidity (open interest) required.
 
-        Returns the more restrictive (higher) of profile and HARD_LIMITS.
+        Returns the more restrictive (higher) of profile and the effective threshold.
+        Effective threshold time-decays for newly listed markets:
+        - < 24h old → 100
+        - 24h-72h -> linear ramp from 100 to 500
+        - >= 72h → 500 (HARD_LIMITS default)
+        When market_age_hours is None, defaults to HARD_LIMITS value.
+
+        Args:
+            market_age_hours: Age of the market in hours, or None for default behavior.
         """
-        return max(
-            self._profile.min_liquidity_threshold,
-            int(HARD_LIMITS["min_liquidity_threshold"]),
-        )
+        profile_val = self._profile.min_liquidity_threshold
+        if market_age_hours is None:
+            effective = int(HARD_LIMITS["min_liquidity_threshold"])
+        elif market_age_hours < 24:
+            effective = 100
+        elif market_age_hours < 72:
+            effective = int(100 + (400 * (market_age_hours - 24) / 48))
+        else:
+            effective = 500
+        return max(profile_val, effective)
 
     @property
     def min_edge_pct(self) -> float:

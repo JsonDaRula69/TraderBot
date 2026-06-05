@@ -172,6 +172,13 @@ def mark_closed(conn: sqlite3.Connection, ticker: str) -> bool:
     return closed
 
 
+def list_open_positions(conn: sqlite3.Connection) -> list[DbPosition]:
+    rows = conn.execute(
+        "SELECT * FROM positions WHERE settlement_result IS NULL AND quantity > 0 ORDER BY ticker"
+    ).fetchall()
+    return [_row_to_model(r) for r in rows]
+
+
 def count_open(conn: sqlite3.Connection) -> int:
     row = conn.execute(
         "SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL AND quantity > 0"

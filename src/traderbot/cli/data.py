@@ -40,11 +40,29 @@ def forecasts_cmd(
             help="ICAO airport station code (e.g. KLGA, KLAX) — overrides city-center coords",
         ),
     ] = None,
+    offset: Annotated[
+        int,
+        typer.Option(
+            "--offset",
+            help="Day offset into forecast: 0=current, 1=tomorrow day, etc.",
+        ),
+    ] = 0,
+    all_periods: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            help="Return ALL NWS forecast periods (D+0 through D+6 or more)",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Output as JSON for machine consumption")
     ] = False,
 ) -> None:
-    """List recent weather forecasts with NWS + GFS/ECMWF/GEM ensemble data."""
+    """List weather forecasts with NWS + GFS/ECMWF/GEM ensemble data.
+
+    Use --offset to request a specific forecast period (0 = current, 1 = tomorrow day, etc.).
+    Use --all to return all available NWS forecast periods.
+    """
     from traderbot.data.weather.provider import WeatherDataProvider
 
     console = Console()
@@ -52,12 +70,30 @@ def forecasts_cmd(
 
     try:
         provider = WeatherDataProvider()
-        forecasts = asyncio.run(provider.get_forecasts(city_list, station=station))
+
+        if all_periods:
+            all_forecasts = asyncio.run(provider.get_all_forecasts(city_list, station=station))
+            if json_output:
+                result: dict[str, list[dict]] = {}
+                for city, periods in all_forecasts.items():
+                    result[city] = [fc.model_dump(mode="json") for fc in periods]
+                json_lib.dump(result, sys.stdout, default=str)
+            else:
+                for city, periods in all_forecasts.items():
+                    console.print(f"\n[bold cyan]{city}[/bold cyan] — {len(periods)} periods")
+                    for i, fc in enumerate(periods):
+                        console.print(
+                            f"  [{i}] {fc.date}  High: {fc.high_temp_f}°F  Low: {fc.low_temp_f}°F  "
+                            f"Precip: {fc.precip_prob:.0%}  Wind: {fc.wind_speed} mph"
+                        )
+            return
+
+        forecasts = asyncio.run(provider.get_forecasts(city_list, station=station, offset=offset))
         # Fetch ensemble consensus for each city
         consensus_map: dict[str, dict] = {}
         for city in forecasts:
             try:
-                cons = asyncio.run(provider.get_model_consensus(city))
+                cons = asyncio.run(provider.get_model_consensus(city, offset=offset))
                 consensus_map[city] = {
                     "models_used": cons.models_used,
                     "mean_temp": cons.mean_temp,
@@ -84,7 +120,7 @@ def forecasts_cmd(
         json_lib.dump(result, sys.stdout, default=str)
         return
 
-    table = Table(title="Weather Forecasts")
+    table = Table(title=f"Weather Forecasts (offset={offset})")
     table.add_column("City", style="cyan")
     table.add_column("NWS High (°F)", justify="right")
     table.add_column("GFS High (°F)", justify="right")
@@ -364,3 +400,78 @@ def record_bias_cmd(
             console.print(
                 f"    Forecast: {r['forecast_high_f']}°F  Actual: {r['actual_high_f']}°F  Error: {r['error_f']:+.1f}°F"
             )
+
+
+@data_app.command("settle")
+def settle_paper_cmd(
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show what would be settled without writing")
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output as JSON for machine consumption")
+    ] = False,
+) -> None:
+    """Check open paper positions against settlement data and mark won/lost."""
+    from traderbot.db import get_connection
+    from traderbot.db.positions import init_table
+    from traderbot.db.positions import list_open_positions as _list_open
+    from traderbot.paths import _resolve_db_path
+    from traderbot.simulation.settlement import auto_settle_paper_positions
+
+    if dry_run:
+        console = Console()
+        conn_path = _resolve_db_path(None)
+        with get_connection(conn_path) as conn:
+            init_table(conn)
+            positions = _list_open(conn)
+
+        if json_output:
+            result = {
+                "dry_run": True,
+                "open_count": len(positions),
+                "positions": [
+                    {
+                        "ticker": p.ticker,
+                        "quantity": p.quantity,
+                        "avg_price": p.avg_price,
+                    }
+                    for p in positions
+                ],
+            }
+            json_lib.dump(result, sys.stdout, default=str)
+            return
+
+        if not positions:
+            console.print("[green]No open positions to settle.[/green]")
+            return
+
+        table = Table(title="Open Positions (dry-run)")
+        table.add_column("Ticker", style="cyan")
+        table.add_column("Quantity", justify="right")
+        table.add_column("Avg Price (¢)", justify="right")
+        for p in positions:
+            table.add_row(p.ticker, str(p.quantity), str(p.avg_price))
+        console.print(table)
+        console.print(
+            f"\n[yellow]{len(positions)} positions would be checked for settlement.[/yellow]"
+        )
+        return
+
+    try:
+        settled = auto_settle_paper_positions(profile=None)
+    except Exception as exc:
+        if json_output:
+            json_lib.dump({"error": str(exc)}, sys.stdout)
+        else:
+            err_console.print(f"[red]Settlement failed:[/red] {exc}")
+        raise typer.Exit(code=1) from None
+
+    if json_output:
+        json_lib.dump({"settled": settled}, sys.stdout)
+        return
+
+    console = Console()
+    if settled == 0:
+        console.print("[yellow]No positions settled.[/yellow]")
+    else:
+        console.print(f"[green]Settled {settled} position(s).[/green]")
