@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tests/test_openclaw_compliance.py` — validates all OpenClaw CLI invocations against Dep_Docs (command, subcommand, and flag correctness). Catches flag-name mistakes like `--schedule`→`--cron` at test time
+- `tests/test_kalshi_compliance.py` — validates all Kalshi API endpoint paths and HTTP methods against Dep_Docs. Catches deprecated/typo'd endpoint paths at test time
+
 ### Changed
 
 - HARD_LIMITS max_position_per_market_pct ceiling raised from 5% to 15% (issue #73)
