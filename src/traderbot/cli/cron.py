@@ -662,15 +662,16 @@ def cron_setup(
 
     for job in cron_jobs:
         cmd_args = [
-            agent_id,
             "--name",
             job["name"],
-            "--schedule",
+            "--cron",
             job["cron_expr"],
             "--session",
             job["session"],
             "--message",
             job["message"],
+            "--agent",
+            agent_id,
         ]
         if channel and to:
             cmd_args += ["--channel", channel, "--to", to]

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `traderbot cron setup` now supports `--replace` flag to cleanly re-register decision/heartbeat/news loops (PR #89)
 - `_reregister_cron_jobs()` in update pipeline now calls both `cron setup --replace` and `cron setup-heartbeat-tasks --replace` for every agent — previously only heartbeat tasks were re-registered (PR #89)
+- `cron setup` was passing `--schedule` (wrong flag) and positional `agent_id` (wrong position) to `openclaw cron add` — now passes `--cron` and `--agent` correctly, which was why decision/heartbeat/news loops never registered (PR #90)
 - Installer Phase 2 now configures `tools.sessions.visibility: agent` and `tools.agentToAgent.enabled: true` for fresh installs (PR #82)
 - Remaining issues #51, #53, #61 closed with documentation comments
 
