@@ -74,7 +74,14 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
                 tags.append(tag_name)
         if not tags:
             return None
-        tags.sort(key=lambda t: Version(t.lstrip("v")), reverse=True)
+
+        def _tag_key(t: str) -> tuple[int, ...]:
+            try:
+                return Version(t.removeprefix("v")).release
+            except InvalidVersion:
+                return (0, 0, 0)
+
+        tags.sort(key=_tag_key, reverse=True)
         latest_tag = tags[0]
         result = (latest_tag.lstrip("v"), "")
         try:
