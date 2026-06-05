@@ -565,16 +565,16 @@ class TestHeartbeatCycle:
 
         monkeypatch.setattr("traderbot.updater.fetch_latest_version", mock_fetch)
 
-        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
+        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
         assert "update_check" in result.steps_completed
         assert api_called["count"] == 0
         conn.close()
 
-    def test_steps_in_correct_order(self):
+    def test_steps_in_correct_order(self, tmp_path):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
+        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
         expected_order = [
             "performance_review",
             "decision_review",
@@ -686,11 +686,11 @@ class TestHeartbeatResultModel:
 
 
 class TestEdgeCases:
-    def test_graceful_empty_db(self):
+    def test_graceful_empty_db(self, tmp_path):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, dry_run=True))
+        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
         assert result.performance.trade_count == 0
         assert result.decisions.closed_count == 0
         assert result.adaptation.skipped_reason != ""
