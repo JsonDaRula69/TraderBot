@@ -39,6 +39,11 @@ jobs:
     needs: frozen-check
     runs-on: ubuntu-latest
 
+  unit:
+    name: Unit tests
+    needs: frozen-check
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
