@@ -280,12 +280,10 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
             (run_id,),
         ).fetchall()
     except sqlite3.OperationalError:
+        logger.warning("Failed to query decisions for run_id=%s", run_id)
         return []
     finally:
         conn.close()
-
-    if not decisions:
-        return []
 
     # Group final decisions by (treatment, ticker)
     # Use the last timestep's decision for each treatment-ticker pair
@@ -333,6 +331,7 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
         ).fetchall()
         price_map: dict[str, tuple[int, int]] = {r[0]: (r[1], r[2]) for r in price_rows}
     except sqlite3.OperationalError:
+        logger.warning("Failed to query prices from %s", db_path)
         return []
     finally:
         conn.close()

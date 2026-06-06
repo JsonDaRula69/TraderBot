@@ -269,6 +269,7 @@ class WeatherSignalEngine(BaseSignalEngine):
         try:
             return implied_probability(ob).yes_prob
         except (ValueError, AttributeError):
+            logger.debug("Failed to compute implied probability for ob, defaulting to 0.5")
             return 0.5
 
     def _get_or_init_provider(self):

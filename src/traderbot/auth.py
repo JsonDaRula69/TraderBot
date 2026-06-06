@@ -263,6 +263,7 @@ class AuthManager:
             logger.debug("Deleted %s/%s from keyring", service, key)
             return True
         except keyring.errors.PasswordDeleteError:
+            logger.debug("Password already deleted for %s/%s", service, key)
             return False
 
     @staticmethod

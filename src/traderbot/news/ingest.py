@@ -113,7 +113,7 @@ def _build_metadata(
             if hasattr(sentiment, "label"):
                 meta["sentiment_label"] = str(sentiment.label)
         except Exception:
-            pass
+            logger.debug("Failed to extract sentiment fields, skipping enrichment")
     # Add impact if available
     if impact is not None:
         try:
@@ -126,7 +126,7 @@ def _build_metadata(
             if hasattr(impact, "confidence"):
                 meta["impact_confidence"] = str(impact.confidence)
         except Exception:
-            pass
+            logger.debug("Failed to extract impact fields, skipping enrichment")
     return meta
 
 
@@ -210,7 +210,7 @@ def _is_signal(
             if float(mag) >= 0.7 and float(conf) >= 0.5:
                 return True
         except (ValueError, TypeError):
-            pass
+            logger.debug("Failed to parse impact magnitude/confidence for signal check")
     if sentiment is not None:
         try:
             score = getattr(sentiment, "score", 0) or 0
@@ -218,7 +218,7 @@ def _is_signal(
             if abs(score_f) >= 0.8:
                 return True
         except (ValueError, TypeError):
-            pass
+            logger.debug("Failed to parse sentiment score for signal check")
     return False
 
 
@@ -246,6 +246,7 @@ def _collection_dim(vs: VectorStore, name: str) -> int:
                     return len(emb) if not hasattr(emb, "shape") else emb.shape[0]
         return 0
     except Exception:
+        logger.warning("_collection_dim failed for '%s'", name, exc_info=True)
         return 0
 
 
@@ -506,7 +507,7 @@ def ingest_news(
         report.collection_sizes["news"] = news_col.count()
         report.collection_sizes["news_signals"] = sig_col.count()
     except Exception:
-        pass
+        logger.debug("Failed to read initial collection sizes")
 
     news_dim = _collection_dim(vs, _NEWS_COLLECTION)
     sig_dim = _collection_dim(vs, _NEWS_SIGNALS_COLLECTION)
@@ -648,7 +649,7 @@ def ingest_news(
         report.collection_sizes["news_signals"] = sig_col.count()
         report.collection_sizes[_DATA_COLLECTION] = vs.get_collection(_DATA_COLLECTION).count()
     except Exception:
-        pass
+        logger.debug("Failed to read final collection sizes")
 
     return report
 
@@ -765,6 +766,7 @@ def get_news_collection_stats(vector_store: VectorStore | None = None) -> dict[s
             col = vs.get_collection(name)
             stats[name] = col.count()
         except Exception:
+            logger.warning("Failed to get collection stats for '%s'", name, exc_info=True)
             stats[name] = 0
     return stats
 
@@ -798,6 +800,7 @@ def get_data_points(
     try:
         col = vs.get_collection(_DATA_COLLECTION)
     except Exception:
+        logger.warning("Cannot access data_points collection", exc_info=True)
         return {"count": 0, "data_points": []}
 
     try:
@@ -812,6 +815,7 @@ def get_data_points(
             limit=max_items * 2,
         )
     except Exception:
+        logger.debug("ChromaDB filtered query failed for category=%s, falling back", category)
         results = col.get(
             where={"category": {"$eq": category}},
             include=["metadatas", "documents"],
@@ -903,6 +907,7 @@ def get_news_context(
     try:
         col = vs.get_collection(_NEWS_COLLECTION)
     except Exception:
+        logger.warning("Cannot access news collection for context", exc_info=True)
         base: dict = {"sentiment": None, "article_count": 0, "articles": []}
         if data_points_result is not None:
             base["data_points"] = data_points_result
@@ -920,6 +925,7 @@ def get_news_context(
             limit=max_articles * 3,
         )
     except Exception:
+        logger.debug("ChromaDB filtered query failed for news context category=%s, falling back", category)
         results = col.get(
             where={"category": {"$eq": category}},
             include=["metadatas", "documents"],
@@ -951,7 +957,7 @@ def get_news_context(
                 score = float(score_str)
                 sentiment_scores.append(score)
             except (ValueError, TypeError):
-                pass
+                logger.debug("Failed to parse sentiment_score '%s' for avg", score_str)
         articles.append(
             {
                 "id": doc_id,

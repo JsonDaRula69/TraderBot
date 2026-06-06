@@ -332,7 +332,7 @@ def uninstall(
                     console.print("  Uninstalled pip package: traderbot")
                     removed.append("pip:traderbot")
     except Exception:
-        pass
+        logger.debug("pip uninstall failed, skipping")
 
     _sl_usrs = [Path("/usr/local/bin/traderbot"), Path.home() / ".local/bin/traderbot"]
     for _sl in _sl_usrs:
@@ -348,7 +348,7 @@ def uninstall(
                 if not json_output:
                     console.print(f"  Removed symlink: {_sl}")
             except Exception:
-                pass
+                logger.debug("Failed to remove symlink %s", _sl)
 
     if not json_output:
         console.print("[bold]Remove OpenClaw cron jobs[/bold]")
@@ -367,7 +367,7 @@ def uninstall(
                     _sp.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
                     cron_removed.append(jid)
     except Exception:
-        pass
+        logger.debug("Cron job removal failed, skipping")
     if cron_removed and not json_output:
         console.print(f"  Removed {len(cron_removed)} cron jobs")
 
@@ -450,7 +450,7 @@ def uninstall(
                     if not json_output:
                         console.print(f"  Cleaned PATH addition: {_sf}")
             except Exception:
-                pass
+                logger.debug("Failed to remove PATH addition from %s", _sf)
 
     openclaw_dir = Path.home() / ".openclaw"
     if openclaw_dir.exists():
@@ -511,7 +511,7 @@ def uninstall(
                 if not json_output:
                     console.print("  Removed orphaned sandbox containers")
     except Exception:
-        pass
+        logger.debug("Docker container removal failed, skipping")
 
     try:
         _img_res = _sp.run(
@@ -529,7 +529,7 @@ def uninstall(
                 if not json_output:
                     console.print(f"  Removed Docker image: {_sbx_name}")
     except Exception:
-        pass
+        logger.debug("Docker image removal failed for %s", _sbx_name)
 
     # Prune Docker build cache (accumulates from repeated sandbox builds)
     try:
@@ -541,7 +541,7 @@ def uninstall(
             if not json_output:
                 console.print("  Pruned Docker build cache")
     except Exception:
-        pass
+        logger.debug("Docker build cache prune failed, skipping")
 
     log_dir = data_dir / "logs"
     if log_dir.exists():
@@ -560,7 +560,7 @@ def uninstall(
                 p.unlink()
                 tmp_cleaned.append(str(p))
     except Exception:
-        pass
+        logger.debug("Temp file cleanup failed, skipping")
 
     if tmp_cleaned:
         removed.extend(tmp_cleaned)

@@ -13,7 +13,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
 
 sandbox_app = typer.Typer(
     name="sandbox",
@@ -40,8 +40,7 @@ def sandbox_enter() -> None:
         else:
             Console().print("[dim]Fallback: POSIX chmod enforcement[/dim]")
     except Exception as e:
-        err_console.print(f"[red]Failed to enter sandbox:[/red] {e}")
-        raise typer.Exit(code=1)
+        report_cli_error(f"Failed to enter sandbox: {e}")
 
 
 @sandbox_app.command("exit")

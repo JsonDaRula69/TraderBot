@@ -161,7 +161,7 @@ def _openclaw_cli(*args: str, timeout: int = 30) -> bool:
             if result.returncode == 0:
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("openclaw CLI not found or timed out during cron registration")
     return False
 
 
@@ -177,7 +177,7 @@ def get_openclaw_version() -> str | None:
         if result.returncode == 0:
             return result.stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+        logger.debug("openclaw CLI not found or timed out during version check")
     return None
 
 

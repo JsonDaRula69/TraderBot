@@ -74,8 +74,10 @@ class ProfileRegistry:
             plaintext = _decrypt_data(encrypted, key)
             return json.loads(plaintext)
         except (FileNotFoundError, json.JSONDecodeError):
+            logger.debug("Profiles file not found or invalid, returning empty dict")
             return {}
         except Exception:
+            logger.warning("Failed to decrypt profiles file, attempting legacy migration")
             legacy = get_data_dir() / "profiles.json"
             if legacy.exists():
                 try:
@@ -84,7 +86,7 @@ class ProfileRegistry:
                     legacy.unlink()
                     return data
                 except Exception:
-                    pass
+                    logger.warning("Legacy profiles migration failed, returning empty dict")
             return {}
 
     def _write_profiles_file(self, data: dict[str, dict]) -> None:

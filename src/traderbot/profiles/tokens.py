@@ -56,6 +56,7 @@ def _derive_or_create_key() -> bytes:
     try:
         fd = os.open(str(key_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError:
+        logger.debug("Key file already exists at %s, reading existing key", key_file)
         set_file_owner_only(key_file)
         return base64.urlsafe_b64decode(key_file.read_text().strip())
     try:

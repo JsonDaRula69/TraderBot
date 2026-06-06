@@ -219,6 +219,7 @@ def step_performance_review(
         try:
             std_return = statistics.stdev(trade_returns)
         except statistics.StatisticsError:
+            logger.debug("Statistics stdev failed (likely ≤1 data point), defaulting to 0.0")
             std_return = 0.0
         if std_return > 0:
             sharpe_ratio = mean_return / std_return
@@ -401,6 +402,7 @@ async def step_system_health(
         else:
             freshness = "no_decisions_yet"
     except Exception:
+        logger.debug("Failed to query decision freshness")
         freshness = "unknown"
 
     api_status = "not_checked"
@@ -430,14 +432,17 @@ async def step_system_health(
                         else:
                             balance_cents = int(raw)
         except Exception:
+            logger.debug("Kalshi API health check failed on /events, trying fallback")
             try:
                 response = await asyncio.wait_for(client.get("/"), timeout=5.0)
                 api_ok = response.status_code < 500
             except Exception:
+                logger.debug("Kalshi API health check failed on /, trying second fallback")
                 try:
                     response = await asyncio.wait_for(client.get("/markets?limit=1"), timeout=5.0)
                     api_ok = response.status_code < 500
                 except Exception:
+                    logger.debug("Kalshi API health check failed on all endpoints")
                     api_ok = False
         finally:
             await asyncio.wait_for(client.close(), timeout=2.0)

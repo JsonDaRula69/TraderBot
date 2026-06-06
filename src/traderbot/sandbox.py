@@ -144,6 +144,7 @@ class FilesystemSandbox:
             probe.touch()
             return False
         except (OSError, PermissionError):
+            logger.debug("Sandbox probe touch failed at %s — likely inside sandbox", probe)
             return True
         finally:
             if probe.exists():
@@ -189,7 +190,7 @@ class FilesystemSandbox:
                 else:
                     path.chmod(0o644)
             except OSError:
-                pass
+                logger.debug("Sandbox chmod failed for %s", path)
 
     def _write_lock(self) -> None:
         """Write a PID-based lock file to the workspace."""
@@ -247,4 +248,5 @@ def get_active_sandbox() -> FilesystemSandbox | None:
                 workspace_dir=get_agent_workspace_dir(),
             )
     except portalocker.exceptions.LockException:
+        logger.debug("FilesystemSandbox lock contention, returning None")
         return None

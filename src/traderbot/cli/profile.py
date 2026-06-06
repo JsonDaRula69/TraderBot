@@ -15,6 +15,7 @@ from traderbot.cli.helpers import (
     _mask_token,
     _resolve_agent_path,
     _write_token_to_env,
+    report_cli_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ def _interactive_profile_create(console: Console, registry) -> None:
                 try:
                     enabled_categories.append(MarketCategory(cat_val))
                 except ValueError:
-                    pass
+                    logger.debug("Skipping invalid category value: %s", cat_val)
 
     console.print("\n[bold]Risk Parameters[/bold] (press Enter for defaults):")
 
@@ -144,8 +145,7 @@ def _interactive_profile_create(console: Console, registry) -> None:
         if profile_mode == "paper":
             console.print(f"  Initial balance: ${initial_balance_cents / 100:.2f}")
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        report_cli_error(str(e))
 
 
 def _interactive_profile_select(profiles: list[str], console: Console) -> str | None:
@@ -174,8 +174,7 @@ def _interactive_profile_select(profiles: list[str], console: Console) -> str | 
 def _interactive_profile_action(name: str, console: Console, registry) -> None:
     profile = registry.get_profile(name)
     if profile is None:
-        console.print(f"[red]Error:[/red] Profile '{name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{name}' not found")
 
     console.print(f"\n[bold]Profile: {name}[/bold] ({profile.mode})")
     console.print(f"  Description:    {profile.description}")
@@ -399,11 +398,7 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
                 "Agent workspace not found for '%s' — token assigned to .env only", agent_id
             )
     except TokenAlreadyAssignedError:
-        console.print(f"[yellow]Profile '{name}' already has a token assigned.[/yellow]")
-        console.print(
-            "Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign."
-        )
-        raise typer.Exit(1) from None
+        report_cli_error(f"Profile '{name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign.")
 
 
 def _do_assign(
@@ -424,8 +419,7 @@ def _do_assign(
     registry = ProfileRegistry()
 
     if not registry.profile_exists(profile_name):
-        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{profile_name}' not found")
 
     profile = registry.get_profile(profile_name)
 
@@ -484,11 +478,7 @@ def _do_assign(
         except Exception as e:
             logger.warning("Failed to propagate workspace files: %s", e)
     except TokenAlreadyAssignedError:
-        console.print(f"[yellow]Profile '{profile_name}' already has a token assigned.[/yellow]")
-        console.print(
-            "Use [bold]traderbot profile revoke[/bold] first, or re-run with [bold]--force[/bold] to reassign."
-        )
-        raise typer.Exit(1) from None
+        report_cli_error(f"Profile '{profile_name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign.")
 
 
 def _interactive_assign(console: Console, registry, overwrite: bool = False) -> None:
@@ -579,15 +569,13 @@ def _apply_profile_update(
     from traderbot.kalshi.models import MarketCategory
 
     if not registry.profile_exists(name):
-        console.print(f"[red]Error:[/red] Profile '{name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{name}' not found")
 
     update_kwargs: dict = {}
 
     if mode is not None:
         if mode not in ("paper", "live"):
-            console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
-            raise typer.Exit(1)
+            report_cli_error("mode must be 'paper' or 'live'")
         update_kwargs["mode"] = mode
 
     if description is not None:
@@ -599,8 +587,7 @@ def _apply_profile_update(
                 MarketCategory(cat.strip().lower()) for cat in categories.split(",")
             ]
         except ValueError as e:
-            console.print(f"[red]Error:[/red] Invalid category: {e}")
-            raise typer.Exit(1) from None
+            report_cli_error(f"Invalid category: {e}")
         update_kwargs["mode"] = mode
 
     if description is not None:
@@ -612,8 +599,7 @@ def _apply_profile_update(
                 MarketCategory(cat.strip().lower()) for cat in categories.split(",")
             ]
         except ValueError as e:
-            console.print(f"[red]Error:[/red] Invalid category: {e}")
-            raise typer.Exit(1) from None
+            report_cli_error(f"Invalid category: {e}")
 
     if risk_multiplier is not None:
         update_kwargs["risk_multiplier"] = risk_multiplier
@@ -647,8 +633,7 @@ def _apply_profile_update(
         registry.update_profile(name, **update_kwargs)
         console.print(f"[green]✓[/green] Updated profile '{name}'")
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        report_cli_error(str(e))
 
 
 @profile_app.command("create")
@@ -712,8 +697,7 @@ def profile_create(
 
     profile_mode = mode or "paper"
     if profile_mode not in ("paper", "live"):
-        console.print("[red]Error:[/red] mode must be 'paper' or 'live'")
-        raise typer.Exit(1)
+        report_cli_error("mode must be 'paper' or 'live'")
 
     enabled_categories = []
     if categories:
@@ -722,8 +706,7 @@ def profile_create(
                 MarketCategory(cat.strip().lower()) for cat in categories.split(",")
             ]
         except ValueError as e:
-            console.print(f"[red]Error:[/red] Invalid category: {e}")
-            raise typer.Exit(1) from None
+            report_cli_error(f"Invalid category: {e}")
 
     profile_data = {
         "name": name,
@@ -743,8 +726,7 @@ def profile_create(
     try:
         profile = TradingProfile(**profile_data)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        report_cli_error(str(e))
 
     if registry.profile_exists(name):
         console.print(f"[yellow]Profile '{name}' already exists.[/yellow]")
@@ -766,11 +748,10 @@ def profile_create(
                     f"[green]✓[/green] Created profile '{new_name}' in {profile_mode} mode"
                 )
             except ValueError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                raise typer.Exit(1) from None
-        else:
-            console.print("[dim]Cancelled.[/dim]")
-        return
+                report_cli_error(str(e))
+            else:
+                console.print("[dim]Cancelled.[/dim]")
+            return
 
     registry.create_profile(profile)
     console.print(f"[green]✓[/green] Created profile '{name}' in {profile_mode} mode")
@@ -834,8 +815,7 @@ def profile_show(
     profile = registry.get_profile(name)
 
     if profile is None:
-        console.print(f"[red]Error:[/red] Profile '{name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{name}' not found")
 
     if json_output:
         print(json_lib.dumps(profile.model_dump(mode="json"), indent=2))
@@ -914,10 +894,7 @@ def profile_assign(
 
     if profile_name is None or agent_id is None:
         if not sys.stdin.isatty():
-            console.print(
-                "[red]Error:[/red] profile_name and agent_id required in non-interactive mode"
-            )
-            raise typer.Exit(1)
+            report_cli_error("profile_name and agent_id required in non-interactive mode")
         _interactive_assign(console, registry, overwrite=overwrite)
         return
 
@@ -947,14 +924,12 @@ def profile_sync_env(
 
         registry = ProfileRegistry()
         if not registry.profile_exists(profile_name):
-            console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
+            report_cli_error(f"Profile '{profile_name}' not found")
         else:
-            console.print(
-                f"[red]Error:[/red] No valid token for profile '{profile_name}'. "
-                "Re-assign with: traderbot profile assign "
-                f"{profile_name} <agent> --force"
+            report_cli_error(
+                f"No valid token for profile '{profile_name}'. "
+                f"Re-assign with: traderbot profile assign {profile_name} <agent> --force"
             )
-        raise typer.Exit(1)
 
     console.print(f"[green]✓[/green] Synced token for profile '{profile_name}' to .env")
     console.print(f"  Token: {_mask_token(token)}")
@@ -990,7 +965,7 @@ def profile_get_token(
 
     token = get_profile_token(profile_name)
     if token is None:
-        raise typer.Exit(1)
+        report_cli_error(f"No token found for profile '{profile_name}'")
     print(token)
 
 
@@ -1172,8 +1147,7 @@ def profile_auth(
 
     profile = registry.get_profile(profile_name)
     if profile is None:
-        console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{profile_name}' not found")
 
     auth_store = ProfileAuthStore(profile)
     known_services = ["kalshi", "voyage", "newsapi", "twitter", "reddit"]
@@ -1239,30 +1213,21 @@ def profile_reset(
 
     profiles = registry.list_profiles()
     if not profiles:
-        console.print(
-            "[red]Error:[/red] No profiles found. Create one with: traderbot profile create <name>"
-        )
-        raise typer.Exit(1)
+        report_cli_error("No profiles found. Create one with: traderbot profile create <name>")
 
     if name is None:
         if not sys.stdin.isatty():
-            console.print("[red]Error:[/red] Profile name required in non-interactive mode")
-            raise typer.Exit(1)
+            report_cli_error("Profile name required in non-interactive mode")
         choice = _interactive_profile_select(profiles, console)
         if not choice:
             raise typer.Exit(0)
         name = choice
     elif name not in profiles:
-        console.print(f"[red]Error:[/red] Profile '{name}' not found")
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{name}' not found")
 
     profile = registry.get_profile(name)
     if not profile or not profile.paper_mode:
-        console.print(
-            f"[red]Error:[/red] Profile '{name}' is not paper mode — "
-            "only paper profiles can be reset"
-        )
-        raise typer.Exit(1)
+        report_cli_error(f"Profile '{name}' is not paper mode — only paper profiles can be reset")
 
     pb = compute_paper_balance(profile)
 
@@ -1315,11 +1280,9 @@ def profile_reset(
         try:
             new_balance_dollars = float(result)
             if new_balance_dollars <= 0:
-                console.print("[red]Error:[/red] Starting balance must be positive")
-                raise typer.Exit(1)
+                report_cli_error("Starting balance must be positive")
         except ValueError:
-            console.print(f"[red]Error:[/red] Invalid number: '{result}'")
-            raise typer.Exit(1)
+            report_cli_error(f"Invalid number: '{result}'")
 
         new_balance_cents = int(new_balance_dollars * 100)
 

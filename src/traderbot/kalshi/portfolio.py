@@ -159,6 +159,7 @@ class PortfolioService:
                     )
                 )
             except Exception:
+                logger.debug("Skipping malformed settlement for ticker %s", ticker)
                 continue
         total_pnl = sum(s.pnl_cents for s in settlements)
         logger.info("Fetched %d settlements, total PnL=%d cents", len(settlements), total_pnl)

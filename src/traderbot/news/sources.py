@@ -1146,6 +1146,7 @@ class NewsAggregator:
                         try:
                             ts = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=UTC)
                         except ValueError:
+                            logger.debug("Invalid date format '%s', using current time", day_str)
                             ts = datetime.now(tz=UTC)
 
                         points.append(
@@ -1279,6 +1280,7 @@ class NewsAggregator:
                         try:
                             ts = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
                         except ValueError:
+                            logger.debug("FRED: skipping invalid date '%s'", date_str)
                             continue
 
                         points.append(
@@ -1986,9 +1988,11 @@ class NewsAggregator:
                                     )
                                 )
                             except Exception:
+                                logger.debug("TheSportsDB: skipping malformed event in backfill")
                                 continue
                         return sport_points
                     except Exception:
+                        logger.warning("TheSportsDB %s backfill day query failed, returning empty", sport)
                         return []
 
             tasks = [asyncio.ensure_future(_fetch_day(sport)) for sport in self._THESPORTSDB_SPORTS]
@@ -2194,9 +2198,11 @@ class NewsAggregator:
                                 )
                             )
                         except Exception:
+                            logger.debug("NewsAPI backfill: skipping malformed article")
                             continue
                     return items
                 except Exception:
+                    logger.warning("NewsAPI backfill failed, returning empty")
                     return []
 
         all_items: list[NewsItem] = []
@@ -2286,6 +2292,7 @@ class NewsAggregator:
                     try:
                         timestamp = datetime.fromisoformat(date + "T00:00:00+00:00")
                     except ValueError:
+                        logger.debug("FRED: invalid date format '%s', using current time", date)
                         timestamp = datetime.now(tz=UTC)
                 else:
                     timestamp = datetime.now(tz=UTC)

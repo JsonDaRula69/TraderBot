@@ -176,7 +176,7 @@ def ask_then_merge(
             fenced_merge(template_content, target_path, markers)
             return True
     except EOFError:
-        pass
+        logger.debug("Interactive prompt received EOF, skipping template injection")
     return False
 
 

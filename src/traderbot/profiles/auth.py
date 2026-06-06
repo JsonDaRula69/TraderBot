@@ -62,6 +62,7 @@ class ProfileAuthStore:
             keyring.delete_password(service_name, _keyring_username(key))
             return True
         except keyring.errors.PasswordDeleteError:
+            logger.debug("Password already deleted for %s/%s", service_name, key)
             return False
 
     def _get_kalshi_credentials(self) -> tuple[str, str] | None:

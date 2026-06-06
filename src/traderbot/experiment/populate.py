@@ -119,6 +119,7 @@ def _yes_price_dollars(market: Market) -> float | None:
         try:
             return float(prices[0])
         except (ValueError, TypeError):
+            logger.debug("Failed to parse price '%s' as float", prices[0])
             return None
     return None
 

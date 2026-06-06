@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +125,8 @@ def forecasts_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Failed to fetch forecasts:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1)
+        report_cli_error(f"Failed to fetch forecasts: {exc}")
 
     if json_output:
         result: dict[str, dict] = {}
@@ -214,9 +213,8 @@ def signals_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Signal computation failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1)
+        report_cli_error(f"Signal computation failed: {exc}")
 
     if json_output:
         json_lib.dump(results, sys.stdout, default=str)
@@ -270,7 +268,7 @@ def bias_cmd(
         with get_connection() as conn:
             init_table(conn)
     except Exception:
-        pass
+        logger.debug("Failed to initialize learnings table, continuing")
 
     try:
         async def _run() -> dict:
@@ -284,9 +282,8 @@ def bias_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Bias analysis failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1)
+        report_cli_error(f"Bias analysis failed: {exc}")
 
     if json_output:
         json_lib.dump(result, sys.stdout, default=str)
@@ -425,9 +422,8 @@ def record_bias_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Record bias failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1)
+        report_cli_error(f"Record bias failed: {exc}")
 
     if json_output:
         json_lib.dump({"results": results}, sys.stdout, default=str)
@@ -503,9 +499,8 @@ def settle_paper_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Settlement failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1)
+        report_cli_error(f"Settlement failed: {exc}")
 
     if json_output:
         json_lib.dump({"settled": settled}, sys.stdout)

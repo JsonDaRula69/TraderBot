@@ -85,6 +85,7 @@ def get_systemd_available() -> bool:
         subprocess.run([systemctl, "--version"], capture_output=True, timeout=5)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        logger.debug("systemctl not available, skipping systemd check")
         return False
 
 
@@ -198,6 +199,6 @@ def task_scheduler_remove_tasks(task_name_pattern: str) -> list[str]:
                         del_result.stderr.decode().strip(),
                     )
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+        logger.debug("Windows task scheduler removal not available or timed out")
     logger.info("Task scheduler removal complete: %d tasks removed", len(removed))
     return removed

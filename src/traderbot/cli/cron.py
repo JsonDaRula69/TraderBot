@@ -16,7 +16,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from traderbot.cli.helpers import _SUDO, _SYSTEMCTL
+from traderbot.cli.helpers import _SUDO, _SYSTEMCTL, report_cli_error
 
 # Ensure openclaw CLI is on PATH (npm global bin not inherited by subprocesses)
 _npm_global = str(Path(os.environ.get("HOME", "")) / ".npm-global" / "bin")
@@ -112,6 +112,7 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         )
         return True
     except Exception:
+        logger.debug("systemd service installation failed")
         return False
 
 
@@ -253,6 +254,7 @@ def _systemd_available() -> bool:
         subprocess.run([_SYSTEMCTL, "--version"], capture_output=True, timeout=5)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        logger.debug("systemctl not available, skipping systemd timer setup")
         return False
 
 
@@ -298,7 +300,7 @@ def _remove_news_ingest_timer(
         )
         subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True, timeout=15)
     except Exception:
-        pass
+        logger.debug("systemd disable/remove failed, skipping")
 
 
 _SYSADMIN_CRON_JOBS: list[dict[str, str]] = [
@@ -403,7 +405,7 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
                     )
                     removed.append(jname)
     except Exception:
-        pass
+        logger.debug("Cron job removal batch failed, skipping")
     return removed
 
 
@@ -444,12 +446,10 @@ def cron_setup(
     results: list[dict[str, str | bool]] = []
 
     if role not in ("sysadmin", "trader"):
-        console.print(f"[red]Error:[/red] Invalid role '{role}'. Must be 'sysadmin' or 'trader'.")
-        raise typer.Exit(1)
+        report_cli_error(f"Invalid role '{role}'. Must be 'sysadmin' or 'trader'.")
 
     if not shutil.which("openclaw"):
-        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-        raise typer.Exit(1)
+        report_cli_error("openclaw CLI not found in PATH")
 
     if replace:
         _remove_cron_jobs_by_name(agent_id)
