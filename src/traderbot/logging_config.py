@@ -1,33 +1,127 @@
 """Structured logging helpers for TraderBot."""
 
+from __future__ import annotations
+
+import contextlib
+import json
 import logging
+import logging.handlers
+import os
 import sys
+from contextvars import ContextVar
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _root_logger_configured = False
 
+operation_id_var: ContextVar[str] = ContextVar("operation_id", default="")
+
+
+class _JsonFormatter(logging.Formatter):
+    """Emit each log record as a single JSON line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        obj: dict[str, str] = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+            "operation_id": operation_id_var.get(""),
+        }
+        return json.dumps(obj, ensure_ascii=False)
+
+
+def _configure_module_levels() -> None:
+    """Apply per-module log levels from TRADERBOT_LOG_LEVELS env var.
+
+    Format: ``module1=DEBUG,module2=WARNING``
+    The module name is matched prefix-style — ``traderbot.kalshi`` covers
+    every logger whose name starts with ``traderbot.kalshi``.
+    """
+    raw = os.environ.get("TRADERBOT_LOG_LEVELS", "")
+    if not raw:
+        return
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if "=" not in pair:
+            continue
+        module, _, level_name = pair.partition("=")
+        module = module.strip()
+        level_name = level_name.strip()
+        numeric = logging.getLevelName(level_name)
+        if isinstance(numeric, int):
+            logging.getLogger(module).setLevel(numeric)
+
 
 def configure_root_logger(level: int = logging.INFO) -> None:
-    """Configure the root logger with a stderr StreamHandler."""
+    """Configure the root logger with a stderr StreamHandler.
+
+    Respects three environment variables:
+
+    - **TRADERBOT_LOG_FORMAT** - set to ``json`` for JSON-formatted output;
+      any other value (or unset) keeps the default pipe-delimited format.
+    - **TRADERBOT_LOG_FILE** - path to a log file; enables a
+      :class:`~logging.handlers.RotatingFileHandler` (10 MB, 5 backups).
+    - **TRADERBOT_LOG_LEVELS** - comma-separated ``module=LEVEL`` pairs
+      (e.g. ``traderbot.kalshi=DEBUG,traderbot.risk=WARNING``).
+    """
     global _root_logger_configured
     if _root_logger_configured:
         return
 
-    handler = logging.StreamHandler(sys.stderr)
-    formatter = logging.Formatter("%(asctime)s | %(name)s | %(levelname)s | %(message)s")
-    handler.setFormatter(formatter)
+    fmt = os.environ.get("TRADERBOT_LOG_FORMAT", "pipe")
+    if fmt == "json":
+        formatter: logging.Formatter = _JsonFormatter()
+    else:
+        formatter = logging.Formatter("%(asctime)s | %(name)s | %(levelname)s | %(message)s")
 
     root = logging.getLogger()
     root.setLevel(level)
+
+    # StreamHandler on stderr (always present)
+    sh = logging.StreamHandler(sys.stderr)
+    sh.setFormatter(formatter)
     if not root.handlers:
-        root.addHandler(handler)
+        root.addHandler(sh)
+    else:
+        # During tests the root may already have handlers; replace formatters
+        # only on StreamHandlers we own so caplog still works.
+        for h in root.handlers:
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler):
+                h.setFormatter(formatter)
+
+    # Optional RotatingFileHandler
+    log_file = os.environ.get("TRADERBOT_LOG_FILE", "")
+    if log_file:
+        rfh = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+        )
+        rfh.setFormatter(formatter)
+        root.addHandler(rfh)
+
+    # Per-module log level overrides
+    _configure_module_levels()
 
     _root_logger_configured = True
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Return a configured logger for the given name."""
-    configure_root_logger()
-    return logging.getLogger(name)
+@contextlib.contextmanager
+def correlation_id(cid: str) -> Iterator[None]:
+    """Context manager that sets ``operation_id`` for the duration of *cid*.
+
+    The value is stored in a :class:`~contextvars.ContextVar` so it
+    propagates across ``asyncio`` tasks automatically.
+    """
+    token = operation_id_var.set(cid)
+    try:
+        yield
+    finally:
+        operation_id_var.reset(token)
 
 
 def _format_details(details: dict) -> str:

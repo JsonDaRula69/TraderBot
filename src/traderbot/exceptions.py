@@ -14,13 +14,19 @@ class TraderBotError(Exception):
     ----------
     message : str
         Human-readable description of the error (default ``""``).
+    error_code : int
+        Numeric error code for programmatic handling (default ``0``).
+        When non-zero, ``str(exc)`` returns ``[E{code}] {message}``.
     """
 
-    def __init__(self, message: str = "") -> None:
+    def __init__(self, message: str = "", error_code: int = 0) -> None:
         self.message: str = message
+        self.error_code: int = error_code
         super().__init__(message)
 
     def __str__(self) -> str:
+        if self.error_code:
+            return f"[E{self.error_code}] {self.message}"
         return self.message
 
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from traderbot.kalshi.client import AuthenticationError
+from traderbot.exceptions import AuthenticationError
 from traderbot.kalshi.markets import MarketService
 from traderbot.logging_config import log_cache_event, log_market_event
 

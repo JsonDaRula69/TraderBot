@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import traderbot.kalshi.markets as markets_mod
-from traderbot.kalshi.client import AuthenticationError
+from traderbot.exceptions import AuthenticationError
 from traderbot.kalshi.models import Market
 from traderbot.kalshi.provider import (
     MarketDataProvider,

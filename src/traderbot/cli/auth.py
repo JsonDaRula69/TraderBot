@@ -123,7 +123,8 @@ def auth_check(
         try:
             import asyncio
 
-            from traderbot.kalshi.client import AuthenticationError, KalshiClient
+            from traderbot.exceptions import AuthenticationError
+            from traderbot.kalshi.client import KalshiClient
 
             async def _test_endpoints() -> dict[str, object]:
                 client = KalshiClient()

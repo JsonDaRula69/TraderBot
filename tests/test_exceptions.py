@@ -46,6 +46,33 @@ class TestTraderBotError:
         exc = TraderBotError()
         assert str(exc) == ""
 
+    def test_error_code_defaults_to_zero(self) -> None:
+        """error_code must default to 0."""
+        exc = TraderBotError("test")
+        assert exc.error_code == 0
+
+    def test_error_code_stored_from_keyword(self) -> None:
+        """error_code keyword must be stored."""
+        exc = TraderBotError("test", error_code=1000)
+        assert exc.error_code == 1000
+
+    def test_str_with_error_code_returns_formatted(self) -> None:
+        """str(exc) must return '[E{code}] {message}' when error_code is set."""
+        exc = TraderBotError("test", error_code=1000)
+        assert str(exc) == "[E1000] test"
+
+    def test_str_without_error_code_returns_message(self) -> None:
+        """str(exc) must return plain message when error_code is 0."""
+        exc = TraderBotError("test")
+        assert str(exc) == "test"
+
+    def test_error_code_backward_compatible(self) -> None:
+        """TraderBotError("test") must still work without error_code."""
+        exc = TraderBotError("test")
+        assert exc.message == "test"
+        assert exc.error_code == 0
+        assert str(exc) == "test"
+
 
 class TestConfigurationError:
     """ConfigurationError signals missing or invalid configuration."""
@@ -225,3 +252,74 @@ class TestExceptionHierarchy:
             except TraderBotError:
                 caught.append(type(exc).__name__)
         assert len(caught) == 5
+
+
+class TestKalshiClientDeprecationWarnings:
+    """Deprecation wrappers in kalshi/client.py must emit DeprecationWarning."""
+
+    def test_configuration_error_warns(self) -> None:
+        from traderbot.kalshi.client import ConfigurationError
+
+        with pytest.warns(DeprecationWarning, match="kalshi.client.ConfigurationError"):
+            ConfigurationError("test")
+
+    def test_rate_limit_error_warns(self) -> None:
+        from traderbot.kalshi.client import RateLimitError
+
+        with pytest.warns(DeprecationWarning, match="kalshi.client.RateLimitError"):
+            RateLimitError("test")
+
+    def test_authentication_error_warns(self) -> None:
+        from traderbot.kalshi.client import AuthenticationError
+
+        with pytest.warns(DeprecationWarning, match="kalshi.client.AuthenticationError"):
+            AuthenticationError("test")
+
+    def test_kalshi_configuration_error_catchable_as_base(self) -> None:
+        from traderbot.exceptions import ConfigurationError as BaseConfigError
+        from traderbot.kalshi.client import ConfigurationError
+
+        with pytest.warns(DeprecationWarning):
+            exc = ConfigurationError("test")
+        assert isinstance(exc, BaseConfigError)
+        assert isinstance(exc, TraderBotError)
+
+    def test_kalshi_rate_limit_error_catchable_as_base(self) -> None:
+        from traderbot.exceptions import RateLimitError as BaseRateLimitError
+        from traderbot.kalshi.client import RateLimitError
+
+        with pytest.warns(DeprecationWarning):
+            exc = RateLimitError("test")
+        assert isinstance(exc, BaseRateLimitError)
+        assert isinstance(exc, TraderBotError)
+
+    def test_kalshi_authentication_error_catchable_as_base(self) -> None:
+        from traderbot.exceptions import AuthenticationError as BaseAuthError
+        from traderbot.kalshi.client import AuthenticationError
+
+        with pytest.warns(DeprecationWarning):
+            exc = AuthenticationError("test")
+        assert isinstance(exc, BaseAuthError)
+        assert isinstance(exc, TraderBotError)
+
+    def test_base_exceptions_catch_kalshi_instances(self) -> None:
+        """Catching TraderBotError must catch all kalshi/client.py exceptions."""
+        from traderbot.kalshi.client import (
+            AuthenticationError,
+            ConfigurationError,
+            RateLimitError,
+        )
+
+        with pytest.warns(DeprecationWarning):
+            errors = [
+                ConfigurationError("a"),
+                RateLimitError("b"),
+                AuthenticationError("c"),
+            ]
+        caught = []
+        for exc in errors:
+            try:
+                raise exc
+            except TraderBotError:
+                caught.append(type(exc).__name__)
+        assert len(caught) == 3
