@@ -1186,9 +1186,7 @@ def profile_auth(
 @profile_app.command("reset")
 def profile_reset(
     name: Annotated[str | None, typer.Argument(help="Profile name to reset")] = None,
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompts")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompts")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Reset a paper profile's balance without losing trade history.
@@ -1208,8 +1206,7 @@ def profile_reset(
     profiles = registry.list_profiles()
     if not profiles:
         console.print(
-            "[red]Error:[/red] No profiles found. "
-            "Create one with: traderbot profile create <name>"
+            "[red]Error:[/red] No profiles found. Create one with: traderbot profile create <name>"
         )
         raise typer.Exit(1)
 
@@ -1251,9 +1248,7 @@ def profile_reset(
 
     console.print(f"\n[bold]Profile:[/bold] {name}")
     if profile.initial_balance_cents:
-        console.print(
-            f"  Current initial balance: ${profile.initial_balance_cents / 100:.2f}"
-        )
+        console.print(f"  Current initial balance: ${profile.initial_balance_cents / 100:.2f}")
     else:
         console.print("  Current initial balance: not set")
 
