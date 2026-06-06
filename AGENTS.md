@@ -218,12 +218,22 @@ Every resource that can be created MUST have a corresponding cleanup path in the
 
 ## Error Handling
 
-- **Custom exceptions**: define domain-specific exceptions in `traderbot/exceptions.py`. Prefer typed exceptions over `Exception` or string returns.
-- **CLI commands**: use `typer.Exit(1)` with a descriptive `[red]Error:[/red]` rich message. Never let unhandled exceptions bubble to the user raw.
-- **No silent swallows**: never `except Exception: pass`. At minimum log the error. Use broad catches only at module boundaries (e.g., subprocess calls to external tools).
+- **Custom exceptions**: define domain-specific exceptions in `traderbot/exceptions.py`. All domain exceptions inherit from `TraderBotError` — use `except TraderBotError` to catch the entire domain.
+- **Error codes**: every `TraderBotError` subclass has a default numeric error code (see `ErrorCodes` class). `str(exc)` returns `[E{code}] {message}` when code is non-zero. Use `report_error()` from `error_reporter.py` for consistent log-level routing.
+- **CLI commands**: use `report_cli_error()` from `cli/helpers.py` which outputs `[red]Error [E{code}]:[/red] {message}` and raises `typer.Exit(1)`. Never use raw `sys.exit(1)` or bare `typer.Exit()`.
+- **No silent swallows**: never `except Exception: pass`. At minimum log the error with `logger.exception()` or `logger.error()`. Use `should_silently_fail(module_name)` from `error_reporter.py` for modules that must suppress errors by policy.
 - **Retry policy**: transient errors (network, rate limits) retry with exponential backoff before failing. Auth/config errors fail immediately.
 - **Error context**: include relevant state information in exception messages (file paths, IDs, return codes). Avoid leaking secrets (tokens, API keys).
 - **Chain of trust**: library code raises typed exceptions. CLI code catches and formats them. Never print raw tracebacks to end users.
+
+## Logging
+
+- **Module-level loggers**: every module MUST declare `logger = logging.getLogger(__name__)` at the top. Never use `logging.basicConfig()` — call `configure_root_logger()` from `logging_config.py` once at the CLI entry point.
+- **Log levels**: use `logger.exception()` for unexpected failures in `except` blocks (includes traceback). Use `logger.error()` for expected failures. Use `logger.warning()` for degradation. Use `logger.info()` for operational milestones. Use `logger.debug()` for diagnostic detail.
+- **Structured logging**: set `TRADERBOT_LOG_FORMAT=json` for JSON output (machine-readable). Default is pipe-delimited. Set `TRADERBOT_LOG_FILE=/path/to/file.log` for file rotation (10MB, 5 backups). Set `TRADERBOT_LOG_LEVELS=module=LEVEL` for per-module level overrides.
+- **Correlation IDs**: use `correlation_id(cid)` from `logging_config.py` to trace operations across async module boundaries. The `operation_id` appears in JSON logs and can be read via `operation_id_var.get()`.
+- **When diagnosing issues**: always check the logs FIRST. Production logs are in `~/.traderbot/logs/`. Use `TRADERBOT_LOG_LEVELS=traderbot.kalshi=DEBUG,traderbot.risk=DEBUG` to increase verbosity for specific modules without flooding others.
+- **Never log secrets**: API keys, tokens, PEM content, and passwords must NEVER appear in log output. Use `SecretStr` fields in Pydantic models and `.get_secret_value()` only in controlled paths.
 
 ## Configuration Loading
 
