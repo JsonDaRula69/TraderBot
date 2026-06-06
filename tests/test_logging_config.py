@@ -1,17 +1,18 @@
-"""Tests for traderbot.logging_config — JSON format, rotation, per-module levels, correlation ID."""
+"""Tests for traderbot.logging_config — JSON format, rotation, per-module levels, correlation ID, Sentry."""
 
 from __future__ import annotations
 
 import json
 import logging
 import logging.handlers
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from traderbot.logging_config import (
     configure_root_logger,
     correlation_id,
+    init_sentry,
     log_cache_event,
     log_market_event,
     log_reconciliation_event,
@@ -22,6 +23,7 @@ from traderbot.logging_config import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_root_logger():
@@ -54,6 +56,7 @@ def _clean_env(monkeypatch):
 # configure_root_logger — baseline (backward compat)
 # ---------------------------------------------------------------------------
 
+
 class TestConfigureRootLoggerBaseline:
     def test_configures_stderr_handler(self, _clean_env) -> None:
         configure_root_logger()
@@ -85,6 +88,7 @@ class TestConfigureRootLoggerBaseline:
 # ---------------------------------------------------------------------------
 # TRADERBOT_LOG_FORMAT=json
 # ---------------------------------------------------------------------------
+
 
 class TestJsonFormat:
     def test_json_env_produces_valid_json(self, monkeypatch, _clean_env, caplog) -> None:
@@ -130,13 +134,16 @@ class TestJsonFormat:
 # TRADERBOT_LOG_FILE (RotatingFileHandler)
 # ---------------------------------------------------------------------------
 
+
 class TestFileRotation:
     def test_file_handler_attached(self, monkeypatch, tmp_path, _clean_env) -> None:
         log_path = str(tmp_path / "test.log")
         monkeypatch.setenv("TRADERBOT_LOG_FILE", log_path)
         configure_root_logger()
         root = logging.getLogger()
-        rfh_handlers = [h for h in root.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        rfh_handlers = [
+            h for h in root.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
         assert len(rfh_handlers) == 1
         assert rfh_handlers[0].maxBytes == 10 * 1024 * 1024
         assert rfh_handlers[0].backupCount == 5
@@ -157,13 +164,18 @@ class TestFileRotation:
 
     def test_no_file_handler_without_env(self, _clean_env) -> None:
         configure_root_logger()
-        rfh_handlers = [h for h in logging.getLogger().handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        rfh_handlers = [
+            h
+            for h in logging.getLogger().handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
         assert len(rfh_handlers) == 0
 
 
 # ---------------------------------------------------------------------------
 # TRADERBOT_LOG_LEVELS (per-module overrides)
 # ---------------------------------------------------------------------------
+
 
 class TestPerModuleLevels:
     def test_module_level_override(self, monkeypatch, _clean_env) -> None:
@@ -190,6 +202,7 @@ class TestPerModuleLevels:
 # ---------------------------------------------------------------------------
 # correlation_id context manager
 # ---------------------------------------------------------------------------
+
 
 class TestCorrelationId:
     def test_sets_and_resets_operation_id(self) -> None:
@@ -229,6 +242,7 @@ class TestCorrelationId:
 # Structured event helpers (unchanged)
 # ---------------------------------------------------------------------------
 
+
 class TestLogMarketEvent:
     def test_calls_info(self) -> None:
         mock_logger = MagicMock(spec=logging.Logger)
@@ -255,3 +269,93 @@ class TestLogReconciliationEvent:
         mock_logger = MagicMock(spec=logging.Logger)
         log_reconciliation_event(mock_logger, "TEST-MKT1", drift_cents=50)
         mock_logger.warning.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Sentry integration
+# ---------------------------------------------------------------------------
+
+
+class TestInitSentry:
+    def test_no_dsn_returns_false(self, monkeypatch):
+        monkeypatch.delenv("TRADERBOT_SENTRY_DSN", raising=False)
+        result = init_sentry()
+        assert result is False
+
+    def test_empty_dsn_returns_false(self, monkeypatch):
+        monkeypatch.setenv("TRADERBOT_SENTRY_DSN", "")
+        result = init_sentry()
+        assert result is False
+
+    @patch("traderbot.logging_config.HAS_SENTRY", False)
+    def test_no_sentry_sdk_returns_false_even_with_dsn(self, monkeypatch):
+        monkeypatch.setenv("TRADERBOT_SENTRY_DSN", "https://key@sentry.io/1")
+        result = init_sentry()
+        assert result is False
+
+    @patch("traderbot.logging_config.HAS_SENTRY", True)
+    def test_valid_dsn_initializes_sentry(self, monkeypatch):
+        monkeypatch.setenv("TRADERBOT_SENTRY_DSN", "https://key@sentry.io/1")
+        mock_init = MagicMock(return_value=None)
+        mock_sentry = MagicMock()
+        mock_sentry.init = mock_init
+        import traderbot.logging_config as _mod
+
+        original = _mod.HAS_SENTRY
+        _mod.sentry_sdk = mock_sentry
+        try:
+            result = init_sentry()
+        finally:
+            if not original:
+                del _mod.sentry_sdk
+        assert result is True
+        mock_init.assert_called_once()
+        call_kwargs = mock_init.call_args.kwargs
+        assert call_kwargs["dsn"] == "https://key@sentry.io/1"
+        assert call_kwargs["traces_sample_rate"] == 0.1
+
+    def test_before_send_adds_error_code_tag(self):
+        from traderbot.exceptions import TraderBotError
+        from traderbot.logging_config import _sentry_before_send
+
+        event: dict = {"tags": {}}
+        exc_value = TraderBotError("test error", error_code=3000)
+        hint = {"exc_info": (type(exc_value), exc_value, None)}
+        result = _sentry_before_send(event, hint)
+        assert result["tags"]["error_code"] == "3000"
+
+    def test_before_send_no_exc_info_passes_through(self):
+        from traderbot.logging_config import _sentry_before_send
+
+        event = {"tags": {"existing": "tag"}}
+        hint: dict = {}
+        result = _sentry_before_send(event, hint)
+        assert result == event
+        assert "error_code" not in result.get("tags", {})
+
+    def test_before_send_non_traderbot_error_no_tag(self):
+        from traderbot.logging_config import _sentry_before_send
+
+        event: dict = {"tags": {}}
+        exc_value = ValueError("plain error")
+        hint = {"exc_info": (type(exc_value), exc_value, None)}
+        result = _sentry_before_send(event, hint)
+        assert "error_code" not in result.get("tags", {})
+
+    def test_before_send_zero_error_code_no_tag(self):
+        from traderbot.exceptions import TraderBotError
+        from traderbot.logging_config import _sentry_before_send
+
+        event: dict = {"tags": {}}
+        exc_value = TraderBotError("no code", error_code=0)
+        hint = {"exc_info": (type(exc_value), exc_value, None)}
+        result = _sentry_before_send(event, hint)
+        assert "error_code" not in result.get("tags", {})
+
+
+class TestConfigureRootLoggerSentry:
+    def test_configure_calls_init_sentry(self, _clean_env, monkeypatch):
+        monkeypatch.delenv("TRADERBOT_SENTRY_DSN", raising=False)
+        with patch("traderbot.logging_config.init_sentry", return_value=False) as mock_sentry:
+            configure_root_logger()
+            mock_sentry.assert_called_once()

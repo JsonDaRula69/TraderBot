@@ -55,6 +55,7 @@ dev = [
     "ruff>=0.5",
 ]
 news-extras = ["pytrends>=4.9.2"]
+sentry = ["sentry-sdk>=2.0.0"]
 
 [project.scripts]
 traderbot = "traderbot.cli:main"

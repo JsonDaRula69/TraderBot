@@ -5,15 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-import pytest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tests.conftest import strip_ansi
-
+import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import strip_ansi
 from traderbot.cli import app
 from traderbot.db.decisions import DbDecision
 from traderbot.db.decisions import init_table as init_decisions_table
@@ -22,10 +21,12 @@ from traderbot.heartbeat import (
     AdaptationReview,
     CircuitBreakerReview,
     DecisionReview,
+    ErrorSummary,
     HeartbeatResult,
     LearningPromotionReview,
     PerformanceReview,
     SystemHealthReview,
+    get_error_summary,
     run_heartbeat_cycle,
     step_bayesian_adaptation,
     step_circuit_breaker_check,
@@ -376,9 +377,9 @@ class TestLearningPromotion:
 
 class TestCircuitBreakerCheck:
     def test_default_normal(self):
-        from traderbot.risk.circuit_breaker import CircuitBreaker
-
         import tempfile
+
+        from traderbot.risk.circuit_breaker import CircuitBreaker
 
         with tempfile.TemporaryDirectory() as td:
             breaker = CircuitBreaker(state_file=Path(td) / "breaker.json")
@@ -565,7 +566,9 @@ class TestHeartbeatCycle:
 
         monkeypatch.setattr("traderbot.updater.fetch_latest_version", mock_fetch)
 
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         assert "update_check" in result.steps_completed
         assert api_called["count"] == 0
         conn.close()
@@ -574,7 +577,9 @@ class TestHeartbeatCycle:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         expected_order = [
             "performance_review",
             "decision_review",
@@ -690,7 +695,9 @@ class TestEdgeCases:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         assert result.performance.trade_count == 0
         assert result.decisions.closed_count == 0
         assert result.adaptation.skipped_reason != ""
@@ -774,3 +781,80 @@ class TestSystemHealthPing:
             result = asyncio.run(step_system_health(conn))
             assert result.api_connectivity == "unavailable"
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Error Summary
+# ---------------------------------------------------------------------------
+
+
+class TestErrorSummary:
+    def test_empty_log_file(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert result.total_by_level == {}
+        assert result.top_error_codes == []
+        assert result.recent_errors == []
+
+    def test_no_log_path_env(self, monkeypatch):
+        monkeypatch.delenv("TRADERBOT_LOG_FILE", raising=False)
+        result = get_error_summary()
+        assert result.total_by_level == {}
+
+    def test_nonexistent_log_file(self, tmp_path):
+        result = get_error_summary(str(tmp_path / "nonexistent.log"))
+        assert result.total_by_level == {}
+
+    def test_parse_pipe_delimited_errors(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "2025-01-01 | traderbot.risk | ERROR | [E3000] Rate limit exceeded\n"
+            "2025-01-01 | traderbot.kalshi | ERROR | [E3000] Another rate limit\n"
+            "2025-01-01 | traderbot.risk | CRITICAL | [E5000] Validation failure\n"
+            "2025-01-01 | traderbot.core | INFO | Normal message\n"
+            "2025-01-01 | traderbot.core | WARNING | Something concerning\n",
+            encoding="utf-8",
+        )
+        result = get_error_summary(str(log_file))
+        assert result.total_by_level["ERROR"] == 2
+        assert result.total_by_level["CRITICAL"] == 1
+        assert result.total_by_level["INFO"] == 1
+        assert result.total_by_level["WARNING"] == 1
+        assert result.top_error_codes == [(3000, 2), (5000, 1)]
+        assert len(result.recent_errors) == 3
+
+    def test_top_five_error_codes(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        lines = []
+        for code in [1000, 2000, 3000, 4000, 5000, 6000, 7000]:
+            lines.append(f"2025-01-01 | mod | ERROR | [E{code}] Error {code}")
+        log_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert len(result.top_error_codes) <= 5
+
+    def test_recent_errors_capped_at_ten(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        lines = [f"2025-01-01 | mod | ERROR | [E3000] Error {i}" for i in range(15)]
+        log_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert len(result.recent_errors) == 10
+
+    def test_generated_at_is_set(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert result.generated_at.tzinfo is not None
+
+    def test_uses_env_var_log_file(self, tmp_path, monkeypatch):
+        log_file = tmp_path / "env_test.log"
+        log_file.write_text("2025-01-01 | mod | ERROR | [E2000] Test\n", encoding="utf-8")
+        monkeypatch.setenv("TRADERBOT_LOG_FILE", str(log_file))
+        result = get_error_summary()
+        assert result.total_by_level.get("ERROR") == 1
+
+    def test_error_summary_dataclass_defaults(self):
+        summary = ErrorSummary()
+        assert summary.total_by_level == {}
+        assert summary.top_error_codes == []
+        assert summary.recent_errors == []

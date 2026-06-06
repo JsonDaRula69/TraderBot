@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import re
 import statistics
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -163,6 +166,88 @@ class HeartbeatResult(BaseModel):
     steps_completed: list[str] = Field(default_factory=list)
     state_path: Path | None = Field(default=None)
     state_saved: bool = Field(default=False)
+
+
+# ---------------------------------------------------------------------------
+# Error summary
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ErrorSummary:
+    """Aggregated error summary from log analysis."""
+
+    total_by_level: dict[str, int] = field(default_factory=dict)
+    top_error_codes: list[tuple[int, int]] = field(default_factory=list)
+    recent_errors: list[str] = field(default_factory=list)
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+_ERROR_CODE_RE = re.compile(r"\[E(\d+)\]")
+
+
+def get_error_summary(log_path: str | Path | None = None) -> ErrorSummary:
+    """Parse recent log entries and return an aggregated error summary.
+
+    Reads the log file specified by *log_path* or ``TRADERBOT_LOG_FILE`` env var.
+    Returns an empty summary when no log file is available.
+    """
+    import os
+
+    if log_path is None:
+        log_path = os.environ.get("TRADERBOT_LOG_FILE", "")
+    if not log_path:
+        return ErrorSummary()
+
+    path = Path(log_path)
+    if not path.exists():
+        return ErrorSummary()
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ErrorSummary()
+
+    total_by_level: dict[str, int] = {}
+    error_codes: Counter[int] = Counter()
+    recent_errors: list[str] = []
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        level = _extract_level(stripped)
+        if level is None:
+            continue
+
+        total_by_level[level] = total_by_level.get(level, 0) + 1
+
+        if level in ("ERROR", "CRITICAL"):
+            match = _ERROR_CODE_RE.search(stripped)
+            if match:
+                error_codes[int(match.group(1))] += 1
+            if len(recent_errors) < 10:
+                msg = stripped.split(" | ", 3)[-1] if " | " in stripped else stripped
+                recent_errors.append(msg)
+
+    top_error_codes = error_codes.most_common(5)
+    return ErrorSummary(
+        total_by_level=total_by_level,
+        top_error_codes=top_error_codes,
+        recent_errors=recent_errors,
+    )
+
+
+def _extract_level(line: str) -> str | None:
+    """Extract log level from a pipe-delimited or JSON log line."""
+    if " | " in line:
+        parts = line.split(" | ")
+        if len(parts) >= 3:
+            candidate = parts[2].strip()
+            if candidate in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+                return candidate
+    return None
 
 
 # ---------------------------------------------------------------------------

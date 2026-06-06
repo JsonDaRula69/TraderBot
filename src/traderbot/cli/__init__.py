@@ -331,8 +331,8 @@ def uninstall(
                     )
                     console.print("  Uninstalled pip package: traderbot")
                     removed.append("pip:traderbot")
-    except Exception:
-        logger.debug("pip uninstall failed, skipping")
+    except Exception as exc:
+        logger.warning("pip uninstall failed: %s", exc)
 
     _sl_usrs = [Path("/usr/local/bin/traderbot"), Path.home() / ".local/bin/traderbot"]
     for _sl in _sl_usrs:
@@ -347,8 +347,8 @@ def uninstall(
                 removed.append(str(_sl))
                 if not json_output:
                     console.print(f"  Removed symlink: {_sl}")
-            except Exception:
-                logger.debug("Failed to remove symlink %s", _sl)
+            except Exception as exc:
+                logger.warning("Failed to remove symlink %s: %s", _sl, exc)
 
     if not json_output:
         console.print("[bold]Remove OpenClaw cron jobs[/bold]")
@@ -366,8 +366,8 @@ def uninstall(
                 if jid:
                     _sp.run(["openclaw", "cron", "remove", jid], capture_output=True, timeout=10)
                     cron_removed.append(jid)
-    except Exception:
-        logger.debug("Cron job removal failed, skipping")
+    except Exception as exc:
+        logger.warning("Cron job removal failed: %s", exc)
     if cron_removed and not json_output:
         console.print(f"  Removed {len(cron_removed)} cron jobs")
 
@@ -449,8 +449,8 @@ def uninstall(
                     removed.append(f"{_sf}:local-bin-path")
                     if not json_output:
                         console.print(f"  Cleaned PATH addition: {_sf}")
-            except Exception:
-                logger.debug("Failed to remove PATH addition from %s", _sf)
+            except Exception as exc:
+                logger.warning("Failed to remove PATH addition from %s: %s", _sf, exc)
 
     openclaw_dir = Path.home() / ".openclaw"
     if openclaw_dir.exists():
@@ -510,8 +510,8 @@ def uninstall(
                 removed.append("docker:openclaw-sbx-containers")
                 if not json_output:
                     console.print("  Removed orphaned sandbox containers")
-    except Exception:
-        logger.debug("Docker container removal failed, skipping")
+    except Exception as exc:
+        logger.warning("Docker container removal failed: %s", exc)
 
     try:
         _img_res = _sp.run(
@@ -528,8 +528,8 @@ def uninstall(
                 removed.append(f"docker:{_sbx_name}")
                 if not json_output:
                     console.print(f"  Removed Docker image: {_sbx_name}")
-    except Exception:
-        logger.debug("Docker image removal failed for %s", _sbx_name)
+    except Exception as exc:
+        logger.warning("Docker image removal failed for %s: %s", _sbx_name, exc)
 
     # Prune Docker build cache (accumulates from repeated sandbox builds)
     try:
@@ -540,8 +540,8 @@ def uninstall(
             removed.append("docker:build-cache")
             if not json_output:
                 console.print("  Pruned Docker build cache")
-    except Exception:
-        logger.debug("Docker build cache prune failed, skipping")
+    except Exception as exc:
+        logger.warning("Docker build cache prune failed: %s", exc)
 
     log_dir = data_dir / "logs"
     if log_dir.exists():
@@ -559,8 +559,8 @@ def uninstall(
             if p.exists():
                 p.unlink()
                 tmp_cleaned.append(str(p))
-    except Exception:
-        logger.debug("Temp file cleanup failed, skipping")
+    except Exception as exc:
+        logger.warning("Temp file cleanup failed: %s", exc)
 
     if tmp_cleaned:
         removed.extend(tmp_cleaned)

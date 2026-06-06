@@ -32,6 +32,46 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
+# ─── Error Reporting Logging ─────────────────────────────────────────────────
+
+$TRADERBOT_LOG_DIR = Join-Path $env:USERPROFILE ".traderbot\logs"
+$TRADERBOT_INSTALL_LOG = Join-Path $TRADERBOT_LOG_DIR "install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+New-Item -ItemType Directory -Path $TRADERBOT_LOG_DIR -Force | Out-Null
+
+function Write-Log {
+    param(
+        [string]$Level = "INFO",
+        [string]$Message
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logLine = "[$timestamp] [$Level] $Message"
+    Add-Content -Path $TRADERBOT_INSTALL_LOG -Value $logLine -Encoding UTF8
+    if ($Level -eq "ERROR") {
+        $host.ui.WriteErrorLine("[ERROR] $Message")
+    } elseif ($Level -eq "WARN") {
+        $host.ui.WriteErrorLine("[WARN]  $Message")
+    } else {
+        Write-Output $Message
+    }
+}
+
+function Write-LogInfo {
+    param([string]$Message)
+    Write-Log -Level "INFO" -Message $Message
+}
+
+function Write-LogWarn {
+    param([string]$Message)
+    Write-Log -Level "WARN" -Message $Message
+}
+
+function Write-LogError {
+    param([string]$Message)
+    Write-Log -Level "ERROR" -Message $Message
+}
+
+Write-LogInfo "Installer started. Log: $TRADERBOT_INSTALL_LOG"
+
 # ─── Constants ───────────────────────────────────────────────────────────────
 
 $TRADERBOT_REPO = if ($env:TRADERBOT_REPO) { $env:TRADERBOT_REPO } else { "JsonDaRula69/TraderBot" }
@@ -86,8 +126,8 @@ function Get-OSPlatform {
 
 $OS_TYPE = Get-OSPlatform
 if ($OS_TYPE -ne "windows") {
-    Write-Error "This installer is for Windows only. Use traderbot-installer.sh for Linux/macOS."
-    exit 1
+    Write-LogError "This installer is for Windows only. Use traderbot-installer.sh for Linux/macOS."
+    exit 2
 }
 
 Write-Host "Detected: Windows $(Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption)" -ForegroundColor Cyan
@@ -445,8 +485,8 @@ function Install-Python312 {
         return $found
     }
 
-    Write-Error "Python 3.12 installation failed. Install manually from https://www.python.org/downloads/ and re-run."
-    exit 1
+    Write-LogError "Python 3.12 installation failed. Install manually from https://www.python.org/downloads/ and re-run."
+    exit 3
 }
 
 function Install-Git {
@@ -513,8 +553,8 @@ function Install-TraderBot {
                     if ($LASTEXITCODE -ne 0) {
                         git pull origin master 2>$null
                         if ($LASTEXITCODE -ne 0) {
-                            Write-Error "git pull failed for both 'main' and 'master' branches."
-                            exit 1
+                            Write-LogError "git pull failed for both 'main' and 'master' branches."
+                            exit 4
                         }
                     }
                 } finally {
@@ -552,8 +592,8 @@ function Install-FromGit {
         Expand-Archive -Path $zipFile -DestinationPath $tempDir -Force
         $extracted = Get-ChildItem $tempDir -Directory | Select-Object -First 1
         if (-not $extracted) {
-            Write-Error "Failed to extract TraderBot archive."
-            exit 1
+            Write-LogError "Failed to extract TraderBot archive."
+            exit 3
         }
         Move-Item $extracted.FullName $INSTALL_DIR
         Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -586,8 +626,8 @@ function Install-Dependencies {
         # Find venv python
         $venvPython = Join-Path $INSTALL_DIR ".venv\Scripts\python.exe"
         if (-not (Test-Path $venvPython)) {
-            Write-Error "venv Python not found at $venvPython"
-            exit 1
+            Write-LogError "venv Python not found at $venvPython"
+            exit 3
         }
 
         # Install with uv if available, fall back to pip
@@ -597,8 +637,8 @@ function Install-Dependencies {
             & $venvPython -m pip install --upgrade pip --quiet
             & $venvPython -m pip install -e . --quiet
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "pip install failed."
-                exit 1
+                Write-LogError "pip install failed."
+                exit 3
             }
         }
 
@@ -618,9 +658,9 @@ function Install-Dependencies {
             $version = & $tbCmd --version 2>$null
             Write-Host "TraderBot installed successfully: $($version -join ' ')" -ForegroundColor Green
         } else {
-            Write-Error "traderbot.exe not found at $tbCmd"
+            Write-LogError "traderbot.exe not found at $tbCmd"
             Get-ChildItem $venvBin -Filter "*.exe" | ForEach-Object { Write-Host $_.Name }
-            exit 1
+            exit 3
         }
     } finally {
         Pop-Location
@@ -1153,8 +1193,8 @@ function Update-TraderBot {
             Pop-Location
         }
     } else {
-        Write-Error "Not a git repository. Cannot auto-update."
-        exit 1
+        Write-LogError "Not a git repository. Cannot auto-update."
+        exit 4
     }
 
     # Re-install dependencies

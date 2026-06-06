@@ -83,6 +83,7 @@ from pathlib import Path
 import websockets
 
 from traderbot.auth import get_credential
+from traderbot.exceptions import AuthenticationError, DataError, RateLimitError
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
 from traderbot.logging_config import configure_root_logger
@@ -257,7 +258,6 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
     )
     if not current_map:
         current_map, seed_tickers = await _seed_from_rest()
-        # Record seed tickers for orderbook_delta subscription
         for t in seed_tickers:
             ob_subscribed.add(t)
         _save_cache(
@@ -271,7 +271,6 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
             }
         )
     else:
-        # Pre-populate ob_subscribed from existing orderbook keys and known tickers
         ob_subscribed.update(current_orderbooks.keys())
         ob_subscribed.update(current_tickers.keys())
 
@@ -285,11 +284,224 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
         msg = {"id": msg_id, "cmd": "subscribe", "params": params}
         await ws.send(json.dumps(msg))
 
+    # --- Scoped helpers for message processing ---
+
+    def _build_cache_dict() -> dict:
+        return {
+            "map": current_map,
+            "tickers": current_tickers,
+            "orderbooks": current_orderbooks,
+            "fills": current_fills,
+            "orders": current_orders,
+            "positions": current_positions,
+        }
+
+    def _handle_ticker(msg: dict) -> None:
+        data = msg.get("msg", msg)
+        tkr = data.get("ticker", "")
+        if tkr:
+            current_tickers[tkr] = {
+                "yes_bid": data.get("yes_bid"),
+                "no_bid": data.get("no_bid"),
+                "volume": data.get("volume"),
+                "open_interest": data.get("open_interest"),
+                "updated_at": time.time(),
+            }
+            _save_cache(_build_cache_dict())
+        _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+
+    async def _handle_lifecycle(msg: dict, ws: websockets.WebSocketClientProtocol) -> None:
+        evt = msg.get("event", msg)
+        ticker = evt.get("ticker", "")
+        category = evt.get("category", "")
+        lifecycle = evt.get("lifecycle", evt.get("status", ""))
+
+        if ticker and category:
+            current_map[ticker] = category
+            _save_cache(_build_cache_dict())
+            logger.debug("Cache updated: %s → %s (%s)", ticker, category, lifecycle)
+
+        if ticker and ticker not in ob_subscribed:
+            ob_subscribed.add(ticker)
+            try:
+                await _send_sub(
+                    ws,
+                    {"channels": ["orderbook_delta"], "market_tickers": [ticker]},
+                )
+                logger.info("Dynamic orderbook_delta sub for new ticker: %s", ticker)
+            except websockets.ConnectionClosed:
+                logger.warning("Connection lost while subscribing orderbook_delta for %s", ticker)
+                raise
+            except OSError as exc:
+                logger.error("Connection error subscribing orderbook_delta for %s: %s", ticker, exc)
+                raise
+            except Exception as exc:
+                logger.warning("Failed to sub orderbook_delta for %s: %s", ticker, exc)
+
+        _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+
+    def _handle_orderbook(msg: dict) -> None:
+        data = msg.get("msg", msg)
+        tkr = data.get("ticker", msg.get("market_ticker", ""))
+        now = time.time()
+        if tkr:
+            ob = current_orderbooks.get(tkr, {})
+            if "yes_bids" in data:
+                ob["yes_bids"] = data["yes_bids"]
+            if "no_bids" in data:
+                ob["no_bids"] = data["no_bids"]
+            if "yes" in data:
+                ob["yes_bids"] = data["yes"]
+            if "no" in data:
+                ob["no_bids"] = data["no"]
+            ob["updated_at"] = now
+            current_orderbooks[tkr] = ob
+            _save_cache(_build_cache_dict())
+        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
+
+    def _handle_fill(msg: dict) -> None:
+        data = msg.get("msg", msg)
+        fill_entry = {
+            "order_id": str(data.get("order_id", "")),
+            "ticker": data.get("ticker", data.get("market_ticker", "")),
+            "side": data.get("side", ""),
+            "shares": data.get("shares", data.get("count", 0)),
+            "price": data.get("price", 0),
+            "timestamp": time.time(),
+        }
+        current_fills.append(fill_entry)
+        if len(current_fills) > _MAX_FILL_HISTORY:
+            del current_fills[: len(current_fills) - _MAX_FILL_HISTORY]
+        _save_cache(_build_cache_dict())
+        _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+
+    def _handle_orders(msg: dict) -> None:
+        data = msg.get("msg", msg)
+        orders_raw = data.get("orders", [data]) if isinstance(data, dict) else data
+        if not isinstance(orders_raw, list):
+            orders_raw = [orders_raw]
+        for order_data in orders_raw:
+            oid = str(order_data.get("order_id", ""))
+            if oid:
+                current_orders[oid] = {
+                    "ticker": order_data.get("ticker", order_data.get("market_ticker", "")),
+                    "status": order_data.get("status", ""),
+                    "side": order_data.get("side", ""),
+                    "remaining": order_data.get("remaining", order_data.get("unfilled", 0)),
+                    "filled": order_data.get("filled", 0),
+                    "updated_at": time.time(),
+                }
+        _save_cache(_build_cache_dict())
+        _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+
+    def _handle_positions(msg: dict) -> None:
+        data = msg.get("msg", msg)
+        positions_raw = (
+            data.get("positions", [data]) if isinstance(data, dict) else data
+        )
+        if not isinstance(positions_raw, list):
+            positions_raw = [positions_raw]
+        for pos_data in positions_raw:
+            tkr = pos_data.get("ticker", pos_data.get("market_ticker", ""))
+            if tkr:
+                current_positions[tkr] = {
+                    "side": pos_data.get("side", ""),
+                    "quantity": pos_data.get("quantity", pos_data.get("count", 0)),
+                    "entry_price": pos_data.get("entry_price", 0),
+                    "current_price": pos_data.get("current_price", 0),
+                    "updated_at": time.time(),
+                }
+        _save_cache(_build_cache_dict())
+        _write_status(connected=True, last_msg_at=time.time(), cache_size=len(current_map))
+
+    async def _subscribe_channels(ws: websockets.WebSocketClientProtocol) -> None:
+        """Subscribe to all required WebSocket channels."""
+        await _send_sub(ws, {"channels": ["fill", "user_orders", "market_positions"]})
+        await _send_sub(ws, {"channels": ["market_lifecycle_v2"]})
+        await _send_sub(ws, {"channels": ["ticker"]})
+
+        if ob_subscribed:
+            tickers_list = sorted(ob_subscribed)
+            batch_size = 100
+            for i in range(0, len(tickers_list), batch_size):
+                batch = tickers_list[i : i + batch_size]
+                await _send_sub(
+                    ws, {"channels": ["orderbook_delta"], "market_tickers": batch}
+                )
+                logger.info(
+                    "Subscribed orderbook_delta for %d tickers (batch %d)",
+                    len(batch),
+                    i // batch_size + 1,
+                )
+
+    async def _read_acks(ws: websockets.WebSocketClientProtocol) -> None:
+        """Read subscription acknowledgement messages, with timeout per ack."""
+        for _ in range(msg_id):
+            try:
+                ack = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                logger.info("Subscription ack: %s", str(ack)[:200])
+            except asyncio.TimeoutError:
+                logger.warning("Timeout waiting for subscription ack")
+                break
+            except websockets.ConnectionClosed:
+                logger.warning("Connection closed while reading subscription acks")
+                raise
+
+    async def _process_messages(ws: websockets.WebSocketClientProtocol) -> None:
+        """Process incoming WebSocket messages with scoped exception handling."""
+        async for raw in ws:
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                logger.debug("Skipping malformed WebSocket message (length=%d)", len(raw))
+                continue
+
+            channel = msg.get("channel", msg.get("type", ""))
+
+            try:
+                if channel == "ticker":
+                    _handle_ticker(msg)
+                    continue
+
+                if channel == "market_lifecycle_v2":
+                    await _handle_lifecycle(msg, ws)
+                    continue
+
+                if channel == "orderbook_delta":
+                    _handle_orderbook(msg)
+                    continue
+
+                if channel == "fill":
+                    _handle_fill(msg)
+                    continue
+
+                if channel == "user_orders":
+                    _handle_orders(msg)
+                    continue
+
+                if channel == "market_positions":
+                    _handle_positions(msg)
+                    continue
+            except (ValueError, KeyError) as exc:
+                logger.error(
+                    "Invalid message data on channel=%s: %s", channel, exc, exc_info=False
+                )
+                continue
+            except DataError as exc:
+                logger.error("Data processing error on channel=%s: %s", channel, exc)
+                continue
+
+    # --- Main reconnect loop with scoped exception handlers ---
+
     while True:
         try:
             headers = auth_headers(api_key, private_key, "GET", "/trade-api/ws/v2")
             headers["Content-Type"] = "application/json"
+        except Exception as exc:
+            logger.exception("Auth header generation failed: %s", exc)
+            raise
 
+        try:
             async with websockets.connect(
                 ws_url,
                 additional_headers=headers,
@@ -300,248 +512,47 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                 delay = RECONNECT_DELAY
                 _write_status(connected=True)
 
-                # 1) Portfolio-level channels — no market_ticker needed
-                await _send_sub(ws, {"channels": ["fill", "user_orders", "market_positions"]})
+                try:
+                    await _subscribe_channels(ws)
+                except (websockets.ConnectionClosed, OSError) as exc:
+                    logger.warning("Connection lost during channel subscription: %s", exc)
+                    raise
+                except Exception as exc:
+                    logger.exception("Unexpected error during channel subscription: %s", exc)
+                    raise
 
-                # 2) Global broadcast channels
-                await _send_sub(ws, {"channels": ["market_lifecycle_v2"]})
+                try:
+                    await _read_acks(ws)
+                except websockets.ConnectionClosed:
+                    logger.warning("Connection closed while reading subscription acks")
+                    raise
+                except OSError as exc:
+                    logger.error("Connection error reading subscription acks: %s", exc)
+                    raise
 
-                # 3) Ticker — subscribe globally (no per-market filter needed by API)
-                await _send_sub(ws, {"channels": ["ticker"]})
-
-                # 4) orderbook_delta — subscribe per-market using known tickers
-                if ob_subscribed:
-                    tickers_list = sorted(ob_subscribed)
-                    # Kalshi may have limits per subscription; batch if needed
-                    batch_size = 100
-                    for i in range(0, len(tickers_list), batch_size):
-                        batch = tickers_list[i : i + batch_size]
-                        await _send_sub(
-                            ws, {"channels": ["orderbook_delta"], "market_tickers": batch}
-                        )
-                        logger.info(
-                            "Subscribed orderbook_delta for %d tickers (batch %d)",
-                            len(batch),
-                            i // batch_size + 1,
-                        )
-
-                # Read acks for all subscriptions
-                for _ in range(msg_id):
-                    try:
-                        ack = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                        logger.info("Subscription ack: %s", str(ack)[:200])
-                    except asyncio.TimeoutError:
-                        logger.warning("Timeout waiting for subscription ack")
-                        break
-
-                async for raw in ws:
-                    try:
-                        msg = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-
-                    channel = msg.get("channel", msg.get("type", ""))
-                    now = time.time()
-
-                    # --- ticker channel ---
-                    if channel == "ticker":
-                        data = msg.get("msg", msg)
-                        tkr = data.get("ticker", "")
-                        if tkr:
-                            current_tickers[tkr] = {
-                                "yes_bid": data.get("yes_bid"),
-                                "no_bid": data.get("no_bid"),
-                                "volume": data.get("volume"),
-                                "open_interest": data.get("open_interest"),
-                                "updated_at": now,
-                            }
-                            _save_cache(
-                                {
-                                    "map": current_map,
-                                    "tickers": current_tickers,
-                                    "orderbooks": current_orderbooks,
-                                    "fills": current_fills,
-                                    "orders": current_orders,
-                                    "positions": current_positions,
-                                }
-                            )
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
-
-                    # --- market_lifecycle_v2 channel ---
-                    if channel == "market_lifecycle_v2":
-                        evt = msg.get("event", msg)
-                        ticker = evt.get("ticker", "")
-                        category = evt.get("category", "")
-                        lifecycle = evt.get("lifecycle", evt.get("status", ""))
-
-                        if ticker and category:
-                            current_map[ticker] = category
-                            _save_cache(
-                                {
-                                    "map": current_map,
-                                    "tickers": current_tickers,
-                                    "orderbooks": current_orderbooks,
-                                    "fills": current_fills,
-                                    "orders": current_orders,
-                                    "positions": current_positions,
-                                }
-                            )
-                            logger.debug("Cache updated: %s → %s (%s)", ticker, category, lifecycle)
-
-                        # If this ticker has markets and we haven't subscribed
-                        # orderbook_delta for it yet, do so now
-                        if ticker and ticker not in ob_subscribed:
-                            ob_subscribed.add(ticker)
-                            try:
-                                await _send_sub(
-                                    ws,
-                                    {
-                                        "channels": ["orderbook_delta"],
-                                        "market_tickers": [ticker],
-                                    },
-                                )
-                                logger.info(
-                                    "Dynamic orderbook_delta sub for new ticker: %s", ticker
-                                )
-                            except Exception as exc:
-                                logger.warning(
-                                    "Failed to sub orderbook_delta for %s: %s", ticker, exc
-                                )
-
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
-
-                    # --- orderbook_delta channel ---
-                    if channel == "orderbook_delta":
-                        data = msg.get("msg", msg)
-                        tkr = data.get("ticker", msg.get("market_ticker", ""))
-                        if tkr:
-                            ob = current_orderbooks.get(tkr, {})
-                            # Apply deltas: yes_bids and no_bids are arrays of [price, size]
-                            if "yes_bids" in data:
-                                ob["yes_bids"] = data["yes_bids"]
-                            if "no_bids" in data:
-                                ob["no_bids"] = data["no_bids"]
-                            # Handle snapshot-style full replacement
-                            if "yes" in data:
-                                ob["yes_bids"] = data["yes"]
-                            if "no" in data:
-                                ob["no_bids"] = data["no"]
-                            ob["updated_at"] = now
-                            current_orderbooks[tkr] = ob
-                            _save_cache(
-                                {
-                                    "map": current_map,
-                                    "tickers": current_tickers,
-                                    "orderbooks": current_orderbooks,
-                                    "fills": current_fills,
-                                    "orders": current_orders,
-                                    "positions": current_positions,
-                                }
-                            )
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
-
-                    # --- fill channel ---
-                    if channel == "fill":
-                        data = msg.get("msg", msg)
-                        fill_entry = {
-                            "order_id": str(data.get("order_id", "")),
-                            "ticker": data.get("ticker", data.get("market_ticker", "")),
-                            "side": data.get("side", ""),
-                            "shares": data.get("shares", data.get("count", 0)),
-                            "price": data.get("price", 0),
-                            "timestamp": now,
-                        }
-                        current_fills.append(fill_entry)
-                        # Trim to max history
-                        if len(current_fills) > _MAX_FILL_HISTORY:
-                            current_fills = current_fills[-_MAX_FILL_HISTORY:]
-                        _save_cache(
-                            {
-                                "map": current_map,
-                                "tickers": current_tickers,
-                                "orderbooks": current_orderbooks,
-                                "fills": current_fills,
-                                "orders": current_orders,
-                                "positions": current_positions,
-                            }
-                        )
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
-
-                    # --- user_orders channel ---
-                    if channel == "user_orders":
-                        data = msg.get("msg", msg)
-                        # May be a single order or list of orders
-                        orders_raw = data.get("orders", [data]) if isinstance(data, dict) else data
-                        if not isinstance(orders_raw, list):
-                            orders_raw = [orders_raw]
-                        for order_data in orders_raw:
-                            oid = str(order_data.get("order_id", ""))
-                            if oid:
-                                current_orders[oid] = {
-                                    "ticker": order_data.get(
-                                        "ticker", order_data.get("market_ticker", "")
-                                    ),
-                                    "status": order_data.get("status", ""),
-                                    "side": order_data.get("side", ""),
-                                    "remaining": order_data.get(
-                                        "remaining", order_data.get("unfilled", 0)
-                                    ),
-                                    "filled": order_data.get("filled", 0),
-                                    "updated_at": now,
-                                }
-                        _save_cache(
-                            {
-                                "map": current_map,
-                                "tickers": current_tickers,
-                                "orderbooks": current_orderbooks,
-                                "fills": current_fills,
-                                "orders": current_orders,
-                                "positions": current_positions,
-                            }
-                        )
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
-
-                    # --- market_positions channel ---
-                    if channel == "market_positions":
-                        data = msg.get("msg", msg)
-                        # May be a single position or list
-                        positions_raw = (
-                            data.get("positions", [data]) if isinstance(data, dict) else data
-                        )
-                        if not isinstance(positions_raw, list):
-                            positions_raw = [positions_raw]
-                        for pos_data in positions_raw:
-                            tkr = pos_data.get("ticker", pos_data.get("market_ticker", ""))
-                            if tkr:
-                                current_positions[tkr] = {
-                                    "side": pos_data.get("side", ""),
-                                    "quantity": pos_data.get("quantity", pos_data.get("count", 0)),
-                                    "entry_price": pos_data.get("entry_price", 0),
-                                    "current_price": pos_data.get("current_price", 0),
-                                    "updated_at": now,
-                                }
-                        _save_cache(
-                            {
-                                "map": current_map,
-                                "tickers": current_tickers,
-                                "orderbooks": current_orderbooks,
-                                "fills": current_fills,
-                                "orders": current_orders,
-                                "positions": current_positions,
-                            }
-                        )
-                        _write_status(connected=True, last_msg_at=now, cache_size=len(current_map))
-                        continue
+                try:
+                    await _process_messages(ws)
+                except websockets.ConnectionClosed:
+                    logger.warning("Connection closed during message processing")
+                    raise
+                except OSError as exc:
+                    logger.error("Connection error during message processing: %s", exc)
+                    raise
 
         except websockets.ConnectionClosed:
             logger.warning("Connection closed, reconnecting in %.0fs", delay)
         except OSError as exc:
             logger.error("Connection error: %s, retrying in %.0fs", exc, delay)
+        except RateLimitError as exc:
+            retry_after = exc.retry_after_seconds or 60.0
+            logger.warning(
+                "Rate limited (retry_after=%.0fs), backing off before reconnect", retry_after
+            )
+            await asyncio.sleep(retry_after)
+            continue
+        except AuthenticationError as exc:
+            logger.error("Authentication failed: %s — cannot reconnect without valid credentials", exc)
+            raise
         except Exception:
             logger.exception("Unexpected error, reconnecting in %.0fs", delay)
 

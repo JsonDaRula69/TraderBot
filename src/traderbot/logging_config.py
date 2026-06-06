@@ -12,8 +12,17 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+try:
+    import sentry_sdk
+
+    HAS_SENTRY = True
+except ImportError:
+    HAS_SENTRY = False
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from sentry_sdk.types import Event, Hint
 
 _root_logger_configured = False
 
@@ -32,6 +41,38 @@ class _JsonFormatter(logging.Formatter):
             "operation_id": operation_id_var.get(""),
         }
         return json.dumps(obj, ensure_ascii=False)
+
+
+def _sentry_before_send(event: Event, hint: Hint) -> Event:
+    """Add error_code as a Sentry tag for TraderBotError instances."""
+    exc_info = hint.get("exc_info")
+    if exc_info:
+        _exc_type, exc_value, _ = exc_info
+        from traderbot.exceptions import TraderBotError
+
+        if isinstance(exc_value, TraderBotError) and exc_value.error_code:
+            tags = event.get("tags") or {}
+            tags["error_code"] = str(exc_value.error_code)
+            event["tags"] = tags
+    return event
+
+
+def init_sentry() -> bool:
+    """Initialize Sentry SDK if TRADERBOT_SENTRY_DSN is set.
+
+    Returns True if Sentry was initialized, False otherwise.
+    Silently does nothing when the DSN is not set or sentry-sdk is not installed.
+    """
+    dsn = os.environ.get("TRADERBOT_SENTRY_DSN", "")
+    if not dsn or not HAS_SENTRY:
+        return False
+
+    sentry_sdk.init(
+        dsn=dsn,
+        traces_sample_rate=0.1,
+        before_send=_sentry_before_send,
+    )
+    return True
 
 
 def _configure_module_levels() -> None:
@@ -90,7 +131,9 @@ def configure_root_logger(level: int = logging.INFO) -> None:
         # During tests the root may already have handlers; replace formatters
         # only on StreamHandlers we own so caplog still works.
         for h in root.handlers:
-            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler):
+            if isinstance(h, logging.StreamHandler) and not isinstance(
+                h, logging.handlers.RotatingFileHandler
+            ):
                 h.setFormatter(formatter)
 
     # Optional RotatingFileHandler
@@ -106,6 +149,8 @@ def configure_root_logger(level: int = logging.INFO) -> None:
 
     # Per-module log level overrides
     _configure_module_levels()
+
+    init_sentry()
 
     _root_logger_configured = True
 
