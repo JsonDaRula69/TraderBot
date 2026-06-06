@@ -12,7 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class EnvKalshiConfig(BaseSettings):
-    """Kalshi config that reads credentials from .env file."""
+    """Lenient Kalshi config variant for multi-stage credential resolution.
+
+    Unlike :class:`KalshiConfig` (which requires ``api_key``), this class
+    allows ``api_key=None`` so callers can attempt env-file resolution first
+    and fall back to keyring or interactive prompts when no key is found.
+    Uses ``extra="ignore"`` for the same reason as :class:`KalshiConfig`:
+    the ``KALSHI_*`` env prefix often captures unrelated variables.
+    """
 
     model_config = SettingsConfigDict(
         strict=True,

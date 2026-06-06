@@ -169,6 +169,144 @@ def get_profile_token(profile_name: str) -> str | None:
     return None
 
 
+def staleness_warning(profile_name: str | None = None) -> dict[str, str | bool]:
+    """Check profile token staleness and return a status dict.
+
+    Reads TRADERBOT_PROFILE_TOKEN from the process environment and .env file,
+    then verifies the token against the encrypted registry. If the token is
+    invalid, expired, or revoked, logs a WARNING with remediation instructions.
+
+    Args:
+        profile_name: Optional profile name to check. If None, resolves from
+            the current TRADERBOT_PROFILE_TOKEN env var.
+
+    Returns:
+        Dict with keys:
+            - token_source: "env" | "env_file" | "none"
+            - valid: bool — whether the token resolves successfully
+            - expired: bool — whether the token was found but expired
+            - profile: str — resolved profile name (empty if invalid)
+            - agent: str — resolved agent id (empty if invalid)
+            - message: str — human-readable status message
+    """
+    result: dict[str, str | bool] = {
+        "token_source": "none",
+        "valid": False,
+        "expired": False,
+        "profile": "",
+        "agent": "",
+        "message": "",
+    }
+
+    token: str | None = None
+    if profile_name is not None:
+        token = get_profile_token(profile_name)
+        if token is not None:
+            result["token_source"] = "registry"
+    else:
+        token = os.environ.get("TRADERBOT_PROFILE_TOKEN")
+        if token is not None:
+            result["token_source"] = "env"
+        else:
+            from traderbot.profiles.runtime import _read_env_file_token
+
+            token = _read_env_file_token()
+            if token is not None:
+                result["token_source"] = "env_file"
+
+    if token is None:
+        result["message"] = "No profile token found. Assign one with: traderbot profile assign <profile> <agent>"
+        logger.warning("Token staleness check: no token found")
+        return result
+
+    # Resolve against the encrypted registry
+    resolution = resolve_token(token)
+    if resolution is not None:
+        profile_resolved, agent_resolved = resolution
+        result["valid"] = True
+        result["profile"] = profile_resolved
+        result["agent"] = agent_resolved
+        result["message"] = f"Token valid for profile '{profile_resolved}' (agent '{agent_resolved}')"
+    else:
+        # Distinguish expired vs revoked
+        result["expired"] = _check_token_expired(token)
+        if result["expired"]:
+            result["message"] = (
+                "Profile token has EXPIRED. Run: traderbot profile sync-env <profile_name>"
+            )
+        else:
+            result["message"] = (
+                "Profile token is INVALID or REVOKED. "
+                "Re-assign with: traderbot profile assign <profile> <agent> --force"
+            )
+        logger.warning(
+            "Token staleness check: %s (token=%s)",
+            result["message"],
+            _mask_token(token),
+        )
+
+    return result
+
+
+def _check_token_expired(token: str) -> bool:
+    """Check if a token exists in the registry but has expired."""
+    from datetime import UTC, datetime
+
+    tokens = _load_tokens_file()
+    now = datetime.now(UTC)
+    for entry in tokens:
+        if entry["token"] == token:
+            expires_str = entry.get("expires_at")
+            if expires_str is not None:
+                expires = datetime.fromisoformat(expires_str)
+                return expires < now
+            # Token found but no expiry — not expired
+            return False
+    # Token not found in registry at all — considered revoked, not expired
+    return False
+
+
+def sync_env_token(profile_name: str) -> str | None:
+    """Resolve a profile's current token and write it to .env.
+
+    Reads the current valid token from the encrypted registry for the given
+    profile, then updates TRADERBOT_PROFILE_TOKEN in ~/.traderbot/.env.
+
+    Args:
+        profile_name: The profile name whose token to sync.
+
+    Returns:
+        The synced token string if successful, None if profile has no token.
+    """
+    from traderbot.cli.helpers import _write_token_to_env
+    from traderbot.profiles.registry import ProfileRegistry
+
+    registry = ProfileRegistry()
+    if not registry.profile_exists(profile_name):
+        logger.error("Profile '%s' not found in registry", profile_name)
+        return None
+
+    token = get_profile_token(profile_name)
+    if token is None:
+        logger.error("No token assigned to profile '%s'", profile_name)
+        return None
+
+    # Verify the token is still valid
+    resolution = resolve_token(token)
+    if resolution is None:
+        logger.error(
+            "Token for profile '%s' is invalid/expired. Re-assign with: "
+            "traderbot profile assign %s <agent> --force",
+            profile_name,
+            profile_name,
+        )
+        return None
+
+    _write_token_to_env(token)
+    logger.info("Synced token for profile '%s' to .env", profile_name)
+    return token
+
+
 def rotate_token(profile_name: str, ttl_days: int = TOKEN_TTL_DAYS) -> tuple[str, str] | None:
     """Replace a profile's token with a new one, invalidating the old token.
 

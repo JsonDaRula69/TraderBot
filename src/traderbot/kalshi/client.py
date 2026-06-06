@@ -63,7 +63,16 @@ class AuthenticationError(Exception):
 
 
 class KalshiConfig(BaseSettings):
-    """Configuration for Kalshi API client, loaded from environment variables."""
+    """Strict Pydantic config for the Kalshi API client.
+
+    Uses ``extra="ignore"`` (not ``"forbid"``) because the Kalshi API
+    environment often contains unrelated ``KALSHI_*`` variables (e.g. from
+    shell profiles, CI plugins, or future API parameters). Forbidding
+    extras would cause hard-to-debug startup crashes on any unexpected env
+    var — a brittle failure mode for what should be a tolerant config layer.
+    ``ignore`` silently discards unknown fields, matching the project's
+    explicit design decision (see commit 3d628e5).
+    """
 
     model_config = SettingsConfigDict(
         strict=True,

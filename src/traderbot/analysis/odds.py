@@ -9,6 +9,11 @@ logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict
 
+# Aligns with risk floor HARD_LIMITS['min_edge_pct'] (0.03).
+# Edges below 3% are classified as "neutral" (no directional opinion)
+# because a 1% edge is noise in prediction markets.
+EDGE_NEUTRAL_THRESHOLD: float = 0.03
+
 if TYPE_CHECKING:
     from traderbot.kalshi.models import OrderBook
 
@@ -67,7 +72,7 @@ def detect_edge(estimated_prob: float, orderbook: OrderBook) -> EdgeEstimate:
     market_prob = implied_probability(orderbook).yes_prob
     edge = estimated_prob - market_prob
 
-    if abs(edge) < 0.01:
+    if abs(edge) < EDGE_NEUTRAL_THRESHOLD:
         direction: Literal["yes", "no", "neutral"] = "neutral"
     elif edge > 0:
         direction = "yes"

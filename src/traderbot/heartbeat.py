@@ -134,6 +134,19 @@ class SystemHealthReview(BaseModel):
     alerts: list[str] = Field(default_factory=list)
 
 
+class TokenStalenessReview(BaseModel):
+    """Step 6.5: Profile token staleness check."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    token_source: str = "none"
+    valid: bool = False
+    expired: bool = False
+    profile: str = ""
+    agent: str = ""
+    degraded: bool = False
+
+
 class HeartbeatResult(BaseModel):
     """Complete heartbeat cycle output."""
 
@@ -146,6 +159,7 @@ class HeartbeatResult(BaseModel):
     learning_promotion: LearningPromotionReview = Field(default_factory=LearningPromotionReview)
     circuit_breaker: CircuitBreakerReview = Field(default_factory=CircuitBreakerReview)
     system_health: SystemHealthReview = Field(default_factory=SystemHealthReview)
+    token_staleness: TokenStalenessReview = Field(default_factory=TokenStalenessReview)
     steps_completed: list[str] = Field(default_factory=list)
     state_path: Path | None = Field(default=None)
     state_saved: bool = Field(default=False)
@@ -441,6 +455,29 @@ async def step_system_health(
     )
 
 
+def step_token_staleness() -> TokenStalenessReview:
+    """Step 6.5: Check profile token staleness.
+
+    Calls staleness_warning() to verify the current token against the encrypted
+    registry. Emits a degraded status flag if the token is invalid or expired.
+    """
+    from traderbot.profiles.tokens import staleness_warning
+
+    result = staleness_warning()
+    degraded = not result["valid"]
+    if degraded:
+        logger.warning("Token staleness detected: %s", result["message"])
+
+    return TokenStalenessReview(
+        token_source=result["token_source"],
+        valid=result["valid"],
+        expired=result["expired"],
+        profile=result["profile"],
+        agent=result["agent"],
+        degraded=degraded,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Full heartbeat cycle
 # ---------------------------------------------------------------------------
@@ -486,6 +523,10 @@ async def run_heartbeat_cycle(
     system_health = await step_system_health(conn)
     steps_completed.append("system_health")
 
+    # Step 6.5: Token staleness check
+    token_staleness = step_token_staleness()
+    steps_completed.append("token_staleness")
+
     # Step 7: Update check (respects user-configured interval and enabled flag via UpdateConfig)
     update_result = check_for_updates()
     if update_result:
@@ -502,6 +543,7 @@ async def run_heartbeat_cycle(
         learning_promotion=learning_promotion,
         circuit_breaker=circuit_breaker,
         system_health=system_health,
+        token_staleness=token_staleness,
         steps_completed=steps_completed,
     )
 
@@ -519,6 +561,7 @@ async def run_heartbeat_cycle(
         learning_promotion=result.learning_promotion,
         circuit_breaker=result.circuit_breaker,
         system_health=result.system_health,
+        token_staleness=result.token_staleness,
         steps_completed=steps_completed,
     )
 
@@ -580,6 +623,15 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
     if not alert_lines:
         alert_lines = "- None\n"
 
+    staleness = result.token_staleness
+    staleness_lines = "- Valid ✓\n"
+    if not staleness.valid:
+        status = "EXPIRED" if staleness.expired else "INVALID/REVOKED"
+        staleness_lines = f"- ⚠️ {status} (source: {staleness.token_source})\n"
+        if staleness.profile:
+            staleness_lines += f"  Profile: {staleness.profile}\n"
+        staleness_lines += "  Run `traderbot profile sync-env <profile>` to fix\n"
+
     content = f"""\
 # TraderBot Heartbeat Data
 
@@ -609,6 +661,8 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
 - DB: {health.db_integrity}
 - Freshness: {health.data_freshness}
 
+### Token Staleness
+{staleness_lines}
 ### Alerts
 {alert_lines}
 """

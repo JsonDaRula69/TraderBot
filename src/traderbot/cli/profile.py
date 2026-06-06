@@ -926,6 +926,40 @@ def profile_assign(
     )
 
 
+@profile_app.command("sync-env")
+def profile_sync_env(
+    profile_name: Annotated[str, typer.Argument(help="Profile name whose token to sync to .env")],
+) -> None:
+    """Sync a profile's token from the registry to .env.
+
+    Resolves the current valid token for the given profile from the encrypted
+    token registry, then writes it as TRADERBOT_PROFILE_TOKEN in ~/.traderbot/.env.
+    Useful when the .env token has gone stale (expired or out of sync with
+    the registry).
+    """
+    from traderbot.profiles.tokens import sync_env_token
+
+    console = Console()
+    token = sync_env_token(profile_name)
+
+    if token is None:
+        from traderbot.profiles.registry import ProfileRegistry
+
+        registry = ProfileRegistry()
+        if not registry.profile_exists(profile_name):
+            console.print(f"[red]Error:[/red] Profile '{profile_name}' not found")
+        else:
+            console.print(
+                f"[red]Error:[/red] No valid token for profile '{profile_name}'. "
+                "Re-assign with: traderbot profile assign "
+                f"{profile_name} <agent> --force"
+            )
+        raise typer.Exit(1)
+
+    console.print(f"[green]✓[/green] Synced token for profile '{profile_name}' to .env")
+    console.print(f"  Token: {_mask_token(token)}")
+
+
 @profile_app.command("revoke")
 def profile_revoke(
     profile_name: Annotated[str, typer.Argument(help="Profile name")],
