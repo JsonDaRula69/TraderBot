@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `traderbot data forecasts` display mode no longer crashes with `AttributeError: 'CityForecast' object has no attribute 'temperature_high'` — all references changed to `high_temp_f` (bug #132)
+- `WeatherDataProvider` now lazily re-creates httpx client when called across multiple `asyncio.run()` boundaries, preventing `RuntimeError: Event loop is closed` on repeated CLI invocations (bug #132)
 - `traderbot auth set-kalshi` now always prompts for credentials instead of silently re-using .env values — enables credential rotation without manual cleanup
 - `traderbot auth set-kalshi` PEM prompt now uses `sys.stdin.read()` instead of `typer.prompt()` to capture multi-line PEM blocks — single-line prompt was truncating pasted keys (PR #93)
 - `traderbot update` version comparison now uses Git tags API (`/git/refs/tags`) instead of `releases/latest` — `releases/latest` only returns GitHub Releases (created on tag push), so every version between Release creation and the next tag push appeared as "Update available: v0.15.NN → v0.15.00" (PR #94)
