@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Literal
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:

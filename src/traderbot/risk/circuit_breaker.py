@@ -8,6 +8,7 @@ import hmac
 import json
 import logging
 import os
+import time
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
@@ -31,6 +32,8 @@ SLOW_THRESHOLD = 0.01
 HALT_THRESHOLD = 0.02
 FULL_STOP_THRESHOLD = 0.10
 
+FULL_STOP_RECOVERY_COOLDOWN_SECS = 86400  # 24 hours
+
 
 class CircuitBreakerState(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
@@ -41,6 +44,7 @@ class CircuitBreakerState(BaseModel):
     position_size_multiplier: float = 1.0
     can_trade: bool = True
     reason: str = ""
+    last_recovery_ts: float = 0.0
 
 
 class CircuitBreaker:
@@ -51,13 +55,13 @@ class CircuitBreaker:
         self._load_state()
 
     def check(self, daily_loss_pct: float, drawdown_pct: float) -> CircuitBreakerState:
-        if self._state.level == BreakerLevel.FULL_STOP:
-            self._state.daily_loss_pct = daily_loss_pct
-            self._state.drawdown_pct = drawdown_pct
-            self._persist_state()
-            return self._state.model_copy()
+        previous_level = self._state.level
+        in_cooldown = (
+            self._state.last_recovery_ts > 0
+            and 0 < (time.monotonic() - self._state.last_recovery_ts) < FULL_STOP_RECOVERY_COOLDOWN_SECS
+        )
 
-        if drawdown_pct >= FULL_STOP_THRESHOLD:
+        if drawdown_pct >= FULL_STOP_THRESHOLD and not in_cooldown:
             self._state = CircuitBreakerState(
                 level=BreakerLevel.FULL_STOP,
                 daily_loss_pct=daily_loss_pct,
@@ -92,6 +96,14 @@ class CircuitBreaker:
                 position_size_multiplier=1.0,
                 can_trade=True,
                 reason="",
+            )
+
+        # Record recovery timestamp when transitioning from FULL_STOP to a lower level
+        if previous_level == BreakerLevel.FULL_STOP and self._state.level != BreakerLevel.FULL_STOP:
+            self._state = self._state.model_copy(update={"last_recovery_ts": time.monotonic()})
+            logger.info(
+                "Circuit breaker auto-recovered from FULL_STOP to %s",
+                self._state.level.name,
             )
 
         self._persist_state()

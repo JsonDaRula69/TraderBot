@@ -334,11 +334,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                 )
                 breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
             else:
-                # No paper profile — read existing state, call check with zero loss to trigger recovery
                 state = breaker.get_state()
-                if state.level in (BreakerLevel.SLOW, BreakerLevel.HALT):
-                    from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
-
+                if state.level != BreakerLevel.NORMAL:
                     logger.info("No profile — calling breaker.check(0, 0) for auto-recovery")
                     breaker.check(daily_loss_pct=0.0, drawdown_pct=0.0)
 
