@@ -40,7 +40,7 @@ def get_current_version() -> str:
         return "0.0.0"
 
 
-def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | None:
+def fetch_latest_version(cache_ttl_seconds: int = 3600, force: bool = False) -> tuple[str, str] | None:
     """Fetch latest version tag from GitHub, cached locally to avoid 403 rate limits.
 
     Uses the Git tags API (not releases/latest) so every commit-tagged version
@@ -50,9 +50,11 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
     (default 1 hour). Subsequent calls within the TTL return the cached value
     without hitting the GitHub API — preventing unauthenticated rate-limit
     exhaustion (60 req/hour per IP).
+
+    Pass ``force=True`` to bypass the cache and always hit the GitHub API.
     """
     cache_path = CACHE_DIR / ".update_cache.json"
-    if cache_path.exists():
+    if not force and cache_path.exists():
         try:
             cached = json.loads(cache_path.read_text())
             age = _time.time() - cached.get("ts", 0)
@@ -155,7 +157,7 @@ def check_for_updates(
             pass
 
     current = get_current_version().lstrip("v")
-    latest = fetch_latest_version(cache_ttl_seconds=interval_minutes * 60)
+    latest = fetch_latest_version(cache_ttl_seconds=interval_minutes * 60, force=force)
     if latest is None:
         return None
 
