@@ -198,7 +198,7 @@ def _t_critical(alpha: float, df: int) -> float:
     For 95% CI with n=3 (df=2), returns ~4.303 instead of 1.96.
     """
     try:
-        from scipy import stats  # noqa: F811
+        from scipy import stats
 
         return float(stats.t.ppf(1.0 - alpha / 2.0, df))
     except ImportError:

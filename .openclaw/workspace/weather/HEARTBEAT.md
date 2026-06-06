@@ -24,15 +24,15 @@ session — so they never collide with trading or each other._
 Register all tasks as isolated cron jobs (run once):
 
 ```bash
-traderbot cron setup-heartbeat-tasks --agent weather
+traderbot cron setup --agent weather --role trader --replace
 ```
 
 Verify:
 ```bash
-openclaw cron list | grep weather
+traderbot cron setup --agent weather --role trader --json
 ```
 
 Remove:
 ```bash
-traderbot cron remove-heartbeat-tasks --agent weather
+traderbot cron setup --agent weather --role trader --replace
 ```
