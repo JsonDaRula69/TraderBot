@@ -33,13 +33,14 @@ def _seed_position(
     quantity: int,
     avg_price: int,
     settlement_result: bool | None = None,
+    side: str = "yes",
 ) -> None:
     """Insert a position row directly into SQLite."""
     now = datetime.now(UTC).isoformat()
     conn.execute(
-        "INSERT INTO positions (ticker, quantity, avg_price, settlement_result, updated_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (ticker, quantity, avg_price, settlement_result, now),
+        "INSERT INTO positions (ticker, side, quantity, avg_price, settlement_result, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (ticker, side, quantity, avg_price, settlement_result, now),
     )
     conn.commit()
 
@@ -179,3 +180,80 @@ class TestPortfolioValueClamping:
             effective_balance_cents=10_000,
         )
         assert pb.portfolio_value_cents == 9_500
+
+
+class TestSideAwareSettlementPayout:
+    """compute_paper_balance() must compute payout correctly for both YES and NO sides."""
+
+    def test_no_position_wins_gets_full_payout(self) -> None:
+        """NO side wins when market resolves NO → payout = 100 * qty."""
+        conn, _ = _db_path_in_memory()
+        _seed_position(conn, "NO-WIN", quantity=5, avg_price=40, settlement_result=False, side="no")
+
+        from unittest.mock import patch
+
+        profile = _make_profile(initial_cents=10_000)
+        with patch("traderbot.paper.get_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = lambda s: conn
+            mock_conn.return_value.__exit__ = lambda s, *a: None
+            result = compute_paper_balance(profile, db_path=None)
+
+        assert result is not None
+        assert result.settled_payout_cents == 500
+        assert result.remaining_cents == 10_000 - 200 + 500
+
+    def test_yes_position_loses_gets_zero(self) -> None:
+        """YES side loses when market resolves NO → payout = 0."""
+        conn, _ = _db_path_in_memory()
+        _seed_position(conn, "YES-LOSE", quantity=3, avg_price=60, settlement_result=False, side="yes")
+
+        from unittest.mock import patch
+
+        profile = _make_profile(initial_cents=10_000)
+        with patch("traderbot.paper.get_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = lambda s: conn
+            mock_conn.return_value.__exit__ = lambda s, *a: None
+            result = compute_paper_balance(profile, db_path=None)
+
+        assert result is not None
+        assert result.settled_payout_cents == 0
+        assert result.remaining_cents == 10_000 - 180
+
+    def test_no_position_loses_gets_zero(self) -> None:
+        """NO side loses when market resolves YES → payout = 0."""
+        conn, _ = _db_path_in_memory()
+        _seed_position(conn, "NO-LOSE", quantity=4, avg_price=55, settlement_result=True, side="no")
+
+        from unittest.mock import patch
+
+        profile = _make_profile(initial_cents=10_000)
+        with patch("traderbot.paper.get_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = lambda s: conn
+            mock_conn.return_value.__exit__ = lambda s, *a: None
+            result = compute_paper_balance(profile, db_path=None)
+
+        assert result is not None
+        assert result.settled_payout_cents == 0
+        assert result.remaining_cents == 10_000 - 220
+
+    def test_mixed_yes_no_settlements(self) -> None:
+        """Mix of YES-win, NO-win, YES-lose, NO-lose, and open positions."""
+        conn, _ = _db_path_in_memory()
+        _seed_position(conn, "YWIN", quantity=5, avg_price=50, settlement_result=True, side="yes")
+        _seed_position(conn, "NWIN", quantity=3, avg_price=45, settlement_result=False, side="no")
+        _seed_position(conn, "YLOSE", quantity=2, avg_price=60, settlement_result=False, side="yes")
+        _seed_position(conn, "NLOSE", quantity=4, avg_price=30, settlement_result=True, side="no")
+        _seed_position(conn, "OPEN", quantity=2, avg_price=70, settlement_result=None, side="yes")
+
+        from unittest.mock import patch
+
+        profile = _make_profile(initial_cents=10_000)
+        with patch("traderbot.paper.get_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = lambda s: conn
+            mock_conn.return_value.__exit__ = lambda s, *a: None
+            result = compute_paper_balance(profile, db_path=None)
+
+        assert result is not None
+        assert result.settled_payout_cents == 800
+        assert result.remaining_cents == 10_035
+        assert result.open_position_count == 1

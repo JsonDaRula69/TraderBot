@@ -64,10 +64,14 @@ def compute_paper_balance(
     with get_connection(resolved) as conn:
         for pos in list_all(conn):
             total_cost += pos.avg_price * pos.quantity
-            if pos.settlement_result is True:
-                total_payout += 100 * pos.quantity
-            elif pos.settlement_result is False:
-                pass
+            if pos.settlement_result == "void":
+                total_cost -= pos.avg_price * pos.quantity  # refund cost
+            elif pos.settlement_result is not None:
+                won = (pos.side == "yes" and pos.settlement_result is True) or (
+                    pos.side == "no" and pos.settlement_result is False
+                )
+                if won:
+                    total_payout += 100 * pos.quantity
             else:
                 open_count += 1
 
