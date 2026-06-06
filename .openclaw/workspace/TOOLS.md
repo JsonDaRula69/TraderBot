@@ -41,10 +41,8 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 | `traderbot profile get-token <name>` | Get profile token for service install | |
 | `traderbot auth setup-master-password` | Set master password | Required for paper trades |
 | `traderbot auth set-kalshi` | Set Kalshi API credentials (interactive prompt) | |
-| `traderbot auth set-voyage` | Set Voyage AI API key | |
-| `traderbot auth set-newsapi` | Set NewsAPI key | |
-| `traderbot auth check-kalshi` | Validate Kalshi credentials | |
-| `traderbot cron setup-heartbeat-tasks --agent main` | Register fleet cron jobs | Isolated sessions per task |
+| `traderbot auth check` | Validate all API credentials | `--json` for machine-readable output |
+| `traderbot cron setup --agent <name> --role <role> --replace` | Register fleet cron jobs | Isolated sessions per task |
 
 ### Oversight & Monitoring
 
@@ -89,7 +87,7 @@ If a command is not listed below, assume it is 🟢 Sysadmin-autonomous (it's pr
 
 | Command | Reason |
 |---|---|
-| `traderbot shutdown` | Halts all agents, closes positions. Human decision. |
+| `traderbot halt --force` | Halts all agents (FULL_STOP). Human decision. |
 | Modify `AGENTS.md`, `SOUL.md`, `TOOLS.md` | Immutable operating constraints. Requires human approval. |
 
 All other commands are 🟢 autonomous. The sysadmin manages the fleet end-to-end.

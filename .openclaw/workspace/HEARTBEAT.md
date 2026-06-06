@@ -18,10 +18,10 @@ session — so they never collide with other agent work or each other._
 
 ## Setup
 
-These cron jobs are registered by `traderbot cron setup-heartbeat-tasks --role sysadmin` or can be verified:
+These cron jobs are registered by `traderbot cron setup --agent <agent-id> --role sysadmin --replace` or can be verified:
 
 ```bash
-openclaw cron list | grep " main "
+traderbot cron setup --agent <agent-id> --role sysadmin --dry-run
 ```
 
 ## Data Output

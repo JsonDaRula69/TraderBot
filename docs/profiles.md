@@ -60,7 +60,7 @@ All risk parameters are validated against `HARD_LIMITS` at creation time. A prof
 
 | Parameter | Ceiling | Floor |
 |---|---|---|
-| `max_position_per_market_pct` | 5% | N/A |
+| `max_position_per_market_pct` | 15% | N/A |
 | `max_daily_loss_pct` | 2% | N/A |
 | `max_drawdown_pct` | 10% | N/A |
 | `max_open_positions` | 20 | N/A |

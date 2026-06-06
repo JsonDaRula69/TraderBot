@@ -14,7 +14,7 @@ This solves the emotional bias problem: the agent can feel "really confident" ab
 # risk/limits.py — IMMUTABLE without explicit human approval
 # Wrapped in MappingProxyType to prevent runtime modification
 HARD_LIMITS = {
-    "max_position_per_market_pct": 0.05,    # Never >5% of portfolio in one market
+    "max_position_per_market_pct": 0.15,    # Never >15% of portfolio in one market
     "max_daily_loss_pct": 0.02,              # Stop trading if down 2% today
     "max_drawdown_pct": 0.10,                # Halt ALL trading if down 10% from peak
     "min_liquidity_threshold": 500,           # Don't trade if open_interest < 500
@@ -25,9 +25,9 @@ HARD_LIMITS = {
 
 ### Per-Market Position Limit
 
-No single market can consume more than 5% of total portfolio value. This prevents concentration risk — even if the agent identifies a "certain thing," it cannot over-commit.
+No single market can consume more than 15% of total portfolio value. This prevents concentration risk — even if the agent identifies a "certain thing," it cannot over-commit.
 
-**Check**: `current_position_value(ticker) + order_value <= portfolio_value * 0.05`
+**Check**: `current_position_value(ticker) + order_value <= portfolio_value * 0.15`
 
 ### Daily Loss Circuit Breaker
 
@@ -152,18 +152,21 @@ Three-tier system with increasing severity:
 | **HALT** | 2 | Daily loss > 2% | `can_trade = False`, no new trades | Automatic on next `check()` when loss drops below threshold |
 | **FULL_STOP** | 3 | Drawdown > 10% | `position_size_multiplier = 0.0`, `can_trade = False` | **Manual only** — requires `traderbot resume` or manual flag clear |
 
-The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). The state file is protected with an HMAC-SHA256 signature to prevent tampering. Any modification to the state file (e.g., resetting FULL_STOP to NORMAL) will fail verification and raise a `SecurityError`. On restart, the agent verifies the HMAC signature before reading the persisted state.
+The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). The state file is protected with an HMAC-SHA256 signature to prevent tampering. Any modification to the state file (e.g., resetting FULL_STOP to NORMAL) will fail verification — the system logs a warning, defaults to FULL_STOP, and raises `SecurityError` from `traderbot.exceptions`.
 
 ### Circuit Breaker State Model
 
 ```python
 class CircuitBreakerState(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
     level: BreakerLevel = BreakerLevel.NORMAL
     daily_loss_pct: float = 0.0
     drawdown_pct: float = 0.0
     position_size_multiplier: float = 1.0
     can_trade: bool = True
     reason: str = ""
+    last_recovery_ts: float = 0.0
 ```
 
 ## AgentRiskLimits

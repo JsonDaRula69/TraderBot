@@ -568,7 +568,7 @@ The `--realtime` flag on `traderbot analyze` enables live orderbook and ticker s
 
 ### Architecture
 
-- **`KalshiWebSocket`** (`kalshi/websocket.py`): Async WebSocket client connecting to `wss://api.elections.kalshi.com/trade-api/ws/v2`
+- **`KalshiWebSocket`** (`kalshi/websocket.py`): Async WebSocket client connecting to `wss://external-api.kalshi.com/trade-api/ws/v2`
 - **Authentication**: RSA-PSS signed headers via `kalshi/signing.py` + TLS cert pinning via `kalshi/pinning.py`
 - **Channels**: `orderbook_delta`, `ticker`, `market_lifecycle_v2`, `fill`, `user_orders`, `market_positions`
 - **30-second timeout**: `asyncio.wait_for(ws.receive(), timeout=30.0)` — graceful disconnect if no data received
