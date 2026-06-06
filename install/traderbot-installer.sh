@@ -158,8 +158,9 @@ try:
     with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.loads(resp.read())
         tier = data.get('usage_tier', 'basic').lower()
-        rate = data.get('read', {}).get('refill_rate', 20)
-        print(f'{tier}:{rate}')
+        read_rate = data.get('read', {}).get('refill_rate', 200)
+        write_rate = data.get('write', {}).get('refill_rate', 100)
+        print(f'{tier}:{read_rate}:{write_rate}')
 except urllib.error.HTTPError as e:
     print(f'HTTP_ERROR:{e.code}:{e.reason}')
     sys.exit(1)
@@ -186,9 +187,12 @@ except Exception:
     fi
 
     local detected_tier="${tier_info%%:*}"
-    local detected_rate="${tier_info##*:}"
-    echo "  Detected tier: ${detected_tier} (${detected_rate} req/sec)"
-    _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "$detected_rate"
+    local rest="${tier_info#*:}"
+    local detected_read_rate="${rest%%:*}"
+    local detected_write_rate="${rest##*:}"
+    echo "  Detected tier: ${detected_tier} (read=${detected_read_rate} tokens/sec, write=${detected_write_rate} tokens/sec)"
+    _env_set "$env_file" "KALSHI_READ_BUDGET_TOKENS" "$detected_read_rate"
+    _env_set "$env_file" "KALSHI_WRITE_BUDGET_TOKENS" "$detected_write_rate"
     return 0
 }
 

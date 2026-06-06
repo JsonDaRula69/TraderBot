@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `HistoryService` now uses `/historical/` endpoints (`/historical/markets`, `/historical/trades`, `/historical/markets/{ticker}`) for archived data instead of live `/markets/` endpoints — live endpoints only return post-cutoff data. Added response format guardrails that warn when expected keys (`market`, `markets`, `trades`) are missing before normalization.
+- Phantom `KALSHI_RATE_LIMIT_RPS` env var removed from docs and installers — replaced with actual `KALSHI_READ_BUDGET_TOKENS` (default 200) and `KALSHI_WRITE_BUDGET_TOKENS` (default 100). Effective RPS = budget / endpoint_cost (default 10).
+
 ### Added
 
 - `tests/test_openclaw_compliance.py` — validates all OpenClaw CLI invocations against Dep_Docs (command, subcommand, and flag correctness). Catches flag-name mistakes like `--schedule`→`--cron` at test time

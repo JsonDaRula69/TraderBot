@@ -681,14 +681,16 @@ function Setup-APICredentials {
     Write-Host ""
 
     Write-Host "Select Kalshi API tier:"
-    Write-Host "  1) Basic     (20 req/sec)  — free, 200 read tokens/sec"
-    Write-Host "  2) Advanced  (30 req/sec)  — 300 read + 300 write tokens/sec"
-    Write-Host "  3) Premier   (100 req/sec) — 1000 read + 1000 write tokens/sec"
-    Write-Host "  4) Paragon   (200 req/sec) — 2000 read + 2000 write tokens/sec"
-    Write-Host "  5) Prime     (400 req/sec) — 4000 read + 4000 write tokens/sec"
+    Write-Host "  1) Basic     (20 read / 10 write req/sec)  — free, 200 read + 100 write tokens/sec"
+    Write-Host "  2) Advanced  (30 read / 30 write req/sec)  — 300 read + 300 write tokens/sec"
+    Write-Host "  3) Premier   (100 read / 100 write req/sec) — 1000 read + 1000 write tokens/sec"
+    Write-Host "  4) Paragon   (200 read / 200 write req/sec) — 2000 read + 2000 write tokens/sec"
+    Write-Host "  5) Prime     (400 read / 400 write req/sec) — 4000 read + 4000 write tokens/sec"
     $tier = Read-Tier -Prompt "Tier [1]: " -Default 1 -Max 5
-    $rps = @(20, 30, 100, 200, 400)[$tier - 1]
-    Set-EnvInFile $envFile "KALSHI_RATE_LIMIT_RPS" "$rps"
+    $readTokens = @(200, 300, 1000, 2000, 4000)[$tier - 1]
+    $writeTokens = @(100, 300, 1000, 2000, 4000)[$tier - 1]
+    Set-EnvInFile $envFile "KALSHI_READ_BUDGET_TOKENS" "$readTokens"
+    Set-EnvInFile $envFile "KALSHI_WRITE_BUDGET_TOKENS" "$writeTokens"
 
     # --- API key table: name => (env_prefix, description, optional_flag) ---
     $apiKeys = @(

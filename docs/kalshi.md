@@ -6,9 +6,9 @@ Everything about connecting to Kalshi's API — authentication, endpoints, data 
 
 | Detail | Value |
 |---|---|
-| **Base URL (production)** | `https://api.elections.kalshi.com/trade-api/v2` |
+| **Base URL (production)** | `https://external-api.kalshi.com/trade-api/v2` |
 | **Auth method** | RSA-PSS signed headers (KALSHI-ACCESS-KEY/SIGNATURE/TIMESTAMP) |
-| **Rate limit** | Default 20 rps (configurable via `KALSHI_RATE_LIMIT_RPS` env var). Token bucket refill rate: `rate_limit_rps / endpoint_cost` — each endpoint costs 10 tokens, so effective rps = 200 / 10 = 20. Configure KALSHI_RATE_LIMIT_RPS with the *token refill rate* (not the desired requests-per-second). |
+| **Rate limit** | Token-budget model (configurable via `KALSHI_READ_BUDGET_TOKENS` and `KALSHI_WRITE_BUDGET_TOKENS` env vars). Effective request rate = budget_tokens / endpoint_cost (default cost=10 tokens per request, so 200 read tokens/sec = 20 RPS, 100 write tokens/sec = 10 RPS). Configure the *token refill rate*, not the desired requests-per-second. |
 | **Docs** | [docs.kalshi.com](https://docs.kalshi.com) |
 
 ## Authentication
@@ -69,7 +69,7 @@ If the pin does not match, the connection is aborted with a `SecurityError`. If 
 
 | Stream | Description |
 |---|---|
-| `wss://api.elections.kalshi.com/trade-api/ws/v2` | Production real-time data |
+| `wss://external-api.kalshi.com/trade-api/ws/v2` | Production real-time data |
 
 WebSocket auth is sent as HTTP headers during the handshake (same RSA-PSS signing as REST). Subscribe format: `{"id": N, "cmd": "subscribe", "params": {"channels": ["ticker"], "market_ticker": "XXX"}}`.
 

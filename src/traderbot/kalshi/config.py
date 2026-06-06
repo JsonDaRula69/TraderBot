@@ -37,6 +37,7 @@ class EnvKalshiConfig(BaseSettings):
     # Per-second token budgets from the Kalshi API `GET /account/limits` endpoint.
     # Effective request rate = budget / endpoint_cost (default 10 tokens per request).
     # On Basic tier: read = 200 tokens/sec (20 RPS), write = 100 tokens/sec (10 RPS).
+    # Configurable via KALSHI_READ_BUDGET_TOKENS and KALSHI_WRITE_BUDGET_TOKENS env vars.
     read_budget_tokens: float = 200.0
     write_budget_tokens: float = 100.0
     read_burst_capacity: float = 200.0
