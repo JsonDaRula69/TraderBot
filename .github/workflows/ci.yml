@@ -39,11 +39,6 @@ jobs:
     needs: frozen-check
     runs-on: ubuntu-latest
 
-  unit:
-    name: Unit tests
-    needs: frozen-check
-    runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +56,7 @@ jobs:
 
   unit:
     name: Unit tests
-    needs: lint
+    needs: frozen-check
     runs-on: ubuntu-latest
 
     steps:
@@ -84,6 +79,35 @@ jobs:
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
+
+  live:
+    name: Live API tests
+    needs: frozen-check
+    runs-on: ubuntu-latest
+    continue-on-error: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run live tests
+        run: uv run --frozen python -m pytest -m "live" --timeout=60 -x
+        env:
+          KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
+          KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
 
   test:
     name: Test (${{ matrix.os }})
@@ -116,39 +140,9 @@ jobs:
           file: ./coverage.xml
           fail_ci_if_error: false
 
-  live:
-    name: Live API tests
-    needs: unit
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --all-extras --dev
-
-      - name: Run live tests
-        run: uv run --frozen python -m pytest -m "live" --timeout=60 -x
-        env:
-          KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
-          KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-          NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
-          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
-          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
-
   build:
     name: Build wheel
-    needs: test
+    needs: [test, live]
     runs-on: ubuntu-latest
 
     steps:
