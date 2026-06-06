@@ -16,6 +16,8 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
+
 logger = logging.getLogger(__name__)
 
 # Kalshi API SPKI pin — SHA-256 of DER-encoded SubjectPublicKeyInfo, base64-encoded.
@@ -27,8 +29,11 @@ logger = logging.getLogger(__name__)
 KALSHI_SPKI_PIN = "Iu/+7wHLhGRvN84Vr2fyW7omLlvfmIcGNnaUf9uTkwA="
 
 
-class CertPinningError(Exception):
+class CertPinningError(TraderBotError):
     """TLS certificate public key does not match any trusted SPKI pin."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.CERT_PINNING, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 def compute_spki_pin(cert_der: bytes) -> str:

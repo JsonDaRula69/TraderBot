@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
 from traderbot.kalshi.models import Market, PortfolioState, Trade, TradeRequest
 from traderbot.paths import get_data_dir
 from traderbot.risk import evaluate_trade
@@ -24,8 +25,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BacktestError(Exception):
+class BacktestError(TraderBotError):
     """Raised when the backtest encounters an invalid state."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.BACKTEST, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 @dataclass(frozen=True)

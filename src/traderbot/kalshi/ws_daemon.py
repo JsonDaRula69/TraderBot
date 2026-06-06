@@ -85,13 +85,10 @@ import websockets
 from traderbot.auth import get_credential
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.signing import auth_headers
+from traderbot.logging_config import configure_root_logger
 from traderbot.paths import get_data_dir
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+configure_root_logger()
 logger = logging.getLogger("ws-daemon")
 
 CACHE_PATH = get_data_dir() / "event_category_cache.json"

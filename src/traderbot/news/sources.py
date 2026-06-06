@@ -17,6 +17,12 @@ from typing import Any, ClassVar
 import feedparser
 import httpx
 
+from traderbot.exceptions import (
+    AuthenticationError,
+    DataError,
+    ErrorCodes,
+    RateLimitError,
+)
 from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
 from traderbot.profiles.config import resolve_fred_key, resolve_openweather_key
 
@@ -57,8 +63,11 @@ REDDIT_CATEGORY_SUBREDDITS: dict[NewsCategory, list[str]] = {
 }
 
 
-class NewsAPIError(Exception):
+class NewsAPIError(DataError):
     """Raised when the NewsAPI returns an error response."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.NEWS_API, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 def _sanitize_content(text: str) -> str:
@@ -79,12 +88,18 @@ def _sanitize_url(url: str) -> str:
     return ""
 
 
-class NewsAPIAuthError(Exception):
+class NewsAPIAuthError(AuthenticationError):
     """Raised when NewsAPI returns 401 — permanent auth failure, no retry."""
 
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.AUTHENTICATION, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
-class NewsAPIBudgetExceeded(Exception):
+
+class NewsAPIBudgetExceeded(RateLimitError):
     """Raised when the client-side daily budget (100 req/day) is exhausted."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.NEWS_BUDGET, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 @dataclass

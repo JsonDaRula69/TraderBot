@@ -13,6 +13,7 @@ from typing import Annotated, Literal
 import portalocker.exceptions
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
 from traderbot.fileops import (
     LOCK_EXCLUSIVE,
     LOCK_NON_BLOCKING,
@@ -70,8 +71,11 @@ class WalEntry(BaseModel):
     status: WalStatus = WalStatus.PENDING
 
 
-class ConcurrentWriteError(Exception):
+class ConcurrentWriteError(TraderBotError):
     """Raised when another writer is actively writing to the WAL."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.CONCURRENT_WRITE, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 def _now_iso() -> str:

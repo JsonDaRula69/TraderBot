@@ -7,14 +7,19 @@ from typing import Any
 
 import httpx
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
+
 logger = logging.getLogger(__name__)
 
 OLLAMA_DEFAULT_URL = "http://localhost:11434/api/generate"
 DEFAULT_TIMEOUT = 60
 
 
-class OllamaConnectionError(Exception):
+class OllamaConnectionError(TraderBotError):
     """Raised when the Ollama server cannot be reached."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.OLLAMA_CONNECTION, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 class OllamaProvider:

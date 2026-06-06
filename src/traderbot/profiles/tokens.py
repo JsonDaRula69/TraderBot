@@ -11,6 +11,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from traderbot.exceptions import ErrorCodes, ValidationError
 from traderbot.fileops import set_dir_owner_only, set_file_owner_only
 from traderbot.paths import get_data_dir
 
@@ -29,10 +30,11 @@ def _get_keys_dir() -> Path:
     return keys_dir
 
 
-class TokenAlreadyAssignedError(ValueError):
-    def __init__(self, profile_name: str) -> None:
+class TokenAlreadyAssignedError(ValidationError):
+    def __init__(self, profile_name: str, error_code: int = ErrorCodes.TOKEN_ALREADY_ASSIGNED) -> None:
         self.profile_name = profile_name
-        super().__init__(f"Profile '{profile_name}' already has a token assigned")
+        message = f"Profile '{profile_name}' already has a token assigned"
+        super().__init__(message, error_code=error_code)
 
 
 def _mask_token(token: str) -> str:

@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Protocol, runtime_checkable
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
 from traderbot.llm.ollama import OllamaConnectionError
 
 logger = logging.getLogger(__name__)
@@ -21,8 +22,11 @@ class LLMProvider(Protocol):
     def generate(self, prompt: str) -> str: ...
 
 
-class LLMClientError(Exception):
+class LLMClientError(TraderBotError):
     """Raised when the LLM client exhausts retries or hits a permanent error."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.LLM, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 class LLMClient:
