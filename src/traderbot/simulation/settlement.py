@@ -146,55 +146,47 @@ async def _settle_weather_bets(
 async def _settle_kalshi_bets(
     conn: Any,
     bets: list[tuple[Any, tuple[str, int, int, int, str, float]]],
-    profile: Profile | None = None,
 ) -> int:
-    """Settle non-weather Kalshi bets via the Kalshi API.
+    """Settle non-weather Kalshi bets using the public Kalshi /markets/{ticker} endpoint.
 
-    Requires Kalshi auth credentials. Skips all positions if auth is not available.
+    No auth required — the /markets/{ticker} endpoint is public.
     """
+    import httpx
+
     from traderbot.db.positions import update_settlement
-    from traderbot.kalshi.client import ConfigurationError, KalshiClient, KalshiConfig
-    from traderbot.kalshi.markets import MarketService
-
-    try:
-        if profile is not None:
-            from traderbot.profiles.config import resolve_kalshi_credentials
-
-            api_key, private_key_pem = resolve_kalshi_credentials(profile)
-            config = KalshiConfig(
-                api_key=api_key,  # type: ignore[arg-type]
-                private_key_pem=private_key_pem,  # type: ignore[arg-type]
-            )
-        else:
-            config = KalshiConfig()  # type: ignore[call-arg]
-    except (ConfigurationError, Exception):
-        logger.info("Kalshi auth not available, skipping %d non-weather positions", len(bets))
-        return 0
 
     settled = 0
-    async with KalshiClient(config=config) as client:
-        service = MarketService(client)
+    base_url = "https://external-api.kalshi.com/trade-api/v2"
+    async with httpx.AsyncClient(timeout=15.0) as client:
         for pos, _parsed in bets:
+            url = f"{base_url}/markets/{pos.ticker}"
             try:
-                market = await service.get_market(pos.ticker)
+                resp = await client.get(url)
             except Exception:
                 logger.warning(
                     "Failed to fetch market %s from Kalshi API", pos.ticker, exc_info=True
                 )
                 continue
 
-            if market.settlement_result is None:
+            if resp.status_code != 200:
+                logger.warning("HTTP %d fetching market %s", resp.status_code, pos.ticker)
+                continue
+
+            data = resp.json()
+            market = data.get("market", {})
+            sr = market.get("settlement_result")
+            if sr is None:
                 logger.debug("Market %s not yet settled via Kalshi API", pos.ticker)
                 continue
 
-            outcome = 1 if market.settlement_result else 0
+            outcome = 1 if sr else 0
             pnl_cents = (outcome * 100 - pos.avg_price) * pos.quantity
-            update_settlement(conn, pos.ticker, market.settlement_result, pnl_cents)
+            update_settlement(conn, pos.ticker, sr, pnl_cents)
             settled += 1
             logger.info(
                 "Settled %s via Kalshi: result=%s pnl=%d",
                 pos.ticker,
-                market.settlement_result,
+                sr,
                 pnl_cents,
             )
 
@@ -253,7 +245,7 @@ def auto_settle_paper_positions(
             if weather_bets:
                 total += await _settle_weather_bets(conn, weather_bets)
             if kalshi_bets:
-                total += await _settle_kalshi_bets(conn, kalshi_bets, profile)
+                total += await _settle_kalshi_bets(conn, kalshi_bets)
 
             logger.info("auto_settle_paper_positions: %d positions settled", total)
             return total

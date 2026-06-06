@@ -1181,3 +1181,144 @@ def profile_auth(
                 table.add_row(svc, masked_key)
 
         console.print(table)
+
+
+@profile_app.command("reset")
+def profile_reset(
+    name: Annotated[str | None, typer.Argument(help="Profile name to reset")] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip confirmation prompts")
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Reset a paper profile's balance without losing trade history.
+
+    Sets the initial balance to a new value while preserving all
+    position records, settlement history, and audit logs.
+
+    Use this when stale positions or accumulated losses have made
+    the portfolio balance unrepresentative of actual performance.
+    """
+    from traderbot.paper import compute_paper_balance
+    from traderbot.profiles.registry import ProfileRegistry
+
+    console = Console()
+    registry = ProfileRegistry()
+
+    profiles = registry.list_profiles()
+    if not profiles:
+        console.print(
+            "[red]Error:[/red] No profiles found. "
+            "Create one with: traderbot profile create <name>"
+        )
+        raise typer.Exit(1)
+
+    if name is None:
+        if not sys.stdin.isatty():
+            console.print("[red]Error:[/red] Profile name required in non-interactive mode")
+            raise typer.Exit(1)
+        choice = _interactive_profile_select(profiles, console)
+        if not choice:
+            raise typer.Exit(0)
+        name = choice
+    elif name not in profiles:
+        console.print(f"[red]Error:[/red] Profile '{name}' not found")
+        raise typer.Exit(1)
+
+    profile = registry.get_profile(name)
+    if not profile or not profile.paper_mode:
+        console.print(
+            f"[red]Error:[/red] Profile '{name}' is not paper mode — "
+            "only paper profiles can be reset"
+        )
+        raise typer.Exit(1)
+
+    pb = compute_paper_balance(profile)
+
+    if json_output:
+        import json as _j
+
+        current: dict = {
+            "name": name,
+            "initial_balance_cents": profile.initial_balance_cents,
+        }
+        if pb:
+            current["remaining_cents"] = pb.remaining_cents
+            current["open_positions"] = pb.open_position_count
+            current["cost_at_risk_cents"] = pb.cost_at_risk_cents
+        _j.dump(current, sys.stdout, default=str)
+        return
+
+    console.print(f"\n[bold]Profile:[/bold] {name}")
+    if profile.initial_balance_cents:
+        console.print(
+            f"  Current initial balance: ${profile.initial_balance_cents / 100:.2f}"
+        )
+    else:
+        console.print("  Current initial balance: not set")
+
+    if pb:
+        console.print(f"  Current remaining cash:  ${pb.remaining_cents / 100:.2f}")
+        console.print(f"  Open positions:          {pb.open_position_count}")
+        console.print(f"  Cost at risk:            ${pb.cost_at_risk_cents / 100:.2f}")
+        console.print(f"  Total settled P&L:       ${pb.net_pnl_cents / 100:.2f}")
+    else:
+        console.print("[yellow]  No active balance data found[/yellow]")
+
+    console.print()
+    console.print("[bold]What this does:[/bold]")
+    console.print("  - Resets the starting balance to a new value")
+    console.print("  - All trade history, positions, and settlements preserved")
+    console.print("  - P&L calculation uses the new starting balance")
+    console.print("  - Open positions remain in the database")
+    console.print()
+
+    if not yes:
+        default_val = str((profile.initial_balance_cents or 10000) // 100)
+        result = typer.prompt(
+            "Enter new starting balance in dollars (e.g. 100, 500, 2000)",
+            default=default_val,
+        )
+        if not result:
+            console.print("[yellow]Reset cancelled.[/yellow]")
+            raise typer.Exit(0)
+
+        try:
+            new_balance_dollars = float(result)
+            if new_balance_dollars <= 0:
+                console.print("[red]Error:[/red] Starting balance must be positive")
+                raise typer.Exit(1)
+        except ValueError:
+            console.print(f"[red]Error:[/red] Invalid number: '{result}'")
+            raise typer.Exit(1)
+
+        new_balance_cents = int(new_balance_dollars * 100)
+
+        if pb and pb.cost_at_risk_cents > new_balance_cents:
+            deficit = (new_balance_cents - pb.cost_at_risk_cents) // 100
+            console.print(
+                f"[yellow]Warning:[/yellow] New balance ${new_balance_dollars:.2f} is less "
+                f"than cost at risk (${pb.cost_at_risk_cents / 100:.2f}). "
+                f"Remaining cash after open positions: ${deficit}."
+            )
+            confirm2 = typer.prompt("Type 'yes' to confirm", default="")
+            if confirm2 != "yes":
+                console.print("[yellow]Reset cancelled.[/yellow]")
+                raise typer.Exit(0)
+
+        confirm = typer.prompt(
+            f"Reset '{name}' from ${profile.initial_balance_cents / 100:.2f} "
+            f"to ${new_balance_dollars:.2f}",
+            default="no",
+        )
+        if confirm != "yes":
+            console.print("[yellow]Reset cancelled.[/yellow]")
+            raise typer.Exit(0)
+    else:
+        new_balance_cents = profile.initial_balance_cents or 10000
+
+    registry.update_profile(name, initial_balance_cents=new_balance_cents)
+
+    console.print(f"\n[green]✓[/green] Profile '{name}' reset to ${new_balance_cents / 100:.2f}")
+    console.print("  Trade history, positions, and settlements preserved.")
+    console.print("  Run 'traderbot profile show <name>' to verify.\n")

@@ -26,6 +26,7 @@ class PaperBalance:
     settled_payout_cents: int
     remaining_cents: int
     open_position_count: int
+    effective_balance_cents: int = 0
     mark_to_market_cents: int = 0
 
     @property
@@ -34,7 +35,7 @@ class PaperBalance:
 
     @property
     def net_pnl_cents(self) -> int:
-        return self.settled_payout_cents - (self.initial_cents - self.remaining_cents)
+        return self.settled_payout_cents - (self.effective_balance_cents - self.remaining_cents)
 
 
 def compute_paper_balance(
@@ -73,6 +74,7 @@ def compute_paper_balance(
     remaining = initial - total_cost + total_payout
     return PaperBalance(
         initial_cents=initial,
+        effective_balance_cents=initial,
         cost_at_risk_cents=total_cost - total_payout,
         settled_payout_cents=total_payout,
         remaining_cents=remaining,
