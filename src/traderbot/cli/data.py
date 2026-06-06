@@ -256,12 +256,20 @@ def bias_cmd(
     ] = False,
 ) -> None:
     """Show historical forecast bias for a city."""
-    from traderbot.data.weather.provider import WeatherDataProvider
+    from traderbot.data.weather.provider import WeatherDataProvider, _resolve_city
     from traderbot.db import get_connection
     from traderbot.db.forecast_bias import init_table
 
     console = Console()
     city_code = city.strip().upper()
+
+    # Resolve short codes (NYC, LA, etc.) to full city names so the query
+    # matches what record-bias stores (e.g. "New York", not "NYC").
+    resolved = _resolve_city(city_code)
+    if resolved is None:
+        report_cli_error(f"Unknown city code: {city_code}")
+        raise typer.Exit(code=1)
+    city_name = resolved
 
     # Ensure forecast_bias table exists
     try:
@@ -274,7 +282,8 @@ def bias_cmd(
         async def _run() -> dict:
             provider = WeatherDataProvider()
             try:
-                return await provider.get_historical_bias(city=city_code, days=days)
+                report = await provider.get_historical_bias(city=city_name, days=days)
+                return report.model_dump()
             finally:
                 await provider.close()
 
@@ -289,23 +298,24 @@ def bias_cmd(
         json_lib.dump(result, sys.stdout, default=str)
         return
 
-    direction = result.get("bias_direction", "")
+    mean_err = result.get("mean_error", 0.0)
+    direction = "over" if mean_err > 0 else ("under" if mean_err < 0 else "neutral")
     direction_style = {
         "over": "red",
         "under": "blue",
         "neutral": "yellow",
     }.get(direction, "")
 
-    table = Table(title=f"Historical Forecast Bias — {result.get('city', city_code)}")
+    table = Table(title=f"Historical Forecast Bias — {result.get('city', city_name)}")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="white")
-    table.add_row("Mean Error (°F)", f"{result.get('mean_error', 0):+.2f}")
-    table.add_row("MAE (°F)", f"{result.get('mae', 0):.2f}")
+    table.add_row("Mean Error (°F)", f"{mean_err:+.2f}")
+    table.add_row("MAE (°F)", f"{result.get('mean_abs_error', 0):.2f}")
     table.add_row(
         "Direction",
         f"[{direction_style}]{direction}[/{direction_style}]",
     )
-    table.add_row("Sample Size", str(result.get("sample_size", 0)))
+    table.add_row("Sample Size", str(result.get("total_comparisons", 0)))
     console.print(table)
 
 

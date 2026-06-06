@@ -31,7 +31,7 @@ class PaperBalance:
 
     @property
     def portfolio_value_cents(self) -> int:
-        return self.remaining_cents + self.mark_to_market_cents
+        return max(0, self.remaining_cents + self.mark_to_market_cents)
 
     @property
     def net_pnl_cents(self) -> int:
@@ -75,7 +75,7 @@ def compute_paper_balance(
     return PaperBalance(
         initial_cents=initial,
         effective_balance_cents=initial,
-        cost_at_risk_cents=total_cost - total_payout,
+        cost_at_risk_cents=max(0, total_cost - total_payout),
         settled_payout_cents=total_payout,
         remaining_cents=remaining,
         open_position_count=open_count,

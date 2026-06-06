@@ -8,6 +8,7 @@ TradingSignal instances.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from traderbot.analysis.odds import implied_probability
@@ -22,6 +23,12 @@ if TYPE_CHECKING:
     from traderbot.kalshi.models import OrderBook
 
 logger = logging.getLogger(__name__)
+
+# Regex for Kalshi weather tickers: KXHIGHCHI-26JUN02-T81 or KXLOWTCHI-26JUN02-T32
+_TICKER_STRIKE_RE = re.compile(
+    r"^(KX(?:HIGH|LOWT)\w*)-(\d{2})([A-Z]{3})(\d{2})-(T|B)(\d+(?:\.\d+)?)$",
+    re.IGNORECASE,
+)
 
 _TICKER_TO_CITY: dict[str, str] = {
     "KXHIGHNY": "New York",
@@ -40,6 +47,34 @@ _TICKER_TO_CITY: dict[str, str] = {
     "KXHIGHTDET": "Detroit",
     "KXHIGHTSF": "San Francisco",
 }
+
+
+def _detect_strike_type(ticker: str, question: str | None = None) -> str:
+    """Determine strike_type from a Kalshi weather ticker.
+
+    KXHIGH*  T-type: YES = temp < threshold → "less"
+    KXLOWT*  T-type: YES = temp > threshold → "greater"
+    B-type (bucket): YES = temp in range         → "between"
+    """
+    m = _TICKER_STRIKE_RE.match(ticker)
+    if m:
+        prefix = m.group(1).upper()
+        strike_marker = m.group(5).upper()
+        if strike_marker == "T":
+            # T-type (threshold): direction depends on KXHIGH vs KXLOWT prefix
+            if prefix.startswith("KXLOWT"):
+                return "greater"
+            return "less"
+        return "between"
+
+    if question:
+        q = question.lower()
+        if "below" in q or "less than" in q or "under" in q:
+            return "less"
+        if "above" in q or "greater than" in q or "over" in q:
+            return "greater"
+
+    return "between"
 
 
 def _estimate_prob_from_threshold(
@@ -169,8 +204,14 @@ class WeatherSignalEngine(BaseSignalEngine):
     def _compute_one(self, ticker: str, market: MarketData, fc: CityForecast) -> TradingSignal:
         forecast_temp = fc.high_temp_f
 
+        effective_strike_type = market.strike_type
+        if effective_strike_type is None or effective_strike_type == "between":
+            detected = _detect_strike_type(ticker)
+            if detected != "between":
+                effective_strike_type = detected
+
         estimated_prob = _estimate_prob_from_threshold(
-            forecast_temp, market.threshold, market.strike_type
+            forecast_temp, market.threshold, effective_strike_type
         )
 
         market_prob = self._get_market_prob(ticker)
@@ -205,7 +246,7 @@ class WeatherSignalEngine(BaseSignalEngine):
             phantom_edge_flag=phantom_flag,
             reasoning=(
                 f"{fc.city}: forecast={forecast_temp}°F, threshold={market.threshold}°F "
-                f"({market.strike_type}), est={estimated_prob:.3f}, "
+                f"({effective_strike_type}), est={estimated_prob:.3f}, "
                 f"market={market_prob:.3f}, edge={edge:+.3f}, "
                 f"consensus={consensus_score or 'N/A'}, bias_adj={bias_adjustment:.3f}"
             ),

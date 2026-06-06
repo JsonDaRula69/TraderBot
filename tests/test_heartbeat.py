@@ -1,4 +1,4 @@
-"""Tests for the heartbeat cycle — 8-step self-review, adaptation, health, and update check."""
+"""Tests for the heartbeat cycle — self-review, adaptation, health, and update check."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ from traderbot.heartbeat import (
     LearningPromotionReview,
     PerformanceReview,
     SystemHealthReview,
+    TokenStalenessReview,
+    WsHealthReview,
     get_error_summary,
     run_heartbeat_cycle,
     step_bayesian_adaptation,
@@ -476,7 +478,9 @@ class TestHeartbeatCycle:
         assert "system_health" in result.steps_completed
         assert "update_check" in result.steps_completed
         assert "update_heartbeat_md" in result.steps_completed
-        assert len(result.steps_completed) == 8
+        assert "ws_health" in result.steps_completed
+        assert "token_staleness" in result.steps_completed
+        assert len(result.steps_completed) == 10
         conn.close()
 
     def test_full_cycle_with_decisions(self, tmp_path):
@@ -586,7 +590,9 @@ class TestHeartbeatCycle:
             "bayesian_adaptation",
             "learning_promotion",
             "circuit_breaker_check",
+            "ws_health",
             "system_health",
+            "token_staleness",
             "update_check",
             "update_heartbeat_md",
         ]
@@ -643,7 +649,7 @@ class TestHeartbeatCLI:
         result = runner.invoke(app, ["heartbeat", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data["steps_completed"]) == 8
+        assert len(data["steps_completed"]) == 10
 
 
 # ---------------------------------------------------------------------------
@@ -677,7 +683,9 @@ class TestHeartbeatResultModel:
             AdaptationReview,
             LearningPromotionReview,
             CircuitBreakerReview,
+            WsHealthReview,
             SystemHealthReview,
+            TokenStalenessReview,
             HeartbeatResult,
         ]:
             cfg = model_cls.model_config

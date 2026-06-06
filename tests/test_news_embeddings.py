@@ -263,3 +263,110 @@ class TestBatchAPI:
         monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
         vc = VoyageClient()
         assert vc.embed_batch_retrieve("batch_123") is None
+
+
+class TestEmbedBatchRetry:
+
+    def test_embed_batch_retries_on_failure_then_succeeds(self, monkeypatch: pytest.MonkeyPatch):
+        vc = _make_voyage_client_with_key(monkeypatch)
+        mock_client = _make_mock_client()
+        expected = [[0.1] * EMBED_DIMENSION, [0.2] * EMBED_DIMENSION]
+        call_count = 0
+
+        def embed_side_effect(texts, model, input_type):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise RuntimeError("transient API error")
+            return MagicMock(embeddings=expected)
+
+        mock_client.embed.side_effect = embed_side_effect
+        _set_client(vc, mock_client)
+
+        with patch(VOYAGEAI_MODULE, MagicMock()), patch(
+            "traderbot.news.embeddings.time.sleep"
+        ) as mock_sleep:
+            result = vc.embed_batch(["text one", "text two"])
+
+        assert result == expected
+        assert call_count == 3
+        backoff_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert backoff_calls == [1, 2]
+
+    def test_embed_batch_returns_none_after_all_retries_exhausted(self, monkeypatch: pytest.MonkeyPatch):
+        vc = _make_voyage_client_with_key(monkeypatch)
+        mock_client = _make_mock_client()
+        mock_client.embed.side_effect = RuntimeError("permanent API failure")
+        _set_client(vc, mock_client)
+
+        with patch(VOYAGEAI_MODULE, MagicMock()), patch(
+            "traderbot.news.embeddings.time.sleep"
+        ) as mock_sleep:
+            result = vc.embed_batch(["text one"])
+
+        assert result is None
+        assert mock_client.embed.call_count == 3
+        backoff_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert backoff_calls == [1, 2]
+
+    def test_embed_batch_succeeds_immediately(self, monkeypatch: pytest.MonkeyPatch):
+        vc = _make_voyage_client_with_key(monkeypatch)
+        mock_client = _make_mock_client()
+        expected = [[0.1] * EMBED_DIMENSION]
+        mock_client.embed.return_value = MagicMock(embeddings=expected)
+        _set_client(vc, mock_client)
+
+        with patch(VOYAGEAI_MODULE, MagicMock()), patch(
+            "traderbot.news.embeddings.time.sleep"
+        ) as mock_sleep:
+            result = vc.embed_batch(["text one"])
+
+        assert result == expected
+        mock_client.embed.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    def test_embed_batch_retry_empty_embeddings(self, monkeypatch: pytest.MonkeyPatch):
+        vc = _make_voyage_client_with_key(monkeypatch)
+        mock_client = _make_mock_client()
+        call_count = 0
+
+        def embed_side_effect(texts, model, input_type):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return MagicMock(embeddings=None)
+            return MagicMock(embeddings=[[0.5] * EMBED_DIMENSION])
+
+        mock_client.embed.side_effect = embed_side_effect
+        _set_client(vc, mock_client)
+
+        with patch(VOYAGEAI_MODULE, MagicMock()), patch(
+            "traderbot.news.embeddings.time.sleep"
+        ) as mock_sleep:
+            result = vc.embed_batch(["text"])
+
+        assert result == [[0.5] * EMBED_DIMENSION]
+        assert call_count == 2
+        mock_sleep.assert_called_once_with(1)
+
+    def test_embed_batch_retry_with_custom_max_retries(self, monkeypatch: pytest.MonkeyPatch):
+        vc = _make_voyage_client_with_key(monkeypatch)
+        mock_client = _make_mock_client()
+
+        max_retries = 2
+
+        def embed_side_effect(texts, model, input_type):
+            raise RuntimeError("permanent failure")
+
+        mock_client.embed.side_effect = embed_side_effect
+        _set_client(vc, mock_client)
+
+        with patch(VOYAGEAI_MODULE, MagicMock()), patch(
+            "traderbot.news.embeddings.time.sleep"
+        ) as mock_sleep:
+            result = vc.embed_batch(["text"], max_retries=max_retries)
+
+        assert result is None
+        assert mock_client.embed.call_count == max_retries
+        backoff_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert backoff_calls == [1]

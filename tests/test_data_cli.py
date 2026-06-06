@@ -180,3 +180,132 @@ class TestNoTemperatureHighRef:
         assert "temperature_high" not in content, (
             "temperature_high found in cli/data.py — must be high_temp_f"
         )
+
+
+# ------------------------------------------------------------------
+#  bias command: city code resolution (bug #144)
+# ------------------------------------------------------------------
+
+
+class TestBiasCityResolution:
+    """``traderbot data bias NYC`` must resolve ``NYC`` to ``New York``
+    before querying the DB, matching what ``record-bias`` stores.
+    """
+
+    def test_bias_cmd_resolves_nyc_to_new_york(self) -> None:
+        """Verify bias command passes resolved city name to get_historical_bias."""
+        from traderbot.data.models import BiasReport
+
+        mock_provider = AsyncMock()
+        mock_provider.get_historical_bias.return_value = BiasReport(
+            city="New York",
+            model="nws",
+            total_comparisons=5,
+            mean_error=1.2,
+            mean_abs_error=2.3,
+            std_error=0.8,
+            last_n_days=90,
+        )
+        mock_provider.close = AsyncMock()
+
+        with (
+            patch(
+                "traderbot.data.weather.provider.WeatherDataProvider",
+                return_value=mock_provider,
+            ),
+            patch("traderbot.db.get_connection"),
+            patch("traderbot.db.forecast_bias.init_table"),
+        ):
+            result = runner.invoke(app, ["data", "bias", "NYC"])
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+            # get_historical_bias must be called with the resolved name "New York"
+            mock_provider.get_historical_bias.assert_called_once_with(
+                city="New York", days=90
+            )
+
+    def test_bias_cmd_rejects_unknown_city(self) -> None:
+        """Verify bias command exits with error for unknown city code."""
+        result = runner.invoke(app, ["data", "bias", "ZZZ"])
+        assert result.exit_code == 1
+
+    def test_bias_cmd_resolve_la(self) -> None:
+        """Verify LA resolves to Los Angeles in bias command."""
+        from traderbot.data.models import BiasReport
+
+        mock_provider = AsyncMock()
+        mock_provider.get_historical_bias.return_value = BiasReport(
+            city="Los Angeles",
+            model="nws",
+            total_comparisons=3,
+            mean_error=-0.5,
+            mean_abs_error=1.8,
+            std_error=0.6,
+            last_n_days=90,
+        )
+        mock_provider.close = AsyncMock()
+
+        with (
+            patch(
+                "traderbot.data.weather.provider.WeatherDataProvider",
+                return_value=mock_provider,
+            ),
+            patch("traderbot.db.get_connection"),
+            patch("traderbot.db.forecast_bias.init_table"),
+        ):
+            result = runner.invoke(app, ["data", "bias", "LA"])
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+            mock_provider.get_historical_bias.assert_called_once_with(
+                city="Los Angeles", days=90
+            )
+
+
+class TestBiasDBQueryResolution:
+    """Verify that data stored under 'New York' is found when querying with 'NYC'.
+
+    This is the core bug: record-bias stores 'New York' but the old bias
+    command passed 'NYC' directly to the SQL WHERE clause.
+    """
+
+    def test_nyc_query_finds_new_york_data(self, tmp_path) -> None:
+        """Insert data with city='New York' and query with resolved 'NYC' -> 'New York'."""
+        import sqlite3
+
+        from traderbot.db.forecast_bias import init_table, query_bias, record_forecast
+
+        conn = sqlite3.connect(str(tmp_path / "test.db"))
+        try:
+            init_table(conn)
+            # record-bias stores with the resolved city name
+            record_forecast(conn, city="New York", forecast_high_f=70.0, actual_high_f=72.0)
+
+            # Simulate the fix: resolve NYC -> New York before querying
+            from traderbot.data.weather.provider import _resolve_city
+
+            resolved = _resolve_city("NYC")
+            assert resolved == "New York"
+
+            stats = query_bias(conn, city=resolved, days=90)
+            assert stats["count"] == 1, (
+                f"Expected 1 record for resolved 'NYC'->'New York', got {stats['count']}"
+            )
+        finally:
+            conn.close()
+
+    def test_raw_nyc_finds_nothing(self, tmp_path) -> None:
+        """Verify the bug: querying with raw 'NYC' returns 0 results."""
+        import sqlite3
+
+        from traderbot.db.forecast_bias import init_table, query_bias, record_forecast
+
+        conn = sqlite3.connect(str(tmp_path / "test.db"))
+        try:
+            init_table(conn)
+            record_forecast(conn, city="New York", forecast_high_f=70.0, actual_high_f=72.0)
+
+            # Without resolution, raw 'NYC' matches nothing
+            stats = query_bias(conn, city="NYC", days=90)
+            assert stats["count"] == 0, (
+                f"Expected 0 results for raw 'NYC', got {stats['count']}"
+            )
+        finally:
+            conn.close()

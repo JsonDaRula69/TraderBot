@@ -112,7 +112,7 @@ def evaluate_trade_full(
     drawdown_pct = (portfolio.peak_value_cents - portfolio.portfolio_value_cents) / max(
         portfolio.peak_value_cents, 1
     )
-    breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
+    breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct, profile=profile)
 
     if not breaker.get_state().can_trade:
         return TradeResult(sized_position_cents=0, direction=trade_request.direction)

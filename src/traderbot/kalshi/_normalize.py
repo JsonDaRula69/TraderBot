@@ -98,6 +98,18 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         status_val,
         raw.get("ticker"),
     )
+
+    strike_type_raw = raw.get("strike_type")
+    strike_type_val: str | None = None
+    if isinstance(strike_type_raw, str):
+        st_lower = strike_type_raw.lower()
+        if st_lower in ("less", "greater", "between"):
+            strike_type_val = st_lower
+        elif "less" in st_lower or "below" in st_lower or "under" in st_lower:
+            strike_type_val = "less"
+        elif "greater" in st_lower or "above" in st_lower or "over" in st_lower:
+            strike_type_val = "greater"
+
     return Market(
         ticker=raw["ticker"],
         question=question,
@@ -111,6 +123,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         category=category_str,
         market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),
+        strike_type=strike_type_val,
     )
 
 

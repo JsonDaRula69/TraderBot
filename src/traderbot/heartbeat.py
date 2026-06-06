@@ -125,6 +125,17 @@ class CircuitBreakerReview(BaseModel):
     reason: str = ""
 
 
+class WsHealthReview(BaseModel):
+    """Step 5.5: WS daemon health check."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    pid: int | None = None
+    pid_alive: bool = False
+    connected: bool = False
+    status: str = "unknown"  # healthy, stale, disconnected, not_running
+
+
 class SystemHealthReview(BaseModel):
     """Step 6: System health and connectivity."""
 
@@ -161,6 +172,7 @@ class HeartbeatResult(BaseModel):
     adaptation: AdaptationReview = Field(default_factory=AdaptationReview)
     learning_promotion: LearningPromotionReview = Field(default_factory=LearningPromotionReview)
     circuit_breaker: CircuitBreakerReview = Field(default_factory=CircuitBreakerReview)
+    ws_health: WsHealthReview = Field(default_factory=WsHealthReview)
     system_health: SystemHealthReview = Field(default_factory=SystemHealthReview)
     token_staleness: TokenStalenessReview = Field(default_factory=TokenStalenessReview)
     steps_completed: list[str] = Field(default_factory=list)
@@ -460,6 +472,42 @@ def step_circuit_breaker_check(
     )
 
 
+def step_ws_health() -> WsHealthReview:
+    """Step 5.5: Verify WS daemon process liveness and status consistency."""
+    import json
+
+    from traderbot.cli.ws import DAEMON_STATUS_PATH, _get_status, _is_pid_alive
+
+    status_data = _get_status()
+    if status_data is None:
+        logger.warning("WS daemon status file not found — daemon not running")
+        return WsHealthReview(status="not_running")
+
+    pid = status_data.get("pid")
+    connected = status_data.get("connected", False)
+
+    if pid is None:
+        logger.warning("WS daemon status file missing PID field")
+        return WsHealthReview(status="not_running")
+
+    alive = _is_pid_alive(pid)
+
+    if not alive:
+        logger.warning("WS daemon PID %s is stale (process not found)", pid)
+        stale_status = {**status_data, "connected": False}
+        DAEMON_STATUS_PATH.write_text(
+            json.dumps(stale_status, indent=2)
+        )
+        return WsHealthReview(pid=pid, pid_alive=False, connected=False, status="stale")
+
+    if not connected:
+        logger.warning("WS daemon PID %s alive but reports DISCONNECTED", pid)
+        return WsHealthReview(pid=pid, pid_alive=True, connected=False, status="disconnected")
+
+    logger.info("WS daemon healthy — PID %s alive and CONNECTED", pid)
+    return WsHealthReview(pid=pid, pid_alive=True, connected=True, status="healthy")
+
+
 async def step_system_health(
     db_conn: sqlite3.Connection,
 ) -> SystemHealthReview:
@@ -609,6 +657,10 @@ async def run_heartbeat_cycle(
     circuit_breaker = step_circuit_breaker_check()
     steps_completed.append("circuit_breaker_check")
 
+    # Step 5.5: WS daemon health check
+    ws_health = step_ws_health()
+    steps_completed.append("ws_health")
+
     # Step 6: System health
     system_health = await step_system_health(conn)
     steps_completed.append("system_health")
@@ -632,6 +684,7 @@ async def run_heartbeat_cycle(
         adaptation=adaptation,
         learning_promotion=learning_promotion,
         circuit_breaker=circuit_breaker,
+        ws_health=ws_health,
         system_health=system_health,
         token_staleness=token_staleness,
         steps_completed=steps_completed,
@@ -650,6 +703,7 @@ async def run_heartbeat_cycle(
         adaptation=result.adaptation,
         learning_promotion=result.learning_promotion,
         circuit_breaker=result.circuit_breaker,
+        ws_health=result.ws_health,
         system_health=result.system_health,
         token_staleness=result.token_staleness,
         steps_completed=steps_completed,
@@ -710,6 +764,8 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
         alert_lines += f"- ⚠️ {alert}\n"
     if cb.level != "NORMAL":
         alert_lines += f"- ⚠️ Circuit breaker: {cb.level} — {cb.reason}\n"
+    if result.ws_health.status not in ("healthy", "unknown"):
+        alert_lines += f"- ⚠️ WS daemon: {result.ws_health.status} (PID {result.ws_health.pid}, alive={result.ws_health.pid_alive}, connected={result.ws_health.connected})\n"
     if not alert_lines:
         alert_lines = "- None\n"
 
@@ -745,6 +801,12 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
 - Can trade: {cb.can_trade}
 - Daily loss: {cb.daily_loss_pct:.2%}
 - Drawdown: {cb.drawdown_pct:.2%}
+
+### WS Daemon Health
+- Status: {result.ws_health.status}
+- PID: {result.ws_health.pid or "N/A"}
+- PID alive: {result.ws_health.pid_alive}
+- Connected: {result.ws_health.connected}
 
 ### System Health
 - API: {health.api_connectivity}

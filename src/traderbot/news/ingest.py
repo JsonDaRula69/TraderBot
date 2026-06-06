@@ -175,8 +175,9 @@ def _store_datapoints(
             logger.warning("Voyage batch embed failed for data_points: %s", exc)
         if embeddings is None:
             logger.error(
-                "Cannot store data_points — Voyage unavailable and collection is %d-dim. "
-                "The embedding source is configured at install and does not change.",
+                "Cannot store %d data_points — Voyage embed_batch permanently failed. "
+                "Collection is %d-dim and cannot accept documents without matching embeddings.",
+                len(dp_items),
                 _collection_dim(vs, _DATA_COLLECTION),
             )
             return 0
@@ -277,7 +278,10 @@ def _store_newsapi_backfill(
             logger.warning("Voyage embed failed for NewsAPI backfill: %s", exc)
         if embeddings is None:
             logger.error(
-                "Voyage unavailable — cannot store NewsAPI backfill to %d-dim collection", news_dim
+                "Cannot store %d NewsAPI items — Voyage embed_batch permanently failed. "
+                "Collection is %d-dim and cannot accept documents without matching embeddings.",
+                len(items),
+                news_dim,
             )
             return 0
 

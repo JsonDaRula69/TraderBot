@@ -328,7 +328,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     pb.mark_to_market_cents,
                     portfolio_value,
                 )
-                breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
+                breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct, profile=profile)
             else:
                 state = breaker.get_state()
                 if state.level != BreakerLevel.NORMAL:

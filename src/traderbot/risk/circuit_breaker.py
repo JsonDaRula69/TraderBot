@@ -18,6 +18,8 @@ from traderbot.paths import get_data_dir
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from traderbot.profiles.models import TradingProfile
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,39 +56,53 @@ class CircuitBreaker:
         self._state = CircuitBreakerState()
         self._load_state()
 
-    def check(self, daily_loss_pct: float, drawdown_pct: float) -> CircuitBreakerState:
+    def check(
+        self,
+        daily_loss_pct: float,
+        drawdown_pct: float,
+        profile: TradingProfile | None = None,
+    ) -> CircuitBreakerState:
+        if profile is not None:
+            slow_threshold = profile.max_daily_loss_pct * 0.5
+            halt_threshold = profile.max_daily_loss_pct
+            full_stop_threshold = profile.max_drawdown_pct
+        else:
+            slow_threshold = SLOW_THRESHOLD
+            halt_threshold = HALT_THRESHOLD
+            full_stop_threshold = FULL_STOP_THRESHOLD
+
         previous_level = self._state.level
         in_cooldown = (
             self._state.last_recovery_ts > 0
             and 0 < (time.monotonic() - self._state.last_recovery_ts) < FULL_STOP_RECOVERY_COOLDOWN_SECS
         )
 
-        if drawdown_pct >= FULL_STOP_THRESHOLD and not in_cooldown:
+        if drawdown_pct >= full_stop_threshold and not in_cooldown:
             self._state = CircuitBreakerState(
                 level=BreakerLevel.FULL_STOP,
                 daily_loss_pct=daily_loss_pct,
                 drawdown_pct=drawdown_pct,
                 position_size_multiplier=0.0,
                 can_trade=False,
-                reason=f"Drawdown {drawdown_pct:.2%} exceeds {FULL_STOP_THRESHOLD:.0%}",
+                reason=f"Drawdown {drawdown_pct:.2%} exceeds {full_stop_threshold:.0%}",
             )
-        elif daily_loss_pct >= HALT_THRESHOLD:
+        elif daily_loss_pct >= halt_threshold:
             self._state = CircuitBreakerState(
                 level=BreakerLevel.HALT,
                 daily_loss_pct=daily_loss_pct,
                 drawdown_pct=drawdown_pct,
                 position_size_multiplier=0.0,
                 can_trade=False,
-                reason=f"Daily loss {daily_loss_pct:.2%} exceeds {HALT_THRESHOLD:.0%}",
+                reason=f"Daily loss {daily_loss_pct:.2%} exceeds {halt_threshold:.0%}",
             )
-        elif daily_loss_pct >= SLOW_THRESHOLD:
+        elif daily_loss_pct >= slow_threshold:
             self._state = CircuitBreakerState(
                 level=BreakerLevel.SLOW,
                 daily_loss_pct=daily_loss_pct,
                 drawdown_pct=drawdown_pct,
                 position_size_multiplier=0.5,
                 can_trade=True,
-                reason=f"Daily loss {daily_loss_pct:.2%} exceeds {SLOW_THRESHOLD:.0%}",
+                reason=f"Daily loss {daily_loss_pct:.2%} exceeds {slow_threshold:.0%}",
             )
         else:
             self._state = CircuitBreakerState(

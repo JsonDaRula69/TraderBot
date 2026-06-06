@@ -65,6 +65,77 @@ class TestDbDecision:
             )
 
 
+class TestRowToModel:
+    def _insert_and_fetch(self, table_sql: str, insert_sql: str, insert_args: tuple, col_list: str) -> sqlite3.Row:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(table_sql)
+        conn.execute(insert_sql, insert_args)
+        row = conn.execute("SELECT * FROM decisions").fetchone()
+        conn.close()
+        return row
+
+    def test_legacy_checks_column_renamed_to_risk_checks(self) -> None:
+        from traderbot.db.decisions import _row_to_model
+
+        row = self._insert_and_fetch(
+            "CREATE TABLE decisions (id INTEGER PRIMARY KEY, timestamp TEXT, ticker TEXT, "
+            "direction TEXT, quantity INTEGER, price INTEGER, signal_strength REAL, "
+            "confidence REAL, edge_estimate REAL, checks TEXT, outcome TEXT, "
+            "rejection_reason TEXT, actual_result INTEGER)",
+            "INSERT INTO decisions (id, timestamp, ticker, direction, quantity, price, "
+            "signal_strength, confidence, edge_estimate, checks, outcome, rejection_reason, "
+            "actual_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, "2025-01-01T00:00:00+00:00", "KXBTCD-26MAR31-T55000", "yes", 10, 5000, 0.8,
+             0.75, 0.05, '{"min_liquidity": true, "max_risk": true}', "executed", None, None),
+            "",
+        )
+        result = _row_to_model(row)
+        assert result.risk_checks == {"min_liquidity": True, "max_risk": True}
+        assert result.outcome == "executed"
+
+    def test_risk_checks_column_works(self) -> None:
+        from traderbot.db.decisions import _row_to_model
+
+        row = self._insert_and_fetch(
+            "CREATE TABLE decisions (id INTEGER PRIMARY KEY, timestamp TEXT, ticker TEXT, "
+            "direction TEXT, quantity INTEGER, price INTEGER, signal_strength REAL, "
+            "confidence REAL, edge_estimate REAL, risk_checks TEXT, outcome TEXT, "
+            "rejection_reason TEXT, actual_result INTEGER)",
+            "INSERT INTO decisions (id, timestamp, ticker, direction, quantity, price, "
+            "signal_strength, confidence, edge_estimate, risk_checks, outcome, rejection_reason, "
+            "actual_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (2, "2025-01-01T00:00:00+00:00", "KXBTCD-26MAR31-T55000", "no", 5, 5000, 0.3,
+             0.2, -0.02, '{"min_liquidity": false}', "rejected", "Below min liquidity threshold", None),
+            "",
+        )
+        result = _row_to_model(row)
+        assert result.risk_checks == {"min_liquidity": False}
+        assert result.outcome == "rejected"
+
+    def test_missing_risk_checks_defaults_to_empty(self) -> None:
+        from traderbot.db.decisions import _row_to_model
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE decisions (id INTEGER PRIMARY KEY, timestamp TEXT, ticker TEXT, "
+            "direction TEXT, quantity INTEGER, price INTEGER, signal_strength REAL, "
+            "confidence REAL, edge_estimate REAL, outcome TEXT, rejection_reason TEXT, "
+            "actual_result INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO decisions (id, timestamp, ticker, direction, quantity, price, "
+            "signal_strength, confidence, edge_estimate, outcome, rejection_reason, "
+            "actual_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (3, "2025-01-01T00:00:00+00:00", "TEST", "neutral", 1, 50, 0.5, 0.5, 0.0, "held", None, None),
+        )
+        row = conn.execute("SELECT * FROM decisions").fetchone()
+        conn.close()
+        result = _row_to_model(row)
+        assert result.risk_checks == {}
+
+
 class TestInitTable:
     def test_creates_decisions_table(self) -> None:
         conn = sqlite3.connect(":memory:")

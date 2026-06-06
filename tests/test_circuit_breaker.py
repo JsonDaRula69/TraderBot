@@ -10,6 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from traderbot.profiles.models import TradingProfile
 from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker, CircuitBreakerState
 
 
@@ -384,3 +385,90 @@ class TestCircuitBreakerStateExtraForbidden:
 
         with pytest.raises(ValidationError):
             CircuitBreakerState(level=BreakerLevel.NORMAL, extra_field=True)
+
+
+class TestProfileThresholds:
+    """Verify that check() uses profile thresholds when a profile is provided."""
+
+    @pytest.fixture
+    def profile(self):
+        from traderbot.kalshi.models import MarketCategory
+
+        return TradingProfile(
+            name="test-agent",
+            mode="paper",
+            description="Test profile for circuit breaker",
+            enabled_categories=[MarketCategory.WEATHER],
+            risk_multiplier=1.0,
+            max_position_per_market_pct=0.10,
+            max_daily_loss_pct=0.04,
+            max_drawdown_pct=0.20,
+            max_open_positions=10,
+            min_liquidity_threshold=100,
+            min_edge_pct=0.03,
+        )
+
+    def test_check_with_profile_uses_profile_thresholds(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """With profile (max_daily_loss=4%, max_drawdown=20%), the thresholds are:
+        SLOW = 4% * 0.5 = 2%, HALT = 4%, FULL_STOP = 20%.
+        Loss at 1% should be NORMAL (would be SLOW with hardcoded thresholds)."""
+        state = cb.check(daily_loss_pct=0.01, drawdown_pct=0.03, profile=profile)
+        assert state.level == BreakerLevel.NORMAL
+        assert state.can_trade is True
+        assert state.position_size_multiplier == 1.0
+
+    def test_check_with_profile_slow_threshold(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """SLOW triggers at 2% (half of max_daily_loss 4%)."""
+        state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.01, profile=profile)
+        assert state.level == BreakerLevel.SLOW
+        assert state.position_size_multiplier == 0.5
+        assert state.can_trade is True
+
+    def test_check_with_profile_halt_threshold(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """HALT triggers at 4% (max_daily_loss)."""
+        state = cb.check(daily_loss_pct=0.04, drawdown_pct=0.01, profile=profile)
+        assert state.level == BreakerLevel.HALT
+        assert state.position_size_multiplier == 0.0
+        assert state.can_trade is False
+
+    def test_check_with_profile_full_stop_threshold(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """FULL_STOP triggers at 20% drawdown (max_drawdown)."""
+        state = cb.check(daily_loss_pct=0.01, drawdown_pct=0.20, profile=profile)
+        assert state.level == BreakerLevel.FULL_STOP
+        assert state.position_size_multiplier == 0.0
+        assert state.can_trade is False
+
+    def test_check_with_profile_high_thresholds_no_trigger(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """Profile with high thresholds: 1.5% daily loss, 15% drawdown should be NORMAL
+        (SLOW=2%, HALT=4%, FULL_STOP=20%)."""
+        state = cb.check(daily_loss_pct=0.015, drawdown_pct=0.15, profile=profile)
+        assert state.level == BreakerLevel.NORMAL
+        assert state.can_trade is True
+        assert state.position_size_multiplier == 1.0
+
+    def test_check_without_profile_uses_hardcoded_defaults(self, cb: CircuitBreaker) -> None:
+        """Without profile, check() falls back to hardcoded thresholds (SLOW=1%, HALT=2%, FULL_STOP=10%)."""
+        state = cb.check(daily_loss_pct=0.01, drawdown_pct=0.03)
+        assert state.level == BreakerLevel.SLOW
+
+        state = cb.check(daily_loss_pct=0.02, drawdown_pct=0.03)
+        assert state.level == BreakerLevel.HALT
+
+        state = cb.check(daily_loss_pct=0.005, drawdown_pct=0.10)
+        assert state.level == BreakerLevel.FULL_STOP
+
+    def test_check_with_profile_then_without_resets_thresholds(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """After calling check() with a profile, calling without profile reverts to defaults."""
+        # With profile: 1.5% loss is NORMAL (SLOW threshold at 2%)
+        state = cb.check(daily_loss_pct=0.015, drawdown_pct=0.01, profile=profile)
+        assert state.level == BreakerLevel.NORMAL
+
+        # Without profile: 1.5% loss is SLOW (hardcoded threshold at 1%)
+        state = cb.check(daily_loss_pct=0.015, drawdown_pct=0.01)
+        assert state.level == BreakerLevel.SLOW
+
+    def test_check_with_profile_reason_includes_profile_threshold(self, cb: CircuitBreaker, profile: TradingProfile) -> None:
+        """Reason messages should reflect the profile-derived thresholds."""
+        state = cb.check(daily_loss_pct=0.03, drawdown_pct=0.01, profile=profile)
+        assert state.level == BreakerLevel.SLOW
+        assert "2%" in state.reason  # slow_threshold = 4% * 0.5 = 2%
