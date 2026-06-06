@@ -21,7 +21,7 @@ from traderbot.learning import (
     scan_for_promotions,
 )
 from traderbot.paths import get_workspace_dir
-from traderbot.risk.circuit_breaker import CircuitBreaker
+from traderbot.risk.circuit_breaker import BreakerLevel, BreakerTransition, CircuitBreaker
 from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
@@ -33,6 +33,14 @@ if TYPE_CHECKING:
     import sqlite3
 
 logger = logging.getLogger(__name__)
+
+BREAKER_ESCALATION_WEIGHTS: dict[BreakerLevel, int] = {
+    BreakerLevel.SLOW: 1,
+    BreakerLevel.HALT: 3,
+    BreakerLevel.FULL_STOP: 5,
+}
+
+_last_processed_transition_ts: float = 0.0
 
 
 def _default_heartbeat_path() -> Path:
@@ -369,10 +377,13 @@ def step_bayesian_adaptation(
     decisions: list[DbDecision],
     adapter: BayesianAdapter | None = None,
     dry_run: bool = False,
+    breaker: CircuitBreaker | None = None,
 ) -> AdaptationReview:
     """Step 3: Run Bayesian adaptation with latest observations.
 
     Uses Beta-Binomial update on win/loss across all executed decisions.
+    Breaker escalations feed weighted negative evidence: SLOW→+1, HALT→+3, FULL_STOP→+5 failures.
+    Recovery events are explicitly excluded.
     """
     if not decisions:
         return AdaptationReview(skipped_reason="no decisions to adapt from")
@@ -389,17 +400,21 @@ def step_bayesian_adaptation(
     )
     failures = len(executed) - successes
 
-    if successes + failures < 1:
+    breaker_failures = _compute_breaker_failures(breaker)
+    total_failures = failures + breaker_failures
+
+    if successes + total_failures < 1:
         return AdaptationReview(skipped_reason="insufficient resolved decisions")
 
-    observations = BinomialObservations(successes=successes, failures=failures)
+    observations = BinomialObservations(successes=successes, failures=total_failures)
     engine = adapter or BayesianAdapter()
 
     if dry_run:
         obs_total = observations.total
+        extra = f" (+{breaker_failures} from breaker)" if breaker_failures else ""
         return AdaptationReview(
             updated=False,
-            reasoning=f"Dry run: would update Beta-Binomial with {successes} wins, {failures} losses ({obs_total} obs)",
+            reasoning=f"Dry run: would update Beta-Binomial with {successes} wins, {total_failures} losses ({obs_total} obs){extra}",
             skipped_reason="dry_run",
         )
 
@@ -422,6 +437,29 @@ def step_bayesian_adaptation(
     except ValueError as exc:
         logger.warning("Bayesian adaptation skipped: %s", exc)
         return AdaptationReview(skipped_reason=str(exc))
+
+
+def _compute_breaker_failures(breaker: CircuitBreaker | None) -> int:
+    """Compute weighted failures from breaker escalation transitions since last processing."""
+    global _last_processed_transition_ts
+
+    if breaker is None:
+        return 0
+
+    transitions = breaker.get_transitions_since(_last_processed_transition_ts)
+    if not transitions:
+        return 0
+
+    weighted_failures = 0
+    latest_ts = _last_processed_transition_ts
+    for t in transitions:
+        if t.to_level > t.from_level:
+            weighted_failures += BREAKER_ESCALATION_WEIGHTS.get(t.to_level, 0)
+        if t.timestamp > latest_ts:
+            latest_ts = t.timestamp
+
+    _last_processed_transition_ts = latest_ts
+    return weighted_failures
 
 
 def step_learning_promotion(
@@ -635,6 +673,11 @@ async def run_heartbeat_cycle(
 
     steps_completed: list[str] = []
 
+    # Step 0: Sync settlement results from positions → decisions
+    synced = _sync_settlement_before_adaptation(conn)
+    if synced:
+        logger.info("Heartbeat: synced %d settlement results before adaptation", synced)
+
     # Step 1: Performance review
     decisions = _get_decisions(conn, since)
     performance = step_performance_review(conn, decisions, since)
@@ -645,8 +688,14 @@ async def run_heartbeat_cycle(
     steps_completed.append("decision_review")
 
     # Step 3: Bayesian adaptation
-    adapter = BayesianAdapter(state_path=state_path) if state_path is not None else None
-    adaptation = step_bayesian_adaptation(decisions, adapter=adapter, dry_run=dry_run)
+    from traderbot.simulation.adapter_state import resolve_state_path
+
+    resolved_state_path = state_path if state_path is not None else resolve_state_path()
+    adapter = BayesianAdapter(state_path=resolved_state_path)
+    breaker_instance = CircuitBreaker()
+    adaptation = step_bayesian_adaptation(
+        decisions, adapter=adapter, dry_run=dry_run, breaker=breaker_instance
+    )
     steps_completed.append("bayesian_adaptation")
 
     # Step 4: Learning promotion
@@ -654,7 +703,7 @@ async def run_heartbeat_cycle(
     steps_completed.append("learning_promotion")
 
     # Step 5: Circuit breaker check
-    circuit_breaker = step_circuit_breaker_check()
+    circuit_breaker = step_circuit_breaker_check(breaker=breaker_instance)
     steps_completed.append("circuit_breaker_check")
 
     # Step 5.5: WS daemon health check
@@ -708,6 +757,17 @@ async def run_heartbeat_cycle(
         token_staleness=result.token_staleness,
         steps_completed=steps_completed,
     )
+
+
+def _sync_settlement_before_adaptation(conn: sqlite3.Connection) -> int:
+    """Bridge positions.settlement_result → decisions.actual_result before adaptation."""
+    try:
+        from traderbot.db.sync import sync_settlement_to_decisions
+
+        return sync_settlement_to_decisions(conn)
+    except Exception as exc:
+        logger.warning("Settlement sync skipped: %s", exc)
+        return 0
 
 
 def _get_decisions(conn: sqlite3.Connection, since: datetime) -> list[DbDecision]:
