@@ -112,7 +112,7 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --tb=short -W ignore::UserWarning:onnxruntime"
+addopts = "-v --tb=short"
 markers = [
     "unit: unit tests (no external dependencies)",
     "integration: integration tests (mocked external services)",
