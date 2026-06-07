@@ -35,7 +35,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         ] = False,
         full: Annotated[
             bool,
-            typer.Option("--full", help="Run full interactive setup wizard (delegates to 'traderbot setup')"),
+            typer.Option(
+                "--full", help="Run full interactive setup wizard (delegates to 'traderbot setup')"
+            ),
         ] = False,
     ) -> None:
         """One-time setup wizard for new users.

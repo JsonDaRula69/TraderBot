@@ -168,9 +168,7 @@ def _step_kalshi_credentials(
     pem_file.chmod(0o600)
 
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    old_lines = (
-        env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    )
+    old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     new_lines = [
         line
         for line in old_lines
@@ -338,8 +336,7 @@ def _step_profile_creation(
         default_categories = [
             cat
             for cat in MarketCategory
-            if cat.value
-            not in ("elections", "social", "mentions", "entertainment", "companies")
+            if cat.value not in ("elections", "social", "mentions", "entertainment", "companies")
         ]
 
         profile = TradingProfile(
@@ -372,9 +369,7 @@ def _step_profile_creation(
         )
 
 
-def _print_summary(
-    console: Console, results: list[StepResult], json_output: bool = False
-) -> None:
+def _print_summary(console: Console, results: list[StepResult], json_output: bool = False) -> None:
     if json_output:
         json_lib.dump(
             {
@@ -485,9 +480,7 @@ def _run_setup_steps(
             message="Skipped (--no-creds flag)",
         )
     else:
-        r4 = _step_kalshi_credentials(
-            console, non_interactive=non_interactive, dry_run=dry_run
-        )
+        r4 = _step_kalshi_credentials(console, non_interactive=non_interactive, dry_run=dry_run)
     results.append(r4)
     if not json_output:
         _render_step_result(console, r4)
@@ -502,9 +495,7 @@ def _run_setup_steps(
             message="Skipped (--no-creds flag)",
         )
     else:
-        r5 = _step_optional_services(
-            console, non_interactive=non_interactive, dry_run=dry_run
-        )
+        r5 = _step_optional_services(console, non_interactive=non_interactive, dry_run=dry_run)
     results.append(r5)
     if not json_output:
         console.print(f"  [dim]○[/dim] {r5.message}")
@@ -512,9 +503,7 @@ def _run_setup_steps(
     # Step 6: Master password
     if not json_output:
         _console_step(console, 6, "Master Password")
-    r6 = _step_master_password(
-        console, non_interactive=non_interactive, dry_run=dry_run
-    )
+    r6 = _step_master_password(console, non_interactive=non_interactive, dry_run=dry_run)
     results.append(r6)
     if not json_output:
         _render_step_result(console, r6)
@@ -522,9 +511,7 @@ def _run_setup_steps(
     # Step 7: Profile creation
     if not json_output:
         _console_step(console, 7, "Profile Creation")
-    r7 = _step_profile_creation(
-        console, non_interactive=non_interactive, dry_run=dry_run
-    )
+    r7 = _step_profile_creation(console, non_interactive=non_interactive, dry_run=dry_run)
     results.append(r7)
     if not json_output:
         _render_step_result(console, r7)

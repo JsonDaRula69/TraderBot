@@ -355,12 +355,8 @@ def auth_set_kalshi(
 
 @auth_app.command("set-key")
 def auth_set_key(
-    service: Annotated[
-        str, typer.Argument(help="Service name (non-Kalshi)")
-    ],
-    key: Annotated[
-        str, typer.Argument(help="Key to set (e.g., api_key, client_secret)")
-    ],
+    service: Annotated[str, typer.Argument(help="Service name (non-Kalshi)")],
+    key: Annotated[str, typer.Argument(help="Key to set (e.g., api_key, client_secret)")],
     value: Annotated[
         str | None, typer.Option("--value", help="Value (non-interactive/cron)")
     ] = None,
@@ -386,23 +382,18 @@ def auth_set_key(
     valid_keys = _ALL_SERVICES.get(service)
     if valid_keys is None:
         non_kalshi = sorted(s for s in _ALL_SERVICES if s != "kalshi")
-        report_cli_error(
-            f"Unknown service: {service}. Valid services: {', '.join(non_kalshi)}"
-        )
+        report_cli_error(f"Unknown service: {service}. Valid services: {', '.join(non_kalshi)}")
 
     if key not in valid_keys:
         report_cli_error(
-            f"Unknown key '{key}' for service '{service}'. "
-            f"Valid keys: {', '.join(valid_keys)}"
+            f"Unknown key '{key}' for service '{service}'. Valid keys: {', '.join(valid_keys)}"
         )
 
     if tier is not None:
         if service != "coingecko":
             report_cli_error("--tier is only valid for service 'coingecko'")
         if key != "api_key":
-            report_cli_error(
-                "--tier is only valid with key 'api_key' for service 'coingecko'"
-            )
+            report_cli_error("--tier is only valid with key 'api_key' for service 'coingecko'")
 
     sensitive_keys = frozenset({"api_key", "client_secret", "private_key_pem"})
 
@@ -423,9 +414,7 @@ def auth_set_key(
 
     if tier is not None:
         tier_source = mgr.set_credential("coingecko", "tier", tier)
-        console.print(
-            f"[green]✓[/green] coingecko.tier ({tier}) stored in {tier_source}"
-        )
+        console.print(f"[green]✓[/green] coingecko.tier ({tier}) stored in {tier_source}")
 
 
 @auth_app.command("migrate")
@@ -502,8 +491,7 @@ def auth_detect_tier(
             )
             raise typer.Exit(1)
         report_cli_error(
-            "No CoinGecko API key configured. "
-            "Use `traderbot auth set-key coingecko api_key`."
+            "No CoinGecko API key configured. Use `traderbot auth set-key coingecko api_key`."
         )
 
     detected_tier: str | None = None
@@ -523,18 +511,15 @@ def auth_detect_tier(
                 detected_tier = tier
                 break
             if tier != "free":
-                logger.debug(
-                    "CoinGecko %s tier probe returned %d", tier, resp.status_code
-                )
+                logger.debug("CoinGecko %s tier probe returned %d", tier, resp.status_code)
         except httpx.TransportError as exc:
             logger.debug("CoinGecko %s tier probe failed: %s", tier, exc)
             error_detail = str(exc)
             continue
 
     if detected_tier is None:
-        msg = (
-            "Unable to determine CoinGecko API tier. All probe endpoints failed"
-            + (f": {error_detail}" if error_detail else ".")
+        msg = "Unable to determine CoinGecko API tier. All probe endpoints failed" + (
+            f": {error_detail}" if error_detail else "."
         )
         if json_output:
             json_lib.dump({"error": msg}, sys.stdout)
