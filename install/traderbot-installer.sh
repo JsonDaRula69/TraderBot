@@ -680,6 +680,30 @@ uninstall_services() {
 
 update_services() {
     local os_type="$1"
+
+    # Detect pipx-installed TraderBot
+    if command -v traderbot &>/dev/null && pipx list --short 2>/dev/null | grep -q "traderbot"; then
+        echo "Pipx installation detected. Upgrading via pipx..."
+        pipx upgrade traderbot
+        if [[ $? -ne 0 ]]; then
+            _log_error "pipx upgrade failed."
+            return 1
+        fi
+        # Re-apply configuration via traderbot setup
+        echo "Re-applying configuration..."
+        if command -v traderbot &>/dev/null; then
+            TRADERBOT_NON_INTERACTIVE=1 traderbot setup --non-interactive
+        fi
+        # Re-apply OpenClaw visibility config
+        if command -v openclaw &>/dev/null; then
+            openclaw config set tools.sessions.visibility agent 2>/dev/null || true
+            openclaw config set tools.agentToAgent.enabled true --strict-json 2>/dev/null || true
+        fi
+        echo "Update complete (pipx)."
+        return 0
+    fi
+
+    # Git/source install — existing flow
     local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
 
     if [[ -x "$tb_bin" ]]; then
