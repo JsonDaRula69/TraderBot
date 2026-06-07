@@ -1,14 +1,11 @@
 """TradingProfile model — runtime profile for multi-agent trading."""
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-if TYPE_CHECKING:
-    from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.models import MarketCategory
 
 logger = logging.getLogger(__name__)
 

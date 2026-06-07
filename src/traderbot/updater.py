@@ -1,7 +1,5 @@
 """Auto-update checker for TraderBot — delegates to standalone bootstrap script."""
 
-from __future__ import annotations
-
 import json
 import logging
 import os

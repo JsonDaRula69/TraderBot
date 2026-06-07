@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `src/traderbot/experiment/__init__.py` as proper package marker
 - Removed `numpy` from direct dependencies (transitive via `scipy`)
 - Explicit `experiment/tests` exclusion in wheel and sdist build config
+- Fixed `TradingProfile` Pydantic model — moved `MarketCategory` out of `TYPE_CHECKING` guard for runtime evaluation
+- Removed `from __future__ import annotations` from `updater.py` and `models.py` (breaks Pydantic and mock patching)
+- Fixed `test_updater.py` mocks — patched `traderbot.paths.get_source_root` instead of removed `traderbot.updater.Path`
+- Fixed `test_injection.py` — mock `_resolve_workspace_root` instead of `__file__` spoofing
 
 ### Added
 
