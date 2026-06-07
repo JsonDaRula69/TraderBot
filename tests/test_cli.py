@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timezone
-from typing import ClassVar
+from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-from tests.conftest import strip_ansi
 
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import strip_ansi
 from traderbot.cli import app
-from traderbot.risk.circuit_breaker import CircuitBreakerState
 from traderbot.risk import TradeResult
+from traderbot.risk.circuit_breaker import CircuitBreakerState
 
 runner = CliRunner()
 
@@ -99,6 +98,8 @@ class TestNewsCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -109,7 +110,7 @@ class TestNewsCommand:
                 body="The Federal Reserve raised rates by 25bps",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/fed",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=["SPX"],
                 category=MarketCategory.ECONOMICS,
             )
@@ -134,6 +135,8 @@ class TestNewsCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -144,7 +147,7 @@ class TestNewsCommand:
                 body="Economic data shows slowdown",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/gdp",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=[],
                 category=MarketCategory.ECONOMICS,
             ),
@@ -154,7 +157,7 @@ class TestNewsCommand:
                 body="Tech company launches new chip",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/chip",
-                published_at=datetime(2026, 4, 15, 13, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 13, 0, 0, tzinfo=UTC),
                 ticker_refs=[],
                 category=MarketCategory.SCIENCE_AND_TECHNOLOGY,
             ),
@@ -177,6 +180,8 @@ class TestNewsCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -187,7 +192,7 @@ class TestNewsCommand:
                 body="Reddit discussion about rates",
                 source=SourcesNewsSource.REDDIT,
                 url="https://reddit.com/r/economics",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=[],
                 category=MarketCategory.ECONOMICS,
             )
@@ -209,6 +214,8 @@ class TestNewsCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -219,7 +226,7 @@ class TestNewsCommand:
                 body="The Federal Reserve raised rates by 25bps",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/fed",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=["SPX"],
                 category=MarketCategory.ECONOMICS,
             )
@@ -262,6 +269,8 @@ class TestSentimentCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -272,7 +281,7 @@ class TestSentimentCommand:
                 body="Bitcoin hits all-time high",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/btc",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=["BTC"],
                 category=MarketCategory.ECONOMICS,
             )
@@ -307,6 +316,8 @@ class TestSentimentCommand:
         from traderbot.kalshi.models import MarketCategory
         from traderbot.news.sources import (
             NewsItem as SourcesNewsItem,
+        )
+        from traderbot.news.sources import (
             NewsSource as SourcesNewsSource,
         )
 
@@ -317,7 +328,7 @@ class TestSentimentCommand:
                 body="Bitcoin hits all-time high",
                 source=SourcesNewsSource.NEWSAPI,
                 url="https://example.com/btc",
-                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
                 ticker_refs=["BTC"],
                 category=MarketCategory.ECONOMICS,
             )
@@ -463,7 +474,7 @@ class TestAnalyze:
     @pytest.mark.unit
     def test_analyze_with_market(self):
         """Mock get_market and get_orderbook, verify Rich output includes market info and implied probability."""
-        from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
+        from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel
 
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
@@ -505,7 +516,7 @@ class TestAnalyze:
     @pytest.mark.unit
     def test_analyze_json_with_mock(self):
         """Mock get_market/get_orderbook, call analyze TICKER --json, verify JSON output."""
-        from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
+        from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel
 
         market = Market(
             ticker="KXBTCD-26MAR31-T55000",
@@ -928,7 +939,7 @@ class TestTrade:
     @pytest.mark.unit
     def test_trade_command_passes_risk_checks_with_live_data(self):
         """With mocked MarketService returning realistic data, trade should pass liquidity and edge checks."""
-        from traderbot.kalshi.models import Market, OrderBook, PortfolioState, OrderBookLevel
+        from traderbot.kalshi.models import Market, OrderBook, OrderBookLevel, PortfolioState
         from traderbot.paper import PaperBalance
         from traderbot.profiles.models import TradingProfile
 
@@ -938,7 +949,7 @@ class TestTrade:
             outcome_prices=["60", "40"],
             volume=1000,
             open_interest=5000,
-            close_time=datetime(2026, 3, 31, tzinfo=timezone.utc),
+            close_time=datetime(2026, 3, 31, tzinfo=UTC),
             status="open",
             event_ticker="KXBTCD-26MAR31",
         )
@@ -1228,7 +1239,7 @@ class TestAudit:
 
 class TestHeartbeat:
     def test_heartbeat(self):
-        from traderbot.heartbeat import HeartbeatResult, DecisionReview, PerformanceReview
+        from traderbot.heartbeat import DecisionReview, HeartbeatResult, PerformanceReview
 
         mock_result = HeartbeatResult(
             timestamp=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
@@ -1244,7 +1255,7 @@ class TestHeartbeat:
 
     @pytest.mark.unit
     def test_heartbeat_json(self):
-        from traderbot.heartbeat import HeartbeatResult, DecisionReview, PerformanceReview
+        from traderbot.heartbeat import DecisionReview, HeartbeatResult, PerformanceReview
 
         mock_result = HeartbeatResult(
             timestamp=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
@@ -1319,7 +1330,17 @@ class TestCronSetup:
             patch("traderbot.cli.cron._run_openclaw_cron_add", return_value=(0, "ok")),
         ):
             runner.invoke(
-                app, ["cron", "setup", "--agent", "test-agent", "--role", "sysadmin", "--replace", "--json"]
+                app,
+                [
+                    "cron",
+                    "setup",
+                    "--agent",
+                    "test-agent",
+                    "--role",
+                    "sysadmin",
+                    "--replace",
+                    "--json",
+                ],
             )
         assert any("test-agent" in c[0] for c in remove_calls)
 
@@ -1363,7 +1384,9 @@ class TestCronSetup:
             patch("traderbot.cli.cron.shutil.which", return_value="/usr/bin/openclaw"),
             patch("traderbot.cli.cron._run_openclaw_cron_add", side_effect=mock_cron_add),
         ):
-            result = runner.invoke(app, ["cron", "setup", "--agent", "my-agent", "--role", "trader", "--json"])
+            result = runner.invoke(
+                app, ["cron", "setup", "--agent", "my-agent", "--role", "trader", "--json"]
+            )
             assert result.exit_code == 0
 
         decision_call = next(
@@ -1740,7 +1763,6 @@ class TestCompareCommand:
         )
 
         async def fake_run_profiles(engine, profiles, start, end):
-            from traderbot.simulation.profiles import PRESETS
 
             results = {}
             for p in profiles:
@@ -2022,3 +2044,31 @@ class TestLearnings:
         db = tmp_path / "test.db"
         result = runner.invoke(app, ["learnings", "--db", str(db), "--status", "invalid"])
         assert result.exit_code == 1
+
+
+class TestUninstallPipx:
+    @pytest.mark.unit
+    def test_uninstall_uses_pipx_when_pipx_installed(self) -> None:
+        """When _is_pipx_installed() returns True, uninstall calls pipx uninstall traderbot."""
+        import subprocess
+
+        mock_run = MagicMock(return_value=subprocess.CompletedProcess([], returncode=0))
+        with (
+            patch("traderbot.paths._is_pipx_installed", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch("traderbot.paths.list_all_data_paths", return_value=[]),
+            patch("traderbot.paths.get_data_dir", return_value=Path("/tmp/tb_uninstall_test")),
+            patch("traderbot.cli.Path.home", return_value=Path("/tmp/tb_uninstall_test_home")),
+            patch("traderbot.cli.Path.exists", return_value=False),
+            patch("traderbot.cli.shutil.which", return_value=None),
+        ):
+            result = runner.invoke(app, ["uninstall", "--json"])
+            assert result.exit_code == 0
+
+        # Find the pipx uninstall call
+        pipx_calls = [
+            call
+            for call in mock_run.call_args_list
+            if call[0][0] == ["pipx", "uninstall", "traderbot"]
+        ]
+        assert len(pipx_calls) == 1, f"Expected pipx uninstall call, got: {mock_run.call_args_list}"

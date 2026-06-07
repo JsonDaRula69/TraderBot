@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Added unit tests for `_is_pipx_installed()` and `get_install_method()` in `test_paths.py`
+- Added unit test for pipx uninstall path in `test_cli.py`
+- Added unit test for pipx update path in `test_updater.py`
 - Installer `--update` now detects pipx installations and uses `pipx upgrade traderbot` instead of git pull
 - `traderbot uninstall` now detects pipx installations and uses `pipx uninstall` instead of `pip uninstall`
 - `traderbot update` now detects pipx installations and uses `pipx upgrade` instead of `pip install --upgrade`

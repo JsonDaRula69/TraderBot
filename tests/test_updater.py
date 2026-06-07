@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from traderbot.updater import (
     apply_update,
@@ -19,21 +20,30 @@ class TestGetCurrentVersion:
     def test_reads_version_file(self, tmp_path: Path) -> None:
         version_file = tmp_path / "VERSION"
         version_file.write_text("0.08.50\n")
-        with patch("importlib.metadata.version", side_effect=Exception("no package")), patch("traderbot.paths.get_source_root", return_value=tmp_path):
+        with (
+            patch("importlib.metadata.version", side_effect=Exception("no package")),
+            patch("traderbot.paths.get_source_root", return_value=tmp_path),
+        ):
             result = get_current_version()
         assert result == "0.08.50"
 
     def test_strips_v_prefix(self, tmp_path: Path) -> None:
         version_file = tmp_path / "VERSION"
         version_file.write_text("v0.09.00\n")
-        with patch("importlib.metadata.version", side_effect=Exception("no package")), patch("traderbot.paths.get_source_root", return_value=tmp_path):
+        with (
+            patch("importlib.metadata.version", side_effect=Exception("no package")),
+            patch("traderbot.paths.get_source_root", return_value=tmp_path),
+        ):
             result = get_current_version()
         assert result == "0.09.00"
 
     def test_strips_whitespace(self, tmp_path: Path) -> None:
         version_file = tmp_path / "VERSION"
         version_file.write_text("  0.08.50  \n")
-        with patch("importlib.metadata.version", side_effect=Exception("no package")), patch("traderbot.paths.get_source_root", return_value=tmp_path):
+        with (
+            patch("importlib.metadata.version", side_effect=Exception("no package")),
+            patch("traderbot.paths.get_source_root", return_value=tmp_path),
+        ):
             result = get_current_version()
         assert result == "0.08.50"
 
@@ -43,7 +53,10 @@ class TestGetCurrentVersion:
         assert result == "0.10.00"
 
     def test_fallback_to_zero(self) -> None:
-        with patch("importlib.metadata.version", side_effect=Exception("no package")), patch("traderbot.paths.get_source_root", side_effect=FileNotFoundError):
+        with (
+            patch("importlib.metadata.version", side_effect=Exception("no package")),
+            patch("traderbot.paths.get_source_root", side_effect=FileNotFoundError),
+        ):
             result = get_current_version()
         assert result == "0.0.0"
 
@@ -66,7 +79,10 @@ class TestFetchLatestVersion:
                 "object": {"sha": "abc", "type": "commit", "url": ""},
             },
         ]
-        with patch("traderbot.updater.httpx.get", return_value=mock_response), patch("traderbot.updater.CACHE_DIR", tmp_path):
+        with (
+            patch("traderbot.updater.httpx.get", return_value=mock_response),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
             result = fetch_latest_version()
         assert result is not None
         assert result[0] == "0.09.00"
@@ -90,7 +106,10 @@ class TestFetchLatestVersion:
         mock_response.json.return_value = [
             {"ref": "refs/tags/v0.09.00", "object": {"sha": "abc"}},
         ]
-        with patch("traderbot.updater.CACHE_DIR", tmp_path), patch("traderbot.updater.httpx.get", return_value=mock_response):
+        with (
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+            patch("traderbot.updater.httpx.get", return_value=mock_response),
+        ):
             result = fetch_latest_version(cache_ttl_seconds=3600)
         assert result is not None
         assert result[0] == "0.09.00"
@@ -101,7 +120,10 @@ class TestFetchLatestVersion:
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
             "404", request=MagicMock(), response=mock_response
         )
-        with patch("traderbot.updater.httpx.get", return_value=mock_response), patch("traderbot.updater.CACHE_DIR", tmp_path):
+        with (
+            patch("traderbot.updater.httpx.get", return_value=mock_response),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
             result = fetch_latest_version()
         assert result is None
 
@@ -115,7 +137,10 @@ class TestFetchLatestVersion:
             {"ref": "refs/tags/v0.10.156)", "object": {"sha": "abc"}},
             {"ref": "refs/tags/v0.10.155", "object": {"sha": "abc"}},
         ]
-        with patch("traderbot.updater.httpx.get", return_value=mock_response), patch("traderbot.updater.CACHE_DIR", tmp_path):
+        with (
+            patch("traderbot.updater.httpx.get", return_value=mock_response),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
             result = fetch_latest_version()
         assert result is not None
         assert result[0] == "0.15.07"
@@ -133,17 +158,27 @@ class TestFetchLatestVersion:
 class TestCheckForUpdates:
     def test_no_update_when_current_latest_match(self, tmp_path: Path) -> None:
         mock_cfg = MagicMock(enabled=True, check_interval_minutes=60, auto_apply=False)
-        with patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg), patch("traderbot.updater.get_current_version", return_value="0.08.50"), patch("traderbot.updater.fetch_latest_version", return_value=("0.08.50", "")), patch("traderbot.updater.CACHE_DIR", tmp_path):
+        with (
+            patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg),
+            patch("traderbot.updater.get_current_version", return_value="0.08.50"),
+            patch("traderbot.updater.fetch_latest_version", return_value=("0.08.50", "")),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
             result = check_for_updates()
         assert result is None
 
     def test_returns_update_when_latest_newer(self, tmp_path: Path) -> None:
         mock_cfg = MagicMock(enabled=True, check_interval_minutes=60, auto_apply=False)
-        with patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg), patch("traderbot.updater.get_current_version", return_value="0.08.50"), patch(
-                    "traderbot.updater.fetch_latest_version",
-                    return_value=("0.09.00", "https://example.com"),
-                ), patch("traderbot.updater.CACHE_DIR", tmp_path):
-                        result = check_for_updates(silent=True)
+        with (
+            patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg),
+            patch("traderbot.updater.get_current_version", return_value="0.08.50"),
+            patch(
+                "traderbot.updater.fetch_latest_version",
+                return_value=("0.09.00", "https://example.com"),
+            ),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
+            result = check_for_updates(silent=True)
         assert result is not None
         assert result["current"] == "0.08.50"
         assert result["latest"] == "0.09.00"
@@ -152,16 +187,24 @@ class TestCheckForUpdates:
         interval_ts = str(time.time() - 30)
         (tmp_path / ".update_check_ts").write_text(interval_ts)
         mock_cfg = MagicMock(enabled=True, check_interval_minutes=60, auto_apply=False)
-        with patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg), patch("traderbot.updater.get_current_version", return_value="0.08.50"), patch("traderbot.updater.fetch_latest_version", return_value=("0.09.00", "")), patch("traderbot.updater.CACHE_DIR", tmp_path):
-                        result = check_for_updates(force=True, silent=True)
+        with (
+            patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg),
+            patch("traderbot.updater.get_current_version", return_value="0.08.50"),
+            patch("traderbot.updater.fetch_latest_version", return_value=("0.09.00", "")),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
+            result = check_for_updates(force=True, silent=True)
         assert result is not None
 
     def test_interval_marker_blocks_early_recheck(self, tmp_path: Path) -> None:
         interval_ts = str(time.time() - 120)
         (tmp_path / ".update_check_ts").write_text(interval_ts)
         mock_cfg = MagicMock(enabled=True, check_interval_minutes=60)
-        with patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg), patch("traderbot.updater.CACHE_DIR", tmp_path):
-                result = check_for_updates()
+        with (
+            patch("traderbot.update_config.UpdateConfig.load", return_value=mock_cfg),
+            patch("traderbot.updater.CACHE_DIR", tmp_path),
+        ):
+            result = check_for_updates()
         assert result is None
 
     def test_disabled_config_returns_none(self) -> None:
@@ -210,3 +253,24 @@ class TestApplyUpdate:
         ):
             result = apply_update(restart=False)
         assert result is False
+
+    @pytest.mark.unit
+    def test_pipx_install_uses_pipx_upgrade(self) -> None:
+        """When _is_pipx_installed() returns True, apply_update calls pipx upgrade traderbot."""
+        import subprocess
+
+        mock_run = MagicMock(return_value=subprocess.CompletedProcess([], returncode=0))
+        with (
+            patch("traderbot.paths._is_pipx_installed", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch("traderbot.updater._ensure_openclaw_visibility"),
+        ):
+            result = apply_update(restart=False)
+        assert result is True
+
+        pipx_calls = [
+            call
+            for call in mock_run.call_args_list
+            if call[0][0] == ["pipx", "upgrade", "traderbot"]
+        ]
+        assert len(pipx_calls) == 1, f"Expected pipx upgrade call, got: {mock_run.call_args_list}"
