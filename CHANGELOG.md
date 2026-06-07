@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Installer script (`install/traderbot-installer.sh`) now delegates interactive configuration to `traderbot setup` instead of its own `interactive_config_flow()` function, removing ~1200 lines of duplicated credential prompting, keyring setup, master password, and profile creation logic that is already handled by the Python CLI
+
 ### Fixed
 
 - Paper settlement cash crediting now correctly adds proceeds to cash balance instead of overwriting

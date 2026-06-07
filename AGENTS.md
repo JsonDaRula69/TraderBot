@@ -27,7 +27,7 @@ TraderBot supports two installation methods:
    ```bash
    bash <(curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh)
    ```
-   The installer handles venv creation, dependency installation, and interactive configuration.
+   The installer handles venv creation, dependency installation, and delegates interactive configuration to `traderbot setup`. For pip-installed flows, `traderbot` is on PATH; for git-installed flows, `${INSTALL_DIR}/.venv/bin/traderbot` is used. Environment variables `TRADERBOT_NON_INTERACTIVE`, `TRADERBOT_NO_CREDS`, `TRADERBOT_DRY_RUN`, and `TRADERBOT_JSON` map to `traderbot setup` flags `--non-interactive`, `--no-creds`, `--dry-run`, and `--json` respectively.
 
 ## Versioning Scheme
 
