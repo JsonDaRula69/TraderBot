@@ -113,6 +113,9 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::UserWarning:onnxruntime",
+]
 markers = [
     "unit: unit tests (no external dependencies)",
     "integration: integration tests (mocked external services)",

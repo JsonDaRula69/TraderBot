@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_newsapi_top_headlines`, `test_openweathermap_weather`, `test_fred_economic_data` properly authenticate
 - CoinGecko live tests cover all 3 auth tiers: free (unauthenticated), demo (x-cg-demo-api-key), pro (x-cg-pro-api-key)
 - `COINGECKO_TIER` secret added to CI workflow for tier-aware CoinGecko testing
-- CI matrix tests now use `--timeout=120` to prevent Windows runner KeyboardInterrupt
+- Suppress ONNX Runtime Windows Server 2025 warning in pytest config (root cause of Windows CI KeyboardInterrupt)
 
 ### Added
 
