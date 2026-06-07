@@ -2,14 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
-
-# Suppress ONNX Runtime's Unsupported Windows version warning.
-# On Windows Server 2025, onnxruntime emits a UserWarning during import
-# that cascades into a KeyboardInterrupt during pytest teardown.
-# This must come before any import that triggers onnxruntime.
-warnings.filterwarnings("ignore", message=".*Unsupported Windows version.*", category=UserWarning)
-
 import pytest
 
 pytest.register_assert_rewrite("tests.news")
