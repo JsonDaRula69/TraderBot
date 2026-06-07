@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settlement sync propagates settled positions back to decisions table for audit trail
 - Live API tests now pass API keys explicitly to `NewsAggregator()` instead of relying on config fallback
 - `test_newsapi_top_headlines`, `test_openweathermap_weather`, `test_fred_economic_data` properly authenticate
+- CoinGecko live tests cover all 3 auth tiers: free (unauthenticated), demo (x-cg-demo-api-key), pro (x-cg-pro-api-key)
+- `COINGECKO_TIER` secret added to CI workflow for tier-aware CoinGecko testing
 
 ### Added
 

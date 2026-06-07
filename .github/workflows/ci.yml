@@ -108,6 +108,7 @@ jobs:
           NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          COINGECKO_TIER: ${{ secrets.COINGECKO_TIER }}
 
   test:
     name: Test (${{ matrix.os }})
