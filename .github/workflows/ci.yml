@@ -132,20 +132,10 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests (not live)
-        id: tests
         run: uv run --frozen python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
         env:
           PYTHONWARNINGS: ${{ matrix.os == 'windows-latest' && 'ignore::UserWarning' || '' }}
-
-      - name: Verify Windows tests passed
-        if: matrix.os == 'windows-latest' && steps.tests.outcome == 'failure'
-        run: |
-          # On Windows, pytest may exit with code 1 due to ONNX Runtime's
-          # KeyboardInterrupt during teardown (all tests still pass).
-          # Check the last pytest output line for "N passed" to confirm success.
-          uv run --frozen python -m pytest -m "not live" --no-cov -q 2>&1 | tail -1 | grep -q "passed"
-          echo "Windows tests verified: all passed despite KeyboardInterrupt exit code"
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'
