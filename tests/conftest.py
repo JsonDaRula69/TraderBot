@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytest.register_assert_rewrite("tests.news")
+
 import re
 import sqlite3
 
 pytest_plugins = ["tests.integration_conftest"]
 from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
 
 from traderbot.kalshi.provider import (
     MarketSnapshot,

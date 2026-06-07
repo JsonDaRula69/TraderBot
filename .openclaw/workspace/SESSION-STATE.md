@@ -91,6 +91,11 @@ _Each row is one run through the improvement lifecycle. Experiments are designed
 
 _Stale WAL entries purged on 2026-06-05. 128 stale PENDING/REJECTED/EXECUTED entries from 2026-06-01 through 2026-06-03 have been cleared. The WAL protocol remains active and new entries will be written by future sessions._
 
+Status: REJECTED
+Status: REJECTED
+Status: EXECUTED
+Status: EXECUTED
+Status: REJECTED
 ## Completed Actions
 
 _No activity yet._

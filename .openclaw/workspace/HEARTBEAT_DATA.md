@@ -3,7 +3,7 @@
 > 7-step self-review output. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: 2026-06-06T20:19:45.815646+00:00
+## Last Heartbeat: 2026-06-07T02:24:37.702913+00:00
 
 ### Performance
 - Win rate: 0% (0 trades)
@@ -22,6 +22,9 @@
 - Can trade: True
 - Daily loss: 0.00%
 - Drawdown: 0.00%
+
+### Recovery Experiment
+- Not triggered
 
 ### WS Daemon Health
 - Status: not_running

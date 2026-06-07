@@ -19,8 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_newsapi_top_headlines`, `test_openweathermap_weather`, `test_fred_economic_data` properly authenticate
 - CoinGecko live tests cover all 3 auth tiers: free (unauthenticated), demo (x-cg-demo-api-key), pro (x-cg-pro-api-key)
 - `COINGECKO_TIER` secret added to CI workflow for tier-aware CoinGecko testing
-- Suppress ONNX Runtime Windows Server 2025 warning in pytest config (root cause of Windows CI KeyboardInterrupt)
-- Voyage live tests now skip gracefully on invalid/expired API keys instead of crashing
+- Move `pytest.register_assert_rewrite("tests.news")` to root conftest.py (before module imports) — fixes Windows KeyboardInterrupt
+- Revert Voyage test skip — assert real API responses, don't paper over auth issues
+- Remove ineffective ONNX filterwarnings from pyproject.toml (root cause was assert-rewrite ordering, not the warning)
 
 ### Added
 
