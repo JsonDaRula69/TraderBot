@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CoinGecko live tests cover all 3 auth tiers: free (unauthenticated), demo (x-cg-demo-api-key), pro (x-cg-pro-api-key)
 - `COINGECKO_TIER` secret added to CI workflow for tier-aware CoinGecko testing
 - Suppress ONNX Runtime Windows Server 2025 warning in pytest config (root cause of Windows CI KeyboardInterrupt)
+- Voyage live tests now skip gracefully on invalid/expired API keys instead of crashing
 
 ### Added
 
