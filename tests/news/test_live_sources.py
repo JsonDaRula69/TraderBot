@@ -175,8 +175,7 @@ def test_voyage_embeddings() -> None:
 
     vc = VoyageClient()
     result = vc.embed("Kalshi weather markets are trading at 85% probability")
-    if result is None:
-        pytest.skip("Voyage API key invalid or expired")
+    assert result is not None, "Should return an embedding vector"
     assert len(result) == 1024, "voyage-4-large should output 1024 dimensions"
     assert all(isinstance(v, float) for v in result), "All embedding values should be float"
 
@@ -194,8 +193,7 @@ def test_voyage_rerank() -> None:
         "Hurricane watch issued for coastal Florida",
     ]
     result = vc.rerank(query, docs)
-    if result is None:
-        pytest.skip("Voyage API key invalid or expired")
+    assert result is not None, "Should return re-ranking scores"
     assert len(result) == 3, "Should return scores for all 3 documents"
     # Indices: 0=Phoenix, 1=Chicago, 2=Florida. Phoenix should rank highest.
     indices = [idx for idx, _ in result]
