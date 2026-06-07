@@ -132,7 +132,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests (not live)
-        run: uv run --frozen python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
+        run: uv run --frozen python -m pytest -m "not live" --timeout=120 --cov=src/traderbot --cov-report=xml
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'
