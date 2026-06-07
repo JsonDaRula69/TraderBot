@@ -9,7 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `HistoryService` now uses `/historical/` endpoints (`/historical/markets`, `/historical/trades`, `/historical/markets/{ticker}`) for archived data instead of live `/markets/` endpoints — live endpoints only return post-cutoff data. Added response format guardrails that warn when expected keys (`market`, `markets`, `trades`) are missing before normalization.
+- Paper settlement cash crediting now correctly adds proceeds to cash balance instead of overwriting
+- Paper P&L computation is side-aware (long/short) — short positions profit when price falls
+- Paper slippage model crosses the ask for buys (was using bid for both sides)
+- Portfolio valuation uses cash-only buying power instead of inflating with position collateral
+- Void settlement handling — voided markets are skipped in settlement processing
+- Settlement sync propagates settled positions back to decisions table for audit trail
+
+### Added
+
+- `BayesianAdapter` persistence — adapter state survives across agent sessions via DB serialization
+- Breaker→adaptation weighted feedback — circuit breaker events feed into adapter weight adjustment
+- Auto-experiment trigger on `FULL_STOP` — when a FULL_STOP halt fires, an experiment is automatically created to evaluate the cause
+- Deployment clears `FULL_STOP` blocker — deploying a new strategy version automatically clears the FULL_STOP halt state
+- Side column in positions table — positions display shows long/short direction explicitly
+
+### Changed
+
+- `FULL_STOP` 24h auto-recovery documented (was documented as "manual only")
+- Cron tables reconciled across documentation — all docs now reference the same schedule definitions (`/historical/markets`, `/historical/trades`, `/historical/markets/{ticker}`) for archived data instead of live `/markets/` endpoints — live endpoints only return post-cutoff data. Added response format guardrails that warn when expected keys (`market`, `markets`, `trades`) are missing before normalization.
 - Phantom `KALSHI_RATE_LIMIT_RPS` env var removed from docs and installers — replaced with actual `KALSHI_READ_BUDGET_TOKENS` (default 200) and `KALSHI_WRITE_BUDGET_TOKENS` (default 100). Effective RPS = budget / endpoint_cost (default 10).
 
 ### Added

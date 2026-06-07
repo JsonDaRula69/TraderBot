@@ -37,6 +37,16 @@ FULL_STOP_THRESHOLD = 0.10
 FULL_STOP_RECOVERY_COOLDOWN_SECS = 86400  # 24 hours
 
 
+class BreakerTransition(BaseModel):
+    """Record of a circuit breaker level transition."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    from_level: BreakerLevel
+    to_level: BreakerLevel
+    timestamp: float
+
+
 class CircuitBreakerState(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -54,6 +64,7 @@ class CircuitBreaker:
         self._state_file = state_file or get_data_dir() / "circuit_breaker_state.json"
         self._secret_file = self._state_file.parent / ".breaker_secret"
         self._state = CircuitBreakerState()
+        self._transitions: list[BreakerTransition] = []
         self._load_state()
 
     def check(
@@ -74,7 +85,9 @@ class CircuitBreaker:
         previous_level = self._state.level
         in_cooldown = (
             self._state.last_recovery_ts > 0
-            and 0 < (time.monotonic() - self._state.last_recovery_ts) < FULL_STOP_RECOVERY_COOLDOWN_SECS
+            and 0
+            < (time.monotonic() - self._state.last_recovery_ts)
+            < FULL_STOP_RECOVERY_COOLDOWN_SECS
         )
 
         if drawdown_pct >= full_stop_threshold and not in_cooldown:
@@ -114,7 +127,15 @@ class CircuitBreaker:
                 reason="",
             )
 
-        # Record recovery timestamp when transitioning from FULL_STOP to a lower level
+        if previous_level != self._state.level:
+            self._transitions.append(
+                BreakerTransition(
+                    from_level=previous_level,
+                    to_level=self._state.level,
+                    timestamp=time.monotonic(),
+                )
+            )
+
         if previous_level == BreakerLevel.FULL_STOP and self._state.level != BreakerLevel.FULL_STOP:
             self._state = self._state.model_copy(update={"last_recovery_ts": time.monotonic()})
             logger.info(
@@ -131,8 +152,70 @@ class CircuitBreaker:
         self._state = CircuitBreakerState()
         self._persist_state()
 
+    def clear_full_stop_on_deploy(
+        self,
+        sharpe: float,
+        win_rate_improvement_pp: float,
+        sample_count: int,
+        agent_id: str | None = None,
+    ) -> bool:
+        """Clear FULL_STOP if deployment bar is met.
+
+        Args:
+            sharpe: Sharpe ratio of the deployed variant.
+            win_rate_improvement_pp: Win rate improvement in percentage points.
+            sample_count: Number of trades in the evaluation sample.
+            agent_id: Optional agent identifier for logging.
+
+        Returns:
+            True if FULL_STOP was active and cleared; False otherwise.
+        """
+        if self._state.level != BreakerLevel.FULL_STOP:
+            logger.debug("clear_full_stop_on_deploy: not in FULL_STOP — nothing to clear")
+            return False
+
+        if sharpe < 1.0:
+            logger.warning(
+                "Deployment bar not met: Sharpe=%.3f < 1.0. FULL_STOP remains active for %s.",
+                sharpe,
+                agent_id or "unknown",
+            )
+            return False
+
+        if win_rate_improvement_pp < 5.0:
+            logger.warning(
+                "Deployment bar not met: win rate improvement=%.1fpp < 5pp. "
+                "FULL_STOP remains active for %s.",
+                win_rate_improvement_pp,
+                agent_id or "unknown",
+            )
+            return False
+
+        if sample_count < 30:
+            logger.warning(
+                "Deployment bar not met: sample count=%d < 30. FULL_STOP remains active for %s.",
+                sample_count,
+                agent_id or "unknown",
+            )
+            return False
+
+        self.clear_full_stop()
+        logger.info(
+            "FULL_STOP cleared on validated deployment: Sharpe=%.3f, "
+            "win_rate_improvement=%.1fpp, samples=%d, agent=%s",
+            sharpe,
+            win_rate_improvement_pp,
+            sample_count,
+            agent_id or "unknown",
+        )
+        return True
+
     def get_state(self) -> CircuitBreakerState:
         return self._state.model_copy()
+
+    def get_transitions_since(self, since_ts: float = 0.0) -> list[BreakerTransition]:
+        """Return transitions with timestamp greater than *since_ts*."""
+        return [t for t in self._transitions if t.timestamp > since_ts]
 
     def _persist_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)

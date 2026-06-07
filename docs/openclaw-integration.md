@@ -136,30 +136,28 @@ Deployed at `~/.openclaw/hooks/traderbot-bootstrap/` and enabled via `openclaw h
 
 ## Isolated Cron Architecture
 
-Each agent gets 7 isolated cron jobs registered during install. Every job runs in a dedicated `cron:<jobId>` session — zero collision with trading or other tasks:
+Each agent gets role-specific cron jobs registered during install. Every job runs in a dedicated `cron:<jobId>` session via `--session isolated` — zero collision with trading or other tasks. Registered via `traderbot cron setup --role <sysadmin|trader> --agent <id> [--replace]`.
 
-### Per-Agent Jobs (registered for every trading agent)
+> **Source of truth**: `src/traderbot/cli/cron.py` — the `_SYSADMIN_CRON_JOBS` and `_TRADER_CRON_JOBS` lists. See `docs/architecture.md` for full job message details.
 
-| Job | Interval | Purpose |
+### Sysadmin Jobs (agent role: `sysadmin` — 4 jobs for "main")
+
+| Job | Cron Expression | Purpose |
 |---|---|---|
-| `circuit-breaker-check` | 30m | `traderbot halt --json` |
-| `data-forecast-check` | 30m | `traderbot data forecasts` |
-| `news-scan` | 30m | `traderbot news-context` |
-| `position-health` | 1h | `traderbot positions --json` |
-| `performance-review` | 6h | `traderbot heartbeat --json` |
-| `learning-promotion` | 6h | `.learnings/` recurrence >= 3 check |
-| `pipeline-health` | 6h | Pipeline timers, data_points count |
+| `learning-pipeline` | `0 */6 * * *` (every 6h) | Promote learnings (Recurrence-Count >= 3), execute queued experiments |
+| `error-logger` | `*/15 * * * *` (every 15m) | Investigate ERRORS.md and FEATURE_REQUESTS.md; file GitHub issues |
+| `health-check` | `0 * * * *` (hourly) | Credential check, fleet P&L, agent win rates, drawdown |
+| `gateway-health` | `0 */6 * * *` (every 6h) | systemd timers, ChromaDB data_points, WS daemon, backfill |
 
-### Sysadmin Jobs (registered for "main" agent)
+### Trader Jobs (agent role: `trader` — 5 jobs per trading agent)
 
-| Job | Interval | Purpose |
+| Job | Cron Expression | Purpose |
 |---|---|---|
-| `fleet-health` | 30m | Agent circuit breakers, fleet status |
-| `experiment-check` | 30m | New experiment designs from agents |
-| `experiment-execution` | 30m | Process queued experiments |
-| `learning-review` | 1h | Cross-agent learning patterns |
-| `news-scan` | 2h | High-impact signals > 0.7 |
-| `pipeline-health` | 3h | Timer status, data pipeline |
+| `circuit-breaker-check` | `*/30 * * * *` (every 30m) | Check/recover circuit breaker; surface CRITICAL alerts |
+| `decision-loop` | `*/5 * * * *` (every 5m) | Full trading decision cycle (scan, forecast, edge, trade) |
+| `position-review` | `0 * * * *` (hourly) | Check settlements, positions with drawdown > 5% |
+| `forecast-check` | `15,45 * * * *` (twice/hour) | Verify NWS + ensemble data availability |
+| `health-check` | `0 * * * *` (hourly) | Credential check, drawdown > 3%, win rate < 40% |
 
 ## Update Flow
 

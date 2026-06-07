@@ -63,17 +63,26 @@ class PaperSlippageModel:
         orderbook: OrderBookSnapshot,
         side: Literal["yes", "no"],
         quantity: int,
+        is_buy: bool = True,
     ) -> int:
-        bids = orderbook.yes_bids if side == "yes" else orderbook.no_bids
+        """Compute fill price by walking the correct side of the book.
 
-        if not bids:
+        Buy orders walk asks (pay to cross the spread).
+        Sell orders walk bids (receive the bid price).
+        """
+        if is_buy:
+            levels = orderbook.yes_asks if side == "yes" else orderbook.no_asks
+        else:
+            levels = orderbook.yes_bids if side == "yes" else orderbook.no_bids
+
+        if not levels:
             return 50 + self.base_slippage_cents
 
         remaining = quantity
         total_cost = 0
         total_filled = 0
 
-        for level in bids:
+        for level in levels:
             if remaining <= 0:
                 break
             fill_at_level = min(remaining, level.size)
@@ -172,22 +181,122 @@ class PaperTrader:
             for row in rows
         ]
 
-    def mark_settled(self, ticker: str, outcome: bool) -> None:
+    def mark_settled(self, ticker: str, outcome: bool | str) -> None:
+        """Settle a paper position — credit cash and mirror to positions table.
+
+        outcome=True → market resolved YES, False → NO, "void" → voided.
+        Win condition: side matches outcome (yes+True, no+False).
+        Loss: side opposes outcome (yes+False, no+True).
+        Winning contracts pay 100¢ each. Cost was already deducted at purchase.
+        """
         row = self._conn.execute(
-            "SELECT quantity, status FROM paper_positions WHERE ticker = ?",
+            "SELECT side, avg_price_cents, quantity, status FROM paper_positions WHERE ticker = ?",
             (ticker,),
         ).fetchone()
         if row is None:
             logger.warning("mark_settled: no position for ticker=%s", ticker)
             return
+        if row["quantity"] <= 0:
+            logger.info("mark_settled: no open quantity for ticker=%s, skipping", ticker)
+            return
+
+        side: str = row["side"]
+        quantity: int = row["quantity"]
+        avg_price_cents: int = row["avg_price_cents"]
         old_status: str = row["status"]
         new_status = "settled"
+        cost_cents = avg_price_cents * quantity
+
+        if outcome == "void":
+            refund = cost_cents
+            self._cash_cents += refund
+            pnl_cents = 0
+            logger.info(
+                "Void settlement %s: refund %d¢ to cash (avg=%d¢ qty=%d)",
+                ticker,
+                refund,
+                avg_price_cents,
+                quantity,
+            )
+            settlement_result = None
+        else:
+            assert isinstance(outcome, bool)
+            won = (side == "yes" and outcome) or (side == "no" and not outcome)
+            if won:
+                payout = 100 * quantity
+                self._cash_cents += payout
+                pnl_cents = payout - cost_cents
+                logger.info(
+                    "Position %s WON: side=%s qty=%d payout=%d pnl=%d",
+                    ticker,
+                    side,
+                    quantity,
+                    payout,
+                    pnl_cents,
+                )
+            else:
+                pnl_cents = -cost_cents
+                logger.info(
+                    "Position %s LOST: side=%s qty=%d cost=%d pnl=%d",
+                    ticker,
+                    side,
+                    quantity,
+                    cost_cents,
+                    pnl_cents,
+                )
+            settlement_result = outcome
+
         self._conn.execute(
             "UPDATE paper_positions SET status = ?, quantity = 0, updated_at = ? WHERE ticker = ?",
             (new_status, datetime.now(UTC).isoformat(), ticker),
         )
+
+        self._mirror_to_positions(
+            ticker, side, quantity, avg_price_cents, settlement_result, pnl_cents
+        )
         self._conn.commit()
-        logger.info("Position %s status: %s → %s", ticker, old_status, new_status)
+        logger.info(
+            "Position %s status: %s → %s (outcome=%s)", ticker, old_status, new_status, outcome
+        )
+
+    def _mirror_to_positions(
+        self,
+        ticker: str,
+        side: str,
+        quantity: int,
+        avg_price_cents: int,
+        settlement_result: bool | None,
+        pnl_cents: int,
+    ) -> None:
+        """Write settlement result to the positions table for balance computation."""
+        from traderbot.db.positions import init_table as init_positions_table
+        from traderbot.db.positions import update_settlement, upsert
+        from traderbot.kalshi.models import Position as KalshiPosition
+
+        init_positions_table(self._conn)
+        now = datetime.now(UTC).isoformat()
+
+        # Upsert to ensure a row exists (may already exist from CLI trade recording)
+        upsert(
+            self._conn,
+            KalshiPosition(
+                ticker=ticker,
+                side=side,
+                quantity=quantity,
+                avg_price=avg_price_cents,
+                settlement_result=settlement_result,
+            ),
+        )
+
+        if settlement_result is not None:
+            update_settlement(self._conn, ticker, settlement_result, pnl_cents)
+        else:
+            # Void: zero out quantity since position is resolved
+            self._conn.execute(
+                "UPDATE positions SET quantity = 0, pnl_cents = 0, updated_at = ? WHERE ticker = ?",
+                (now, ticker),
+            )
+            self._conn.commit()
 
     def close_position(self, ticker: str) -> None:
         row = self._conn.execute(
@@ -287,7 +396,9 @@ class PaperTrader:
         except Exception:
             logger.info("Cache miss for %s — using OI=0", ticker)
 
-        portfolio_value = self._cash_cents + self._position_value_cents()
+        # Kalshi buying power = cash only. Open position cost basis is locked
+        # and cannot collateralize new orders.
+        portfolio_value = self._cash_cents
         self._peak_value_cents = max(portfolio_value, self._peak_value_cents)
         portfolio = PortfolioState(
             portfolio_value_cents=portfolio_value,
@@ -334,7 +445,9 @@ class PaperTrader:
             logger.exception("Provider failure fetching orderbook for %s", ticker)
             return None
 
-        fill_price = self._slippage.compute_fill_price(orderbook, side, risk_adjusted_qty)
+        fill_price = self._slippage.compute_fill_price(
+            orderbook, side, risk_adjusted_qty, is_buy=True
+        )
 
         max_cost = fill_price * risk_adjusted_qty
         if max_cost > self._cash_cents:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
@@ -64,9 +64,8 @@ def sync_settlement_to_decisions(conn: sqlite3.Connection) -> int:
             direction: str = decision["direction"]
 
             # actual_result = True when direction predicted correctly
-            actual = (
-                (direction == "yes" and settled_result is True)
-                or (direction == "no" and settled_result is False)
+            actual = (direction == "yes" and settled_result is True) or (
+                direction == "no" and settled_result is False
             )
 
             conn.execute(

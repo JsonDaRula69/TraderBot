@@ -41,7 +41,7 @@ If the portfolio drops 10% from its historical high, ALL trading stops. The agen
 
 **Check**: `(peak_value - current_value) / peak_value <= 0.10`
 
-**Action on trigger**: Write to `SESSION-STATE.md` that trading is halted. The Heartbeat Loop will not restart trading. Only a human can clear this flag.
+**Action on trigger**: Write to `SESSION-STATE.md` that trading is halted. The Heartbeat Loop will not restart trading. Auto-recovers when drawdown drops below threshold on the next `check()` after a 24h cooldown. Manual override via `traderbot resume` or `clear_full_stop()` also available.
 
 ### Minimum Liquidity Threshold
 
@@ -150,7 +150,7 @@ Three-tier system with increasing severity:
 | **NORMAL** | 0 | Daily loss ≤ 1% | Full position sizing | Default state |
 | **SLOW** | 1 | Daily loss > 1% | `position_size_multiplier = 0.5` | Automatic on next `check()` when loss drops below threshold |
 | **HALT** | 2 | Daily loss > 2% | `can_trade = False`, no new trades | Automatic on next `check()` when loss drops below threshold |
-| **FULL_STOP** | 3 | Drawdown > 10% | `position_size_multiplier = 0.0`, `can_trade = False` | **Manual only** — requires `traderbot resume` or manual flag clear |
+| **FULL_STOP** | 3 | Drawdown > 10% | `position_size_multiplier = 0.0`, `can_trade = False` | **24h cooldown auto-recovery** — auto-recovers when drawdown drops below threshold on next `check()`, with 24h cooldown to prevent oscillation. Manual override via `clear_full_stop()` / `traderbot resume` also available. Added in bug #138 fix (v0.15.23). |
 
 The circuit breaker state persists in `circuit_breaker_state.json` under the data directory (`~/.traderbot/`). The state file is protected with an HMAC-SHA256 signature to prevent tampering. Any modification to the state file (e.g., resetting FULL_STOP to NORMAL) will fail verification — the system logs a warning, defaults to FULL_STOP, and raises `SecurityError` from `traderbot.exceptions`.
 
@@ -323,7 +323,7 @@ The human can:
 - **Halt trading** at any time via `traderbot halt` — sets the Level 3 breaker
 - **Adjust risk appetite** via `USER.md` — changes what the agent considers, not hard limits
 - **Approve specific trades** above a threshold — agent can be configured to ask for human approval on positions above a certain size
-- **Clear the full-stop breaker** — the only way to resume trading after 10% drawdown
+- **Clear the full-stop breaker** — manual override to resume trading immediately after 10% drawdown (otherwise auto-recovers after 24h cooldown)
 
 The human **cannot**:
 - Disable risk limits via agent conversation

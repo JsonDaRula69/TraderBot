@@ -27,6 +27,8 @@ from traderbot.kalshi.ws_cache import get_event_category
 if TYPE_CHECKING:
     from traderbot.kalshi.client import KalshiClient
 
+logger = logging.getLogger(__name__)
+
 _EVENT_CACHE_TTL = 300  # seconds
 _EVENT_CACHE_PAGE_DELAY = 0.3  # seconds between pagination requests
 

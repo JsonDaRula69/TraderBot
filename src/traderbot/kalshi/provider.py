@@ -48,10 +48,16 @@ class MarketSnapshot:
 
 @dataclass(frozen=True)
 class OrderBookSnapshot:
-    """Immutable snapshot of an order book at a point in time."""
+    """Immutable snapshot of an order book at a point in time.
+
+    Bids = orders to buy (trader receives cash when selling into these).
+    Asks = orders to sell (trader pays cash when buying from these).
+    """
 
     yes_bids: tuple[OrderBookLevelSnapshot, ...] = ()
+    yes_asks: tuple[OrderBookLevelSnapshot, ...] = ()
     no_bids: tuple[OrderBookLevelSnapshot, ...] = ()
+    no_asks: tuple[OrderBookLevelSnapshot, ...] = ()
     timestamp: datetime | None = None
 
 
@@ -83,7 +89,9 @@ class MarketDataCache(Protocol):
 class ProdAPIError(TraderBotError):
     """Error raised when production API calls fail."""
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.PRODUCTION_API, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.PRODUCTION_API, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 

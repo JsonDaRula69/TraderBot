@@ -398,7 +398,9 @@ def _interactive_assign_agent(name: str, console: Console, registry) -> None:
                 "Agent workspace not found for '%s' — token assigned to .env only", agent_id
             )
     except TokenAlreadyAssignedError:
-        report_cli_error(f"Profile '{name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign.")
+        report_cli_error(
+            f"Profile '{name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign."
+        )
 
 
 def _do_assign(
@@ -478,7 +480,9 @@ def _do_assign(
         except Exception as e:
             logger.warning("Failed to propagate workspace files: %s", e)
     except TokenAlreadyAssignedError:
-        report_cli_error(f"Profile '{profile_name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign.")
+        report_cli_error(
+            f"Profile '{profile_name}' already has a token assigned. Use 'traderbot profile revoke' first, or re-run with --force to reassign."
+        )
 
 
 def _interactive_assign(console: Console, registry, overwrite: bool = False) -> None:
@@ -565,6 +569,10 @@ def _apply_profile_update(
     initial_balance_cents: int | None = None,
     console: Console = None,
     registry=None,
+    deployment_sharpe: float | None = None,
+    deployment_win_rate_improvement: float | None = None,
+    deployment_samples: int | None = None,
+    deployment_agent_id: str | None = None,
 ) -> None:
     from traderbot.kalshi.models import MarketCategory
 
@@ -634,6 +642,37 @@ def _apply_profile_update(
         console.print(f"[green]✓[/green] Updated profile '{name}'")
     except ValueError as e:
         report_cli_error(str(e))
+        return
+
+    # -- Deployment bar: clear FULL_STOP if validated deployment metrics provided --
+    if (
+        deployment_sharpe is not None
+        or deployment_win_rate_improvement is not None
+        or deployment_samples is not None
+    ):
+        from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker
+
+        breaker = CircuitBreaker()
+        state = breaker.get_state()
+        if state.level == BreakerLevel.FULL_STOP:
+            cleared = breaker.clear_full_stop_on_deploy(
+                sharpe=deployment_sharpe or 0.0,
+                win_rate_improvement_pp=deployment_win_rate_improvement or 0.0,
+                sample_count=deployment_samples or 0,
+                agent_id=deployment_agent_id or name,
+            )
+            if cleared:
+                console.print(
+                    "[green]✓[/green] FULL_STOP cleared — deployment bar met "
+                    f"(Sharpe={deployment_sharpe:.2f}, "
+                    f"ΔWR={deployment_win_rate_improvement:+.1f}pp, "
+                    f"n={deployment_samples})"
+                )
+            else:
+                console.print(
+                    "[yellow]⚠[/yellow] FULL_STOP NOT cleared — deployment bar not met "
+                    "(need Sharpe ≥ 1.0, ΔWR ≥ +5pp, n ≥ 30)"
+                )
 
 
 @profile_app.command("create")
@@ -1028,6 +1067,22 @@ def profile_update(
         int | None,
         typer.Option(help="Initial balance in cents for paper trading (default: 10000 = $100)"),
     ] = None,
+    deployment_sharpe: Annotated[
+        float | None,
+        typer.Option(help="Deployment Sharpe ratio — triggers FULL_STOP clearance if bar met"),
+    ] = None,
+    deployment_win_rate_improvement: Annotated[
+        float | None,
+        typer.Option(help="Deployment win rate improvement (pp) — triggers FULL_STOP clearance"),
+    ] = None,
+    deployment_samples: Annotated[
+        int | None,
+        typer.Option(help="Deployment sample count — triggers FULL_STOP clearance"),
+    ] = None,
+    deployment_agent_id: Annotated[
+        str | None,
+        typer.Option(help="Agent ID for deployment logging"),
+    ] = None,
 ) -> None:
     """Update specific fields of an existing profile.
 
@@ -1054,6 +1109,9 @@ def profile_update(
             min_liquidity,
             min_edge_pct,
             initial_balance_cents,
+            deployment_sharpe,
+            deployment_win_rate_improvement,
+            deployment_samples,
         ]
     )
 
@@ -1095,6 +1153,10 @@ def profile_update(
         initial_balance_cents=initial_balance_cents,
         console=console,
         registry=registry,
+        deployment_sharpe=deployment_sharpe,
+        deployment_win_rate_improvement=deployment_win_rate_improvement,
+        deployment_samples=deployment_samples,
+        deployment_agent_id=deployment_agent_id,
     )
 
 

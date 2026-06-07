@@ -19,6 +19,8 @@ session — so they never collide with trading or each other._
 | learning-promotion | 6h | `.learnings/LEARNINGS.md` PENDING_REVIEW promotion + experiment design |
 | pipeline-health | 6h | Pipeline timer status + data_points collection count |
 
+> **Recovery experiments may auto-fire from FULL_STOP events without backlog.md entry. Check `.learnings/` for recovery reports.**
+
 ## Setup
 
 Register all tasks as isolated cron jobs (run once):

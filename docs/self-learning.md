@@ -44,6 +44,10 @@ This transitions the learning to `PENDING_REVIEW` status. Promotion is notificat
 
 When a PENDING_REVIEW learning is approved for testing, an agent spawns a sub-agent via `sessions_spawn → sessions_yield` to implement the improvement as a `TreatmentInterface` subclass. The design is recorded in `SESSION-STATE.md`.
 
+### Automatic Recovery Experiments
+
+When `FULL_STOP` fires, the heartbeat loop checks whether the experiment database has at least 10 markets populated. If it does, it runs all registered treatments against the control automatically. If any treatment beats the control (p < 0.05, positive effect size), a recovery report is written to `SESSION-STATE.md` with the winning treatment and its effect size. Deployment remains gated by human approval, since it requires profile parameter changes that affect live trading.
+
 ### Stage 4: VALIDATE
 
 Populate the experiment database with market data:
@@ -382,6 +386,18 @@ The adaptation engine runs during the Heartbeat Loop (every 30 minutes):
 | **Reset trigger** | If posterior variance < 0.01, reset to weak prior | Prevents convergence to false certainty |
 | **Human review** | If any parameter moves >10% for 3 consecutive updates, flag for human review | Detects systematic drift |
 
+### Circuit Breaker Escalation as Weighted Evidence
+
+Circuit breaker escalation events feed into Bayesian adaptation as weighted negative evidence. The weights reflect severity:
+
+| Escalation Level | Failure Weight | Rationale |
+|---|---|---|
+| `SLOW` | +1 failure | Mild degradation, low signal |
+| `HALT` | +3 failures | Trading paused, strong negative signal |
+| `FULL_STOP` | +5 failures | Strategy fundamentally broken at current params |
+
+Only escalation events carry weight, not recovery events. This avoids washing out the negative signal: if a breaker recovers on its own, the adaptation engine should still remember that the strategy was fragile enough to trigger it in the first place.
+
 ## Learning Logs
 
 Inspired by `peterskoett/self-improving-agent`. Structured markdown files that capture what the agent learns from experience.
@@ -559,3 +575,7 @@ Before any experiment result is deployed (as either a profile param update or a 
 | FEATURE_REQUESTS.md entries (confirmed gaps) | GitHub issue (label: enhancement) | learning-review cron files issue with investigation results |
 | Pipeline health failures (stale data, missing timers) | GitHub issue or direct fix | pipeline-health cron diagnoses and either files issue or runs fix |
 | Profile param experiments (validated) | Direct deploy via `traderbot profile update` | experiment-execution cron runs backtest → on pass → DEPLOY with agent notification |
+
+### Deployment Clears Blocker
+
+When a validated treatment is deployed via profile update (`traderbot profile update`), any active `FULL_STOP` circuit breaker state is cleared and the agent resumes trading with the new parameters. This closes the autonomous recovery loop: FULL_STOP triggers the recovery experiment, the experiment identifies a winning treatment, deployment applies it, and the blocker is lifted. The agent doesn't need a manual `traderbot resume` call when recovery comes through the experiment pipeline.

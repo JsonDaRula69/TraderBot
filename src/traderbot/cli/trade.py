@@ -524,6 +524,15 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         all_positions = _with_db(db, list_all)
 
+        # Check for empty positions BEFORE price fetching
+        if not all_positions:
+            console = Console()
+            if json_output:
+                json_lib.dump([], sys.stdout, default=str)
+                return
+            console.print("No open positions.")
+            return
+
         # Fetch current prices from Kalshi market data (unauthenticated)
         price_map: dict[str, int] = {}
         if not no_price_fetch:
@@ -590,9 +599,6 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         console = Console()
-        if not all_positions:
-            console.print("No open positions.")
-            return
 
         table = Table(title="Positions")
         table.add_column("Ticker", style="cyan", no_wrap=True)

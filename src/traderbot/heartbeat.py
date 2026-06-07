@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import statistics
@@ -21,7 +22,7 @@ from traderbot.learning import (
     scan_for_promotions,
 )
 from traderbot.paths import get_workspace_dir
-from traderbot.risk.circuit_breaker import BreakerLevel, BreakerTransition, CircuitBreaker
+from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreaker
 from traderbot.simulation.adaptation import (
     WEAK_BETA,
     BayesianAdapter,
@@ -41,6 +42,12 @@ BREAKER_ESCALATION_WEIGHTS: dict[BreakerLevel, int] = {
 }
 
 _last_processed_transition_ts: float = 0.0
+
+# Tracks the transition timestamp of the last FULL_STOP event that triggered
+# a recovery experiment, so we only fire once per escalation.
+_last_full_stop_experiment_ts: float = 0.0
+
+_MIN_MARKETS_FOR_RECOVERY = 10
 
 
 def _default_heartbeat_path() -> Path:
@@ -169,6 +176,21 @@ class TokenStalenessReview(BaseModel):
     degraded: bool = False
 
 
+class RecoveryExperimentReview(BaseModel):
+    """Step 5.1: Recovery experiment triggered during FULL_STOP."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    triggered: bool = False
+    markets_available: int = 0
+    treatments_run: list[str] = Field(default_factory=list)
+    significant_treatment: str = ""
+    p_value: float = 1.0
+    effect_size: float = 0.0
+    report_path: str = ""
+    skipped_reason: str = ""
+
+
 class HeartbeatResult(BaseModel):
     """Complete heartbeat cycle output."""
 
@@ -180,6 +202,7 @@ class HeartbeatResult(BaseModel):
     adaptation: AdaptationReview = Field(default_factory=AdaptationReview)
     learning_promotion: LearningPromotionReview = Field(default_factory=LearningPromotionReview)
     circuit_breaker: CircuitBreakerReview = Field(default_factory=CircuitBreakerReview)
+    recovery_experiment: RecoveryExperimentReview = Field(default_factory=RecoveryExperimentReview)
     ws_health: WsHealthReview = Field(default_factory=WsHealthReview)
     system_health: SystemHealthReview = Field(default_factory=SystemHealthReview)
     token_staleness: TokenStalenessReview = Field(default_factory=TokenStalenessReview)
@@ -510,6 +533,250 @@ def step_circuit_breaker_check(
     )
 
 
+def step_recovery_experiment(
+    breaker: CircuitBreaker | None = None,
+    experiment_db_path: Path | None = None,
+) -> RecoveryExperimentReview:
+    """Step 5.1: If FULL_STOP is active, run recovery experiment.
+
+    Checks if the experiment DB has >= 10 markets available. If yes,
+    runs all registered treatments vs control via the Harness. If any
+    treatment beats control (p < 0.05 paired t-test, positive Cohen's d),
+    writes a recovery report to .learnings/RECOVERY-{timestamp}.md.
+
+    Guard: only triggers once per FULL_STOP event.
+    Does NOT auto-deploy — deployment is gated by profile update.
+    """
+    global _last_full_stop_experiment_ts
+
+    engine = breaker or CircuitBreaker()
+    state = engine.get_state()
+
+    if state.level != BreakerLevel.FULL_STOP:
+        return RecoveryExperimentReview()
+
+    # Check if this FULL_STOP was already processed
+    transitions = engine.get_transitions_since(_last_full_stop_experiment_ts)
+    full_stop_transition = None
+    for t in transitions:
+        if t.to_level == BreakerLevel.FULL_STOP and t.from_level < BreakerLevel.FULL_STOP:
+            full_stop_transition = t
+
+    if full_stop_transition is None:
+        # Same FULL_STOP event — already ran experiment for this one
+        return RecoveryExperimentReview(
+            triggered=False,
+            skipped_reason="already_processed_full_stop",
+        )
+
+    _last_full_stop_experiment_ts = full_stop_transition.timestamp
+
+    # Resolve experiment DB path
+    if experiment_db_path is None:
+        experiment_db_path = Path.home() / ".traderbot" / "experiments" / "experiment.db"
+
+    if not experiment_db_path.exists():
+        logger.info(
+            "Recovery experiment skipped: experiment DB not found at %s", experiment_db_path
+        )
+        return RecoveryExperimentReview(
+            triggered=False,
+            skipped_reason="experiment_db_not_found",
+        )
+
+    import sqlite3 as _sqlite3
+
+    conn: sqlite3.Connection
+    try:
+        conn = _sqlite3.connect(str(experiment_db_path))
+        from traderbot.db.experiment_schema import create_tables
+
+        create_tables(conn)
+        market_count_row = conn.execute("SELECT COUNT(*) FROM markets").fetchone()
+        market_count = market_count_row[0] if market_count_row else 0
+    except Exception as exc:
+        logger.warning("Recovery experiment: failed to query experiment DB: %s", exc)
+        return RecoveryExperimentReview(
+            triggered=False,
+            skipped_reason=f"db_query_failed: {exc}",
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            conn.close()
+
+    if market_count < _MIN_MARKETS_FOR_RECOVERY:
+        logger.info(
+            "Recovery experiment skipped: %d markets available (need >= %d)",
+            market_count,
+            _MIN_MARKETS_FOR_RECOVERY,
+        )
+        return RecoveryExperimentReview(
+            triggered=False,
+            markets_available=market_count,
+            skipped_reason="insufficient_markets",
+        )
+
+    # Discover and register treatments
+    try:
+        from traderbot.experiment.registry import (
+            discover_treatments,
+            get_treatment,
+            register_treatment,
+        )
+
+        discovered = discover_treatments()
+        for _class_name, cls in discovered.items():
+            register_treatment(cls().name, cls)
+    except ImportError as exc:
+        logger.warning("Recovery experiment: treatment registry unavailable: %s", exc)
+        return RecoveryExperimentReview(
+            triggered=False,
+            markets_available=market_count,
+            skipped_reason="registry_unavailable",
+        )
+
+    control_cls = get_treatment("control")
+    if control_cls is None:
+        logger.warning("Recovery experiment: control treatment not found in registry")
+        return RecoveryExperimentReview(
+            triggered=False,
+            markets_available=market_count,
+            skipped_reason="no_control_treatment",
+        )
+
+    treatment_instances = [control_cls()]
+    for name in sorted(set(discovered.keys()) - {"control"}):
+        cls = get_treatment(name)
+        if cls is not None:
+            treatment_instances.append(cls())
+
+    treatment_names = [t.name for t in treatment_instances]
+
+    # Run the experiment harness
+    import uuid
+
+    run_id = f"recovery-{uuid.uuid4().hex[:8]}"
+
+    try:
+        from traderbot.experiment.harness import Harness
+        from traderbot.llm.client import LLMClient
+        from traderbot.llm.ollama import OllamaProvider
+
+        provider = OllamaProvider()
+        llm_client = LLMClient(provider=provider)
+
+        conn = _sqlite3.connect(str(experiment_db_path))
+        from traderbot.db.experiment_schema import create_tables as _create_tables
+
+        _create_tables(conn)
+        harness = Harness(conn, llm_client, seed=42)
+        harness.run(
+            treatment_instances,
+            run_id=run_id,
+            replicates=3,
+            markets_per_cell=2,
+        )
+        conn.close()
+    except Exception as exc:
+        logger.warning("Recovery experiment harness failed: %s", exc)
+        return RecoveryExperimentReview(
+            triggered=True,
+            markets_available=market_count,
+            treatments_run=treatment_names,
+            skipped_reason=f"harness_failed: {exc}",
+        )
+
+    # Score the results
+    try:
+        from traderbot.experiment.results import score_run
+
+        result_list = score_run(str(experiment_db_path), run_id)
+    except Exception as exc:
+        logger.warning("Recovery experiment scoring failed: %s", exc)
+        return RecoveryExperimentReview(
+            triggered=True,
+            markets_available=market_count,
+            treatments_run=treatment_names,
+            skipped_reason=f"scoring_failed: {exc}",
+        )
+
+    # Check for significant improvement
+    significant = [r for r in result_list if r.improvement]
+
+    if not significant:
+        logger.info("Recovery experiment: no treatment beats control — continuing cooldown")
+        return RecoveryExperimentReview(
+            triggered=True,
+            markets_available=market_count,
+            treatments_run=treatment_names,
+        )
+
+    best = max(significant, key=lambda r: r.effect_size)
+    logger.info(
+        "Recovery experiment: %s beats control (p=%.4f, d=%.3f)",
+        best.treatment,
+        best.p_value,
+        best.effect_size,
+    )
+
+    # Write recovery report
+    report_dir = Path.home() / ".traderbot" / ".learnings"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    ts_str = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    report_path = report_dir / f"RECOVERY-{ts_str}.md"
+
+    report_lines = [
+        f"# Recovery Experiment Report — {ts_str}",
+        "",
+        "**Trigger**: Circuit breaker FULL_STOP",
+        f"**Run ID**: {run_id}",
+        f"**Markets available**: {market_count}",
+        "",
+        "## Significant Treatments",
+        "",
+    ]
+    for r in significant:
+        report_lines.append(
+            f"- **{r.treatment}** vs {r.control}: "
+            f"delta={r.delta_profit:+.2f}, p={r.p_value:.4f}, "
+            f"Cohen's d={r.effect_size:.3f}, n={r.n_markets}"
+        )
+    report_lines.extend(
+        [
+            "",
+            "## All Results",
+            "",
+        ]
+    )
+    for r in result_list:
+        sig = "YES" if r.improvement else "NO"
+        report_lines.append(
+            f"- {r.treatment} vs {r.control}: "
+            f"p={r.p_value:.4f}, d={r.effect_size:.3f}, significant={sig}"
+        )
+    report_lines.extend(
+        [
+            "",
+            "## Decision",
+            "",
+            f"Best treatment: **{best.treatment}** (not auto-deployed — requires profile update)",
+        ]
+    )
+
+    report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+    logger.info("Recovery report written to %s", report_path)
+
+    return RecoveryExperimentReview(
+        triggered=True,
+        markets_available=market_count,
+        treatments_run=treatment_names,
+        significant_treatment=best.treatment,
+        p_value=best.p_value,
+        effect_size=best.effect_size,
+        report_path=str(report_path),
+    )
+
+
 def step_ws_health() -> WsHealthReview:
     """Step 5.5: Verify WS daemon process liveness and status consistency."""
     import json
@@ -533,9 +800,7 @@ def step_ws_health() -> WsHealthReview:
     if not alive:
         logger.warning("WS daemon PID %s is stale (process not found)", pid)
         stale_status = {**status_data, "connected": False}
-        DAEMON_STATUS_PATH.write_text(
-            json.dumps(stale_status, indent=2)
-        )
+        DAEMON_STATUS_PATH.write_text(json.dumps(stale_status, indent=2))
         return WsHealthReview(pid=pid, pid_alive=False, connected=False, status="stale")
 
     if not connected:
@@ -706,6 +971,11 @@ async def run_heartbeat_cycle(
     circuit_breaker = step_circuit_breaker_check(breaker=breaker_instance)
     steps_completed.append("circuit_breaker_check")
 
+    # Step 5.1: Recovery experiment (only on FULL_STOP)
+    recovery_experiment = step_recovery_experiment(breaker=breaker_instance)
+    if recovery_experiment.triggered:
+        steps_completed.append("recovery_experiment")
+
     # Step 5.5: WS daemon health check
     ws_health = step_ws_health()
     steps_completed.append("ws_health")
@@ -733,6 +1003,7 @@ async def run_heartbeat_cycle(
         adaptation=adaptation,
         learning_promotion=learning_promotion,
         circuit_breaker=circuit_breaker,
+        recovery_experiment=recovery_experiment,
         ws_health=ws_health,
         system_health=system_health,
         token_staleness=token_staleness,
@@ -752,6 +1023,7 @@ async def run_heartbeat_cycle(
         adaptation=result.adaptation,
         learning_promotion=result.learning_promotion,
         circuit_breaker=result.circuit_breaker,
+        recovery_experiment=result.recovery_experiment,
         ws_health=result.ws_health,
         system_health=result.system_health,
         token_staleness=result.token_staleness,
@@ -838,6 +1110,20 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
             staleness_lines += f"  Profile: {staleness.profile}\n"
         staleness_lines += "  Run `traderbot profile sync-env <profile>` to fix\n"
 
+    # Recovery experiment section
+    recovery = result.recovery_experiment
+    recovery_lines = "- Not triggered\n"
+    if recovery.triggered:
+        recovery_lines = f"- Triggered: {recovery.markets_available} markets available\n"
+        if recovery.treatments_run:
+            recovery_lines += f"- Treatments: {', '.join(recovery.treatments_run)}\n"
+        if recovery.significant_treatment:
+            recovery_lines += f"- Significant treatment: {recovery.significant_treatment} (p={recovery.p_value:.4f}, d={recovery.effect_size:.3f})\n"
+        if recovery.report_path:
+            recovery_lines += f"- Report: {recovery.report_path}\n"
+        elif recovery.skipped_reason:
+            recovery_lines += f"- Skipped: {recovery.skipped_reason}\n"
+
     content = f"""\
 # TraderBot Heartbeat Data
 
@@ -862,6 +1148,8 @@ def _write_heartbeat_md(path: Path, result: HeartbeatResult) -> None:
 - Daily loss: {cb.daily_loss_pct:.2%}
 - Drawdown: {cb.drawdown_pct:.2%}
 
+### Recovery Experiment
+{recovery_lines}
 ### WS Daemon Health
 - Status: {result.ws_health.status}
 - PID: {result.ws_health.pid or "N/A"}

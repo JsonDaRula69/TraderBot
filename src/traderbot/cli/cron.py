@@ -307,7 +307,7 @@ _SYSADMIN_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "learning-pipeline",
         "cron_expr": "0 */6 * * *",
-        "message": "Read each agent's `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. Then check test-lab/backlog.md for QUEUED experiments — move one to RUNNING, execute backtest, validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30). If requires code change: file GitHub issue with full experiment design, test results, and expected benefit (labels: enhancement, experiment). If profile param only: DEPLOY via `traderbot profile update`, notify target agent via `sessions_send`. Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
+        "message": "Read each agent's `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. Then check test-lab/backlog.md for QUEUED experiments — move one to RUNNING, execute backtest, validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30). If requires code change: file GitHub issue with full experiment design, test results, and expected benefit (labels: enhancement, experiment). If profile param only: DEPLOY via `traderbot profile update`, notify target agent via `sessions_send`. Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context. If FULL_STOP is active, check for recovery experiment results. If a treatment validated, deployment via profile update clears the blocker.",
     },
     {
         "name": "error-logger",
@@ -330,7 +330,7 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
+        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade. If level transitioned, log severity for adaptation feedback. Breaker events are automatically fed as weighted negative evidence into the BayesianAdapter during heartbeat.",
     },
     {
         "name": "decision-loop",
@@ -340,7 +340,7 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "position-review",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin.",
+        "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin. Settlement results are automatically synced to decisions.actual_result before adaptation runs. Verify positions with settlement < 48h are correctly reconciled at the decision level.",
     },
     {
         "name": "forecast-check",
