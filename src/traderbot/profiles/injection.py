@@ -23,6 +23,27 @@ from traderbot.profiles.injection_strategies import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_workspace_root() -> Path:
+    """Resolve the workspace template root directory.
+
+    In source-tree installs the templates live alongside the repo at
+    ``<project-root>/.openclaw/workspace/``.  In pip-installed scenarios
+    the templates are deployed to ``~/.traderbot/.openclaw/workspace/``
+    by ``traderbot update``, so we fall back to ``get_data_dir()``.
+    """
+    from traderbot.paths import get_data_dir, get_source_root
+
+    try:
+        src_root = get_source_root()
+        candidate = src_root.parent / ".openclaw" / "workspace"
+        if candidate.exists():
+            return candidate
+    except FileNotFoundError:
+        pass
+
+    return get_data_dir() / ".openclaw" / "workspace"
+
+
 def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False) -> None:
     """Deploy workspace templates using merge strategies per FILE_STRATEGIES.
 
@@ -35,8 +56,7 @@ def propagate_workspace_files(profile, target_dir: Path, overwrite: bool = False
        (e.g., profile with categories=[WEATHER] → workspace/weather/)
     3. Generic agent template → workspace/agent/ (fallback)
     """
-    _src_dir = Path(__file__).resolve().parent.parent.parent
-    workspace_root = _src_dir.parent / ".openclaw" / "workspace"
+    workspace_root = _resolve_workspace_root()
     is_sysadmin = getattr(profile, "name", None) == "sysadmin"
 
     if is_sysadmin:

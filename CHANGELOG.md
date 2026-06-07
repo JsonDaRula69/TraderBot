@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Revert Voyage test skip — assert real API responses, don't paper over auth issues
 - Windows CI: `continue-on-error` for Windows test step (ONNX Runtime KeyboardInterrupt during teardown is an ONNX bug, not a test failure)
 - PYTHONWARNINGS=ignore::UserWarning on Windows to suppress ONNX Runtime's unsupported OS warning
+- Pip install readiness: `get_source_root()` raises `FileNotFoundError` in pip-installed scenarios instead of returning wrong path
+- Pip install readiness: `injection.py` workspace template resolution falls back to `get_data_dir()` when source tree unavailable
+- Pip install readiness: `updater.py` version resolution uses `importlib.metadata` first, source tree as fallback
+- Pip install readiness: `sandbox.py` handles missing source tree gracefully in pip-installed scenarios
+- Added `src/traderbot/py.typed` for PEP 561 type checking compliance
+- Added `src/traderbot/experiment/__init__.py` as proper package marker
+- Removed `numpy` from direct dependencies (transitive via `scipy`)
+- Explicit `experiment/tests` exclusion in wheel and sdist build config
 
 ### Added
 

@@ -34,7 +34,6 @@ dependencies = [
     "cryptography>=42.0",
     "portalocker>=2.8",
     "keyring>=25.0",
-    "numpy>=1.26",
     "scipy>=1.13",
 ]
 
@@ -62,10 +61,10 @@ traderbot = "traderbot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
-exclude = ["tests", "experiments"]
+exclude = ["tests", "experiments", "experiment/tests"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["tests", "experiments", ".github", ".openclaw"]
+exclude = ["tests", "experiments", "experiment/tests", ".github", ".openclaw"]
 
 [tool.uv]
 constraint-dependencies = ["onnxruntime<1.24"]

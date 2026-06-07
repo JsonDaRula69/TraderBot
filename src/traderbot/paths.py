@@ -89,8 +89,28 @@ def get_master_key_path() -> Path:
 
 
 def get_source_root() -> Path:
-    """Return the source tree root (parent of src/traderbot)."""
-    return Path(__file__).resolve().parent.parent.parent
+    """Return the source tree root (parent of src/traderbot).
+
+    In a source-tree install (``pip install -e .`` or ``git clone``),
+    ``Path(__file__).parent.parent.parent`` resolves to the project root
+    containing the ``VERSION`` file and ``.openclaw/`` workspace templates.
+
+    In a pip-installed (wheel) install, that path resolves to the Python
+    ``site-packages`` directory which is **not** a project root.  In that
+    case we raise ``FileNotFoundError`` because the source tree does not
+    exist — callers must fall back to ``importlib.metadata`` or
+    ``get_data_dir()`` as appropriate.
+    """
+    candidate = Path(__file__).resolve().parent.parent.parent
+    # A real project root always has a VERSION file (installed by hatchling
+    # from the root of the repo).  If it's missing we're inside site-packages.
+    if (candidate / "VERSION").exists():
+        return candidate
+    raise FileNotFoundError(
+        f"Source tree root not found (checked {candidate}). "
+        "This function is only available in source-tree installations. "
+        "Use importlib.metadata or get_data_dir() for pip-installed scenarios."
+    )
 
 
 def ensure_data_dir() -> Path:

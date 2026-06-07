@@ -65,7 +65,12 @@ class FilesystemSandbox:
         src_root: Path | None = None,
         workspace_dir: Path | None = None,
     ) -> None:
-        self._src_root = src_root or get_source_root()
+        self._src_root = src_root
+        if self._src_root is None:
+            try:
+                self._src_root = get_source_root()
+            except FileNotFoundError:
+                self._src_root = None
         self._workspace_dir = workspace_dir or get_agent_workspace_dir()
         self._lock_path = self._workspace_dir / SANDBOX_LOCK_EXT
         self._status = SandboxStatus.INACTIVE
@@ -82,8 +87,11 @@ class FilesystemSandbox:
         return self._workspace_dir
 
     @property
-    def src_root(self) -> Path:
-        """Path to the source tree (locked read-only when active)."""
+    def src_root(self) -> Path | None:
+        """Path to the source tree (locked read-only when active).
+
+        Returns None in pip-installed scenarios where no source tree exists.
+        """
         return self._src_root
 
     def is_available(self) -> bool:
@@ -100,8 +108,12 @@ class FilesystemSandbox:
         if self._status == SandboxStatus.ACTIVE:
             raise RuntimeError("Sandbox is already active")
 
+        if self._src_root is None:
+            logger.info("No source tree (pip install) — skipping src lockdown")
+        else:
+            self._lock_src_readonly()
+
         self._ensure_workspace()
-        self._lock_src_readonly()
         self._write_lock()
 
         if self.is_available():
@@ -135,9 +147,13 @@ class FilesystemSandbox:
 
         Attempts to create a temporary file in the source root;
         returns True if blocked (sandbox working), False if writable.
+        Returns True (vacuously) when no source tree exists (pip install).
         """
         if self._status != SandboxStatus.ACTIVE:
             return False
+
+        if self._src_root is None:
+            return True
 
         probe = self._src_root / f".sandbox_probe_{os.getpid()}"
         try:
@@ -161,7 +177,11 @@ class FilesystemSandbox:
 
         On Windows, this is a no-op; NTFS ACLs handle this separately
         via the icacls command (not yet implemented).
+        No-op when _src_root is None (pip-installed, no source tree).
         """
+        if self._src_root is None:
+            return
+
         if not self._src_root.exists():
             raise FileNotFoundError(f"Source root not found: {self._src_root}")
 
@@ -176,11 +196,12 @@ class FilesystemSandbox:
         """Restore original permissions on source tree.
 
         Reverts src/ tree to 0o755 for directories and 0o644 for files.
+        No-op when _src_root is None (pip-installed, no source tree).
         """
         if sys.platform == "win32":
             return
 
-        if not self._src_root.exists():
+        if self._src_root is None or not self._src_root.exists():
             return
 
         for path in self._src_root.rglob("*"):
@@ -209,7 +230,11 @@ class FilesystemSandbox:
 
         The sandbox profile denies writes to the source root and allows
         writes to the agent workspace only.
+        No-op when _src_root is None (pip-installed, no source tree).
         """
+        if self._src_root is None:
+            logger.info("No source tree (pip install) — skipping macOS sandbox profile")
+            return
         profile = SANDBOX_PROFILE.format(
             src_root=str(self._src_root.resolve()),
             workspace=str(self._workspace_dir.resolve()),
@@ -240,13 +265,14 @@ def get_active_sandbox() -> FilesystemSandbox | None:
         return None
 
     try:
-        with portalocker.Lock(
-            str(lock_path), portalocker.LockFlags.SHARED | portalocker.LockFlags.NON_BLOCKING
-        ):
-            return FilesystemSandbox(
-                src_root=get_source_root(),
-                workspace_dir=get_agent_workspace_dir(),
-            )
+        from traderbot.paths import get_source_root as _get_source_root
+
+        with contextlib.suppress(FileNotFoundError):
+            src_root = _get_source_root()
+        return FilesystemSandbox(
+            src_root=src_root,
+            workspace_dir=get_agent_workspace_dir(),
+        )
     except portalocker.exceptions.LockException:
         logger.debug("FilesystemSandbox lock contention, returning None")
         return None
