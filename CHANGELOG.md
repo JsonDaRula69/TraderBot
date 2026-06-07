@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `traderbot uninstall` now detects pipx installations and uses `pipx uninstall` instead of `pip uninstall`
+- `traderbot update` now detects pipx installations and uses `pipx upgrade` instead of `pip install --upgrade`
+- Added `get_install_method()` to `paths.py` — returns "pipx", "pip", or "git"
 - Installer script (`install/traderbot-installer.sh`) now delegates interactive configuration to `traderbot setup` instead of its own `interactive_config_flow()` function, removing ~1200 lines of duplicated credential prompting, keyring setup, master password, and profile creation logic that is already handled by the Python CLI
 
 ### Fixed
