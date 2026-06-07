@@ -17,9 +17,10 @@ class TestDetectTierHelp:
     def test_detect_tier_help(self) -> None:
         result = runner.invoke(app, ["auth", "detect-tier", "--help"])
         assert result.exit_code == 0
-        assert "detect-tier" in result.output.lower()
-        assert "--json" in result.output
-        assert "--dry-run" in result.output
+        plain = strip_ansi(result.output)
+        assert "detect-tier" in plain.lower()
+        assert "--json" in plain
+        assert "--dry-run" in plain
 
 
 class TestDetectTierNoKey:
