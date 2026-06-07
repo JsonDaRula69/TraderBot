@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Portfolio valuation uses cash-only buying power instead of inflating with position collateral
 - Void settlement handling — voided markets are skipped in settlement processing
 - Settlement sync propagates settled positions back to decisions table for audit trail
+- Live API tests now pass API keys explicitly to `NewsAggregator()` instead of relying on config fallback
+- `test_newsapi_top_headlines`, `test_openweathermap_weather`, `test_fred_economic_data` properly authenticate
 
 ### Added
 

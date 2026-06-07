@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from traderbot.news.models import DataPoint, NewsCategory, NewsSource
-from traderbot.news.sources import NewsAggregator
+from traderbot.news.sources import DataSourcesConfig, NewsAggregator
 
 pytestmark = pytest.mark.live
 
@@ -92,7 +92,8 @@ async def test_coingecko_authenticated() -> None:
 async def test_openweathermap_weather() -> None:
     _requires_internet()
     _requires_env("OPENWEATHER_API_KEY")
-    na = NewsAggregator()
+    config = DataSourcesConfig(openweather_key=os.environ["OPENWEATHER_API_KEY"])
+    na = NewsAggregator(config=config)
     results = await na._fetch_openweathermap(limit=3)
     if not results:
         pytest.skip("OpenWeatherMap returned no results (key may be invalid)")
@@ -106,7 +107,8 @@ async def test_openweathermap_weather() -> None:
 async def test_fred_economic_data() -> None:
     _requires_internet()
     _requires_env("FRED_API_KEY")
-    na = NewsAggregator()
+    config = DataSourcesConfig(fred_key=os.environ["FRED_API_KEY"])
+    na = NewsAggregator(config=config)
     results = await na._fetch_fred(limit=3)
     if not results:
         pytest.skip("FRED returned no results (key may be invalid)")
@@ -130,7 +132,7 @@ async def test_google_trends_graceful() -> None:
 async def test_newsapi_top_headlines() -> None:
     _requires_internet()
     _requires_env("NEWSAPI_API_KEY")
-    na = NewsAggregator()
+    na = NewsAggregator(newsapi_key=os.environ["NEWSAPI_API_KEY"])
     results = await na._fetch_newsapi(limit=5)
     assert len(results) > 0, "Should return at least 1 article"
     _assert_datapoint(results[0], NewsSource.NEWSAPI)

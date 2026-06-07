@@ -68,6 +68,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Always use the questions tool** — When prompting the user or asking questions, always use the `question` tool. Do not ask questions inline or in plain text.
 - **Always maintain a todo list** — Use `todowrite` for every task, even simple ones. If the user interrupts you mid-task, evaluate the priority of the new request and insert it into the todo list in the appropriate order. Never leave tasks with `in_progress` status unfinished.
 - **Update VERSION on every commit** — Before every `git commit`, increment the patch version in `VERSION` (repo root). The format is `vMAJOR.MINOR.PATCH` (e.g., `v0.13.23`). The VERSION file is the single source of truth — `traderbot/__init__.py` reads it as primary, with `importlib.metadata` as fallback.
+- **CI and branch protection changes require explicit user approval** — Do NOT modify `.github/workflows/*.yml`, branch protection rules via GitHub API, or the list of required status checks without asking the user first and getting written confirmation. These changes affect every PR and every contributor — incorrect modifications can block merges or make the repo insecure. Always propose the change, explain the impact, and wait for approval before making it.
 
 ## Code Style
 
@@ -106,7 +107,7 @@ This file defines conventions for AI-assisted development of this project. All A
   4. `test`: full matrix (ubuntu/macos/windows) — `-m "not live"`
   5. `live`: API smoke tests (Kalshi, Open-Meteo, CoinGecko, TheSportsDB, OpenWeatherMap, FRED, NewsAPI, VoyageAI, Google Trends) — runs on push to main + weekly. Skipped on fork PRs (secrets unavailable).
   6. `build`: builds wheel + verifies `pip install` works
-- **Pre-existing test failures**: if a test was already failing before your changes, note it in the PR but don't hold the merge. Fixes should be submitted as a separate PR.
+- **Pre-existing test failures must be fixed, not deferred**: if a test was already failing before your changes, fix it in the same PR or a follow-up PR within the same work session. Do NOT treat "pre-existing" as acceptable — a broken test suite is a broken deployment gate. Every CI failure blocks every PR. The only exception is live/API tests that require secrets unavailable in CI (those must be gated behind `@pytest.mark.live` and excluded from required status checks).
 - **Setup for local test execution**: use `uv sync --all-extras --dev` to install pytest (it's in `[project.optional-dependencies] dev`, not `[dependency-groups] dev`).
 - **CLI trade tests**: these require extensive mocking due to the DB persistence layer (`_resolve_db_path`, `get_connection`, `upsert`). If the circular import chain (`traderbot.cli.app` → `traderbot.cli.trade` → `traderbot.paper` → `traderbot.cli.helpers` → ...) prevents clean mocks, the affected tests need the import chain refactored (extract DB code from CLI).
 - **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
@@ -125,7 +126,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement (branch protection is configured with bypass allowance via GraphQL API mutation). PRs from `jsondarula` can be merged once CI passes without additional review.
 - **External contributors** require 1 approving review before merge.
 - **Branch protection configuration** is managed via GitHub REST API (`PUT /repos/{owner}/{repo}/branches/main/protection`). The bypass allowance for `jsondarula` was set via GraphQL mutation on the branch protection rule ID `BPR_kwDOSIPo7s4ElNFj`. Branch protection requires:
-  - 6 required status checks (Lint & format, Unit tests, Test on all 3 OS, Build wheel)
+  - 8 required status checks (Lint & format, Unit tests, Frozen lockfile check, Test on all 3 OS, Build wheel, Live API tests)
   - Strict status checks (branch must be up-to-date)
   - Enforce admins enabled
   - The `bypass_pull_request_allowances` field is NOT exposed in the GitHub Settings UI for this account tier — it must be set via API.
