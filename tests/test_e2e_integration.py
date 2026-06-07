@@ -950,7 +950,7 @@ class TestBayesianHeartbeatIntegration:
             ))
 
             # Verify all steps ran
-            assert len(result.steps_completed) == 8
+            assert len(result.steps_completed) == 10, f"Expected 10 steps, got {len(result.steps_completed)}: {result.steps_completed}"
 
             # Step 4: Verify WAL still has pending entry (dry-run doesn't modify)
             pending = scan_pending(session_file)

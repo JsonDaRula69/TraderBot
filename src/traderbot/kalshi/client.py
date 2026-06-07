@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,15 @@ import httpx
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from traderbot.exceptions import (
+    AuthenticationError as _AuthenticationError,
+)
+from traderbot.exceptions import (
+    ConfigurationError as _ConfigurationError,
+)
+from traderbot.exceptions import (
+    RateLimitError as _RateLimitError,
+)
 from traderbot.kalshi.models import MarketListResponse, TradeListResponse
 from traderbot.kalshi.pinning import create_pinned_ssl_context
 from traderbot.kalshi.rate_limit import TokenBucketRateLimiter
@@ -50,20 +60,53 @@ _PUBLIC_ENDPOINTS: frozenset[str] = frozenset(
 )
 
 
-class ConfigurationError(Exception):
-    """Raised when required configuration is missing."""
+class ConfigurationError(_ConfigurationError):
+    """Deprecated: use traderbot.exceptions.ConfigurationError instead."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        warnings.warn(
+            "kalshi.client.ConfigurationError is deprecated, use traderbot.exceptions.ConfigurationError",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 
-class RateLimitError(Exception):
-    """Raised when the Kalshi API returns HTTP 429 (rate limit exceeded)."""
+class RateLimitError(_RateLimitError):
+    """Deprecated: use traderbot.exceptions.RateLimitError instead."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        warnings.warn(
+            "kalshi.client.RateLimitError is deprecated, use traderbot.exceptions.RateLimitError",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 
-class AuthenticationError(Exception):
-    """Raised when the Kalshi API returns an authentication failure (401/403)."""
+class AuthenticationError(_AuthenticationError):
+    """Deprecated: use traderbot.exceptions.AuthenticationError instead."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        warnings.warn(
+            "kalshi.client.AuthenticationError is deprecated, use traderbot.exceptions.AuthenticationError",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 
 class KalshiConfig(BaseSettings):
-    """Configuration for Kalshi API client, loaded from environment variables."""
+    """Strict Pydantic config for the Kalshi API client.
+
+    Uses ``extra="ignore"`` (not ``"forbid"``) because the Kalshi API
+    environment often contains unrelated ``KALSHI_*`` variables (e.g. from
+    shell profiles, CI plugins, or future API parameters). Forbidding
+    extras would cause hard-to-debug startup crashes on any unexpected env
+    var — a brittle failure mode for what should be a tolerant config layer.
+    ``ignore`` silently discards unknown fields, matching the project's
+    explicit design decision (see commit 3d628e5).
+    """
 
     model_config = SettingsConfigDict(
         strict=True,
@@ -218,7 +261,7 @@ class KalshiClient:
             if len(segments) != len(pub_segs):
                 continue
             match = True
-            for s, p in zip(segments, pub_segs):
+            for s, p in zip(segments, pub_segs, strict=False):
                 if p.startswith("{") and p.endswith("}"):
                     continue
                 if s != p:

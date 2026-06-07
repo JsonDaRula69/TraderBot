@@ -7,6 +7,13 @@ Usage:
 
 This script self-updates first: it downloads the latest version of itself
 from GitHub before proceeding with the full update pipeline.
+
+Exit codes (per error-reporting contract):
+  0 = Success
+  1 = Generic error
+  2 = Config/validation error
+  3 = Dependency error
+  4 = Network error
 """
 from __future__ import annotations
 
@@ -19,7 +26,25 @@ import sys
 import time
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# ── File logging setup (contract: ~/.traderbot/logs/install-{timestamp}.log) ─
+LOG_DIR = Path.home() / ".traderbot" / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"install-{time.strftime('%Y%m%d-%H%M%S')}.log"
+
+_file_handler = logging.FileHandler(str(LOG_FILE), encoding="utf-8")
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(
+    logging.Formatter(
+        "[{asctime}] [{levelname}] {message}",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        style="{",
+    )
+)
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setLevel(logging.INFO)
+_stream_handler.setFormatter(logging.Formatter("%(message)s"))
+
+logging.basicConfig(level=logging.INFO, handlers=[_file_handler, _stream_handler])
 logger = logging.getLogger("traderbot-update")
 
 REPO = "JsonDaRula69/TraderBot"
@@ -42,6 +67,15 @@ def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     kwargs.setdefault("env", _UPDATER_ENV)
     logger.info("  $ %s", " ".join(cmd))
     return subprocess.run(cmd, **kwargs)
+
+
+def _check_run(cmd: list[str], error_message: str, exit_code: int = 4, **kwargs) -> subprocess.CompletedProcess:
+    """Run a command and exit with *exit_code* if it fails."""
+    result = _run(cmd, **kwargs)
+    if result.returncode != 0:
+        logger.error("[ERROR] %s (exit code %d)", error_message, result.returncode)
+        sys.exit(exit_code)
+    return result
 
 
 def _self_update() -> bool:
@@ -67,11 +101,17 @@ def _self_update() -> bool:
 
 def _git_pull(branch: str) -> None:
     _run(["git", "stash", "--include-untracked"], cwd=REPO_DIR, capture_output=True)
-    _run(["git", "pull", "origin", branch], cwd=REPO_DIR)
+    result = _run(["git", "pull", "origin", branch], cwd=REPO_DIR)
+    if result.returncode != 0:
+        logger.error("[ERROR] git pull failed for branch '%s' (exit code %d)", branch, result.returncode)
+        sys.exit(4)
 
 
 def _pip_install() -> None:
-    _run([str(PYTHON), "-m", "pip", "install", "-e", "."], cwd=REPO_DIR)
+    result = _run([str(PYTHON), "-m", "pip", "install", "-e", "."], cwd=REPO_DIR)
+    if result.returncode != 0:
+        logger.error("[ERROR] pip install failed (exit code %d)", result.returncode)
+        sys.exit(3)
 
 
 def _refresh_workspace_files() -> None:
@@ -101,7 +141,9 @@ def _refresh_workspace_files() -> None:
 def _rebuild_sandbox_image() -> None:
     build_script = REPO_DIR / "install" / "docker" / "build-sandbox.sh"
     if shutil.which("docker") and build_script.is_file():
-        _run(["bash", str(build_script)], cwd=REPO_DIR)
+        result = _run(["bash", str(build_script)], cwd=REPO_DIR)
+        if result.returncode != 0:
+            logger.warning("Sandbox image rebuild failed (exit code %d)", result.returncode)
 
 
 def _configure_openclaw_sandbox() -> None:
@@ -189,7 +231,7 @@ def _kill_ws_daemon() -> None:
             capture_output=True, timeout=10,
         )
     except Exception:
-        pass
+        logger.debug("ws_daemon kill failed (process may not be running)")
 
 
 def _restart_ws_daemon() -> None:
@@ -226,16 +268,21 @@ def _backup_databases() -> None:
             f.unlink()
 
 
-def main() -> None:
+def _echo(msg: str) -> None:
+    """Print user-facing message + log it — replaces bare print()."""
+    logger.info(msg)
+
+
+def main() -> int:
     branch = "dev" if "--dev" in sys.argv else "main"
 
-    print("=== TraderBot Update ===")
-    print(f"  Branch: {branch}")
-    print()
+    logger.info("=== TraderBot Update ===")
+    logger.info("  Branch: %s", branch)
+    logger.info("  Log: %s", LOG_FILE)
 
     _self_update()
 
-    print("  → Backing up databases...")
+    _echo("  → Backing up databases...")
     _backup_databases()
 
     # Detect install mode: pip vs git
@@ -247,40 +294,43 @@ def main() -> None:
         is_git = REPO_DIR.is_dir() and (REPO_DIR / ".git").is_dir()
 
     if is_git:
-        print("  → Pulling latest code...")
+        _echo("  → Pulling latest code...")
         _git_pull(branch)
-        print("  → Reinstalling package...")
+        _echo("  → Reinstalling package...")
         _pip_install()
     else:
-        print("  → Upgrading via pip...")
-        subprocess.run(
+        _echo("  → Upgrading via pip...")
+        result = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--upgrade", "traderbot"],
-            check=False,
+            capture_output=True, timeout=120,
         )
+        if result.returncode != 0:
+            logger.error("[ERROR] pip upgrade failed (exit code %d)", result.returncode)
+            return 3
 
-    print("  → Refreshing workspace files...")
+    _echo("  → Refreshing workspace files...")
     _refresh_workspace_files()
 
-    print("  → Rebuilding sandbox image...")
+    _echo("  → Rebuilding sandbox image...")
     _rebuild_sandbox_image()
 
-    print("  → Re-applying OpenClaw config...")
+    _echo("  → Re-applying OpenClaw config...")
     _configure_openclaw_sandbox()
 
-    print("  → Deploying bootstrap hook...")
+    _echo("  → Deploying bootstrap hook...")
     _enable_bootstrap_hook()
 
-    print("  → Re-registering cron jobs...")
+    _echo("  → Re-registering cron jobs...")
     _reregister_cron_jobs()
 
-    print("  → Restarting WS daemon...")
+    _echo("  → Restarting WS daemon...")
     _restart_ws_daemon()
 
-    print("  → Restarting OpenClaw gateway...")
+    _echo("  → Restarting OpenClaw gateway...")
     _restart_gateway()
 
-    print()
-    print("=== Update complete ===")
+    _echo("")
+    _echo("=== Update complete ===")
     return 0
 
 

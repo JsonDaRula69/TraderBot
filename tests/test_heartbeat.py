@@ -1,19 +1,18 @@
-"""Tests for the heartbeat cycle — 8-step self-review, adaptation, health, and update check."""
+"""Tests for the heartbeat cycle — self-review, adaptation, health, and update check."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import sqlite3
-import pytest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tests.conftest import strip_ansi
-
+import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import strip_ansi
 from traderbot.cli import app
 from traderbot.db.decisions import DbDecision
 from traderbot.db.decisions import init_table as init_decisions_table
@@ -22,16 +21,22 @@ from traderbot.heartbeat import (
     AdaptationReview,
     CircuitBreakerReview,
     DecisionReview,
+    ErrorSummary,
     HeartbeatResult,
     LearningPromotionReview,
     PerformanceReview,
     SystemHealthReview,
+    TokenStalenessReview,
+    WsHealthReview,
+    _compute_breaker_failures,
+    get_error_summary,
     run_heartbeat_cycle,
     step_bayesian_adaptation,
     step_circuit_breaker_check,
     step_decision_review,
     step_learning_promotion,
     step_performance_review,
+    step_recovery_experiment,
     step_system_health,
 )
 
@@ -376,9 +381,9 @@ class TestLearningPromotion:
 
 class TestCircuitBreakerCheck:
     def test_default_normal(self):
-        from traderbot.risk.circuit_breaker import CircuitBreaker
-
         import tempfile
+
+        from traderbot.risk.circuit_breaker import CircuitBreaker
 
         with tempfile.TemporaryDirectory() as td:
             breaker = CircuitBreaker(state_file=Path(td) / "breaker.json")
@@ -475,7 +480,9 @@ class TestHeartbeatCycle:
         assert "system_health" in result.steps_completed
         assert "update_check" in result.steps_completed
         assert "update_heartbeat_md" in result.steps_completed
-        assert len(result.steps_completed) == 8
+        assert "ws_health" in result.steps_completed
+        assert "token_staleness" in result.steps_completed
+        assert len(result.steps_completed) == 10
         conn.close()
 
     def test_full_cycle_with_decisions(self, tmp_path):
@@ -565,7 +572,9 @@ class TestHeartbeatCycle:
 
         monkeypatch.setattr("traderbot.updater.fetch_latest_version", mock_fetch)
 
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         assert "update_check" in result.steps_completed
         assert api_called["count"] == 0
         conn.close()
@@ -574,14 +583,18 @@ class TestHeartbeatCycle:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         expected_order = [
             "performance_review",
             "decision_review",
             "bayesian_adaptation",
             "learning_promotion",
             "circuit_breaker_check",
+            "ws_health",
             "system_health",
+            "token_staleness",
             "update_check",
             "update_heartbeat_md",
         ]
@@ -638,7 +651,7 @@ class TestHeartbeatCLI:
         result = runner.invoke(app, ["heartbeat", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data["steps_completed"]) == 8
+        assert len(data["steps_completed"]) == 10
 
 
 # ---------------------------------------------------------------------------
@@ -672,7 +685,9 @@ class TestHeartbeatResultModel:
             AdaptationReview,
             LearningPromotionReview,
             CircuitBreakerReview,
+            WsHealthReview,
             SystemHealthReview,
+            TokenStalenessReview,
             HeartbeatResult,
         ]:
             cfg = model_cls.model_config
@@ -690,7 +705,9 @@ class TestEdgeCases:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         _init_db(conn)
-        result = asyncio.run(run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True))
+        result = asyncio.run(
+            run_heartbeat_cycle(conn, heartbeat_path=tmp_path / "HEARTBEAT_DATA.md", dry_run=True)
+        )
         assert result.performance.trade_count == 0
         assert result.decisions.closed_count == 0
         assert result.adaptation.skipped_reason != ""
@@ -774,3 +791,341 @@ class TestSystemHealthPing:
             result = asyncio.run(step_system_health(conn))
             assert result.api_connectivity == "unavailable"
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Error Summary
+# ---------------------------------------------------------------------------
+
+
+class TestErrorSummary:
+    def test_empty_log_file(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert result.total_by_level == {}
+        assert result.top_error_codes == []
+        assert result.recent_errors == []
+
+    def test_no_log_path_env(self, monkeypatch):
+        monkeypatch.delenv("TRADERBOT_LOG_FILE", raising=False)
+        result = get_error_summary()
+        assert result.total_by_level == {}
+
+    def test_nonexistent_log_file(self, tmp_path):
+        result = get_error_summary(str(tmp_path / "nonexistent.log"))
+        assert result.total_by_level == {}
+
+    def test_parse_pipe_delimited_errors(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "2025-01-01 | traderbot.risk | ERROR | [E3000] Rate limit exceeded\n"
+            "2025-01-01 | traderbot.kalshi | ERROR | [E3000] Another rate limit\n"
+            "2025-01-01 | traderbot.risk | CRITICAL | [E5000] Validation failure\n"
+            "2025-01-01 | traderbot.core | INFO | Normal message\n"
+            "2025-01-01 | traderbot.core | WARNING | Something concerning\n",
+            encoding="utf-8",
+        )
+        result = get_error_summary(str(log_file))
+        assert result.total_by_level["ERROR"] == 2
+        assert result.total_by_level["CRITICAL"] == 1
+        assert result.total_by_level["INFO"] == 1
+        assert result.total_by_level["WARNING"] == 1
+        assert result.top_error_codes == [(3000, 2), (5000, 1)]
+        assert len(result.recent_errors) == 3
+
+    def test_top_five_error_codes(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        lines = []
+        for code in [1000, 2000, 3000, 4000, 5000, 6000, 7000]:
+            lines.append(f"2025-01-01 | mod | ERROR | [E{code}] Error {code}")
+        log_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert len(result.top_error_codes) <= 5
+
+    def test_recent_errors_capped_at_ten(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        lines = [f"2025-01-01 | mod | ERROR | [E3000] Error {i}" for i in range(15)]
+        log_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert len(result.recent_errors) == 10
+
+    def test_generated_at_is_set(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("", encoding="utf-8")
+        result = get_error_summary(str(log_file))
+        assert result.generated_at.tzinfo is not None
+
+    def test_uses_env_var_log_file(self, tmp_path, monkeypatch):
+        log_file = tmp_path / "env_test.log"
+        log_file.write_text("2025-01-01 | mod | ERROR | [E2000] Test\n", encoding="utf-8")
+        monkeypatch.setenv("TRADERBOT_LOG_FILE", str(log_file))
+        result = get_error_summary()
+        assert result.total_by_level.get("ERROR") == 1
+
+    def test_error_summary_dataclass_defaults(self):
+        summary = ErrorSummary()
+        assert summary.total_by_level == {}
+        assert summary.top_error_codes == []
+        assert summary.recent_errors == []
+
+
+# ---------------------------------------------------------------------------
+# Adapter State Persistence Across Heartbeat Cycles
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterPersistence:
+    def test_state_dir_created_on_first_run(self, tmp_path):
+        """Default state_path creates parent directory and persists state file."""
+        state_path = tmp_path / "subdir" / "adapter_state.json"
+        assert not state_path.parent.exists()
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _init_db(conn)
+        decisions = [
+            _make_decision(id=i, direction="yes", price=40, actual_result=True, outcome="executed")
+            for i in range(12)
+        ]
+        from traderbot.simulation.adaptation import BayesianAdapter, GuardrailConfig
+
+        config = GuardrailConfig(min_observations=1, max_updates_per_day=100)
+        adapter = BayesianAdapter(config=config, state_path=state_path)
+        result = step_bayesian_adaptation(decisions, adapter=adapter)
+        assert result.updated
+        assert state_path.parent.exists()
+        assert state_path.exists()
+        conn.close()
+
+    def test_state_persists_across_two_cycles(self, tmp_path):
+        """Adapter state (update timestamps, drift counts) survives heartbeat cycles."""
+        state_path = tmp_path / "adapter_state.json"
+
+        from traderbot.simulation.adaptation import BayesianAdapter, GuardrailConfig
+        from traderbot.simulation.adapter_state import AdapterStateStore
+
+        # Cycle 1: perform a successful update
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _init_db(conn)
+        decisions = [
+            _make_decision(id=i, direction="yes", price=40, actual_result=True, outcome="executed")
+            for i in range(12)
+        ]
+        config = GuardrailConfig(min_observations=1, max_updates_per_day=100)
+        adapter1 = BayesianAdapter(config=config, state_path=state_path)
+        result1 = step_bayesian_adaptation(decisions, adapter=adapter1)
+        assert result1.updated
+        timestamps_after_cycle1 = len(adapter1._update_timestamps)
+        assert timestamps_after_cycle1 >= 1
+        conn.close()
+
+        loaded = AdapterStateStore.load(state_path)
+        assert loaded is not None
+        assert len(loaded.update_timestamps) >= 1
+
+        conn2 = sqlite3.connect(":memory:")
+        conn2.row_factory = sqlite3.Row
+        _init_db(conn2)
+        adapter2 = BayesianAdapter(config=config, state_path=state_path)
+        assert len(adapter2._update_timestamps) == timestamps_after_cycle1
+
+        result2 = step_bayesian_adaptation(decisions, adapter=adapter2)
+        assert result2.updated
+        assert len(adapter2._update_timestamps) > timestamps_after_cycle1
+        conn2.close()
+
+    def test_run_heartbeat_cycle_always_passes_state_path(self, tmp_path):
+        """run_heartbeat_cycle always instantiates BayesianAdapter with state_path."""
+        state_path = tmp_path / "adapter_state.json"
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _init_db(conn)
+        for i in range(12):
+            _insert_decision(
+                conn, direction="yes", price=40, actual_result=1, hours_ago=1
+            )
+
+        with patch(
+            "traderbot.simulation.adapter_state.resolve_state_path", return_value=state_path
+        ):
+            from traderbot.heartbeat import run_heartbeat_cycle
+
+            result = asyncio.run(
+                run_heartbeat_cycle(
+                    conn,
+                    heartbeat_path=tmp_path / "hb.md",
+                    state_path=state_path,
+                    dry_run=True,
+                )
+            )
+        assert "bayesian_adaptation" in result.steps_completed
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Breaker Escalation → Bayesian Adapter Weighted Failures
+# ---------------------------------------------------------------------------
+
+
+class TestBreakerEscalationFeedback:
+    """Circuit breaker escalation events feed weighted failures into BayesianAdapter."""
+
+    def _make_breaker_with_transition(
+        self, from_level: int, to_level: int
+    ) -> "MagicMock":
+        """Create a mock breaker with a single transition record."""
+        from traderbot.risk.circuit_breaker import BreakerLevel, BreakerTransition
+
+        mock = MagicMock()
+        transition = BreakerTransition(
+            from_level=BreakerLevel(from_level),
+            to_level=BreakerLevel(to_level),
+            timestamp=999.0,
+        )
+        mock.get_transitions_since.return_value = [transition]
+        return mock
+
+    def test_slow_escalation_adds_one_failure(self):
+        """SLOW escalation → +1 failures fed into adapter."""
+        import traderbot.heartbeat as hb_mod
+
+        hb_mod._last_processed_transition_ts = 0.0
+        try:
+            breaker = self._make_breaker_with_transition(
+                from_level=0, to_level=1  # NORMAL → SLOW
+            )
+            failures = _compute_breaker_failures(breaker)
+            assert failures == 1
+        finally:
+            hb_mod._last_processed_transition_ts = 0.0
+
+    def test_full_stop_escalation_adds_five_failures(self):
+        """FULL_STOP escalation → +5 failures fed into adapter."""
+        import traderbot.heartbeat as hb_mod
+
+        hb_mod._last_processed_transition_ts = 0.0
+        try:
+            breaker = self._make_breaker_with_transition(
+                from_level=0, to_level=3  # NORMAL → FULL_STOP
+            )
+            failures = _compute_breaker_failures(breaker)
+            assert failures == 5
+        finally:
+            hb_mod._last_processed_transition_ts = 0.0
+
+    def test_recovery_does_not_add_positive_evidence(self):
+        """Recovery transitions (to_level < from_level) produce zero failures."""
+        import traderbot.heartbeat as hb_mod
+
+        hb_mod._last_processed_transition_ts = 0.0
+        try:
+            breaker = self._make_breaker_with_transition(
+                from_level=3, to_level=0  # FULL_STOP → NORMAL (recovery)
+            )
+            failures = _compute_breaker_failures(breaker)
+            assert failures == 0
+        finally:
+            hb_mod._last_processed_transition_ts = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Recovery Experiment (FULL_STOP trigger)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoveryExperiment:
+    """Recovery experiment triggers on FULL_STOP, checks markets, runs harness."""
+
+    def _make_full_stop_breaker(self, transition_ts: float = 1000.0) -> MagicMock:
+        """Create a mock breaker in FULL_STOP state with a transition record."""
+        from traderbot.risk.circuit_breaker import BreakerLevel, BreakerTransition, CircuitBreakerState
+
+        mock = MagicMock()
+        mock.get_state.return_value = CircuitBreakerState(
+            level=BreakerLevel.FULL_STOP,
+            can_trade=False,
+            reason="Drawdown exceeds threshold",
+        )
+        transition = BreakerTransition(
+            from_level=BreakerLevel.HALT,
+            to_level=BreakerLevel.FULL_STOP,
+            timestamp=transition_ts,
+        )
+
+        def _transitions_since(since_ts: float) -> list:
+            if transition_ts > since_ts:
+                return [transition]
+            return []
+
+        mock.get_transitions_since.side_effect = _transitions_since
+        return mock
+
+    def _make_normal_breaker(self) -> MagicMock:
+        """Create a mock breaker in NORMAL state (no FULL_STOP)."""
+        from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
+
+        mock = MagicMock()
+        mock.get_state.return_value = CircuitBreakerState(level=BreakerLevel.NORMAL)
+        mock.get_transitions_since.return_value = []
+        return mock
+
+    def test_no_trigger_when_not_full_stop(self):
+        """Recovery experiment does NOT trigger when breaker is not FULL_STOP."""
+        breaker = self._make_normal_breaker()
+        result = step_recovery_experiment(breaker=breaker)
+        assert result.triggered is False
+        assert result.skipped_reason == ""
+
+    def test_trigger_only_once_per_full_stop(self, tmp_path):
+        """Recovery experiment fires once per FULL_STOP escalation event."""
+        import traderbot.heartbeat as hb_mod
+
+        hb_mod._last_full_stop_experiment_ts = 0.0
+        try:
+            fake_db = tmp_path / "nonexistent_experiment.db"
+            breaker = self._make_full_stop_breaker(transition_ts=1000.0)
+            result1 = step_recovery_experiment(breaker=breaker, experiment_db_path=fake_db)
+            assert result1.triggered is False
+            assert result1.skipped_reason == "experiment_db_not_found"
+
+            # Second call with same FULL_STOP transition — should skip
+            result2 = step_recovery_experiment(breaker=breaker, experiment_db_path=fake_db)
+            assert result2.triggered is False
+            assert result2.skipped_reason == "already_processed_full_stop"
+        finally:
+            hb_mod._last_full_stop_experiment_ts = 0.0
+
+    def test_insufficient_markets_logs_and_skips(self, tmp_path):
+        """Recovery experiment skips when < 10 markets in experiment DB."""
+        import traderbot.heartbeat as hb_mod
+
+        hb_mod._last_full_stop_experiment_ts = 0.0
+        try:
+            db_path = tmp_path / "experiment.db"
+            import sqlite3 as _sqlite3
+
+            conn = _sqlite3.connect(str(db_path))
+            from traderbot.db.experiment_schema import create_tables
+
+            create_tables(conn)
+            # Insert only 5 markets (below threshold of 10)
+            for i in range(5):
+                conn.execute(
+                    "INSERT INTO markets (ticker, question, city, city_prefix, lat, lon, "
+                    "timezone, resolution_date, close_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (f"TEST-{i}", f"Q{i}", "NYC", "KXHIGHNY", 40.7, -74.0,
+                     "America/New_York", "2099-12-31", "2099-12-31T23:59:59"),
+                )
+            conn.commit()
+            conn.close()
+
+            breaker = self._make_full_stop_breaker(transition_ts=2000.0)
+            result = step_recovery_experiment(breaker=breaker, experiment_db_path=db_path)
+            assert result.triggered is False
+            assert result.markets_available == 5
+            assert result.skipped_reason == "insufficient_markets"
+        finally:
+            hb_mod._last_full_stop_experiment_ts = 0.0

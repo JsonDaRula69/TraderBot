@@ -94,6 +94,7 @@ def _verify_session_token(token: str, stored_key: bytes) -> bool:
         ts_str, mac_b64 = token.rsplit(":", 1)
         timestamp = int(ts_str)
     except (ValueError, TypeError):
+        logger.debug("Invalid session token format")
         return False
 
     if int(time.time()) - timestamp > SESSION_TOKEN_TTL:

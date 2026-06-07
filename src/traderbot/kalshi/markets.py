@@ -7,7 +7,6 @@ import json
 import logging
 import re
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
@@ -22,10 +21,13 @@ from traderbot.kalshi.models import (
     OrderBook,
     TradeListResponse,
 )
-from traderbot.kalshi.ws_cache import get_event_category
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.kalshi.client import KalshiClient
+
+logger = logging.getLogger(__name__)
 
 _EVENT_CACHE_TTL = 300  # seconds
 _EVENT_CACHE_PAGE_DELAY = 0.3  # seconds between pagination requests
@@ -79,6 +81,7 @@ def _load_event_cache_from_disk() -> bool:
         _event_cache_ts = ts
         return bool(_event_category_cache)
     except (json.JSONDecodeError, KeyError, TypeError):
+        logger.warning("_try_load_event_cache_from_disk failed: corrupted or invalid cache data")
         return False
 
 
@@ -267,6 +270,7 @@ class MarketService:
                     ev = data.get("event", data)
                     categories[ticker] = ev.get("category", "")
             except Exception:
+                logger.debug("Skipping malformed market data for ticker %s", ticker)
                 continue
         return categories
 
@@ -433,7 +437,7 @@ class MarketService:
         logger = logging.getLogger(__name__)
         # The series endpoint's category filter works with proper casing
         # (unlike events). Map user-facing categories to API format.
-        _CAT_FMT: dict[str, str] = {
+        _cat_fmt: dict[str, str] = {
             "weather": "Climate and Weather",
             "politics": "Politics and Government",
             "sports": "Sports",
@@ -445,7 +449,7 @@ class MarketService:
             "science": "Science and Technology",
         }
         series_map: dict[str, str] = {}
-        api_cat = _CAT_FMT.get(category, category.title())
+        api_cat = _cat_fmt.get(category, category.title())
         try:
             resp = await self._client.get("/series", limit=500, category=api_cat)
             resp.raise_for_status()
@@ -517,6 +521,7 @@ class MarketService:
                             m.market_category = _map_category(scat)
                     return markets
                 except Exception:
+                    logger.warning("_fetch_for_series failed for series %s", st)
                     return []
 
         tasks = [_fetch_for_series(st, scat) for st, scat in series_items]

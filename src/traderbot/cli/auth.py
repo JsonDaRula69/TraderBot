@@ -1,7 +1,5 @@
 """Auth command group — API credential management."""
 
-from __future__ import annotations
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,13 +8,13 @@ import json as json_lib
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
 
 auth_app = typer.Typer(
     name="auth",
@@ -58,8 +56,7 @@ def auth_rotate(
 
     keys = _ALL_SERVICES.get(service)
     if keys is None:
-        console.print(f"[red]Unknown service:[/red] {service}")
-        raise typer.Exit(code=1)
+        report_cli_error(f"Unknown service: {service}")
 
     env_lines: list[str] = []
     for key in keys:
@@ -73,9 +70,9 @@ def auth_rotate(
         env_path.parent.mkdir(parents=True, exist_ok=True)
         existing = env_path.read_text() if env_path.exists() else ""
         existing_lines = [
-            l
-            for l in existing.splitlines()
-            if not any(l.startswith(ek.split("=")[0]) for ek in env_lines)
+            line
+            for line in existing.splitlines()
+            if not any(line.startswith(ek.split("=")[0]) for ek in env_lines)
         ]
         new_content = "\n".join(existing_lines).rstrip() + "\n" + "\n".join(env_lines) + "\n"
         env_path.write_text(new_content)
@@ -107,10 +104,7 @@ def auth_check(
 
     mgr = AuthManager()
     result = mgr.get_credential("kalshi", "api_key")
-    if result is not None:
-        key = result.value.get_secret_value()
-    else:
-        key = None
+    key = result.value.get_secret_value() if result is not None else None
 
     key_found = bool(key and key.strip())
 
@@ -123,7 +117,8 @@ def auth_check(
         try:
             import asyncio
 
-            from traderbot.kalshi.client import AuthenticationError, KalshiClient
+            from traderbot.exceptions import AuthenticationError
+            from traderbot.kalshi.client import KalshiClient
 
             async def _test_endpoints() -> dict[str, object]:
                 client = KalshiClient()
@@ -218,9 +213,9 @@ def auth_setup_master_password() -> None:
     from traderbot.master_password import is_setup, setup_master_password
 
     if is_setup():
-        err_console.print("[red]Master password already configured.[/red]")
-        err_console.print("Use [bold]traderbot auth change-master-password[/bold] to change it.")
-        raise typer.Exit(code=1)
+        report_cli_error(
+            "Master password already configured. Use 'traderbot auth change-master-password' to change it."
+        )
 
     password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
     try:
@@ -229,8 +224,7 @@ def auth_setup_master_password() -> None:
             "[green]Master password created. Session authenticated for 30 minutes.[/green]"
         )
     except ValueError as e:
-        err_console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        report_cli_error(str(e))
 
 
 @auth_app.command("change-master-password")
@@ -239,9 +233,9 @@ def auth_change_master_password() -> None:
     from traderbot.master_password import change_master_password, is_setup
 
     if not is_setup():
-        err_console.print("[red]No master password configured.[/red]")
-        err_console.print("Run [bold]traderbot auth setup-master-password[/bold] first.")
-        raise typer.Exit(code=1)
+        report_cli_error(
+            "No master password configured. Run 'traderbot auth setup-master-password' first."
+        )
 
     old_password = typer.prompt("Current master password", hide_input=True)
     new_password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
@@ -251,8 +245,7 @@ def auth_change_master_password() -> None:
             "[green]Master password changed. Session authenticated for 30 minutes.[/green]"
         )
     except (ValueError, FileNotFoundError) as e:
-        err_console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(code=1)
+        report_cli_error(str(e))
 
 
 @auth_app.command("check-master-password")
@@ -289,11 +282,9 @@ def auth_check_master_password(
 @auth_app.command("set-kalshi")
 def auth_set_kalshi(
     api_key: Annotated[
-        Optional[str], typer.Option("--api-key", help="API key (non-interactive)")
+        str | None, typer.Option("--api-key", help="API key (non-interactive)")
     ] = None,
-    pem: Annotated[
-        Optional[str], typer.Option("--pem", help="PEM key path (non-interactive)")
-    ] = None,
+    pem: Annotated[str | None, typer.Option("--pem", help="PEM key path (non-interactive)")] = None,
 ) -> None:
     """Store Kalshi credentials in OS keyring (or .env fallback).
 
@@ -322,26 +313,19 @@ def auth_set_kalshi(
         )
         pem_path = Path(pem)
         if not pem_path.is_file():
-            console.print(f"[red]Error:[/red] PEM file not found: {pem}")
-            raise typer.Exit(1)
+            report_cli_error(f"PEM file not found: {pem}")
         private_key_pem = pem_path.read_text(encoding="utf-8").strip()
         if not private_key_pem or "PRIVATE KEY" not in private_key_pem:
-            console.print("[red]Error:[/red] PEM file does not contain a valid private key.")
-            raise typer.Exit(1)
+            report_cli_error("PEM file does not contain a valid private key.")
     elif api_key is not None or pem is not None:
-        # Only one flag provided — ambiguous, require both
-        console.print(
-            "[red]Error:[/red] Both --api-key and --pem are required for non-interactive mode."
-        )
-        raise typer.Exit(1)
+        report_cli_error("Both --api-key and --pem are required for non-interactive mode.")
     else:
         # Interactive mode: prompt for both
         api_key = typer.prompt("KALSHI_API_KEY")
         console.print("[dim]Paste the full multi-line PEM key (Ctrl+D when done):[/dim]")
         private_key_pem = sys.stdin.read().strip()
         if not private_key_pem:
-            console.print("[red]Error:[/red] No PEM key provided.")
-            raise typer.Exit(1)
+            report_cli_error("No PEM key provided.")
 
     pem_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pem_file.write_text(private_key_pem.strip() + "\n", encoding="utf-8")
@@ -350,11 +334,11 @@ def auth_set_kalshi(
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     new_lines = [
-        l
-        for l in old_lines
-        if not l.startswith("KALSHI_API_KEY=")
-        and not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
-        and not l.startswith("KALSHI_PRIVATE_KEY_PEM=")
+        line
+        for line in old_lines
+        if not line.startswith("KALSHI_API_KEY=")
+        and not line.startswith("KALSHI_PRIVATE_KEY_PATH=")
+        and not line.startswith("KALSHI_PRIVATE_KEY_PEM=")
     ]
     new_lines.append(f"KALSHI_API_KEY={api_key}")
     new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")

@@ -81,7 +81,7 @@ class TestGetCutoffs:
     @respx.mock
     async def test_get_cutoffs_with_timestamps(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/historical/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json={"market": SAMPLE_MARKET_WITH_CUTOFFS})
         )
         async with KalshiClient(cfg) as client:
@@ -106,7 +106,7 @@ class TestGetCutoffs:
             "status": "open",
             "event_ticker": "KXBTCD-26MAR31",
         }
-        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/historical/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json={"market": market_without_cutoffs})
         )
         async with KalshiClient(cfg) as client:
@@ -122,7 +122,7 @@ class TestGetCutoffs:
     async def test_get_cutoffs_partial_fields(self) -> None:
         cfg = _make_config()
         market_partial = {**SAMPLE_MARKET_RAW, "market_settled_ts": SETTLED_TS}
-        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/historical/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json={"market": market_partial})
         )
         async with KalshiClient(cfg) as client:
@@ -139,7 +139,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_basic(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets/trades").mock(
+        respx.get(f"{cfg.base_url}/historical/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": "page2"})
         )
         async with KalshiClient(cfg) as client:
@@ -157,7 +157,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_with_time_filters(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.base_url}/markets/trades").mock(
+        route = respx.get(f"{cfg.base_url}/historical/trades").mock(
             return_value=httpx.Response(200, json={"trades": [SAMPLE_TRADE_RAW], "cursor": None})
         )
         after = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
@@ -176,7 +176,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_date_serialization(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.base_url}/markets/trades").mock(
+        route = respx.get(f"{cfg.base_url}/historical/trades").mock(
             return_value=httpx.Response(200, json={"trades": []})
         )
         after = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
@@ -192,7 +192,7 @@ class TestGetHistoricalTrades:
     @respx.mock
     async def test_get_historical_trades_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets/trades").mock(
+        respx.get(f"{cfg.base_url}/historical/trades").mock(
             return_value=httpx.Response(200, json={"trades": []})
         )
         async with KalshiClient(cfg) as client:
@@ -207,7 +207,7 @@ class TestGetSettledMarkets:
     @respx.mock
     async def test_get_settled_markets(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/historical/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": [SAMPLE_SETTLED_MARKET_RAW], "cursor": "next"}
             )
@@ -224,7 +224,7 @@ class TestGetSettledMarkets:
     @respx.mock
     async def test_get_settled_markets_empty(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets").mock(
+        respx.get(f"{cfg.base_url}/historical/markets").mock(
             return_value=httpx.Response(200, json={"markets": []})
         )
         async with KalshiClient(cfg) as client:
@@ -237,7 +237,7 @@ class TestGetSettledMarkets:
     @respx.mock
     async def test_get_settled_markets_with_cursor(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.base_url}/markets").mock(
+        route = respx.get(f"{cfg.base_url}/historical/markets").mock(
             return_value=httpx.Response(
                 200, json={"markets": [SAMPLE_SETTLED_MARKET_RAW]}
             )
@@ -253,7 +253,7 @@ class TestGetSettledMarkets:
     @respx.mock
     async def test_get_historical_trades_with_cursor(self) -> None:
         cfg = _make_config()
-        route = respx.get(f"{cfg.base_url}/markets/trades").mock(
+        route = respx.get(f"{cfg.base_url}/historical/trades").mock(
             return_value=httpx.Response(
                 200, json={"trades": [SAMPLE_TRADE_RAW]}
             )
@@ -271,7 +271,7 @@ class TestGetMarketSeries:
     @respx.mock
     async def test_get_market_series(self) -> None:
         cfg = _make_config()
-        respx.get(f"{cfg.base_url}/markets/KXBTCD-26MAR31-T55000").mock(
+        respx.get(f"{cfg.base_url}/historical/markets/KXBTCD-26MAR31-T55000").mock(
             return_value=httpx.Response(200, json={"market": SAMPLE_MARKET_RAW})
         )
         async with KalshiClient(cfg) as client:

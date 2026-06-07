@@ -1,7 +1,5 @@
 """Admin commands: bootstrap, heartbeat, halt, resume, backfill, cache-warm, learnings."""
 
-from __future__ import annotations
-
 import asyncio
 import json as json_lib
 import logging
@@ -20,7 +18,7 @@ from rich.table import Table
 
 from traderbot.cli.helpers import (
     _python_version_ok,
-    err_console,
+    report_cli_error,
 )
 from traderbot.paths import _resolve_db_path, _with_db
 
@@ -62,10 +60,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                     sys.stdout,
                 )
                 raise typer.Exit(code=1)
-            console.print(
-                f"[red]Python {version_str} detected — 3.12.x required for chromadb dependency.[/red]"
+            report_cli_error(
+                f"Python {version_str} detected — 3.12.x required for chromadb dependency."
             )
-            raise typer.Exit(code=1)
 
         # Step 2: Setup data directory
         data_dir = get_data_dir()
@@ -194,9 +191,8 @@ def register_commands(parent_app: typer.Typer) -> None:
             logger.warning("Heartbeat failed: %s", exc)
             if json_output:
                 json_lib.dump({"error": str(exc)}, sys.stdout)
-            else:
-                console.print(f"[red]Heartbeat failed:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
+                raise typer.Exit(code=1) from None
+            report_cli_error(f"Heartbeat failed: {exc}")
 
         if json_output:
             json_lib.dump(result.model_dump(mode="json"), sys.stdout, default=str)
@@ -204,10 +200,8 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         perf = result.performance
         decision = result.decisions
-        adapt = result.adaptation
         lrn = result.learning_promotion
         cb = result.circuit_breaker
-        health = result.system_health
 
         console.print(f"\n[bold]Heartbeat[/bold] — {result.timestamp.isoformat()}")
         console.print(f"  Steps completed: {', '.join(result.steps_completed)}")
@@ -306,7 +300,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                             price_cents = int(float(market.outcome_prices[0]) * 100)
                             mtm += price_cents * pos.quantity
                         except Exception:
-                            pass
+                            logger.debug("MTM price parse failed for position %s", pos.ticker)
                     await client.close()
                     return mtm
 
@@ -332,13 +326,12 @@ def register_commands(parent_app: typer.Typer) -> None:
                     pb.mark_to_market_cents,
                     portfolio_value,
                 )
-                breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
+                breaker.check(
+                    daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct, profile=profile
+                )
             else:
-                # No paper profile — read existing state, call check with zero loss to trigger recovery
                 state = breaker.get_state()
-                if state.level in (BreakerLevel.SLOW, BreakerLevel.HALT):
-                    from traderbot.risk.circuit_breaker import BreakerLevel, CircuitBreakerState
-
+                if state.level != BreakerLevel.NORMAL:
                     logger.info("No profile — calling breaker.check(0, 0) for auto-recovery")
                     breaker.check(daily_loss_pct=0.0, drawdown_pct=0.0)
 
@@ -428,11 +421,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                             {"error": f"No active learning found for pattern-key: {promote}"},
                             sys.stdout,
                         )
-                    else:
-                        err_console.print(
-                            f"[red]No active learning found for pattern-key:[/red] {promote}"
-                        )
-                    raise typer.Exit(code=1)
+                        raise typer.Exit(code=1)
+                    report_cli_error(f"No active learning found for pattern-key: {promote}")
 
                 learning_id = active_entries[0].id
                 result_path = promote_learning(conn, learning_id)
@@ -444,11 +434,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                         json_lib.dump(
                             {"error": f"Promotion failed for learning #{learning_id}"}, sys.stdout
                         )
-                    else:
-                        err_console.print(
-                            f"[red]Promotion failed for learning[/red] #{learning_id}"
-                        )
-                    raise typer.Exit(code=1)
+                        raise typer.Exit(code=1)
+                    report_cli_error(f"Promotion failed for learning #{learning_id}")
 
                 promoted_entry = {
                     "learning_id": learning_id,
@@ -466,16 +453,14 @@ def register_commands(parent_app: typer.Typer) -> None:
                 return
 
             # Query patterns
-            status_filter: LearningStatus | None = None
             if status is not None:
                 try:
-                    status_filter = LearningStatus(status)
+                    LearningStatus(status)
                 except ValueError:
                     if json_output:
                         json_lib.dump({"error": f"Invalid status: {status}"}, sys.stdout)
-                    else:
-                        err_console.print(f"[red]Invalid status:[/red] {status}")
-                    raise typer.Exit(code=1)
+                        raise typer.Exit(code=1) from None
+                    report_cli_error(f"Invalid status: {status}")
 
             category_filter: LearningCategory | None = None
             if category is not None:
@@ -484,9 +469,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                 except ValueError:
                     if json_output:
                         json_lib.dump({"error": f"Invalid category: {category}"}, sys.stdout)
-                    else:
-                        err_console.print(f"[red]Invalid category:[/red] {category}")
-                    raise typer.Exit(code=1)
+                        raise typer.Exit(code=1) from None
+                    report_cli_error(f"Invalid category: {category}")
 
             patterns = get_patterns(conn, category=category_filter)
 
@@ -611,9 +595,8 @@ def register_commands(parent_app: typer.Typer) -> None:
         except Exception as exc:
             if json_output:
                 json_lib.dump({"error": str(exc)}, sys.stdout)
-            else:
-                console.print(f"[red]Settlement check failed:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
+                raise typer.Exit(code=1) from None
+            report_cli_error(f"Settlement check failed: {exc}")
 
         if json_output:
             json_lib.dump(result, sys.stdout, default=str)
@@ -665,9 +648,8 @@ def register_commands(parent_app: typer.Typer) -> None:
         except Exception as exc:
             if json_output:
                 json_lib.dump({"error": str(exc)}, sys.stdout)
-            else:
-                console.print(f"[red]Reconciliation failed:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
+                raise typer.Exit(code=1) from None
+            report_cli_error(f"Reconciliation failed: {exc}")
 
         if json_output:
             json_lib.dump(result, sys.stdout, default=str)
@@ -699,17 +681,16 @@ def register_commands(parent_app: typer.Typer) -> None:
         console = Console()
 
         if action != "warm":
-            console.print(f"[red]Unknown cache action:[/red] {action}. Use 'warm'.")
-            raise typer.Exit(1)
+            report_cli_error(f"Unknown cache action: {action}. Use 'warm'.")
 
         async def _warm() -> dict[str, int]:
-            from traderbot.kalshi.markets import _event_cache_ts, _event_category_cache
+            from traderbot.kalshi import markets as _markets
 
             client = KalshiClient()
             svc = MarketService(client)
             event_map = await svc._build_event_category_map()
-            _event_category_cache.update(event_map)
-            _event_cache_ts = time.monotonic()
+            _markets._event_category_cache.update(event_map)
+            _markets._event_cache_ts = time.monotonic()
             _save_event_cache_to_disk()
             await client.close()
             return {"events": len(event_map), "categories": len(set(event_map.values()))}

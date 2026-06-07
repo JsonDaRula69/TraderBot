@@ -6,7 +6,6 @@ import pytest  # noqa: TC002
 
 from traderbot.logging_config import (
     configure_root_logger,
-    get_logger,
     log_cache_event,
     log_market_event,
     log_reconciliation_event,
@@ -25,13 +24,6 @@ class TestConfigureRootLogger:
             h for h in logging.getLogger().handlers if isinstance(h, logging.StreamHandler)
         ]
         assert any(isinstance(h, logging.StreamHandler) for h in stream_handlers)
-
-
-class TestGetLogger:
-    def test_returns_logger(self) -> None:
-        logger = get_logger("test_module")
-        assert isinstance(logger, logging.Logger)
-        assert logger.name == "test_module"
 
 
 class TestLogFormatters:

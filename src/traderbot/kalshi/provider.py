@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from traderbot.kalshi.client import AuthenticationError
+from traderbot.exceptions import AuthenticationError, ErrorCodes, TraderBotError
 from traderbot.kalshi.markets import MarketService
 from traderbot.logging_config import log_cache_event, log_market_event
 
@@ -48,10 +48,16 @@ class MarketSnapshot:
 
 @dataclass(frozen=True)
 class OrderBookSnapshot:
-    """Immutable snapshot of an order book at a point in time."""
+    """Immutable snapshot of an order book at a point in time.
+
+    Bids = orders to buy (trader receives cash when selling into these).
+    Asks = orders to sell (trader pays cash when buying from these).
+    """
 
     yes_bids: tuple[OrderBookLevelSnapshot, ...] = ()
+    yes_asks: tuple[OrderBookLevelSnapshot, ...] = ()
     no_bids: tuple[OrderBookLevelSnapshot, ...] = ()
+    no_asks: tuple[OrderBookLevelSnapshot, ...] = ()
     timestamp: datetime | None = None
 
 
@@ -80,8 +86,13 @@ class MarketDataCache(Protocol):
 # --- Exceptions ---
 
 
-class ProdAPIError(Exception):
+class ProdAPIError(TraderBotError):
     """Error raised when production API calls fail."""
+
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.PRODUCTION_API, **kwargs
+    ) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 # --- Protocol ---

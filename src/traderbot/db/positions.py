@@ -21,9 +21,10 @@ class DbPosition(BaseModel):
 
     id: int
     ticker: str
-    quantity: Annotated[int, Field(ge=0)]
+    side: str = "yes"
+    quantity: Annotated[int, Field()]
     avg_price: Annotated[int, Field(ge=0, description="Average price in cents")]
-    settlement_result: bool | None = None
+    settlement_result: bool | str | None = None
     pnl_cents: int = 0
     updated_at: datetime
 
@@ -34,6 +35,7 @@ def init_table(conn: sqlite3.Connection) -> None:
         """CREATE TABLE IF NOT EXISTS positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ticker TEXT UNIQUE NOT NULL,
+            side TEXT NOT NULL DEFAULT 'yes',
             quantity INTEGER NOT NULL DEFAULT 0,
             avg_price INTEGER NOT NULL DEFAULT 0,
             settlement_result INTEGER,
@@ -46,6 +48,12 @@ def init_table(conn: sqlite3.Connection) -> None:
         "positions",
         "pnl_cents",
         "ALTER TABLE positions ADD COLUMN pnl_cents INTEGER DEFAULT 0",
+    )
+    _ensure_column(
+        conn,
+        "positions",
+        "side",
+        "ALTER TABLE positions ADD COLUMN side TEXT NOT NULL DEFAULT 'yes'",
     )
     conn.commit()
 
@@ -67,9 +75,10 @@ def upsert(conn: sqlite3.Connection, position: Position) -> None:
     now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO positions
-           (ticker, quantity, avg_price, settlement_result, pnl_cents, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+           (ticker, side, quantity, avg_price, settlement_result, pnl_cents, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(ticker) DO UPDATE SET
+               side = excluded.side,
                quantity = quantity + excluded.quantity,
                avg_price = (quantity * avg_price + excluded.quantity * excluded.avg_price)
                            / (quantity + excluded.quantity),
@@ -77,6 +86,7 @@ def upsert(conn: sqlite3.Connection, position: Position) -> None:
                updated_at = excluded.updated_at""",
         (
             position.ticker,
+            position.side,
             position.quantity,
             position.avg_price,
             position.settlement_result,
@@ -142,13 +152,14 @@ def update_avg_price(
 def update_settlement(
     conn: sqlite3.Connection,
     ticker: str,
-    result: bool,
+    result: bool | str,
     pnl_cents: int,
 ) -> bool:
     now = datetime.now(UTC).isoformat()
+    db_val: int | str = int(result) if isinstance(result, bool) else result
     cursor = conn.execute(
         "UPDATE positions SET settlement_result = ?, pnl_cents = ?, updated_at = ? WHERE ticker = ?",
-        (int(result), pnl_cents, now, ticker),
+        (db_val, pnl_cents, now, ticker),
     )
     conn.commit()
     updated = cursor.rowcount > 0
@@ -174,14 +185,14 @@ def mark_closed(conn: sqlite3.Connection, ticker: str) -> bool:
 
 def list_open_positions(conn: sqlite3.Connection) -> list[DbPosition]:
     rows = conn.execute(
-        "SELECT * FROM positions WHERE settlement_result IS NULL AND quantity > 0 ORDER BY ticker"
+        "SELECT * FROM positions WHERE settlement_result IS NULL AND quantity != 0 ORDER BY ticker"
     ).fetchall()
     return [_row_to_model(r) for r in rows]
 
 
 def count_open(conn: sqlite3.Connection) -> int:
     row = conn.execute(
-        "SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL AND quantity > 0"
+        "SELECT COUNT(*) FROM positions WHERE settlement_result IS NULL AND quantity != 0"
     ).fetchone()
     return row[0] if row else 0
 
@@ -192,5 +203,9 @@ def _row_to_model(row: sqlite3.Row) -> DbPosition:
     if isinstance(data.get("updated_at"), str):
         data["updated_at"] = datetime.fromisoformat(data["updated_at"])
     if data.get("settlement_result") is not None:
-        data["settlement_result"] = bool(data["settlement_result"])
+        if isinstance(data["settlement_result"], str):
+            # "void" is stored as a string sentinel
+            pass
+        else:
+            data["settlement_result"] = bool(data["settlement_result"])
     return DbPosition.model_validate(data)

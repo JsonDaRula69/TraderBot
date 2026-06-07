@@ -9,10 +9,11 @@ from __future__ import annotations
 import logging
 import sys
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
@@ -176,7 +177,7 @@ def ask_then_merge(
             fenced_merge(template_content, target_path, markers)
             return True
     except EOFError:
-        pass
+        logger.debug("Interactive prompt received EOF, skipping template injection")
     return False
 
 

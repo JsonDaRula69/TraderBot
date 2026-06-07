@@ -12,7 +12,8 @@ import os
 import pytest
 from pydantic import SecretStr
 
-from traderbot.kalshi.client import AuthenticationError, KalshiClient, KalshiConfig
+from traderbot.exceptions import AuthenticationError
+from traderbot.kalshi.client import KalshiClient, KalshiConfig
 
 pytestmark = pytest.mark.integration
 

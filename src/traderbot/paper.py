@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from traderbot.db import get_connection
 from traderbot.db.positions import list_all
 from traderbot.paths import _resolve_db_path
-from traderbot.profiles.models import TradingProfile as Profile
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from traderbot.profiles.models import TradingProfile as Profile
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,7 @@ class PaperBalance:
 
     @property
     def portfolio_value_cents(self) -> int:
-        return self.remaining_cents + self.mark_to_market_cents
+        return max(0, self.remaining_cents + self.mark_to_market_cents)
 
     @property
     def net_pnl_cents(self) -> int:
@@ -64,10 +68,14 @@ def compute_paper_balance(
     with get_connection(resolved) as conn:
         for pos in list_all(conn):
             total_cost += pos.avg_price * pos.quantity
-            if pos.settlement_result is True:
-                total_payout += 100 * pos.quantity
-            elif pos.settlement_result is False:
-                pass
+            if pos.settlement_result == "void":
+                total_cost -= pos.avg_price * pos.quantity  # refund cost
+            elif pos.settlement_result is not None:
+                won = (pos.side == "yes" and pos.settlement_result is True) or (
+                    pos.side == "no" and pos.settlement_result is False
+                )
+                if won:
+                    total_payout += 100 * pos.quantity
             else:
                 open_count += 1
 
@@ -75,7 +83,7 @@ def compute_paper_balance(
     return PaperBalance(
         initial_cents=initial,
         effective_balance_cents=initial,
-        cost_at_risk_cents=total_cost - total_payout,
+        cost_at_risk_cents=max(0, total_cost - total_payout),
         settled_payout_cents=total_payout,
         remaining_cents=remaining,
         open_position_count=open_count,

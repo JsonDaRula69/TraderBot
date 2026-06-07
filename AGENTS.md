@@ -68,6 +68,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Always use the questions tool** — When prompting the user or asking questions, always use the `question` tool. Do not ask questions inline or in plain text.
 - **Always maintain a todo list** — Use `todowrite` for every task, even simple ones. If the user interrupts you mid-task, evaluate the priority of the new request and insert it into the todo list in the appropriate order. Never leave tasks with `in_progress` status unfinished.
 - **Update VERSION on every commit** — Before every `git commit`, increment the patch version in `VERSION` (repo root). The format is `vMAJOR.MINOR.PATCH` (e.g., `v0.13.23`). The VERSION file is the single source of truth — `traderbot/__init__.py` reads it as primary, with `importlib.metadata` as fallback.
+- **CI and branch protection changes require explicit user approval** — Do NOT modify `.github/workflows/*.yml`, branch protection rules via GitHub API, or the list of required status checks without asking the user first and getting written confirmation. These changes affect every PR and every contributor — incorrect modifications can block merges or make the repo insecure. Always propose the change, explain the impact, and wait for approval before making it.
 
 ## Code Style
 
@@ -106,7 +107,7 @@ This file defines conventions for AI-assisted development of this project. All A
   4. `test`: full matrix (ubuntu/macos/windows) — `-m "not live"`
   5. `live`: API smoke tests (Kalshi, Open-Meteo, CoinGecko, TheSportsDB, OpenWeatherMap, FRED, NewsAPI, VoyageAI, Google Trends) — runs on push to main + weekly. Skipped on fork PRs (secrets unavailable).
   6. `build`: builds wheel + verifies `pip install` works
-- **Pre-existing test failures**: if a test was already failing before your changes, note it in the PR but don't hold the merge. Fixes should be submitted as a separate PR.
+- **Pre-existing test failures must be fixed, not deferred**: if a test was already failing before your changes, fix it in the same PR or a follow-up PR within the same work session. Do NOT treat "pre-existing" as acceptable — a broken test suite is a broken deployment gate. Every CI failure blocks every PR. The only exception is live/API tests that require secrets unavailable in CI (those must be gated behind `@pytest.mark.live` and excluded from required status checks).
 - **Setup for local test execution**: use `uv sync --all-extras --dev` to install pytest (it's in `[project.optional-dependencies] dev`, not `[dependency-groups] dev`).
 - **CLI trade tests**: these require extensive mocking due to the DB persistence layer (`_resolve_db_path`, `get_connection`, `upsert`). If the circular import chain (`traderbot.cli.app` → `traderbot.cli.trade` → `traderbot.paper` → `traderbot.cli.helpers` → ...) prevents clean mocks, the affected tests need the import chain refactored (extract DB code from CLI).
 - **Pull requests trigger the full pipeline** (lint → unit → matrix → build).
@@ -125,7 +126,7 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Auto-merge for human operator** (`jsondarula`): bypasses PR review requirement (branch protection is configured with bypass allowance via GraphQL API mutation). PRs from `jsondarula` can be merged once CI passes without additional review.
 - **External contributors** require 1 approving review before merge.
 - **Branch protection configuration** is managed via GitHub REST API (`PUT /repos/{owner}/{repo}/branches/main/protection`). The bypass allowance for `jsondarula` was set via GraphQL mutation on the branch protection rule ID `BPR_kwDOSIPo7s4ElNFj`. Branch protection requires:
-  - 6 required status checks (Lint & format, Unit tests, Test on all 3 OS, Build wheel)
+  - 8 required status checks (Lint & format, Unit tests, Frozen lockfile check, Test on all 3 OS, Build wheel, Live API tests)
   - Strict status checks (branch must be up-to-date)
   - Enforce admins enabled
   - The `bypass_pull_request_allowances` field is NOT exposed in the GitHub Settings UI for this account tier — it must be set via API.
@@ -218,12 +219,22 @@ Every resource that can be created MUST have a corresponding cleanup path in the
 
 ## Error Handling
 
-- **Custom exceptions**: define domain-specific exceptions in `traderbot/exceptions.py`. Prefer typed exceptions over `Exception` or string returns.
-- **CLI commands**: use `typer.Exit(1)` with a descriptive `[red]Error:[/red]` rich message. Never let unhandled exceptions bubble to the user raw.
-- **No silent swallows**: never `except Exception: pass`. At minimum log the error. Use broad catches only at module boundaries (e.g., subprocess calls to external tools).
+- **Custom exceptions**: define domain-specific exceptions in `traderbot/exceptions.py`. All domain exceptions inherit from `TraderBotError` — use `except TraderBotError` to catch the entire domain.
+- **Error codes**: every `TraderBotError` subclass has a default numeric error code (see `ErrorCodes` class). `str(exc)` returns `[E{code}] {message}` when code is non-zero. Use `report_error()` from `error_reporter.py` for consistent log-level routing.
+- **CLI commands**: use `report_cli_error()` from `cli/helpers.py` which outputs `[red]Error [E{code}]:[/red] {message}` and raises `typer.Exit(1)`. Never use raw `sys.exit(1)` or bare `typer.Exit()`.
+- **No silent swallows**: never `except Exception: pass`. At minimum log the error with `logger.exception()` or `logger.error()`. Use `should_silently_fail(module_name)` from `error_reporter.py` for modules that must suppress errors by policy.
 - **Retry policy**: transient errors (network, rate limits) retry with exponential backoff before failing. Auth/config errors fail immediately.
 - **Error context**: include relevant state information in exception messages (file paths, IDs, return codes). Avoid leaking secrets (tokens, API keys).
 - **Chain of trust**: library code raises typed exceptions. CLI code catches and formats them. Never print raw tracebacks to end users.
+
+## Logging
+
+- **Module-level loggers**: every module MUST declare `logger = logging.getLogger(__name__)` at the top. Never use `logging.basicConfig()` — call `configure_root_logger()` from `logging_config.py` once at the CLI entry point.
+- **Log levels**: use `logger.exception()` for unexpected failures in `except` blocks (includes traceback). Use `logger.error()` for expected failures. Use `logger.warning()` for degradation. Use `logger.info()` for operational milestones. Use `logger.debug()` for diagnostic detail.
+- **Structured logging**: set `TRADERBOT_LOG_FORMAT=json` for JSON output (machine-readable). Default is pipe-delimited. Set `TRADERBOT_LOG_FILE=/path/to/file.log` for file rotation (10MB, 5 backups). Set `TRADERBOT_LOG_LEVELS=module=LEVEL` for per-module level overrides.
+- **Correlation IDs**: use `correlation_id(cid)` from `logging_config.py` to trace operations across async module boundaries. The `operation_id` appears in JSON logs and can be read via `operation_id_var.get()`.
+- **When diagnosing issues**: always check the logs FIRST. Production logs are in `~/.traderbot/logs/`. Use `TRADERBOT_LOG_LEVELS=traderbot.kalshi=DEBUG,traderbot.risk=DEBUG` to increase verbosity for specific modules without flooding others.
+- **Never log secrets**: API keys, tokens, PEM content, and passwords must NEVER appear in log output. Use `SecretStr` fields in Pydantic models and `.get_secret_value()` only in controlled paths.
 
 ## Configuration Loading
 

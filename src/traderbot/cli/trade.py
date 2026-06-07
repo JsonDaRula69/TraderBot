@@ -1,7 +1,5 @@
 """Trade-related commands: trade, positions, audit, backtest, paper, compare, analyze, performance."""
 
-from __future__ import annotations
-
 import asyncio
 import json as json_lib
 import logging
@@ -15,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import _get_strategy
+from traderbot.cli.helpers import _get_strategy, report_cli_error
 from traderbot.paper import compute_paper_balance, position_value_for_ticker
 from traderbot.paths import _resolve_db_path, _with_db
 from traderbot.risk.circuit_breaker import CircuitBreaker
@@ -90,7 +88,7 @@ async def _analyze_realtime(ticker: str, console: Console, json_output: bool) ->
                         price = change.get("price", "?")
                         size = change.get("size", "?")
                         direction = change.get("direction", "?")
-                        console.print(f"  {side} {direction} @ {price}¢ × {size}")
+                        console.print(f"  {side} {direction} @ {price}¢ x {size}")
 
             elif msg_type == "ticker":
                 if json_output:
@@ -200,7 +198,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         if orderbook:
             console.print("\n[bold]Order Book[/bold]")
             yes_bids = orderbook.yes_bids if orderbook.yes_bids else []
-            no_bids = orderbook.no_bids if orderbook.no_bids else []
 
             if yes_bids:
                 from traderbot.analysis.odds import implied_probability
@@ -297,6 +294,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             client = KalshiClient()
             market_svc = MarketService(client)
         except Exception:
+            logger.debug("API connection required for market info, connection failed")
             if json_output:
                 json_lib.dump({"error": "API connection required"}, sys.stdout)
             else:
@@ -523,6 +521,15 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         all_positions = _with_db(db, list_all)
 
+        # Check for empty positions BEFORE price fetching
+        if not all_positions:
+            console = Console()
+            if json_output:
+                json_lib.dump([], sys.stdout, default=str)
+                return
+            console.print("No open positions.")
+            return
+
         # Fetch current prices from Kalshi market data (unauthenticated)
         price_map: dict[str, int] = {}
         if not no_price_fetch:
@@ -561,15 +568,13 @@ def register_commands(parent_app: typer.Typer) -> None:
                                     if no_bid is not None and tkr not in prices:
                                         prices[tkr] = 100 - int(no_bid)
                             except Exception:
-                                pass
+                                logger.debug("Price parse failed for ticker %s in positions", tkr)
                         await client.close()
                         return prices
 
                     price_map = asyncio.run(_fetch_prices())
                 except Exception:
-                    pass
-
-        if json_output:
+                    logger.debug("Failed to fetch real-time prices for positions")
             result = []
             for p in all_positions:
                 entry = p.model_dump(mode="json")
@@ -591,9 +596,6 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         console = Console()
-        if not all_positions:
-            console.print("No open positions.")
-            return
 
         table = Table(title="Positions")
         table.add_column("Ticker", style="cyan", no_wrap=True)
@@ -716,6 +718,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             client = KalshiClient()
             history = HistoryService(client)
         except Exception:
+            logger.debug("API connection required for backtest, connection failed")
             if json_output:
                 json_lib.dump({"error": "API connection required for backtest"}, sys.stdout)
             else:
@@ -828,7 +831,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.simulation.strategies import get_strategy
 
         console = Console()
-        err_console = Console(stderr=True)
+        Console(stderr=True)
 
         strat = get_strategy(strategy)
 
@@ -841,6 +844,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         try:
             client = KalshiClient()
         except Exception:
+            logger.debug("Kalshi API connection required for paper trading, connection failed")
             if json_output:
                 json_lib.dump(
                     {"error": "Kalshi API connection required for paper trading"}, sys.stdout
@@ -964,9 +968,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         profile_names = [n.strip() for n in profiles.split(",")]
         unknown = [n for n in profile_names if n not in PRESETS]
         if unknown:
-            console.print(f"[red]Unknown profile(s): {', '.join(unknown)}[/red]")
-            console.print(f"Available: {', '.join(PRESETS.keys())}")
-            raise typer.Exit(code=1)
+            report_cli_error(
+                f"Unknown profile(s): {', '.join(unknown)}. Available: {', '.join(PRESETS.keys())}"
+            )
 
         selected_profiles = [PRESETS[n] for n in profile_names]
 
@@ -977,6 +981,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             client = KalshiClient()
             history = HistoryService(client)
         except Exception:
+            logger.debug("API connection required for compare, connection failed")
             if json_output:
                 json_lib.dump({"error": "API connection required for compare"}, sys.stdout)
             else:

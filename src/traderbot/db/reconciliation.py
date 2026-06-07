@@ -97,7 +97,7 @@ async def reconcile_positions(db_path: str, kalshi_client: KalshiClient) -> dict
                 update_avg_price(conn, ticker, total_additional_qty, weighted_price)
                 counts["updated"] += 1
             except ValueError:
-                pass
+                logger.debug("avg_price update skipped for ticker %s: zero quantity", ticker)
 
     return counts
 

@@ -1,15 +1,19 @@
 """Shared CLI utilities — app, console, and common helpers."""
 
-from __future__ import annotations
-
 import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Never
 
 import typer
 from rich.console import Console
+
+from traderbot.error_reporter import format_cli_error
+from traderbot.paths import (  # noqa: F401 — re-exported for backward compatibility
+    _resolve_db_path,
+    _with_db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,7 @@ def _version(value: bool) -> None:
         from traderbot.updater import get_current_version
 
         print(f"traderbot v{get_current_version()}")
-        raise typer.Exit()
+        raise typer.Exit(code=0)
 
 
 @app.callback()
@@ -87,7 +91,24 @@ def main_callback(
 err_console = Console(stderr=True)
 
 
-from traderbot.paths import _resolve_db_path, _with_db  # noqa: F401 — re-exported for backward compatibility
+def report_cli_error(error: BaseException | str, code: int | None = None) -> Never:
+    """Print a formatted error to stderr and exit with code 1."""
+    from traderbot.exceptions import TraderBotError
+
+    if isinstance(error, str):
+        if code is not None:
+            err_console.print(f"[red]Error [E{code}]:[/red] {error}")
+        else:
+            err_console.print(f"[red]Error:[/red] {error}")
+    elif isinstance(error, TraderBotError):
+        err_console.print(format_cli_error(error))
+    else:
+        if code is not None:
+            err_console.print(f"[red]Error [E{code}]:[/red] {error}")
+        else:
+            err_console.print(f"[red]Error:[/red] {error}")
+
+    raise typer.Exit(code=1)
 
 
 def _get_strategy(name: str):
@@ -120,7 +141,7 @@ def _check_updates_on_startup() -> None:
                 f"Run 'traderbot update' to update.[/dim]"
             )
     except Exception:
-        pass
+        logger.debug("Update check failed, skipping notification")
 
 
 def _resolve_agent_path(agent_id: str) -> Path | None:
@@ -165,7 +186,7 @@ def _resolve_agent_path(agent_id: str) -> Path | None:
 
                 break
         except (_json.JSONDecodeError, OSError):
-            pass
+            logger.debug("Failed to parse openclaw workspace config for agent %s", agent_id)
 
     candidates = [
         Path.home() / ".openclaw" / f"workspace-{agent_id}",

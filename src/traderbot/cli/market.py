@@ -8,13 +8,16 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
+
+if TYPE_CHECKING:
+    from traderbot.news.models import NewsCategory, NewsItem
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     await asyncio.sleep(5)
                 except Exception:
                     if attempt == 2:
+                        logger.warning("Market scan failed after 3 attempts, returning empty")
                         return []
                     await asyncio.sleep(5)
             return []
@@ -122,9 +126,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
                     )
-                else:
-                    err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
-                raise typer.Exit(code=1) from None
+                    raise typer.Exit(code=1) from None
+                report_cli_error(f"Invalid category: {category}. Valid: {valid}")
 
         try:
             from traderbot.kalshi.client import KalshiClient
@@ -140,6 +143,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 result = asyncio.run(service.list_markets(limit=limit))
             markets = result.markets
         except Exception:
+            logger.warning("Failed to fetch markets for signal generation")
             if json_output:
                 json_lib.dump({"note": "Signal generation requires API connection"}, sys.stdout)
             else:
@@ -169,7 +173,7 @@ def register_commands(parent_app: typer.Typer) -> None:
 
                 news_context = get_news_context(category=category.lower())
             except Exception:
-                pass
+                logger.debug("Failed to fetch news context for category=%s", category)
         news_context = news_context or {}
 
         results = []
@@ -188,7 +192,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     }
                 )
             except Exception:
-                pass
+                logger.debug("Signal generation failed for market %s", mkt.ticker)
 
         if json_output:
             json_lib.dump(results, sys.stdout, default=str)
@@ -220,7 +224,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.news.cache_paths import get_news_cache_path
         from traderbot.news.classifier import NewsClassifier
         from traderbot.news.impact_assessor import ImpactAssessor
-        from traderbot.news.models import NewsCategory, NewsItem
         from traderbot.news.sentiment_scorer import SentimentScorer
         from traderbot.news.sources import NewsAggregator
         from traderbot.profiles.config import resolve_newsapi_key
@@ -249,6 +252,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         try:
             items = asyncio.run(_fetch())
         except Exception:
+            logger.warning("Failed to fetch news context for ticker %s", ticker)
             if json_output:
                 json_lib.dump({"error": "Failed to fetch news"}, sys.stdout)
             else:

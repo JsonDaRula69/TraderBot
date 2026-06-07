@@ -16,12 +16,14 @@ session — so they never collide with other agent work or each other._
 | main-pipeline-health | 6h | Pipeline timers, ChromaDB data_points count, WS daemon status, backfill if stale |
 | main-performance-review | 6h | Fleet P&L, agent win rates, drawdown |
 
+> **Recovery experiments may auto-fire from FULL_STOP events without backlog.md entry. Check `.learnings/` for recovery reports.**
+
 ## Setup
 
-These cron jobs are registered by `traderbot cron setup-heartbeat-tasks --role sysadmin` or can be verified:
+These cron jobs are registered by `traderbot cron setup --agent <agent-id> --role sysadmin --replace` or can be verified:
 
 ```bash
-openclaw cron list | grep " main "
+traderbot cron setup --agent <agent-id> --role sysadmin --dry-run
 ```
 
 ## Data Output

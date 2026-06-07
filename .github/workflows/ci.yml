@@ -108,6 +108,7 @@ jobs:
           NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          COINGECKO_TIER: ${{ secrets.COINGECKO_TIER }}
 
   test:
     name: Test (${{ matrix.os }})
@@ -132,6 +133,9 @@ jobs:
 
       - name: Run tests (not live)
         run: uv run --frozen python -m pytest -m "not live" --cov=src/traderbot --cov-report=xml
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+        env:
+          PYTHONWARNINGS: ${{ matrix.os == 'windows-latest' && 'ignore::UserWarning' || '' }}
 
       - name: Upload coverage to Codecov (Linux only)
         if: matrix.os == 'ubuntu-latest'

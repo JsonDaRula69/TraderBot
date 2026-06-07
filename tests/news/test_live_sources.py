@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from traderbot.news.models import DataPoint, NewsCategory, NewsSource
-from traderbot.news.sources import NewsAggregator
+from traderbot.news.sources import DataSourcesConfig, NewsAggregator
 
 pytestmark = pytest.mark.live
 
@@ -65,8 +65,32 @@ async def test_thesportsdb_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_coingecko_crypto_markets() -> None:
+async def test_coingecko_free_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test CoinGecko free/public tier (no API key, no auth header).
+
+    Removes COINGECKO_API_KEY and COINGECKO_TIER from env to exercise the
+    unauthenticated code path. Gracefully skips if CoinGecko returns empty
+    (rate-limited or no public access to /coins/markets).
+    """
     _requires_internet()
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    monkeypatch.delenv("COINGECKO_TIER", raising=False)
+    na = NewsAggregator()
+    results = await na._fetch_coingecko(limit=5)
+    if not results:
+        pytest.skip("CoinGecko free tier returned no results (rate-limited or no public access)")
+    _assert_datapoint(results[0], NewsSource.COINGECKO)
+    assert results[0].category == NewsCategory.CRYPTO
+    assert "price_cents" in results[0].data, "Should contain price_cents"
+    assert isinstance(results[0].data["price_cents"], int), "price_cents should be int"
+
+
+@pytest.mark.asyncio
+async def test_coingecko_demo_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test CoinGecko Demo tier (api.coingecko.com + x-cg-demo-api-key)."""
+    _requires_internet()
+    _requires_env("COINGECKO_API_KEY")
+    monkeypatch.setenv("COINGECKO_TIER", "demo")
     na = NewsAggregator()
     results = await na._fetch_coingecko(limit=5)
     assert len(results) > 0, "Should return at least 1 crypto DataPoint"
@@ -77,12 +101,17 @@ async def test_coingecko_crypto_markets() -> None:
 
 
 @pytest.mark.asyncio
-async def test_coingecko_authenticated() -> None:
+async def test_coingecko_pro_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test CoinGecko Pro tier (pro-api.coingecko.com + x-cg-pro-api-key)."""
     _requires_internet()
     _requires_env("COINGECKO_API_KEY")
+    tier = os.environ.get("COINGECKO_TIER", "")
+    if tier != "pro":
+        pytest.skip("COINGECKO_TIER is not set to 'pro' — skipping Pro tier test")
+    monkeypatch.setenv("COINGECKO_TIER", "pro")
     na = NewsAggregator()
     results = await na._fetch_coingecko(limit=5)
-    assert len(results) > 0, "Should return at least 1 crypto DataPoint with auth"
+    assert len(results) > 0, "Should return at least 1 crypto DataPoint with Pro auth"
     _assert_datapoint(results[0], NewsSource.COINGECKO)
     assert results[0].category == NewsCategory.CRYPTO
     assert "price_cents" in results[0].data
@@ -92,7 +121,8 @@ async def test_coingecko_authenticated() -> None:
 async def test_openweathermap_weather() -> None:
     _requires_internet()
     _requires_env("OPENWEATHER_API_KEY")
-    na = NewsAggregator()
+    config = DataSourcesConfig(openweather_key=os.environ["OPENWEATHER_API_KEY"])
+    na = NewsAggregator(config=config)
     results = await na._fetch_openweathermap(limit=3)
     if not results:
         pytest.skip("OpenWeatherMap returned no results (key may be invalid)")
@@ -106,7 +136,8 @@ async def test_openweathermap_weather() -> None:
 async def test_fred_economic_data() -> None:
     _requires_internet()
     _requires_env("FRED_API_KEY")
-    na = NewsAggregator()
+    config = DataSourcesConfig(fred_key=os.environ["FRED_API_KEY"])
+    na = NewsAggregator(config=config)
     results = await na._fetch_fred(limit=3)
     if not results:
         pytest.skip("FRED returned no results (key may be invalid)")
@@ -130,7 +161,7 @@ async def test_google_trends_graceful() -> None:
 async def test_newsapi_top_headlines() -> None:
     _requires_internet()
     _requires_env("NEWSAPI_API_KEY")
-    na = NewsAggregator()
+    na = NewsAggregator(newsapi_key=os.environ["NEWSAPI_API_KEY"])
     results = await na._fetch_newsapi(limit=5)
     assert len(results) > 0, "Should return at least 1 article"
     _assert_datapoint(results[0], NewsSource.NEWSAPI)
@@ -162,7 +193,7 @@ def test_voyage_rerank() -> None:
         "Hurricane watch issued for coastal Florida",
     ]
     result = vc.rerank(query, docs)
-    assert result is not None, "Should return reranked scores"
+    assert result is not None, "Should return re-ranking scores"
     assert len(result) == 3, "Should return scores for all 3 documents"
     # Indices: 0=Phoenix, 1=Chicago, 2=Florida. Phoenix should rank highest.
     indices = [idx for idx, _ in result]

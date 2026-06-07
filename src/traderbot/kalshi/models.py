@@ -165,6 +165,7 @@ class Position(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     ticker: str
+    side: str = "yes"
     quantity: Annotated[int, Field(ge=0)]
     avg_price: Annotated[int, Field(ge=0, description="Average price in cents")]
     settlement_result: bool | None = None

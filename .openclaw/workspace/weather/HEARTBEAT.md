@@ -19,20 +19,22 @@ session — so they never collide with trading or each other._
 | learning-promotion | 6h | `.learnings/LEARNINGS.md` PENDING_REVIEW promotion + experiment design |
 | pipeline-health | 6h | Pipeline timer status + data_points collection count |
 
+> **Recovery experiments may auto-fire from FULL_STOP events without backlog.md entry. Check `.learnings/` for recovery reports.**
+
 ## Setup
 
 Register all tasks as isolated cron jobs (run once):
 
 ```bash
-traderbot cron setup-heartbeat-tasks --agent weather
+traderbot cron setup --agent weather --role trader --replace
 ```
 
 Verify:
 ```bash
-openclaw cron list | grep weather
+traderbot cron setup --agent weather --role trader --json
 ```
 
 Remove:
 ```bash
-traderbot cron remove-heartbeat-tasks --agent weather
+traderbot cron setup --agent weather --role trader --replace
 ```

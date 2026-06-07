@@ -125,10 +125,13 @@ class VoyageClient(BaseModel):
         self,
         texts: list[str],
         model: str = _DEFAULT_EMBED_MODEL,
+        max_retries: int = 3,
     ) -> list[list[float]] | None:
         """Returns embeddings or None on failure/timeout/key-unset.
 
         Splits large payloads into batches of _EMBED_BATCH_SIZE (Voyage API limit).
+        Retries each chunk up to *max_retries* times with exponential backoff
+        (1s, 2s, 4s) on transient failures before giving up.
         """
         if not texts:
             return []
@@ -137,25 +140,62 @@ class VoyageClient(BaseModel):
         if not self._check_rate_limit():
             return None
 
+        total_chunks = (len(texts) + _EMBED_BATCH_SIZE - 1) // _EMBED_BATCH_SIZE
         all_embeddings: list[list[float]] = []
+
         for i in range(0, len(texts), _EMBED_BATCH_SIZE):
             chunk = texts[i : i + _EMBED_BATCH_SIZE]
-            try:
-                result = self.client.embed(
-                    chunk,
-                    model=model,
-                    input_type="document",
-                )
-                if result and result.embeddings:
-                    all_embeddings.extend(result.embeddings)
-                else:
-                    logger.warning("Voyage embed chunk returned no embeddings")
-                    return None
-            except Exception:
+            chunk_num = i // _EMBED_BATCH_SIZE + 1
+            last_exc: Exception | None = None
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    result = self.client.embed(
+                        chunk,
+                        model=model,
+                        input_type="document",
+                    )
+                    if result and result.embeddings:
+                        all_embeddings.extend(result.embeddings)
+                        last_exc = None
+                        break
+                    else:
+                        logger.warning(
+                            "Voyage embed chunk %d/%d returned no embeddings (attempt %d/%d)",
+                            chunk_num,
+                            total_chunks,
+                            attempt,
+                            max_retries,
+                        )
+                        last_exc = RuntimeError("Voyage returned empty embeddings")
+                except Exception as exc:
+                    last_exc = exc
+                    logger.warning(
+                        "Voyage embed_batch() failed at chunk %d/%d (attempt %d/%d): %s",
+                        chunk_num,
+                        total_chunks,
+                        attempt,
+                        max_retries,
+                        exc,
+                    )
+
+                if attempt < max_retries:
+                    backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                    logger.info(
+                        "Retrying Voyage embed chunk %d/%d in %ds",
+                        chunk_num,
+                        total_chunks,
+                        backoff,
+                    )
+                    time.sleep(backoff)
+
+            if last_exc is not None:
                 logger.warning(
-                    "Voyage embed_batch() failed at chunk %d/%d",
-                    i // _EMBED_BATCH_SIZE + 1,
-                    (len(texts) + _EMBED_BATCH_SIZE - 1) // _EMBED_BATCH_SIZE,
+                    "Voyage embed chunk %d/%d permanently failed after %d attempts: %s",
+                    chunk_num,
+                    total_chunks,
+                    max_retries,
+                    last_exc,
                 )
                 return None
 

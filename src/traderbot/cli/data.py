@@ -1,13 +1,8 @@
 """Data pipeline commands: forecasts, signals, and historical bias."""
 
-from __future__ import annotations
-
-import logging
-
-logger = logging.getLogger(__name__)
-
 import asyncio
 import json as json_lib
+import logging
 import sys
 from typing import Annotated
 
@@ -15,7 +10,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
+
+logger = logging.getLogger(__name__)
+
+from traderbot.data.models import CityForecast
 
 data_app = typer.Typer(
     name="data",
@@ -69,15 +68,43 @@ def forecasts_cmd(
     city_list = [c.strip().upper() for c in cities.split(",") if c.strip()]
 
     try:
-        provider = WeatherDataProvider()
+
+        async def _run() -> (
+            tuple[dict[str, CityForecast], dict[str, dict]] | dict[str, list[CityForecast]]
+        ):
+            provider = WeatherDataProvider()
+            try:
+                if all_periods:
+                    return await provider.get_all_forecasts(city_list, station=station)
+
+                forecasts = await provider.get_forecasts(city_list, station=station, offset=offset)
+                # Fetch ensemble consensus for each city
+                consensus_map: dict[str, dict] = {}
+                for city in forecasts:
+                    try:
+                        cons = await provider.get_model_consensus(city, offset=offset)
+                        consensus_map[city] = {
+                            "models_used": cons.models_used,
+                            "mean_temp": cons.mean_temp,
+                            "std_dev": cons.std_dev,
+                            "spread": cons.spread,
+                            "agreement_score": cons.agreement_score,
+                        }
+                    except Exception as exc:
+                        logger.debug("No ensemble data for %s: %s", city, exc)
+                return forecasts, consensus_map
+            finally:
+                await provider.close()
+
+        result = asyncio.run(_run())
 
         if all_periods:
-            all_forecasts = asyncio.run(provider.get_all_forecasts(city_list, station=station))
+            all_forecasts = result  # type: dict[str, list[CityForecast]]
             if json_output:
-                result: dict[str, list[dict]] = {}
+                json_result: dict[str, list[dict]] = {}
                 for city, periods in all_forecasts.items():
-                    result[city] = [fc.model_dump(mode="json") for fc in periods]
-                json_lib.dump(result, sys.stdout, default=str)
+                    json_result[city] = [fc.model_dump(mode="json") for fc in periods]
+                json_lib.dump(json_result, sys.stdout, default=str)
             else:
                 for city, periods in all_forecasts.items():
                     console.print(f"\n[bold cyan]{city}[/bold cyan] — {len(periods)} periods")
@@ -88,27 +115,12 @@ def forecasts_cmd(
                         )
             return
 
-        forecasts = asyncio.run(provider.get_forecasts(city_list, station=station, offset=offset))
-        # Fetch ensemble consensus for each city
-        consensus_map: dict[str, dict] = {}
-        for city in forecasts:
-            try:
-                cons = asyncio.run(provider.get_model_consensus(city, offset=offset))
-                consensus_map[city] = {
-                    "models_used": cons.models_used,
-                    "mean_temp": cons.mean_temp,
-                    "std_dev": cons.std_dev,
-                    "spread": cons.spread,
-                    "agreement_score": cons.agreement_score,
-                }
-            except Exception as exc:
-                logger.debug("No ensemble data for %s: %s", city, exc)
+        forecasts, consensus_map = result  # type: dict[str, CityForecast], dict[str, dict]
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Failed to fetch forecasts:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1) from None
+        report_cli_error(f"Failed to fetch forecasts: {exc}")
 
     if json_output:
         result: dict[str, dict] = {}
@@ -131,12 +143,12 @@ def forecasts_cmd(
     for city, fc in forecasts.items():
         ens = consensus_map.get(city, {})
         models = ens.get("models_used", [])
-        gfs = fc.temperature_high if "gfs_seamless" in models else "N/A"
-        ecmwf = fc.temperature_high if "ecmwf_ifs" in models else "N/A"
-        gem = fc.temperature_high if "gem_global" in models else "N/A"
+        gfs = fc.high_temp_f if "gfs_seamless" in models else "N/A"
+        ecmwf = fc.high_temp_f if "ecmwf_ifs" in models else "N/A"
+        gem = fc.high_temp_f if "gem_global" in models else "N/A"
         table.add_row(
             city,
-            str(fc.temperature_high),
+            str(fc.high_temp_f),
             str(gfs),
             str(ecmwf),
             str(gem),
@@ -182,16 +194,22 @@ def signals_cmd(
     ]
 
     try:
-        provider = WeatherDataProvider()
-        forecasts = asyncio.run(provider.get_forecasts(cities))
-        engine = WeatherSignalEngine()
-        results = engine.compute_signals(forecasts=forecasts, markets={})
+
+        async def _run() -> dict[str, dict]:
+            provider = WeatherDataProvider()
+            try:
+                forecasts = await provider.get_forecasts(cities)
+            finally:
+                await provider.close()
+            engine = WeatherSignalEngine()
+            return engine.compute_signals(forecasts=forecasts, markets={})
+
+        results = asyncio.run(_run())
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Signal computation failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1) from None
+        report_cli_error(f"Signal computation failed: {exc}")
 
     if json_output:
         json_lib.dump(results, sys.stdout, default=str)
@@ -233,51 +251,67 @@ def bias_cmd(
     ] = False,
 ) -> None:
     """Show historical forecast bias for a city."""
-    from traderbot.data.weather.provider import WeatherDataProvider
+    from traderbot.data.weather.provider import WeatherDataProvider, _resolve_city
     from traderbot.db import get_connection
     from traderbot.db.forecast_bias import init_table
 
     console = Console()
     city_code = city.strip().upper()
 
+    # Resolve short codes (NYC, LA, etc.) to full city names so the query
+    # matches what record-bias stores (e.g. "New York", not "NYC").
+    resolved = _resolve_city(city_code)
+    if resolved is None:
+        report_cli_error(f"Unknown city code: {city_code}")
+        raise typer.Exit(code=1)
+    city_name = resolved
+
     # Ensure forecast_bias table exists
     try:
         with get_connection() as conn:
             init_table(conn)
     except Exception:
-        pass
+        logger.debug("Failed to initialize learnings table, continuing")
 
     try:
-        provider = WeatherDataProvider()
-        result = asyncio.run(provider.get_historical_bias(city=city_code, days=days))
+
+        async def _run() -> dict:
+            provider = WeatherDataProvider()
+            try:
+                report = await provider.get_historical_bias(city=city_name, days=days)
+                return report.model_dump()
+            finally:
+                await provider.close()
+
+        result = asyncio.run(_run())
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Bias analysis failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1) from None
+        report_cli_error(f"Bias analysis failed: {exc}")
 
     if json_output:
         json_lib.dump(result, sys.stdout, default=str)
         return
 
-    direction = result.get("bias_direction", "")
+    mean_err = result.get("mean_error", 0.0)
+    direction = "over" if mean_err > 0 else ("under" if mean_err < 0 else "neutral")
     direction_style = {
         "over": "red",
         "under": "blue",
         "neutral": "yellow",
     }.get(direction, "")
 
-    table = Table(title=f"Historical Forecast Bias — {result.get('city', city_code)}")
+    table = Table(title=f"Historical Forecast Bias — {result.get('city', city_name)}")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="white")
-    table.add_row("Mean Error (°F)", f"{result.get('mean_error', 0):+.2f}")
-    table.add_row("MAE (°F)", f"{result.get('mae', 0):.2f}")
+    table.add_row("Mean Error (°F)", f"{mean_err:+.2f}")
+    table.add_row("MAE (°F)", f"{result.get('mean_abs_error', 0):.2f}")
     table.add_row(
         "Direction",
         f"[{direction_style}]{direction}[/{direction_style}]",
     )
-    table.add_row("Sample Size", str(result.get("sample_size", 0)))
+    table.add_row("Sample Size", str(result.get("total_comparisons", 0)))
     console.print(table)
 
 
@@ -310,23 +344,8 @@ def record_bias_cmd(
     target_date = forecast_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
     try:
-        provider = WeatherDataProvider()
-        results: list[dict] = []
-        for cc in city_codes:
-            resolved = _resolve_city(cc)
-            if resolved is None or resolved not in _CITY_MAP:
-                logger.warning("Unknown city: %s", cc)
-                results.append({"city": cc, "status": "skipped", "reason": "unknown city"})
-                continue
 
-            # Fetch NWS forecast
-            forecasts = asyncio.run(provider.get_forecasts([resolved]))
-            fc = forecasts.get(resolved)
-            forecast_high = fc.high_temp_f if fc else None
-
-            # Fetch actual temperature from Open-Meteo archive API
-            lat, lon = _CITY_MAP[resolved]
-
+        async def _run() -> list[dict]:
             async def _fetch_actual(lat: float, lon: float) -> float | None:
                 import httpx
 
@@ -348,45 +367,77 @@ def record_bias_cmd(
                     actual_temps = daily.get("temperature_2m_max", [])
                     return actual_temps[0] if actual_temps else None
 
-            actual_high = asyncio.run(_fetch_actual(lat, lon))
+            provider = WeatherDataProvider()
+            try:
+                results: list[dict] = []
+                for cc in city_codes:
+                    resolved = _resolve_city(cc)
+                    if resolved is None or resolved not in _CITY_MAP:
+                        logger.warning("Unknown city: %s", cc)
+                        results.append({"city": cc, "status": "skipped", "reason": "unknown city"})
+                        continue
 
-            if forecast_high is None or actual_high is None:
-                logger.warning(
-                    "Missing data for %s: forecast=%s actual=%s", cc, forecast_high, actual_high
-                )
-                results.append(
-                    {"city": cc, "status": "skipped", "reason": "missing forecast or actual data"}
-                )
-                continue
+                    # Fetch NWS forecast
+                    forecasts = await provider.get_forecasts([resolved])
+                    fc = forecasts.get(resolved)
+                    forecast_high = fc.high_temp_f if fc else None
 
-            from traderbot.db import get_connection as _get_conn
+                    # Fetch actual temperature from Open-Meteo archive API
+                    lat, lon = _CITY_MAP[resolved]
+                    actual_high = await _fetch_actual(lat, lon)
 
-            with _get_conn() as conn:
-                from traderbot.db.forecast_bias import init_table as _init_bias_table
-                from traderbot.db.forecast_bias import record_forecast as _record
+                    if forecast_high is None or actual_high is None:
+                        logger.warning(
+                            "Missing data for %s: forecast=%s actual=%s",
+                            cc,
+                            forecast_high,
+                            actual_high,
+                        )
+                        results.append(
+                            {
+                                "city": cc,
+                                "status": "skipped",
+                                "reason": "missing forecast or actual data",
+                            }
+                        )
+                        continue
 
-                _init_bias_table(conn)
-                _record(
-                    conn,
-                    city=resolved,
-                    forecast_high_f=forecast_high,
-                    actual_high_f=actual_high,
-                )
-                results.append(
-                    {
-                        "city": cc,
-                        "status": "recorded",
-                        "forecast_high_f": forecast_high,
-                        "actual_high_f": actual_high,
-                        "error_f": actual_high - forecast_high,
-                    }
-                )
+                    from traderbot.db import get_connection as _get_conn
+
+                    with _get_conn() as conn:
+                        from traderbot.db.forecast_bias import (
+                            init_table as _init_bias_table,
+                        )
+                        from traderbot.db.forecast_bias import (
+                            record_forecast as _record,
+                        )
+
+                        _init_bias_table(conn)
+                        _record(
+                            conn,
+                            city=resolved,
+                            forecast_high_f=forecast_high,
+                            actual_high_f=actual_high,
+                        )
+                        results.append(
+                            {
+                                "city": cc,
+                                "status": "recorded",
+                                "forecast_high_f": forecast_high,
+                                "actual_high_f": actual_high,
+                                "error_f": actual_high - forecast_high,
+                            }
+                        )
+                return results
+            finally:
+                await provider.close()
+
+        results = asyncio.run(_run())
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Record bias failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1) from None
+        report_cli_error(f"Record bias failed: {exc}")
 
     if json_output:
         json_lib.dump({"results": results}, sys.stdout, default=str)
@@ -462,9 +513,8 @@ def settle_paper_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-        else:
-            err_console.print(f"[red]Settlement failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
+            raise typer.Exit(code=1) from None
+        report_cli_error(f"Settlement failed: {exc}")
 
     if json_output:
         json_lib.dump({"settled": settled}, sys.stdout)

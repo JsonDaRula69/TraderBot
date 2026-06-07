@@ -18,7 +18,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from traderbot.cli.helpers import err_console
+from traderbot.cli.helpers import report_cli_error
 
 
 def register_commands(parent_app: typer.Typer) -> None:
@@ -71,9 +71,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
                     )
-                else:
-                    err_console.print(f"[red]Invalid category:[/red] {category}. Valid: {valid}")
-                raise typer.Exit(code=1) from None
+                    raise typer.Exit(code=1) from None
+                report_cli_error(f"Invalid category: {category}. Valid: {valid}")
 
         # Profile-aware category validation: --category must be in enabled_categories
         if (
@@ -89,11 +88,10 @@ def register_commands(parent_app: typer.Typer) -> None:
                     },
                     sys.stdout,
                 )
-            else:
-                err_console.print(
-                    f"[red]Category '{category_enum.value}' not enabled for profile '{profile.name}'.[/red]"
-                )
-            raise typer.Exit(code=1) from None
+                raise typer.Exit(code=1)
+            report_cli_error(
+                f"Category '{category_enum.value}' not enabled for profile '{profile.name}'"
+            )
 
         # Resolve API keys
         newsapi_key = resolve_newsapi_key(profile)
@@ -129,9 +127,8 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout
                     )
-                else:
-                    err_console.print(f"[red]Invalid source:[/red] {source}. Valid: {valid}")
-                raise typer.Exit(code=1) from None
+                    raise typer.Exit(code=1) from None
+                report_cli_error(f"Invalid source: {source}. Valid: {valid}")
 
         async def _fetch() -> list[NewsItem | DataPoint]:
             async with NewsAggregator(
@@ -465,7 +462,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                 f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]"
             )
             if freshness_threshold is not None:
-                sys.exit(1)
+                report_cli_error("No data points found and freshness check requested")
             return
 
         console.print(f"[bold]Data Points:[/bold] {category} — last {hours}h")
@@ -479,7 +476,9 @@ def register_commands(parent_app: typer.Typer) -> None:
                 console.print(
                     f"[red]STALE:[/red] Newest data is {age_hours:.1f}h old (threshold: {freshness_threshold}h)"
                 )
-                sys.exit(1)
+                report_cli_error(
+                    f"STALE: Newest data is {age_hours:.1f}h old (threshold: {freshness_threshold}h)"
+                )
             console.print(f"  Freshness: {age_hours:.1f}h (threshold: {freshness_threshold}h)")
 
         console.print()
@@ -532,9 +531,7 @@ def register_commands(parent_app: typer.Typer) -> None:
             try:
                 since_dt = datetime.fromisoformat(since)
             except ValueError:
-                err_console = Console(stderr=True)
-                err_console.print(f"[red]Invalid timestamp:[/red] {since}. Use ISO 8601 format.")
-                raise typer.Exit(code=1) from None
+                report_cli_error(f"Invalid timestamp: {since}. Use ISO 8601 format.")
 
         items = get_news_summary(
             since=since_dt,

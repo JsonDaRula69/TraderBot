@@ -181,13 +181,14 @@ class WeatherDataProvider(BaseDataProvider):
         """
         self._nws = nws_client or NwsClient()
         self._owns_nws = nws_client is None
-        self._http = http_client or httpx.AsyncClient(timeout=_REQUEST_TIMEOUT)
+        self._http_client = http_client
         self._owns_http = http_client is None
 
     async def close(self) -> None:
         """Clean up owned httpx clients."""
-        if self._owns_http:
-            await self._http.aclose()
+        if self._owns_http and self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
         if self._owns_nws:
             await self._nws.close()
 
@@ -396,6 +397,17 @@ class WeatherDataProvider(BaseDataProvider):
     #  Internal helpers
     # ------------------------------------------------------------------
 
+    def _get_http(self) -> httpx.AsyncClient:
+        """Return the httpx client, creating one lazily if needed.
+
+        This supports repeated ``asyncio.run()`` calls where the event
+        loop is destroyed between invocations.
+        """
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT)
+            self._owns_http = True
+        return self._http_client
+
     async def _fetch_open_meteo_ensemble(
         self, lat: float, lon: float, offset: int = 0
     ) -> dict[str, Any]:
@@ -414,7 +426,8 @@ class WeatherDataProvider(BaseDataProvider):
             "forecast_days": 3,
         }
         try:
-            response = await self._http.get(_OPEN_METEO_ENSEMBLE_URL, params=params)
+            http = self._get_http()
+            response = await http.get(_OPEN_METEO_ENSEMBLE_URL, params=params)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise RuntimeError(

@@ -72,7 +72,8 @@ The `.env` file serves as the fallback when keyring is unavailable. All profiles
 ```bash
 KALSHI_API_KEY=your_key_id
 KALSHI_PRIVATE_KEY_PEM=-----BEGIN RSA PRIVATE KEY-----
-KALSHI_RATE_LIMIT_RPS=20
+KALSHI_READ_BUDGET_TOKENS=200
+KALSHI_WRITE_BUDGET_TOKENS=100
 TRADERBOT_PROFILE_TOKEN=xK9mQ2pL7nR4
 ```
 
@@ -142,11 +143,11 @@ if not profile.is_category_enabled(trade_request.market_category):
 
 If the market's category is not in `enabled_categories`, the trade is rejected. This filter is applied before position sizing, so no amount of position size adjustment can bypass it.
 
-### Layer 5: Token Integrity
+### Layer 4: Token Integrity
 
 Tokens are resolved via constant-time comparison (`hmac.compare_digest`) to prevent timing attacks.
 
-### Layer 6: Filesystem Sandbox
+### Layer 5: Filesystem Sandbox
 
 The agent runtime is sandboxed via OS-level read-only mounts:
 
@@ -157,7 +158,7 @@ The agent runtime is sandboxed via OS-level read-only mounts:
 
 This prevents a compromised agent from rewriting `risk/__init__.py` to bypass HARD_LIMITS or injecting backdoors. The Docker sandbox is the primary enforcement mechanism; `sandbox-exec` and `chmod` are supplementary.
 
-### Layer 7: Master Password Gate
+### Layer 6: Master Password Gate
 
 All trading commands that invoke the risk pipeline (`traderbot trade`, `traderbot paper`) require PBKDF2-HMAC-SHA256 authentication via `master_password.py`:
 
@@ -181,11 +182,11 @@ Public API in `master_password.py`:
 | `require_auth()` | Gate: checks DEV_MODE → session → auto-auth → prompt (3 attempts) |
 | `clear_session()` | Remove session token from env |
 
-### Layer 8: Token Integrity
+### Layer 7: Token Binding
 
 Per-token binding: each profile can have only one active token. Attempting to create a second raises `ValueError`.
 
-### Layer 9: Update Integrity
+### Layer 8: Update Integrity
 
 Agent workspaces and cron job definitions are refreshed on update via `traderbot update`. The pipeline verifies the update source (git origin or PyPI) before applying changes.
 

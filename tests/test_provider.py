@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import traderbot.kalshi.markets as markets_mod
-from traderbot.kalshi.client import AuthenticationError
+from traderbot.exceptions import AuthenticationError, TraderBotError
 from traderbot.kalshi.models import Market
 from traderbot.kalshi.provider import (
     MarketDataProvider,
@@ -256,5 +256,6 @@ class TestProdDataProvider:
 class TestProdAPIError:
     def test_prod_api_error_is_exception(self) -> None:
         assert issubclass(ProdAPIError, Exception)
+        assert issubclass(ProdAPIError, TraderBotError)
         err = ProdAPIError("timeout")
-        assert str(err) == "timeout"
+        assert "[E7000] timeout" == str(err)

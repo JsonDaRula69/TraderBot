@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from traderbot.exceptions import ErrorCodes, TraderBotError
 from traderbot.kalshi.models import PortfolioState, TradeRequest
 from traderbot.risk.circuit_breaker import CircuitBreaker
 from traderbot.risk.limits import HARD_LIMITS, run_all_checks
@@ -25,10 +26,12 @@ class TradeResult(BaseModel):
     direction: Literal["yes", "no"]
 
 
-class RiskCheckError(Exception):
+class RiskCheckError(TraderBotError):
     """Raised when risk checks reject a trade, carrying details about which check failed and why."""
 
-    def __init__(self, ticker: str, failures: list) -> None:
+    def __init__(
+        self, ticker: str, failures: list, error_code: int = ErrorCodes.RISK_CHECK
+    ) -> None:
         self.ticker = ticker
         self.failures = failures
         details = "; ".join(
@@ -36,7 +39,8 @@ class RiskCheckError(Exception):
             or f"{f.limit_name} failed (value={f.current_value}, limit={f.limit_value})"
             for f in failures
         )
-        super().__init__(f"Risk check rejected {ticker}: {details}")
+        message = f"Risk check rejected {ticker}: {details}"
+        super().__init__(message, error_code=error_code)
         self.detail = details
 
 
@@ -110,7 +114,7 @@ def evaluate_trade_full(
     drawdown_pct = (portfolio.peak_value_cents - portfolio.portfolio_value_cents) / max(
         portfolio.peak_value_cents, 1
     )
-    breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct)
+    breaker.check(daily_loss_pct=daily_loss_pct, drawdown_pct=drawdown_pct, profile=profile)
 
     if not breaker.get_state().can_trade:
         return TradeResult(sized_position_cents=0, direction=trade_request.direction)

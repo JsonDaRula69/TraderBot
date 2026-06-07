@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Paper settlement cash crediting now correctly adds proceeds to cash balance instead of overwriting
+- Paper P&L computation is side-aware (long/short) — short positions profit when price falls
+- Paper slippage model crosses the ask for buys (was using bid for both sides)
+- Portfolio valuation uses cash-only buying power instead of inflating with position collateral
+- Void settlement handling — voided markets are skipped in settlement processing
+- Settlement sync propagates settled positions back to decisions table for audit trail
+- Live API tests now pass API keys explicitly to `NewsAggregator()` instead of relying on config fallback
+- `test_newsapi_top_headlines`, `test_openweathermap_weather`, `test_fred_economic_data` properly authenticate
+- CoinGecko live tests cover all 3 auth tiers: free (unauthenticated), demo (x-cg-demo-api-key), pro (x-cg-pro-api-key)
+- `COINGECKO_TIER` secret added to CI workflow for tier-aware CoinGecko testing
+- Move `pytest.register_assert_rewrite("tests.news")` to root conftest.py (correct placement)
+- Revert Voyage test skip — assert real API responses, don't paper over auth issues
+- Windows CI: `continue-on-error` for Windows test step (ONNX Runtime KeyboardInterrupt during teardown is an ONNX bug, not a test failure)
+- PYTHONWARNINGS=ignore::UserWarning on Windows to suppress ONNX Runtime's unsupported OS warning
+- Pip install readiness: `get_source_root()` raises `FileNotFoundError` in pip-installed scenarios instead of returning wrong path
+- Pip install readiness: `injection.py` workspace template resolution falls back to `get_data_dir()` when source tree unavailable
+- Pip install readiness: `updater.py` version resolution uses `importlib.metadata` first, source tree as fallback
+- Pip install readiness: `sandbox.py` handles missing source tree gracefully in pip-installed scenarios
+- Added `src/traderbot/py.typed` for PEP 561 type checking compliance
+- Added `src/traderbot/experiment/__init__.py` as proper package marker
+- Removed `numpy` from direct dependencies (transitive via `scipy`)
+- Explicit `experiment/tests` exclusion in wheel and sdist build config
+- Fixed `TradingProfile` Pydantic model — moved `MarketCategory` out of `TYPE_CHECKING` guard for runtime evaluation
+- Removed `from __future__ import annotations` from `updater.py` and `models.py` (breaks Pydantic and mock patching)
+- Fixed `test_updater.py` mocks — patched `traderbot.paths.get_source_root` instead of removed `traderbot.updater.Path`
+- Fixed `test_injection.py` — mock `_resolve_workspace_root` instead of `__file__` spoofing
+
+### Added
+
+- `BayesianAdapter` persistence — adapter state survives across agent sessions via DB serialization
+- Breaker→adaptation weighted feedback — circuit breaker events feed into adapter weight adjustment
+- Auto-experiment trigger on `FULL_STOP` — when a FULL_STOP halt fires, an experiment is automatically created to evaluate the cause
+- Deployment clears `FULL_STOP` blocker — deploying a new strategy version automatically clears the FULL_STOP halt state
+- Side column in positions table — positions display shows long/short direction explicitly
+
+### Changed
+
+- `FULL_STOP` 24h auto-recovery documented (was documented as "manual only")
+- Cron tables reconciled across documentation — all docs now reference the same schedule definitions (`/historical/markets`, `/historical/trades`, `/historical/markets/{ticker}`) for archived data instead of live `/markets/` endpoints — live endpoints only return post-cutoff data. Added response format guardrails that warn when expected keys (`market`, `markets`, `trades`) are missing before normalization.
+- Phantom `KALSHI_RATE_LIMIT_RPS` env var removed from docs and installers — replaced with actual `KALSHI_READ_BUDGET_TOKENS` (default 200) and `KALSHI_WRITE_BUDGET_TOKENS` (default 100). Effective RPS = budget / endpoint_cost (default 10).
+
 ### Added
 
 - `tests/test_openclaw_compliance.py` — validates all OpenClaw CLI invocations against Dep_Docs (command, subcommand, and flag correctness). Catches flag-name mistakes like `--schedule`→`--cron` at test time
@@ -18,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `traderbot data forecasts` display mode no longer crashes with `AttributeError: 'CityForecast' object has no attribute 'temperature_high'` — all references changed to `high_temp_f` (bug #132)
+- `WeatherDataProvider` now lazily re-creates httpx client when called across multiple `asyncio.run()` boundaries, preventing `RuntimeError: Event loop is closed` on repeated CLI invocations (bug #132)
 - `traderbot auth set-kalshi` now always prompts for credentials instead of silently re-using .env values — enables credential rotation without manual cleanup
 - `traderbot auth set-kalshi` PEM prompt now uses `sys.stdin.read()` instead of `typer.prompt()` to capture multi-line PEM blocks — single-line prompt was truncating pasted keys (PR #93)
 - `traderbot update` version comparison now uses Git tags API (`/git/refs/tags`) instead of `releases/latest` — `releases/latest` only returns GitHub Releases (created on tag push), so every version between Release creation and the next tag push appeared as "Update available: v0.15.NN → v0.15.00" (PR #94)

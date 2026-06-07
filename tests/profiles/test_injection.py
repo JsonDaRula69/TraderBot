@@ -5,6 +5,7 @@ Token values are never written to TOOLS.md — only the env var name reference.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -115,11 +116,6 @@ def test_get_token_from_tools_returns_none_when_token_present(tools_with_token: 
     assert result is None
 
 
-def test_inject_token_nonexistent_directory_is_noop() -> None:
-    """inject_token is a no-op, so nonexistent directory does not raise."""
-    inject_token("/nonexistent/path", "token")
-
-
 def test_remove_token_from_nonexistent_tools_is_noop(temp_agent_dir: Path) -> None:
     remove_token_from_tools(str(temp_agent_dir))
 
@@ -191,53 +187,23 @@ class TestPropagateWorkspaceFiles:
         (learnings / "LEARNINGS.md").write_text("default learnings\n")
         return workspace
 
-    def _call_propagate(self, profile, target_dir, template_dir):
-        import traderbot.profiles.injection as inj_mod
-        fake_file = str(template_dir.parent.parent / "src" / "traderbot" / "profiles" / "injection.py")
-        original_file = inj_mod.__file__
-        inj_mod.__file__ = fake_file
-        try:
+    def _propagate(self, profile, target_dir, template_dir):
+        """Call propagate_workspace_files with _resolve_workspace_root mocked to return template_dir."""
+        with patch(
+            "traderbot.profiles.injection._resolve_workspace_root",
+            return_value=template_dir,
+        ):
             propagate_workspace_files(profile, target_dir)
-        finally:
-            inj_mod.__file__ = original_file
 
     def test_real_templates_create_files(self, tmp_path: Path, profile: TradingProfile):
         target = tmp_path / "real-workspace"
         propagate_workspace_files(profile, target)
         assert target.exists()
 
-    def test_fenced_merge_preserves_custom_content(
+    def test_fenced_merge_replaces_old_rules(
         self, tmp_path: Path, profile: TradingProfile, template_dir: Path
     ):
-        target = tmp_path / "agent-workspace"
-        target.mkdir()
-        (target / "AGENTS.md").write_text(
-            "# My Agent\n\n"
-            "<!-- TRADERBOT_RULES_START -->\n"
-            "old rule\n"
-            "<!-- TRADERBOT_RULES_END -->\n\n"
-            "# Custom additions\n"
-        )
-        self._call_propagate(profile, target, template_dir)
-
-        merged = (target / "AGENTS.md").read_text()
-        assert "old rule" in merged
-        assert "# Custom additions" in merged
-
-    def test_init_if_missing_deploys_absent(
-        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
-    ):
-        target = tmp_path / "agent-workspace"
-        target.mkdir()
-        (target / "AGENTS.md").write_text("existing agents content\n")
-        agent_dir = template_dir / "agent"
-        memory_content = (agent_dir / "MEMORY.md").read_text()
-        init_if_missing(memory_content, target / "MEMORY.md")
-        assert (target / "MEMORY.md").exists()
-
-    def test_fenced_merge_preserves_custom_content(
-        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
-    ):
+        """When target has fenced markers, the block content is replaced (old rule gone, new rules in)."""
         target = tmp_path / "agent-workspace"
         target.mkdir()
         (target / "AGENTS.md").write_text(
@@ -247,12 +213,25 @@ class TestPropagateWorkspaceFiles:
             "<!-- TRADERBOT_RULES_END -->\n"
             "\n# Custom additions\n"
         )
-        self._call_propagate(profile, target, template_dir)
+        self._propagate(profile, target, template_dir)
         content = (target / "AGENTS.md").read_text()
+        # The fenced merge replaces the old block with the template block
         assert "rule one" in content
         assert "rule two" in content
         assert "old rule" not in content
         assert "Custom additions" in content
+
+    def test_init_if_missing_deploys_directly(
+        self, tmp_path: Path, profile: TradingProfile, template_dir: Path
+    ):
+        """init_if_missing directly deploys a missing file."""
+        target = tmp_path / "agent-workspace"
+        target.mkdir()
+        (target / "AGENTS.md").write_text("existing agents content\n")
+        agent_dir = template_dir / "agent"
+        memory_content = (agent_dir / "MEMORY.md").read_text()
+        init_if_missing(memory_content, target / "MEMORY.md")
+        assert (target / "MEMORY.md").exists()
 
     def test_init_if_missing_skips_existing(
         self, tmp_path: Path, profile: TradingProfile, template_dir: Path
@@ -260,15 +239,16 @@ class TestPropagateWorkspaceFiles:
         target = tmp_path / "agent-workspace"
         target.mkdir()
         (target / "USER.md").write_text("my custom user data")
-        self._call_propagate(profile, target, template_dir)
+        self._propagate(profile, target, template_dir)
         assert (target / "USER.md").read_text() == "my custom user data"
 
-    def test_init_if_missing_deploys_absent(
+    def test_init_if_missing_deploys_absent_via_propagate(
         self, tmp_path: Path, profile: TradingProfile, template_dir: Path
     ):
+        """propagate_workspace_files deploys MEMORY.md when absent."""
         target = tmp_path / "agent-workspace"
         target.mkdir()
-        self._call_propagate(profile, target, template_dir)
+        self._propagate(profile, target, template_dir)
         assert (target / "MEMORY.md").exists()
         assert "default memory template" in (target / "MEMORY.md").read_text()
 
@@ -276,7 +256,7 @@ class TestPropagateWorkspaceFiles:
         self, tmp_path: Path, profile: TradingProfile, template_dir: Path
     ):
         target = tmp_path / "new-workspace"
-        self._call_propagate(profile, target, template_dir)
+        self._propagate(profile, target, template_dir)
         assert target.exists()
 
     def test_identity_injection(

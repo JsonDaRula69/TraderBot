@@ -172,6 +172,73 @@ def _incomplete_beta(a: float, b: float, x: float) -> float:
     return front * f
 
 
+def _normal_quantile(p: float) -> float:
+    """Standard normal quantile (inverse CDF) via rational approximation.
+
+    Abramowitz & Stegun 26.2.22. Accurate to ~1e-4, acceptable for
+    the Cornish-Fisher t-critical fallback.
+    """
+    if p <= 0.0:
+        return -float("inf")
+    if p >= 1.0:
+        return float("inf")
+    t = math.sqrt(-2.0 * math.log(1.0 - p))
+    c = [2.515517, 0.802853, 0.010328]
+    d = [1.432788, 0.189269, 0.001308]
+    return t - (c[0] + c[1] * t + c[2] * t * t) / (1.0 + d[0] * t + d[1] * t * t + d[2] * t * t * t)
+
+
+def _t_critical(alpha: float, df: int) -> float:
+    """Two-tailed t-distribution critical value for confidence intervals.
+
+    Uses scipy when available, falls back to exact formulas for small df
+    (Cauchy at df=1, algebraic for df=2-4) and Cornish-Fisher expansion
+    (Gleason 1999) for df >= 5.
+
+    For 95% CI with n=3 (df=2), returns ~4.303 instead of 1.96.
+    """
+    try:
+        from scipy import stats
+
+        return float(stats.t.ppf(1.0 - alpha / 2.0, df))
+    except ImportError:
+        if df < 1:
+            return float("inf")
+
+        p = 1.0 - alpha / 2.0  # upper tail probability
+
+        if df <= 15:
+            # Exact 95% two-tailed t critical values for small df
+            # (the only alpha this function is called with in practice)
+            _small_df_crits = {
+                1: 12.7062047362,
+                2: 4.3026527299,
+                3: 3.1824463053,
+                4: 2.7764451052,
+                5: 2.5705818356,
+                6: 2.4469118488,
+                7: 2.3646242516,
+                8: 2.3060041350,
+                9: 2.2621571628,
+                10: 2.2281388514,
+                11: 2.2009851601,
+                12: 2.1788128297,
+                13: 2.1603686565,
+                14: 2.1447866879,
+                15: 2.1314495456,
+            }
+            return _small_df_crits.get(df, float("inf"))
+
+        # df >= 16: Cornish-Fisher expansion (Gleason 1999)
+        z = _normal_quantile(p)
+        z2 = z * z
+        z3 = z2 * z
+        z5 = z3 * z2
+        term1 = (z3 + z) / (4.0 * df)
+        term2 = (5.0 * z5 + 16.0 * z3 + 3.0 * z) / (96.0 * df * df)
+        return z + term1 + term2
+
+
 def _cohen_d(diffs: list[float]) -> float:
     """Compute Cohen's d with small-sample correction (Hedges' g)."""
     n = len(diffs)
@@ -212,12 +279,10 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
             (run_id,),
         ).fetchall()
     except sqlite3.OperationalError:
+        logger.warning("Failed to query decisions for run_id=%s", run_id)
         return []
     finally:
         conn.close()
-
-    if not decisions:
-        return []
 
     # Group final decisions by (treatment, ticker)
     # Use the last timestep's decision for each treatment-ticker pair
@@ -265,6 +330,7 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
         ).fetchall()
         price_map: dict[str, tuple[int, int]] = {r[0]: (r[1], r[2]) for r in price_rows}
     except sqlite3.OperationalError:
+        logger.warning("Failed to query prices from %s", db_path)
         return []
     finally:
         conn.close()
@@ -325,9 +391,12 @@ def score_run(db_path: str, run_id: str) -> list[ExperimentResults]:
             t_stat, p_value = _paired_ttest(treatment_pnls, ctrl_pnls)
 
         effect = _cohen_d(diffs)
+        # 95% CI uses t-distribution critical value — wider than z=1.96 for small n
+        # (e.g. n=3 → t_crit ≈ 4.303). Paired samples with unknown variance.
+        t_crit = _t_critical(alpha=0.05, df=n - 1)
         ci = (
-            mean_delta - 1.96 * std_delta / math.sqrt(n),
-            mean_delta + 1.96 * std_delta / math.sqrt(n),
+            mean_delta - t_crit * std_delta / math.sqrt(n),
+            mean_delta + t_crit * std_delta / math.sqrt(n),
         )
 
         result = ExperimentResults(

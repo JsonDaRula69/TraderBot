@@ -72,7 +72,6 @@ If a command is not listed, check the sysadmin's `TOOLS.md`. If it's not there e
 | `traderbot profile revoke` | Agent revocation is fleet management. |
 | `traderbot auth set-kalshi` | Credential management is not my role. |
 | `traderbot auth setup-master-password` | Master password is system-level setup. |
-| `traderbot shutdown` | Fleet-level shutdown is the sysadmin or human's call. |
 
 ---
 

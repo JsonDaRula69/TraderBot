@@ -17,6 +17,12 @@ from typing import Any, ClassVar
 import feedparser
 import httpx
 
+from traderbot.exceptions import (
+    AuthenticationError,
+    DataError,
+    ErrorCodes,
+    RateLimitError,
+)
 from traderbot.news.models import DataPoint, NewsCategory, NewsItem, NewsSource
 from traderbot.profiles.config import resolve_fred_key, resolve_openweather_key
 
@@ -57,8 +63,11 @@ REDDIT_CATEGORY_SUBREDDITS: dict[NewsCategory, list[str]] = {
 }
 
 
-class NewsAPIError(Exception):
+class NewsAPIError(DataError):
     """Raised when the NewsAPI returns an error response."""
+
+    def __init__(self, message: str = "", error_code: int = ErrorCodes.NEWS_API, **kwargs) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 def _sanitize_content(text: str) -> str:
@@ -79,12 +88,22 @@ def _sanitize_url(url: str) -> str:
     return ""
 
 
-class NewsAPIAuthError(Exception):
+class NewsAPIAuthError(AuthenticationError):
     """Raised when NewsAPI returns 401 — permanent auth failure, no retry."""
 
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.AUTHENTICATION, **kwargs
+    ) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
-class NewsAPIBudgetExceeded(Exception):
+
+class NewsAPIBudgetExceededError(RateLimitError):
     """Raised when the client-side daily budget (100 req/day) is exhausted."""
+
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.NEWS_BUDGET, **kwargs
+    ) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 @dataclass
@@ -265,7 +284,7 @@ class NewsAggregator:
             self._budget_reset_date = today
             self._newsapi_daily_count = 0
         if self._newsapi_daily_count >= self._daily_budget:
-            raise NewsAPIBudgetExceeded(
+            raise NewsAPIBudgetExceededError(
                 f"NewsAPI daily budget exhausted ({self._newsapi_daily_count} requests today)"
             )
         self._newsapi_daily_count += 1
@@ -1131,6 +1150,7 @@ class NewsAggregator:
                         try:
                             ts = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=UTC)
                         except ValueError:
+                            logger.debug("Invalid date format '%s', using current time", day_str)
                             ts = datetime.now(tz=UTC)
 
                         points.append(
@@ -1264,6 +1284,7 @@ class NewsAggregator:
                         try:
                             ts = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
                         except ValueError:
+                            logger.debug("FRED: skipping invalid date '%s'", date_str)
                             continue
 
                         points.append(
@@ -1385,7 +1406,7 @@ class NewsAggregator:
             return await self._fetch_openweathermap_fallback(key, limit)
 
         coord_to_ticker: dict[tuple[float, float], str] = {}
-        for ticker, (name, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
+        for ticker, (_name, lat, lon) in self._KALSHI_WEATHER_CITIES.items():
             coord_to_ticker[(round(lat, 2), round(lon, 2))] = ticker
 
         points: list[DataPoint] = []
@@ -1689,9 +1710,9 @@ class NewsAggregator:
                     price_change_pct = coin.get("price_change_percentage_24h") or 0
                     last_updated = coin.get("last_updated", "")
 
-                    price_cents = int(round(float(current_price) * 100))
-                    market_cap_cents = int(round(float(market_cap) * 100))
-                    volume_24h_cents = int(round(float(total_volume) * 100))
+                    price_cents = round(float(current_price) * 100)
+                    market_cap_cents = round(float(market_cap) * 100)
+                    volume_24h_cents = round(float(total_volume) * 100)
                     change_24h_pct = round(float(price_change_pct), 2)
 
                     sign = "+" if change_24h_pct >= 0 else ""
@@ -1923,12 +1944,12 @@ class NewsAggregator:
         while current <= end:
             day_str = current.isoformat()
 
-            async def _fetch_day(sport: str) -> list[DataPoint]:
+            async def _fetch_day(sport: str, _day_str: str = day_str) -> list[DataPoint]:
                 async with sem:
                     try:
                         response = await self._client.get(
                             "https://www.thesportsdb.com/api/v1/json/3/eventsday.php",
-                            params={"d": day_str, "s": sport},
+                            params={"d": _day_str, "s": sport},
                             timeout=30.0,
                         )
                         if response.status_code != 200:
@@ -1947,7 +1968,7 @@ class NewsAggregator:
                                 league = event.get("strLeague", "")
                                 home_team = event.get("strHomeTeam", "")
                                 away_team = event.get("strAwayTeam", "")
-                                event_date = event.get("dateEvent", day_str)
+                                event_date = event.get("dateEvent", _day_str)
                                 time_str = event.get("strTime", "00:00:00")
                                 timestamp = datetime.fromisoformat(f"{event_date}T{time_str}+00:00")
 
@@ -1971,9 +1992,13 @@ class NewsAggregator:
                                     )
                                 )
                             except Exception:
+                                logger.debug("TheSportsDB: skipping malformed event in backfill")
                                 continue
                         return sport_points
                     except Exception:
+                        logger.warning(
+                            "TheSportsDB %s backfill day query failed, returning empty", sport
+                        )
                         return []
 
             tasks = [asyncio.ensure_future(_fetch_day(sport)) for sport in self._THESPORTSDB_SPORTS]
@@ -2069,7 +2094,7 @@ class NewsAggregator:
                     for entry in prices:
                         ts_ms, price = entry
                         ts = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
-                        price_cents = int(round(float(price) * 100))
+                        price_cents = round(float(price) * 100)
                         points.append(
                             DataPoint(
                                 id=f"coingecko-hist-{coin_id}-{ts.strftime('%Y%m%d')}",
@@ -2158,7 +2183,7 @@ class NewsAggregator:
                             url = art.get("url", "") or ""
                             published = art.get("publishedAt", "")
                             content = art.get("content") or description
-                            source_name = art.get("source", {}).get("name", "newsapi")
+                            art.get("source", {}).get("name", "newsapi")
                             timestamp = (
                                 datetime.fromisoformat(published.replace("Z", "+00:00"))
                                 if published
@@ -2179,9 +2204,11 @@ class NewsAggregator:
                                 )
                             )
                         except Exception:
+                            logger.debug("NewsAPI backfill: skipping malformed article")
                             continue
                     return items
                 except Exception:
+                    logger.warning("NewsAPI backfill failed, returning empty")
                     return []
 
         all_items: list[NewsItem] = []
@@ -2205,12 +2232,11 @@ class NewsAggregator:
         Returns DataPoint objects with series values as strings (no float conversion).
         Requires FRED_API_KEY resolved via profile-aware fallback chain.
         """
-        if category_filter is not None:
-            if (
-                NewsCategory.ECONOMICS not in category_filter
-                and NewsCategory.FINANCIALS not in category_filter
-            ):
-                return []
+        if category_filter is not None and (
+            NewsCategory.ECONOMICS not in category_filter
+            and NewsCategory.FINANCIALS not in category_filter
+        ):
+            return []
 
         key = resolve_fred_key(None)
         if key is None:
@@ -2271,6 +2297,7 @@ class NewsAggregator:
                     try:
                         timestamp = datetime.fromisoformat(date + "T00:00:00+00:00")
                     except ValueError:
+                        logger.debug("FRED: invalid date format '%s', using current time", date)
                         timestamp = datetime.now(tz=UTC)
                 else:
                     timestamp = datetime.now(tz=UTC)

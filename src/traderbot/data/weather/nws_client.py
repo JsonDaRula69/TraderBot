@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from traderbot.data.models import CityForecast
+from traderbot.exceptions import DataError, ErrorCodes
 from traderbot.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,13 @@ _KALSHI_STATION_MAP: dict[str, str] = {
 GridpointCache = dict[str, dict[str, Any]]
 
 
-class NwsClientError(Exception):
+class NwsClientError(DataError):
     """Raised when the NWS API returns an error or fails to respond."""
+
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.NWS_CLIENT, **kwargs
+    ) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
 
 
 class NwsClient:

@@ -1,14 +1,11 @@
 """Auto-update checker for TraderBot — delegates to standalone bootstrap script."""
 
-from __future__ import annotations
-
 import json
 import logging
 import os
 import subprocess
 import sys
 import time as _time
-from pathlib import Path
 
 import httpx
 from packaging.version import InvalidVersion, Version
@@ -28,19 +25,26 @@ def _version_tuple(version_str: str) -> tuple[int, ...]:
 
 
 def get_current_version() -> str:
-    repo_dir = Path(__file__).resolve().parent.parent.parent
-    version_file = repo_dir / "VERSION"
-    if version_file.exists():
-        return version_file.read_text().strip().lstrip("v")
     try:
         from importlib.metadata import version
 
         return version("traderbot").lstrip("v")
     except Exception:
-        return "0.0.0"
+        pass
+    try:
+        from traderbot.paths import get_source_root
+
+        version_file = get_source_root() / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip().lstrip("v")
+    except FileNotFoundError:
+        pass
+    return "0.0.0"
 
 
-def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | None:
+def fetch_latest_version(
+    cache_ttl_seconds: int = 3600, force: bool = False
+) -> tuple[str, str] | None:
     """Fetch latest version tag from GitHub, cached locally to avoid 403 rate limits.
 
     Uses the Git tags API (not releases/latest) so every commit-tagged version
@@ -50,9 +54,11 @@ def fetch_latest_version(cache_ttl_seconds: int = 3600) -> tuple[str, str] | Non
     (default 1 hour). Subsequent calls within the TTL return the cached value
     without hitting the GitHub API — preventing unauthenticated rate-limit
     exhaustion (60 req/hour per IP).
+
+    Pass ``force=True`` to bypass the cache and always hit the GitHub API.
     """
     cache_path = CACHE_DIR / ".update_cache.json"
-    if cache_path.exists():
+    if not force and cache_path.exists():
         try:
             cached = json.loads(cache_path.read_text())
             age = _time.time() - cached.get("ts", 0)
@@ -155,7 +161,7 @@ def check_for_updates(
             pass
 
     current = get_current_version().lstrip("v")
-    latest = fetch_latest_version(cache_ttl_seconds=interval_minutes * 60)
+    latest = fetch_latest_version(cache_ttl_seconds=interval_minutes * 60, force=force)
     if latest is None:
         return None
 
@@ -204,23 +210,30 @@ def _ensure_openclaw_visibility() -> None:
 
 
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
-    repo_dir = Path(__file__).resolve().parent.parent.parent
-    bootstrap = repo_dir / "install" / "traderbot-update.py"
-    if bootstrap.exists():
-        flag = "--dev" if dev else ""
-        try:
-            result = subprocess.run([sys.executable, str(bootstrap), flag], timeout=600)
-            if result.returncode != 0:
-                logger.error("Bootstrap update failed with exit code %d", result.returncode)
+    try:
+        from traderbot.paths import get_source_root
+
+        repo_dir = get_source_root()
+    except FileNotFoundError:
+        repo_dir = None
+
+    if repo_dir is not None:
+        bootstrap = repo_dir / "install" / "traderbot-update.py"
+        if bootstrap.exists():
+            flag = "--dev" if dev else ""
+            try:
+                result = subprocess.run([sys.executable, str(bootstrap), flag], timeout=600)
+                if result.returncode != 0:
+                    logger.error("Bootstrap update failed with exit code %d", result.returncode)
+                    return False
+            except Exception as exc:
+                logger.error("Bootstrap update failed: %s", exc)
                 return False
-        except Exception as exc:
-            logger.error("Bootstrap update failed: %s", exc)
-            return False
-        _ensure_openclaw_visibility()
-        logger.info("Update applied successfully")
-        if restart:
-            os.execv(sys.executable, [sys.executable, *sys.argv])
-        return True
+            _ensure_openclaw_visibility()
+            logger.info("Update applied successfully")
+            if restart:
+                os.execv(sys.executable, [sys.executable, *sys.argv])
+            return True
 
     # Bootstrap script not available (pip-installed user — install/ not shipped).
     # Fall back to inline pip upgrade + backup.

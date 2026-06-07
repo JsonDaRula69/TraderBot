@@ -34,7 +34,6 @@ dependencies = [
     "cryptography>=42.0",
     "portalocker>=2.8",
     "keyring>=25.0",
-    "numpy>=1.26",
     "scipy>=1.13",
 ]
 
@@ -55,16 +54,17 @@ dev = [
     "ruff>=0.5",
 ]
 news-extras = ["pytrends>=4.9.2"]
+sentry = ["sentry-sdk>=2.0.0"]
 
 [project.scripts]
 traderbot = "traderbot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
-exclude = ["tests", "experiments"]
+exclude = ["tests", "experiments", "experiment/tests"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["tests", "experiments", ".github", ".openclaw"]
+exclude = ["tests", "experiments", "experiment/tests", ".github", ".openclaw"]
 
 [tool.uv]
 constraint-dependencies = ["onnxruntime<1.24"]

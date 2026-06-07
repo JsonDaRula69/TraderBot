@@ -53,6 +53,7 @@ def _discover_from_config() -> list[dict[str, str]]:
     try:
         config = json.loads(config_path.read_text())
     except (json.JSONDecodeError, OSError):
+        logger.warning("Failed to read openclaw config from %s", config_path)
         return []
 
     agents_section = config.get("agents", {})
@@ -181,6 +182,7 @@ def get_agent_identity(agent_path: str) -> dict[str, str] | None:
     try:
         content = identity_file.read_text()
     except Exception:
+        logger.warning("Failed to read identity file %s", identity_file)
         return None
 
     agent_id_match = re.search(

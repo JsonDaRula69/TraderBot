@@ -16,7 +16,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from traderbot.cli.helpers import _SUDO, _SYSTEMCTL
+from traderbot.cli.helpers import _SUDO, _SYSTEMCTL, report_cli_error
 
 # Ensure openclaw CLI is on PATH (npm global bin not inherited by subprocesses)
 _npm_global = str(Path(os.environ.get("HOME", "")) / ".npm-global" / "bin")
@@ -65,7 +65,7 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         if list_result.returncode != 0:
             return False
 
-        agent_list = _json.loads(list_result.stdout)
+        agent_list = json_lib.loads(list_result.stdout)
         if not isinstance(agent_list, list):
             return False
 
@@ -112,6 +112,7 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         )
         return True
     except Exception:
+        logger.debug("systemd service installation failed")
         return False
 
 
@@ -141,14 +142,12 @@ def _install_news_ingest_timer(
         return result
 
     try:
-        from importlib import resources
-
         from traderbot.utils import get_own_venv_dir, get_repo_dir
     except ImportError:
         return result
 
     repo_dir = get_repo_dir()
-    venv_dir = get_own_venv_dir()
+    get_own_venv_dir()
     service_dir = repo_dir / "services"
     service_template = service_dir / "traderbot-news-ingest@.service"
     timer_template = service_dir / "traderbot-news-ingest@.timer"
@@ -253,6 +252,7 @@ def _systemd_available() -> bool:
         subprocess.run([_SYSTEMCTL, "--version"], capture_output=True, timeout=5)
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        logger.debug("systemctl not available, skipping systemd timer setup")
         return False
 
 
@@ -298,14 +298,14 @@ def _remove_news_ingest_timer(
         )
         subprocess.run([_SUDO, _SYSTEMCTL, "daemon-reload"], capture_output=True, timeout=15)
     except Exception:
-        pass
+        logger.debug("systemd disable/remove failed, skipping")
 
 
 _SYSADMIN_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "learning-pipeline",
         "cron_expr": "0 */6 * * *",
-        "message": "Read each agent's `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. Then check test-lab/backlog.md for QUEUED experiments — move one to RUNNING, execute backtest, validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30). If requires code change: file GitHub issue with full experiment design, test results, and expected benefit (labels: enhancement, experiment). If profile param only: DEPLOY via `traderbot profile update`, notify target agent via `sessions_send`. Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context.",
+        "message": "Read each agent's `.learnings/LEARNINGS.md`. Find entries with Recurrence-Count >= 3 that are not already PENDING_REVIEW. Promote each via `traderbot learnings --promote <key>`. Then check test-lab/backlog.md for QUEUED experiments — move one to RUNNING, execute backtest, validate against deployment bar (Sharpe >= 1.0, win rate improvement >= 5pp, sample size >= 30). If requires code change: file GitHub issue with full experiment design, test results, and expected benefit (labels: enhancement, experiment). If profile param only: DEPLOY via `traderbot profile update`, notify target agent via `sessions_send`. Archive result in results/. If any step fails, write to `.learnings/ERRORS.md` with full context. If FULL_STOP is active, check for recovery experiment results. If a treatment validated, deployment via profile update clears the blocker.",
     },
     {
         "name": "error-logger",
@@ -328,7 +328,7 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "circuit-breaker-check",
         "cron_expr": "*/30 * * * *",
-        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade.",
+        "message": "Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert to sysadmin. If HALT or FULL_STOP, surface CRITICAL alert and do not trade. If level transitioned, log severity for adaptation feedback. Breaker events are automatically fed as weighted negative evidence into the BayesianAdapter during heartbeat.",
     },
     {
         "name": "decision-loop",
@@ -338,7 +338,7 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
     {
         "name": "position-review",
         "cron_expr": "0 * * * *",
-        "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin.",
+        "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin. Settlement results are automatically synced to decisions.actual_result before adaptation runs. Verify positions with settlement < 48h are correctly reconciled at the decision level.",
     },
     {
         "name": "forecast-check",
@@ -403,7 +403,7 @@ def _remove_cron_jobs_by_name(agent_id: str, exact: bool = False) -> list[str]:
                     )
                     removed.append(jname)
     except Exception:
-        pass
+        logger.debug("Cron job removal batch failed, skipping")
     return removed
 
 
@@ -444,12 +444,10 @@ def cron_setup(
     results: list[dict[str, str | bool]] = []
 
     if role not in ("sysadmin", "trader"):
-        console.print(f"[red]Error:[/red] Invalid role '{role}'. Must be 'sysadmin' or 'trader'.")
-        raise typer.Exit(1)
+        report_cli_error(f"Invalid role '{role}'. Must be 'sysadmin' or 'trader'.")
 
     if not shutil.which("openclaw"):
-        console.print("[red]Error:[/red] openclaw CLI not found in PATH")
-        raise typer.Exit(1)
+        report_cli_error("openclaw CLI not found in PATH")
 
     if replace:
         _remove_cron_jobs_by_name(agent_id)

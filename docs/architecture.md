@@ -6,38 +6,34 @@ TraderBot's architecture is built around one principle: **the toolkit is a dumb 
 
 The agent operates via independent isolated cron jobs registered via `openclaw cron add --session isolated`, each with a distinct responsibility. This replaces the old monolithic "three-loop" design (Decision/Heartbeat/News) with isolated, collision-free execution.
 
-### Agent Cron Jobs (10 jobs)
+### Trader Cron Jobs (5 jobs)
 
-Registered via `traderbot cron setup-heartbeat-tasks`:
+Registered via `traderbot cron setup --role trader`:
 
-| Job Name | Schedule | Command | Purpose |
-|---|---|---|---|---|
-| `circuit-breaker-check` | `*/30 * * * *` | `traderbot halt --json` | Check circuit breaker state; surface SLOW/CRITICAL alerts |
-| `decision-loop` | `*/5 * * * *` | `traderbot paper momentum --no-confirm --json` | Agent trading decision cycle |
-| `data-forecast-check` | `*/30 * * * *` | `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json` | Verify NWS and ensemble data availability |
-| `news-scan` | `*/30 * * * *` | `traderbot news-context weather --json` | Scan for NHC advisories, NWS warnings, emergency declarations |
-| `news-ingest` | `*/30 * * * *` | `traderbot news-ingest --json` | News + data point ingestion |
-| `position-health` | `0 * * * *` | `traderbot positions --json` | Check positions with settlement < 48h, drawdown > 5% |
-| `settlement-monitor` | `0 * * * *` | `traderbot check-settlements --json` | Check for recently settled markets and update positions DB |
-| `heartbeat-review` | `0 */6 * * *` | `traderbot heartbeat --json` | Performance review, drawdown, win rate, learning promotions |
-| `learning-promotion` | `0 */6 * * *` | `traderbot learnings --promote` | Promote recurring learnings (Recurrence-Count >= 3) |
-| `experiment-execution` | `0 */6 * * *` | `traderbot experiment run --treatments control,calibration_bundle --replicates 3` | Execute scheduled experiments |
-
-All agent cron jobs use `--session isolated` for collision-free execution.
-
-### Sysadmin Cron Setup (7 jobs)
-
-The `traderbot cron setup-heartbeat-tasks` command registers isolated cron jobs for the sysadmin role:
-
-| Job Name | Schedule | Purpose |
+| Job Name | Schedule | Message / Action |
 |---|---|---|
-| `circuit-breaker-check` | `*/30 * * * *` | Check fleet-wide circuit breaker across all agents |
-| `experiment-check` | `0 */6 * * *` | Review pending experiment proposals from agents |
-| `experiment-execution` | `0 */6 * * *` | Execute queued experiments and deploy validated changes |
-| `auth-check` | `0 * * * *` | Verify all API credentials are resolvable |
-| `learning-review` | `0 */6 * * *` | Cross-reference learnings, file GitHub issues |
-| `pipeline-health` | `0 */6 * * *` | Verify systemd timers, ChromaDB data_points, WS daemon |
-| `performance-review` | `0 */6 * * *` | Fleet P&L review, win rates, risk threshold checks |
+| `circuit-breaker-check` | `*/30 * * * *` | Run `traderbot halt --json` then `traderbot halt --recover --json`. If SLOW or worse after recovery, write to `.learnings/ERRORS.md` and surface alert. |
+| `decision-loop` | `*/5 * * * *` | Full trading decision cycle: scan markets → filter horizon → fetch forecasts → model consensus check → compute edge → analyze top 3 → news context → trade if risk passes and edge >= threshold. |
+| `position-review` | `0 * * * *` | Run `traderbot data settle --json` then `traderbot positions --json`. Check positions with settlement < 48h, drawdown > 5%. |
+| `forecast-check` | `15,45 * * * *` | Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. Fall back to data-points if primary fails. |
+| `health-check` | `0 * * * *` | Run `traderbot auth check --json` (verify Kalshi credentials) then `traderbot heartbeat --json` (check drawdown > 3%, win rate < 40% over 30+ trades). Write anomalies to `.learnings/ERRORS.md`. |
+
+All trader cron jobs use `--session isolated` for collision-free execution.
+
+> **Source of truth**: `src/traderbot/cli/cron.py`. Update this table when cron.py changes.
+
+### Sysadmin Cron Jobs (4 jobs)
+
+Registered via `traderbot cron setup --role sysadmin`:
+
+| Job Name | Schedule | Message / Action |
+|---|---|---|
+| `learning-pipeline` | `0 */6 * * *` | Read each agent's `.learnings/LEARNINGS.md`. Promote entries with Recurrence-Count >= 3. Check test-lab/backlog.md for QUEUED experiments — execute one. If code change needed: file GitHub issue. |
+| `error-logger` | `*/15 * * * *` | Read each agent's `.learnings/ERRORS.md` and `.learnings/FEATURE_REQUESTS.md`. Investigate unresolved entries. File GitHub issues for confirmed bugs/enhancements. |
+| `health-check` | `0 * * * *` | Run `traderbot auth check --json`. Verify all API credentials resolvable. Run `traderbot heartbeat --json` — review fleet P&L, win rates, drawdown. |
+| `gateway-health` | `0 */6 * * *` | Check: systemd timers, ChromaDB data_points count, WS daemon status. Write issues to `.learnings/`. |
+
+> **Source of truth**: `src/traderbot/cli/cron.py`. Update this table when cron.py changes.
 
 ### Offline Data Pipelines (systemd timers)
 
@@ -342,7 +338,7 @@ Two registration patterns are used:
 | `__init__.py` | Root wiring | `update`, `update-configure`, `uninstall` |
 | `helpers.py` | Infrastructure | Defines root `app`, `_resolve_db_path`, `_with_db`, `_python_version_ok` |
 | `auth/` | Sub-app | `list-keys`, `rotate`, `check`, `setup-master-password`, `change-master-password`, `check-master-password`, `set-kalshi`, `migrate`, `delete-key`, `clear-session` |
-| `cron/` | Sub-app | `setup`, `setup-heartbeat-tasks`, `remove`, `remove-heartbeat-tasks`, `heartbeat-configure` |
+| `cron/` | Sub-app | `setup` |
 | `sandbox/` | Sub-app | `shell`, `eval` |
 | `profile/` | Sub-app | `create`, `list`, `select`, `show`, `delete` |
 | `data/` | Sub-app | `forecasts`, `signals`, `bias` |
@@ -568,7 +564,7 @@ The `--realtime` flag on `traderbot analyze` enables live orderbook and ticker s
 
 ### Architecture
 
-- **`KalshiWebSocket`** (`kalshi/websocket.py`): Async WebSocket client connecting to `wss://api.elections.kalshi.com/trade-api/ws/v2`
+- **`KalshiWebSocket`** (`kalshi/websocket.py`): Async WebSocket client connecting to `wss://external-api.kalshi.com/trade-api/ws/v2`
 - **Authentication**: RSA-PSS signed headers via `kalshi/signing.py` + TLS cert pinning via `kalshi/pinning.py`
 - **Channels**: `orderbook_delta`, `ticker`, `market_lifecycle_v2`, `fill`, `user_orders`, `market_positions`
 - **30-second timeout**: `asyncio.wait_for(ws.receive(), timeout=30.0)` — graceful disconnect if no data received
@@ -622,10 +618,6 @@ Key operations: `upsert()` (preserves existing `pnl_cents`), `update_settlement(
 |---|---|
 | `traderbot reconcile` | Run `reconcile_all()` — sync positions and settlements with Kalshi |
 | `traderbot check-settlements` | Run `reconcile_settlements()` — check for recently settled markets |
-
-### Settlement-Monitor Cron
-
-The `settlement-monitor` job (`0 * * * *`, hourly) is registered as an isolated cron session that runs `traderbot check-settlements --json` to detect and process market settlements automatically.
 
 ## Data Flow
 

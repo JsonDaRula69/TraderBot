@@ -163,7 +163,10 @@ def _row_to_model(row: sqlite3.Row) -> DbDecision:
     data = dict(row)
     if isinstance(data.get("timestamp"), str):
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
-    data["risk_checks"] = json.loads(data["risk_checks"])
+    # Legacy DBs used column name 'checks' instead of 'risk_checks'
+    if "checks" in data and "risk_checks" not in data:
+        data["risk_checks"] = data.pop("checks")
+    data["risk_checks"] = json.loads(data.get("risk_checks", "{}"))
     if isinstance(data.get("risk_checks"), dict):
         data["risk_checks"] = {
             k: v if isinstance(v, bool) else v == "pass" for k, v in data["risk_checks"].items()

@@ -3,7 +3,7 @@
 > 7-step self-review output. Written by `traderbot heartbeat`.
 > This is NOT HEARTBEAT.md — that file is the agent checklist (instructions for the OpenClaw gateway).
 
-## Last Heartbeat: 2026-06-03T05:09:25.792025+00:00
+## Last Heartbeat: 2026-06-07T02:24:37.702913+00:00
 
 ### Performance
 - Win rate: 0% (0 trades)
@@ -18,16 +18,29 @@
 - No promotions this cycle
 
 ### Circuit Breaker
-- Level: FULL_STOP
-- Can trade: False
+- Level: NORMAL
+- Can trade: True
 - Daily loss: 0.00%
 - Drawdown: 0.00%
+
+### Recovery Experiment
+- Not triggered
+
+### WS Daemon Health
+- Status: not_running
+- PID: N/A
+- PID alive: False
+- Connected: False
 
 ### System Health
 - API: degraded
 - DB: ok
 - Freshness: no_decisions_yet
 
+### Token Staleness
+- ⚠️ INVALID/REVOKED (source: none)
+  Run `traderbot profile sync-env <profile>` to fix
+
 ### Alerts
-- ⚠️ Circuit breaker: FULL_STOP — State file unsigned — manual clearance required
+- ⚠️ WS daemon: not_running (PID None, alive=False, connected=False)
 

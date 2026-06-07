@@ -77,6 +77,11 @@ async def _settle_weather_bets(
 
     Works without Kalshi auth. Queries the archive API for the actual high
     temperature on the settlement date and compares against the strike.
+
+    Settlement direction by ticker type:
+    - KXHIGH* T-type: YES wins when actual < threshold (below)
+    - KXLOWT* T-type: YES wins when actual > threshold (above)
+    - B-type (bucket): treated as greater (simplified)
     """
     import httpx
 
@@ -87,7 +92,7 @@ async def _settle_weather_bets(
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         for pos, parsed in bets:
-            prefix, year, month, day, _strike_type, strike_val = parsed
+            prefix, year, month, day, strike_type_marker, strike_val = parsed
 
             city_info = _KALSHI_CITY_MAP.get(prefix)
             if city_info is None:
@@ -123,8 +128,14 @@ async def _settle_weather_bets(
                 )
                 continue
 
-            # YES position wins if actual temp > strike threshold
-            won = actual_high > strike_val
+            if strike_type_marker == "T":
+                prefix_upper = prefix.upper()
+                if prefix_upper.startswith("KXLOWT"):
+                    won = actual_high > strike_val
+                else:
+                    won = actual_high < strike_val
+            else:
+                won = actual_high > strike_val
 
             pnl_cents = (
                 (100 - pos.avg_price) * pos.quantity if won else (0 - pos.avg_price) * pos.quantity

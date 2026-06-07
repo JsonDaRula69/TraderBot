@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 def _to_cents(value: str | int | float) -> int:
     """Convert a value to integer cents. Handles fixed-point dollar strings like '0.55' → 55 and floats like 0.65 → 65."""
     if isinstance(value, str):
-        return int(round(float(value) * 100))
+        return round(float(value) * 100)
     if isinstance(value, float):
-        return int(round(value * 100))
+        return round(value * 100)
     return int(value)
 
 
@@ -98,6 +98,18 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         status_val,
         raw.get("ticker"),
     )
+
+    strike_type_raw = raw.get("strike_type")
+    strike_type_val: str | None = None
+    if isinstance(strike_type_raw, str):
+        st_lower = strike_type_raw.lower()
+        if st_lower in ("less", "greater", "between"):
+            strike_type_val = st_lower
+        elif "less" in st_lower or "below" in st_lower or "under" in st_lower:
+            strike_type_val = "less"
+        elif "greater" in st_lower or "above" in st_lower or "over" in st_lower:
+            strike_type_val = "greater"
+
     return Market(
         ticker=raw["ticker"],
         question=question,
@@ -111,6 +123,7 @@ def _normalize_market(raw: dict[str, Any]) -> Market:
         category=category_str,
         market_category=_map_category(category_str),
         settlement_result=raw.get("settlement_result"),
+        strike_type=strike_type_val,
     )
 
 

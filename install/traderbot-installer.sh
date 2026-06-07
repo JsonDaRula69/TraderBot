@@ -19,8 +19,10 @@ _log() {
     local timestamp
     timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
     echo "[${timestamp}] [${level}] ${message}" >> "$TRADERBOT_INSTALL_LOG"
-    if [[ "$level" == "ERROR" ]] || [[ "$level" == "WARN" ]]; then
-        echo "  ${message}" >&2
+    if [[ "$level" == "ERROR" ]]; then
+        echo "[ERROR] ${message}" >&2
+    elif [[ "$level" == "WARN" ]]; then
+        echo "[WARN]  ${message}" >&2
     fi
 }
 
@@ -43,8 +45,8 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
-trap 'echo "Interrupted."; cleanup; exit 130' SIGINT
-trap 'echo "Terminated."; cleanup; exit 143' SIGTERM
+trap '_log_error "Interrupted."; cleanup; exit 130' SIGINT
+trap '_log_error "Terminated."; cleanup; exit 143' SIGTERM
 
 _sed_inplace() {
     # Portable sed -i across GNU and BSD/macOS
@@ -71,7 +73,8 @@ _read_tier() {
             echo "$choice"
             return
         fi
-        echo "  Invalid selection. Enter a number between $min and $max." >&2
+        echo "  Invalid selection. Enter a number between $min and $max."
+        _log_warn "Invalid selection. Enter a number between $min and $max."
     done
 }
 
@@ -82,6 +85,7 @@ _validate_key() {
     if [[ ${#key} -lt "$min_len" ]]; then
         read -r -p "  Warning: $name seems too short (${#key} chars, expected at least $min_len). Continue? [y/N]: " confirm
         if [[ ! "$confirm" =~ ^[Yy] ]]; then
+            _log_warn "$name seems too short (${#key} chars, expected at least $min_len)."
             return 1
         fi
     fi
@@ -95,6 +99,7 @@ _validate_prefix() {
     if [[ "$key" != "$prefix"* ]]; then
         read -r -p "  Warning: $name typically starts with '$prefix'. Continue? [y/N]: " confirm
         if [[ ! "$confirm" =~ ^[Yy] ]]; then
+            _log_warn "$name typically starts with '$prefix'."
             return 1
         fi
     fi
@@ -158,8 +163,9 @@ try:
     with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.loads(resp.read())
         tier = data.get('usage_tier', 'basic').lower()
-        rate = data.get('read', {}).get('refill_rate', 20)
-        print(f'{tier}:{rate}')
+        read_rate = data.get('read', {}).get('refill_rate', 200)
+        write_rate = data.get('write', {}).get('refill_rate', 100)
+        print(f'{tier}:{read_rate}:{write_rate}')
 except urllib.error.HTTPError as e:
     print(f'HTTP_ERROR:{e.code}:{e.reason}')
     sys.exit(1)
@@ -186,9 +192,12 @@ except Exception:
     fi
 
     local detected_tier="${tier_info%%:*}"
-    local detected_rate="${tier_info##*:}"
-    echo "  Detected tier: ${detected_tier} (${detected_rate} req/sec)"
-    _env_set "$env_file" "KALSHI_RATE_LIMIT_RPS" "$detected_rate"
+    local rest="${tier_info#*:}"
+    local detected_read_rate="${rest%%:*}"
+    local detected_write_rate="${rest##*:}"
+    echo "  Detected tier: ${detected_tier} (read=${detected_read_rate} tokens/sec, write=${detected_write_rate} tokens/sec)"
+    _env_set "$env_file" "KALSHI_READ_BUDGET_TOKENS" "$detected_read_rate"
+    _env_set "$env_file" "KALSHI_WRITE_BUDGET_TOKENS" "$detected_write_rate"
     return 0
 }
 
@@ -308,7 +317,7 @@ check_openclaw() {
     fi
     echo "  Installing OpenClaw via npm..."
     npm install -g openclaw 2>&1 || {
-        echo "  Failed to install OpenClaw. Install manually and re-run." >&2
+        _log_error "Failed to install OpenClaw. Install manually and re-run."
         return 1
     }
     # Approve postinstall scripts for bundled plugins (Telegram, Discord, etc.)
@@ -346,15 +355,13 @@ ensure_gateway_running() {
     echo "  Installing OpenClaw gateway service..."
     local gw_install_out
     gw_install_out=$(openclaw gateway install 2>&1) || {
-        echo "  Gateway install failed:" >&2
-        echo "  $gw_install_out" >&2
-        echo "  Fix the issue then rerun." >&2
+        _log_error "Gateway install failed: $gw_install_out. Fix the issue then rerun."
         return 1
     }
     echo "  $gw_install_out"
     echo "  Starting OpenClaw gateway..."
     openclaw gateway start 2>&1 || {
-        echo "  Failed to start gateway. Start manually: openclaw gateway start" >&2
+        _log_error "Failed to start gateway. Start manually: openclaw gateway start"
         return 1
     }
     # Wait for gateway to be ready
@@ -365,7 +372,8 @@ ensure_gateway_running() {
         fi
         sleep 2
     done
-    echo "  Gateway start timed out after 30s. Check: openclaw gateway status" >&2
+    echo "  Gateway start timed out after 30s. Check: openclaw gateway status"
+    _log_error "Gateway start timed out after 30s."
     return 1
 }
 
@@ -390,7 +398,7 @@ create_openclaw_agent() {
         agent_ws="$HOME/.openclaw/workspace/$name"
     fi
     openclaw agents add "$name" --non-interactive --workspace "$agent_ws" 2>&1 || {
-        echo "  Warning: Failed to create agent '$name'. Create manually: openclaw agents add $name" >&2
+        _log_warn "Failed to create agent '$name'. Create manually: openclaw agents add $name"
         return 1
     }
 }
@@ -414,8 +422,7 @@ check_docker() {
         if docker info &>/dev/null; then
             return 0
         else
-            echo "Warning: Docker is installed but the daemon is not running." >&2
-            echo "  Start Docker Desktop or the Docker service." >&2
+            _log_warn "Docker is installed but the daemon is not running. Start Docker Desktop or the Docker service."
             return 1
         fi
     fi
@@ -450,14 +457,14 @@ install_dependencies_debian() {
         echo "Installing dependencies with apt..."
         sudo apt update
         sudo apt install -y "${pkgs[@]}" || {
-            echo "Warning: Some packages failed to install (python3.12 may need deadsnakes PPA)." >&2
-            echo "Attempting to add deadsnakes PPA..." >&2
+            _log_warn "Some packages failed to install (python3.12 may need deadsnakes PPA)."
+            _log_info "Attempting to add deadsnakes PPA..."
             sudo apt install -y software-properties-common 2>/dev/null
             sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null
             sudo apt update
             sudo apt install -y python3.12 python3.12-venv python3.12-dev || {
-                echo "Error: Could not install Python 3.12. Install it manually and re-run." >&2
-                exit 1
+                _log_error "Could not install Python 3.12. Install it manually and re-run."
+                exit 3
             }
         }
     fi
@@ -473,8 +480,8 @@ install_dependencies_macos() {
             ((timeout--))
         done
         if [[ ! -d "$(xcode-select -p 2>/dev/null)" ]]; then
-            echo "Error: Xcode CLI tools installation timed out." >&2
-            exit 1
+            _log_error "Xcode CLI tools installation timed out."
+            exit 3
         fi
     fi
 
@@ -488,8 +495,8 @@ install_dependencies_macos() {
             eval "$(/usr/local/bin/brew shellenv)"
         fi
         if ! command -v brew &>/dev/null; then
-            echo "Error: Homebrew installation failed." >&2
-            exit 1
+            _log_error "Homebrew installation failed."
+            exit 3
         fi
     fi
 
@@ -505,13 +512,13 @@ install_dependencies_macos() {
 
     echo "Installing python@3.12, git, jq via Homebrew..."
     if ! brew install python@3.12 git jq; then
-        echo "Warning: brew install python@3.12 failed." >&2
-        echo "Checking for python.org installer of Python 3.12..." >&2
+        _log_warn "brew install python@3.12 failed."
+        _log_info "Checking for python.org installer of Python 3.12..."
         local py_bin
         py_bin="$(find_compatible_python 2>/dev/null)" || true
         if [[ -z "$py_bin" ]]; then
-            echo "Error: Python 3.12 not available. Install from https://www.python.org/downloads/ and re-run." >&2
-            exit 1
+            _log_error "Python 3.12 not available. Install from https://www.python.org/downloads/ and re-run."
+            exit 3
         fi
     fi
 }
@@ -525,7 +532,7 @@ install_uv() {
     # Ensure uv is available in current session
     export PATH="$HOME/.local/bin:$PATH"
     if ! command -v uv &>/dev/null; then
-        echo "Warning: uv installed but not found in PATH. You may need to restart your shell." >&2
+        _log_warn "uv installed but not found in PATH. You may need to restart your shell."
     fi
 }
 
@@ -552,13 +559,13 @@ install_traderbot() {
         fi
         # Fall back to git pull (git-installed or .venv)
         if [[ ! -d "$INSTALL_DIR/.git" ]]; then
-            echo "Error: $INSTALL_DIR is not a git repository. Cannot update." >&2
-            exit 1
+            _log_error "$INSTALL_DIR is not a git repository. Cannot update."
+            exit 2
         fi
         cd "$INSTALL_DIR"
         if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
-            echo "Error: git pull failed for both 'main' and 'master' branches." >&2
-            exit 1
+            _log_error "git pull failed for both 'main' and 'master' branches."
+            exit 4
         fi
     else
         # ── pip-install path (clean install, no git repo needed) ─────────
@@ -586,8 +593,8 @@ install_traderbot() {
                 fi
                 cd "$INSTALL_DIR"
                 if ! git pull origin main 2>/dev/null && ! git pull origin master 2>/dev/null; then
-                    echo "Error: git pull failed." >&2
-                    exit 1
+                    _log_error "git pull failed."
+                    exit 4
                 fi
             else
                 echo "Directory exists but traderbot not in PATH. Checking git state..."
@@ -602,8 +609,8 @@ install_traderbot() {
                     git checkout -- . 2>/dev/null || true
                     git clean -fd 2>/dev/null || true
                     if ! git pull origin main 2>&1 && ! git pull origin master 2>&1; then
-                        echo "Error: git pull failed. Try removing ~/traderbot and re-running the installer." >&2
-                        exit 1
+                        _log_error "git pull failed. Try removing ~/traderbot and re-running the installer."
+                        exit 4
                     fi
                 fi
             fi
@@ -631,20 +638,21 @@ install_traderbot() {
                 fi
 
                 if [[ ! -f "${temp_dir}/traderbot.zip" ]]; then
-                    echo "Error: Failed to download TraderBot" >&2
-                    exit 1
+                    _log_error "Failed to download TraderBot"
+                    exit 4
                 fi
 
                 unzip -q "${temp_dir}/traderbot.zip" -d "${temp_dir}"
                 local extracted_dir
                 extracted_dir="$(find "${temp_dir}" -mindepth 1 -maxdepth 1 -type d -name 'TraderBot-*' | head -1)"
                 if [[ -z "$extracted_dir" ]]; then
-                    echo "Error: Failed to extract TraderBot archive" >&2
-                    exit 1
+                    _log_error "Failed to extract TraderBot archive"
+                    exit 3
                 fi
                 mv "$extracted_dir" "$INSTALL_DIR"
-                echo "Warning: Installed via ZIP (no .git). Auto-update will not work." >&2
-                echo "To enable updates, run: cd ~/traderbot && git init && git remote add origin https://github.com/${TRADERBOT_ORG}/TraderBot.git && git fetch && git checkout main" >&2
+                echo "Warning: Installed via ZIP (no .git). Auto-update will not work."
+                _log_warn "Installed via ZIP (no .git). Auto-update will not work."
+                echo "To enable updates, run: cd ~/traderbot && git init && git remote add origin https://github.com/${TRADERBOT_ORG}/TraderBot.git && git fetch && git checkout main"
             fi
         fi
     fi
@@ -656,11 +664,11 @@ install_traderbot() {
 
     PYTHON_BIN=""
     if ! PYTHON_BIN="$(find_compatible_python)"; then
-        echo "Error: Python 3.12 is required but not found." >&2
-        echo "  chroma-hnswlib (a dependency) has no pre-built wheels for Python 3.13+." >&2
-        echo "  Install Python 3.12 and re-run this installer." >&2
-        echo "  On Ubuntu/Debian: sudo apt install python3.12 python3.12-venv" >&2
-        exit 1
+        _log_error "Python 3.12 is required but not found."
+        _log_error "chroma-hnswlib (a dependency) has no pre-built wheels for Python 3.13+."
+        _log_error "Install Python 3.12 and re-run this installer."
+        _log_error "On Ubuntu/Debian: sudo apt install python3.12 python3.12-venv"
+        exit 3
     fi
     echo "Using Python: $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1))"
 
@@ -674,9 +682,9 @@ install_traderbot() {
     else
         pip install --upgrade pip --quiet
         pip install -e . --quiet 2>&1 || {
-            echo "Error: pip install failed. Retrying with verbose output..." >&2
+            _log_error "pip install failed. Retrying with verbose output..."
             pip install -e . 2>&1 | tail -20
-            exit 1
+            exit 3
         }
     fi
 
@@ -704,12 +712,12 @@ install_traderbot() {
     if [[ -x "${venv_bin}/traderbot" ]]; then
         echo "TraderBot installed successfully: $("${venv_bin}/traderbot" --version 2>/dev/null || echo 'unknown')"
     else
-        echo "Error: traderbot binary not found at ${venv_bin}/traderbot" >&2
-        echo "Contents of ${venv_bin}/:" >&2
+        _log_error "traderbot binary not found at ${venv_bin}/traderbot"
+        _log_error "Contents of ${venv_bin}/:"
         find "${venv_bin}/" -maxdepth 1 -type f -executable 2>/dev/null | head -20 >&2
-        echo "pip install log:" >&2
-        cat "${INSTALL_DIR}/.venv/pip_install.log" 2>/dev/null || echo "(no log available)" >&2
-        exit 1
+        _log_error "pip install log:"
+        cat "${INSTALL_DIR}/.venv/pip_install.log" 2>/dev/null || _log_error "(no log available)"
+        exit 3
     fi
 }
 
@@ -870,12 +878,12 @@ update_services() {
     fi
 
     stop_services "$os_type" || {
-        echo "Error: Failed to stop services." >&2
-        exit 1
+        _log_error "Failed to stop services."
+        exit 3
     }
     install_traderbot "" "update" || {
-        echo "Error: Failed to update TraderBot." >&2
-        exit 1
+        _log_error "Failed to update TraderBot."
+        exit 4
     }
     # Refresh data pipeline timers
     if [[ -x "$INSTALL_DIR/install/services/install-data-pipeline.sh" ]]; then
@@ -903,7 +911,7 @@ update_services() {
         local docker_dir="$INSTALL_DIR/install/docker"
         if [[ -x "$docker_dir/build-sandbox.sh" ]]; then
             echo "Rebuilding Docker sandbox image..."
-            bash "$docker_dir/build-sandbox.sh" 2>&1 || echo "  Warning: sandbox image rebuild failed." >&2
+            bash "$docker_dir/build-sandbox.sh" 2>&1 || _log_warn "sandbox image rebuild failed."
         fi
 echo "Re-applying OpenClaw sandbox configuration..."
         openclaw config set agents.defaults.sandbox.docker.binds "[\"${HOME}/traderbot:/traderbot:ro\",\"${HOME}/.traderbot:/home/traderbot/.traderbot:rw\"]" --strict-json 2>/dev/null || true
@@ -962,8 +970,8 @@ echo "Re-applying OpenClaw sandbox configuration..."
         fi
     done
     start_services "$os_type" || {
-        echo "Error: Failed to start services." >&2
-        exit 1
+        _log_error "Failed to start services."
+        exit 3
     }
 }
 
@@ -1036,7 +1044,7 @@ _env_set() {
 setup_api_credentials() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ ! -x "$tb_cmd" ]]; then
-        echo "TraderBot binary not found. Skipping API credential setup." >&2
+        _log_warn "TraderBot binary not found. Skipping API credential setup."
         return 1
     fi
 
@@ -1078,7 +1086,7 @@ setup_api_credentials() {
             while true; do
                 read -r -p "Kalshi API key: " kalshi_key
                 if [[ -z "$kalshi_key" ]]; then
-                    echo "  Kalshi API key is required. Enter it or press Ctrl+C to abort." >&2
+                    _log_error "Kalshi API key is required. Enter it or press Ctrl+C to abort."
                     continue
                 fi
                 if _validate_key "$kalshi_key" "Kalshi API key" 20; then
@@ -1114,7 +1122,7 @@ setup_api_credentials() {
                 echo "  PEM key received ($line_count lines, ${#kalshi_secret} bytes)"
             fi
             if [[ -n "$kalshi_secret" ]] && [[ "$kalshi_secret" != *"BEGIN"* ]]; then
-                echo "  Warning: PEM key should contain BEGIN/END markers. The key may be invalid." >&2
+                _log_warn "PEM key should contain BEGIN/END markers. The key may be invalid."
             fi
         fi
         _env_set "$env_file" "KALSHI_API_KEY" "$kalshi_key"
@@ -1498,7 +1506,7 @@ except Exception:
 prompt_os_keyring() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ ! -x "$tb_cmd" ]]; then
-        echo "TraderBot binary not found. Skipping keyring prompt." >&2
+        _log_warn "TraderBot binary not found. Skipping keyring prompt."
         return 1
     fi
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
@@ -1540,7 +1548,7 @@ except Exception:
     read -r -p "Store in OS keyring for encrypted storage? [Y/n]: " keyring_choice
     if [[ -z "$keyring_choice" ]] || [[ "$keyring_choice" =~ ^[Yy]$ ]]; then
         echo "Running traderbot auth set-kalshi..."
-        "$tb_cmd" auth set-kalshi 2>&1 || echo "Warning: traderbot auth set-kalshi failed." >&2
+        "$tb_cmd" auth set-kalshi 2>&1 || _log_warn "traderbot auth set-kalshi failed."
     else
         echo "Skipped. Run later with: traderbot auth set-kalshi"
     fi
@@ -1549,7 +1557,7 @@ except Exception:
 setup_master_password() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ ! -x "$tb_cmd" ]]; then
-        echo "TraderBot binary not found. Skipping master password setup." >&2
+        _log_warn "TraderBot binary not found. Skipping master password setup."
         return 1
     fi
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
@@ -1599,11 +1607,11 @@ prompt_sandbox_docker() {
     if [[ -x "$docker_dir/build-sandbox.sh" ]]; then
         echo "  Building traderbot sandbox image..."
         bash "$docker_dir/build-sandbox.sh" 2>&1 || {
-            echo "  Warning: sandbox image build failed." >&2
+            _log_warn "sandbox image build failed."
             return
         }
     else
-        echo "  Warning: build-sandbox.sh not found." >&2
+        _log_warn "build-sandbox.sh not found."
         return
     fi
     echo "  Configuring OpenClaw sandbox for category agents..."
@@ -1631,7 +1639,7 @@ openclaw config set agents.defaults.sandbox.docker.memory 1g 2>/dev/null || true
 prompt_tls_pinning() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ ! -x "$tb_cmd" ]]; then
-        echo "TraderBot binary not found. Skipping TLS pinning." >&2
+        _log_warn "TraderBot binary not found. Skipping TLS pinning."
         return 1
     fi
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
@@ -1653,7 +1661,7 @@ prompt_tls_pinning() {
 prompt_sysadmin_setup() {
     local tb_cmd="${INSTALL_DIR}/.venv/bin/traderbot"
     if [[ ! -x "$tb_cmd" ]]; then
-        echo "TraderBot binary not found. Skipping sysadmin setup." >&2
+        _log_warn "TraderBot binary not found. Skipping sysadmin setup."
         return 1
     fi
     if [[ "${TRADERBOT_NON_INTERACTIVE:-0}" == "1" ]]; then
@@ -1702,7 +1710,7 @@ if not registry.profile_exists('sysadmin'):
     print('Created sysadmin profile.')
 else:
     print('Sysadmin profile already exists.')
-" 2>/dev/null || echo "Warning: sysadmin profile creation failed." >&2
+" 2>/dev/null || _log_warn "sysadmin profile creation failed."
     fi
 
     if [[ -x "$tb_cmd" ]]; then
@@ -1719,8 +1727,8 @@ else:
             "$tb_cmd" cron setup-heartbeat-tasks --agent "$sysadmin_agent" --role sysadmin --replace 2>/dev/null || \
                 echo "  Warning: sysadmin cron registration skipped."
         else
-            echo "Warning: sysadmin assignment failed (exit $assign_exit)." >&2
-            echo "$assign_output" >&2
+            _log_warn "sysadmin assignment failed (exit $assign_exit)."
+            _log_warn "$assign_output"
             echo "Run manually later: $tb_cmd profile assign sysadmin $sysadmin_agent"
         fi
     fi
@@ -1735,7 +1743,7 @@ interactive_config_flow() {
 
         local tb_bin="${INSTALL_DIR}/.venv/bin/traderbot"
         if [[ -x "$tb_bin" ]]; then
-            "$tb_bin" profile create "$profile_name" --mode "$profile_mode" --categories "$profile_categories" 2>&1 || echo "Warning: profile create failed." >&2
+            "$tb_bin" profile create "$profile_name" --mode "$profile_mode" --categories "$profile_categories" 2>&1 || _log_warn "profile create failed."
         fi
 
         echo "Profile '$profile_name' created (paper mode, all categories)."
@@ -1745,8 +1753,8 @@ interactive_config_flow() {
 
     if [[ ! -t 0 ]]; then
         if ! exec < /dev/tty; then
-            echo "Error: Interactive terminal required for configuration." >&2
-            exit 1
+            _log_error "Interactive terminal required for configuration."
+            exit 2
         fi
     fi
     echo
@@ -1927,12 +1935,12 @@ interactive_config_flow() {
             echo "  Creating profile '$cat_profile' (mode=$cat_mode, category=$_cat)..."
             _log_info "Creating profile $cat_profile for agent $cat_name (mode=$cat_mode)"
             if ! "$tb_cmd" profile create "$cat_profile" --mode "$cat_mode" --categories "$_cat" 2>&1; then
-                echo "  Warning: profile creation failed for $cat_name." >&2
+                _log_warn "profile creation failed for $cat_name."
                 _log_warn "Profile creation failed for $cat_name"
                 continue
             fi
         else
-            echo "  TraderBot not found. Skipping profile creation." >&2
+            _log_warn "TraderBot not found. Skipping profile creation."
             continue
         fi
 
@@ -1949,7 +1957,7 @@ interactive_config_flow() {
             local assign_exit=$?
             set -e
             if [[ $assign_exit -ne 0 ]]; then
-                echo "  Warning: assign failed: $cat_assign_out" >&2
+                _log_warn "assign failed: $cat_assign_out"
                 _log_warn "Assign failed for $cat_name: $cat_assign_out"
                 continue
             fi
@@ -2111,8 +2119,8 @@ main() {
     echo "Detected: $OS_TYPE"
 
     if [[ "$OS_TYPE" == "unsupported" ]]; then
-        echo "Error: Unsupported OS. TraderBot requires macOS or Debian-based Linux (Ubuntu/Debian/Raspbian)." >&2
-        exit 1
+        _log_error "Unsupported OS. TraderBot requires macOS or Debian-based Linux (Ubuntu/Debian/Raspbian)."
+        exit 2
     fi
 
     echo "Checking for OpenClaw..."

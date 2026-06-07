@@ -5,14 +5,21 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
 
 class EnvKalshiConfig(BaseSettings):
-    """Kalshi config that reads credentials from .env file."""
+    """Lenient Kalshi config variant for multi-stage credential resolution.
+
+    Unlike :class:`KalshiConfig` (which requires ``api_key``), this class
+    allows ``api_key=None`` so callers can attempt env-file resolution first
+    and fall back to keyring or interactive prompts when no key is found.
+    Uses ``extra="ignore"`` for the same reason as :class:`KalshiConfig`:
+    the ``KALSHI_*`` env prefix often captures unrelated variables.
+    """
 
     model_config = SettingsConfigDict(
         strict=True,
@@ -30,6 +37,7 @@ class EnvKalshiConfig(BaseSettings):
     # Per-second token budgets from the Kalshi API `GET /account/limits` endpoint.
     # Effective request rate = budget / endpoint_cost (default 10 tokens per request).
     # On Basic tier: read = 200 tokens/sec (20 RPS), write = 100 tokens/sec (10 RPS).
+    # Configurable via KALSHI_READ_BUDGET_TOKENS and KALSHI_WRITE_BUDGET_TOKENS env vars.
     read_budget_tokens: float = 200.0
     write_budget_tokens: float = 100.0
     read_burst_capacity: float = 200.0
