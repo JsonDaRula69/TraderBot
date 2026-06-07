@@ -395,11 +395,11 @@ class TestMigratedOrphanExceptions:
         assert "[E2000]" in str(exc)
 
     def test_news_api_budget_exceeded_inherits_rate_limit_error(self) -> None:
-        from traderbot.news.sources import NewsAPIBudgetExceeded
+        from traderbot.news.sources import NewsAPIBudgetExceededError
 
-        assert issubclass(NewsAPIBudgetExceeded, TraderBotError)
-        assert issubclass(NewsAPIBudgetExceeded, RateLimitError)
-        exc = NewsAPIBudgetExceeded("budget exhausted")
+        assert issubclass(NewsAPIBudgetExceededError, TraderBotError)
+        assert issubclass(NewsAPIBudgetExceededError, RateLimitError)
+        exc = NewsAPIBudgetExceededError("budget exhausted")
         assert isinstance(exc, TraderBotError)
         assert isinstance(exc, RateLimitError)
         assert "[E8200]" in str(exc)
@@ -467,7 +467,7 @@ class TestMigratedOrphanExceptions:
         from traderbot.llm.ollama import OllamaConnectionError
         from traderbot.news.sources import (
             NewsAPIAuthError,
-            NewsAPIBudgetExceeded,
+            NewsAPIBudgetExceededError,
             NewsAPIError,
         )
         from traderbot.profiles.tokens import TokenAlreadyAssignedError
@@ -485,7 +485,7 @@ class TestMigratedOrphanExceptions:
             CertPinningError("pin fail"),
             NewsAPIError("news fail"),
             NewsAPIAuthError("auth fail"),
-            NewsAPIBudgetExceeded("budget fail"),
+            NewsAPIBudgetExceededError("budget fail"),
             ConcurrentWriteError("write fail"),
             BacktestError("backtest fail"),
             NwsClientError("nws fail"),

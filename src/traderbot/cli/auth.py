@@ -1,7 +1,5 @@
 """Auth command group — API credential management."""
 
-from __future__ import annotations
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,7 +8,7 @@ import json as json_lib
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -72,9 +70,9 @@ def auth_rotate(
         env_path.parent.mkdir(parents=True, exist_ok=True)
         existing = env_path.read_text() if env_path.exists() else ""
         existing_lines = [
-            l
-            for l in existing.splitlines()
-            if not any(l.startswith(ek.split("=")[0]) for ek in env_lines)
+            line
+            for line in existing.splitlines()
+            if not any(line.startswith(ek.split("=")[0]) for ek in env_lines)
         ]
         new_content = "\n".join(existing_lines).rstrip() + "\n" + "\n".join(env_lines) + "\n"
         env_path.write_text(new_content)
@@ -106,10 +104,7 @@ def auth_check(
 
     mgr = AuthManager()
     result = mgr.get_credential("kalshi", "api_key")
-    if result is not None:
-        key = result.value.get_secret_value()
-    else:
-        key = None
+    key = result.value.get_secret_value() if result is not None else None
 
     key_found = bool(key and key.strip())
 
@@ -218,7 +213,9 @@ def auth_setup_master_password() -> None:
     from traderbot.master_password import is_setup, setup_master_password
 
     if is_setup():
-        report_cli_error("Master password already configured. Use 'traderbot auth change-master-password' to change it.")
+        report_cli_error(
+            "Master password already configured. Use 'traderbot auth change-master-password' to change it."
+        )
 
     password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
     try:
@@ -236,7 +233,9 @@ def auth_change_master_password() -> None:
     from traderbot.master_password import change_master_password, is_setup
 
     if not is_setup():
-        report_cli_error("No master password configured. Run 'traderbot auth setup-master-password' first.")
+        report_cli_error(
+            "No master password configured. Run 'traderbot auth setup-master-password' first."
+        )
 
     old_password = typer.prompt("Current master password", hide_input=True)
     new_password = typer.prompt("New master password", hide_input=True, confirmation_prompt=True)
@@ -283,11 +282,9 @@ def auth_check_master_password(
 @auth_app.command("set-kalshi")
 def auth_set_kalshi(
     api_key: Annotated[
-        Optional[str], typer.Option("--api-key", help="API key (non-interactive)")
+        str | None, typer.Option("--api-key", help="API key (non-interactive)")
     ] = None,
-    pem: Annotated[
-        Optional[str], typer.Option("--pem", help="PEM key path (non-interactive)")
-    ] = None,
+    pem: Annotated[str | None, typer.Option("--pem", help="PEM key path (non-interactive)")] = None,
 ) -> None:
     """Store Kalshi credentials in OS keyring (or .env fallback).
 
@@ -337,11 +334,11 @@ def auth_set_kalshi(
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     old_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     new_lines = [
-        l
-        for l in old_lines
-        if not l.startswith("KALSHI_API_KEY=")
-        and not l.startswith("KALSHI_PRIVATE_KEY_PATH=")
-        and not l.startswith("KALSHI_PRIVATE_KEY_PEM=")
+        line
+        for line in old_lines
+        if not line.startswith("KALSHI_API_KEY=")
+        and not line.startswith("KALSHI_PRIVATE_KEY_PATH=")
+        and not line.startswith("KALSHI_PRIVATE_KEY_PEM=")
     ]
     new_lines.append(f"KALSHI_API_KEY={api_key}")
     new_lines.append(f"KALSHI_PRIVATE_KEY_PATH={pem_file}")

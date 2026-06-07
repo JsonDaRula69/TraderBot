@@ -65,7 +65,7 @@ def _write_heartbeat_config(agent_id: str, heartbeat_interval: str) -> bool:
         if list_result.returncode != 0:
             return False
 
-        agent_list = _json.loads(list_result.stdout)
+        agent_list = json_lib.loads(list_result.stdout)
         if not isinstance(agent_list, list):
             return False
 
@@ -142,14 +142,12 @@ def _install_news_ingest_timer(
         return result
 
     try:
-        from importlib import resources
-
         from traderbot.utils import get_own_venv_dir, get_repo_dir
     except ImportError:
         return result
 
     repo_dir = get_repo_dir()
-    venv_dir = get_own_venv_dir()
+    get_own_venv_dir()
     service_dir = repo_dir / "services"
     service_template = service_dir / "traderbot-news-ingest@.service"
     timer_template = service_dir / "traderbot-news-ingest@.timer"

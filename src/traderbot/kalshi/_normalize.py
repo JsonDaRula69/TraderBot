@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 def _to_cents(value: str | int | float) -> int:
     """Convert a value to integer cents. Handles fixed-point dollar strings like '0.55' → 55 and floats like 0.65 → 65."""
     if isinstance(value, str):
-        return int(round(float(value) * 100))
+        return round(float(value) * 100)
     if isinstance(value, float):
-        return int(round(value * 100))
+        return round(value * 100)
     return int(value)
 
 

@@ -31,7 +31,9 @@ def _get_keys_dir() -> Path:
 
 
 class TokenAlreadyAssignedError(ValidationError):
-    def __init__(self, profile_name: str, error_code: int = ErrorCodes.TOKEN_ALREADY_ASSIGNED) -> None:
+    def __init__(
+        self, profile_name: str, error_code: int = ErrorCodes.TOKEN_ALREADY_ASSIGNED
+    ) -> None:
         self.profile_name = profile_name
         message = f"Profile '{profile_name}' already has a token assigned"
         super().__init__(message, error_code=error_code)
@@ -218,7 +220,9 @@ def staleness_warning(profile_name: str | None = None) -> dict[str, str | bool]:
                 result["token_source"] = "env_file"
 
     if token is None:
-        result["message"] = "No profile token found. Assign one with: traderbot profile assign <profile> <agent>"
+        result["message"] = (
+            "No profile token found. Assign one with: traderbot profile assign <profile> <agent>"
+        )
         logger.warning("Token staleness check: no token found")
         return result
 
@@ -229,7 +233,9 @@ def staleness_warning(profile_name: str | None = None) -> dict[str, str | bool]:
         result["valid"] = True
         result["profile"] = profile_resolved
         result["agent"] = agent_resolved
-        result["message"] = f"Token valid for profile '{profile_resolved}' (agent '{agent_resolved}')"
+        result["message"] = (
+            f"Token valid for profile '{profile_resolved}' (agent '{agent_resolved}')"
+        )
     else:
         # Distinguish expired vs revoked
         result["expired"] = _check_token_expired(token)

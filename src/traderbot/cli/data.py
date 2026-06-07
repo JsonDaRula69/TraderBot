@@ -1,12 +1,10 @@
 """Data pipeline commands: forecasts, signals, and historical bias."""
 
-from __future__ import annotations
-
 import asyncio
 import json as json_lib
 import logging
 import sys
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -16,8 +14,7 @@ from traderbot.cli.helpers import report_cli_error
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from traderbot.data.models import CityForecast
+from traderbot.data.models import CityForecast
 
 data_app = typer.Typer(
     name="data",
@@ -73,17 +70,14 @@ def forecasts_cmd(
     try:
 
         async def _run() -> (
-            tuple[dict[str, CityForecast], dict[str, dict]]
-            | dict[str, list[CityForecast]]
+            tuple[dict[str, CityForecast], dict[str, dict]] | dict[str, list[CityForecast]]
         ):
             provider = WeatherDataProvider()
             try:
                 if all_periods:
                     return await provider.get_all_forecasts(city_list, station=station)
 
-                forecasts = await provider.get_forecasts(
-                    city_list, station=station, offset=offset
-                )
+                forecasts = await provider.get_forecasts(city_list, station=station, offset=offset)
                 # Fetch ensemble consensus for each city
                 consensus_map: dict[str, dict] = {}
                 for city in forecasts:
@@ -125,7 +119,7 @@ def forecasts_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         report_cli_error(f"Failed to fetch forecasts: {exc}")
 
     if json_output:
@@ -200,6 +194,7 @@ def signals_cmd(
     ]
 
     try:
+
         async def _run() -> dict[str, dict]:
             provider = WeatherDataProvider()
             try:
@@ -213,7 +208,7 @@ def signals_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         report_cli_error(f"Signal computation failed: {exc}")
 
     if json_output:
@@ -279,6 +274,7 @@ def bias_cmd(
         logger.debug("Failed to initialize learnings table, continuing")
 
     try:
+
         async def _run() -> dict:
             provider = WeatherDataProvider()
             try:
@@ -291,7 +287,7 @@ def bias_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         report_cli_error(f"Bias analysis failed: {exc}")
 
     if json_output:
@@ -348,6 +344,7 @@ def record_bias_cmd(
     target_date = forecast_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
     try:
+
         async def _run() -> list[dict]:
             async def _fetch_actual(lat: float, lon: float) -> float | None:
                 import httpx
@@ -392,12 +389,17 @@ def record_bias_cmd(
                     if forecast_high is None or actual_high is None:
                         logger.warning(
                             "Missing data for %s: forecast=%s actual=%s",
-                            cc, forecast_high, actual_high,
+                            cc,
+                            forecast_high,
+                            actual_high,
                         )
-                        results.append({
-                            "city": cc, "status": "skipped",
-                            "reason": "missing forecast or actual data",
-                        })
+                        results.append(
+                            {
+                                "city": cc,
+                                "status": "skipped",
+                                "reason": "missing forecast or actual data",
+                            }
+                        )
                         continue
 
                     from traderbot.db import get_connection as _get_conn
@@ -417,13 +419,15 @@ def record_bias_cmd(
                             forecast_high_f=forecast_high,
                             actual_high_f=actual_high,
                         )
-                        results.append({
-                            "city": cc,
-                            "status": "recorded",
-                            "forecast_high_f": forecast_high,
-                            "actual_high_f": actual_high,
-                            "error_f": actual_high - forecast_high,
-                        })
+                        results.append(
+                            {
+                                "city": cc,
+                                "status": "recorded",
+                                "forecast_high_f": forecast_high,
+                                "actual_high_f": actual_high,
+                                "error_f": actual_high - forecast_high,
+                            }
+                        )
                 return results
             finally:
                 await provider.close()
@@ -432,7 +436,7 @@ def record_bias_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         report_cli_error(f"Record bias failed: {exc}")
 
     if json_output:
@@ -509,7 +513,7 @@ def settle_paper_cmd(
     except Exception as exc:
         if json_output:
             json_lib.dump({"error": str(exc)}, sys.stdout)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         report_cli_error(f"Settlement failed: {exc}")
 
     if json_output:

@@ -343,11 +343,12 @@ def backfill_data(
     if not newsapi_key:
         _env_path = _os.path.expanduser("~/.traderbot/.env")
         if _os.path.exists(_env_path):
-            for _line in open(_env_path):
-                _stripped = _line.strip()
-                if _stripped.startswith("NEWSAPI_API_KEY="):
-                    newsapi_key = _stripped.split("=", 1)[1].strip().strip("\"'")
-                    break
+            with open(_env_path) as _env_file:
+                for _line in _env_file:
+                    _stripped = _line.strip()
+                    if _stripped.startswith("NEWSAPI_API_KEY="):
+                        newsapi_key = _stripped.split("=", 1)[1].strip().strip("\"'")
+                        break
     ds_config = DataSourcesConfig(fred_key=fred_key, newsapi_key=newsapi_key)
     vs = vector_store or VectorStore()
     vs.init_collections()
@@ -488,11 +489,12 @@ def ingest_news(
     if not resolved_newsapi:
         _env_path = _os.path.expanduser("~/.traderbot/.env")
         if _os.path.exists(_env_path):
-            for _line in open(_env_path):
-                _stripped = _line.strip()
-                if _stripped.startswith("NEWSAPI_API_KEY="):
-                    resolved_newsapi = _stripped.split("=", 1)[1].strip().strip("\"'")
-                    break
+            with open(_env_path) as _env_file:
+                for _line in _env_file:
+                    _stripped = _line.strip()
+                    if _stripped.startswith("NEWSAPI_API_KEY="):
+                        resolved_newsapi = _stripped.split("=", 1)[1].strip().strip("\"'")
+                        break
     resolved_ow = openweather_key or _os.environ.get("OPENWEATHER_API_KEY")
     resolved_fred = fred_key or _os.environ.get("FRED_API_KEY")
 
@@ -682,7 +684,7 @@ def get_news_summary(
     collection_name = _NEWS_SIGNALS_COLLECTION if signal_only else _NEWS_COLLECTION
 
     try:
-        col = vs.get_collection(collection_name)
+        vs.get_collection(collection_name)
     except Exception as exc:
         logger.warning("Cannot access collection '%s': %s", collection_name, exc)
         return []
@@ -929,7 +931,9 @@ def get_news_context(
             limit=max_articles * 3,
         )
     except Exception:
-        logger.debug("ChromaDB filtered query failed for news context category=%s, falling back", category)
+        logger.debug(
+            "ChromaDB filtered query failed for news context category=%s, falling back", category
+        )
         results = col.get(
             where={"category": {"$eq": category}},
             include=["metadatas", "documents"],
@@ -953,7 +957,7 @@ def get_news_context(
     articles: list[dict] = []
     for i, doc_id in enumerate(results["ids"]):
         meta = results["metadatas"][i]
-        doc = results["documents"][i]
+        results["documents"][i]
         score_str = meta.get("sentiment_score")
         score: float | None = None
         if score_str:

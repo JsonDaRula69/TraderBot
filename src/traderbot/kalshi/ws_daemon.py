@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -396,9 +397,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
 
     def _handle_positions(msg: dict) -> None:
         data = msg.get("msg", msg)
-        positions_raw = (
-            data.get("positions", [data]) if isinstance(data, dict) else data
-        )
+        positions_raw = data.get("positions", [data]) if isinstance(data, dict) else data
         if not isinstance(positions_raw, list):
             positions_raw = [positions_raw]
         for pos_data in positions_raw:
@@ -425,9 +424,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
             batch_size = 100
             for i in range(0, len(tickers_list), batch_size):
                 batch = tickers_list[i : i + batch_size]
-                await _send_sub(
-                    ws, {"channels": ["orderbook_delta"], "market_tickers": batch}
-                )
+                await _send_sub(ws, {"channels": ["orderbook_delta"], "market_tickers": batch})
                 logger.info(
                     "Subscribed orderbook_delta for %d tickers (batch %d)",
                     len(batch),
@@ -440,7 +437,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
             try:
                 ack = await asyncio.wait_for(ws.recv(), timeout=5.0)
                 logger.info("Subscription ack: %s", str(ack)[:200])
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Timeout waiting for subscription ack")
                 break
             except websockets.ConnectionClosed:
@@ -483,9 +480,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
                     _handle_positions(msg)
                     continue
             except (ValueError, KeyError) as exc:
-                logger.error(
-                    "Invalid message data on channel=%s: %s", channel, exc, exc_info=False
-                )
+                logger.error("Invalid message data on channel=%s: %s", channel, exc, exc_info=False)
                 continue
             except DataError as exc:
                 logger.error("Data processing error on channel=%s: %s", channel, exc)
@@ -551,7 +546,9 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
             await asyncio.sleep(retry_after)
             continue
         except AuthenticationError as exc:
-            logger.error("Authentication failed: %s — cannot reconnect without valid credentials", exc)
+            logger.error(
+                "Authentication failed: %s — cannot reconnect without valid credentials", exc
+            )
             raise
         except Exception:
             logger.exception("Unexpected error, reconnecting in %.0fs", delay)
@@ -563,7 +560,7 @@ async def _run(api_key: str, private_key: str, ws_url: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TraderBot WebSocket event cache daemon")
-    args = parser.parse_args()
+    parser.parse_args()
 
     stop = asyncio.Event()
 
@@ -627,15 +624,11 @@ def main() -> None:
             return_when=asyncio.FIRST_COMPLETED,
         )
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         loop.run_until_complete(_amain())
-    except KeyboardInterrupt:
-        pass
 
 
 if __name__ == "__main__":

@@ -261,7 +261,7 @@ class KalshiClient:
             if len(segments) != len(pub_segs):
                 continue
             match = True
-            for s, p in zip(segments, pub_segs):
+            for s, p in zip(segments, pub_segs, strict=False):
                 if p.startswith("{") and p.endswith("}"):
                     continue
                 if s != p:

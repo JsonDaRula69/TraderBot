@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from traderbot.db import get_connection
 from traderbot.db.positions import list_all
 from traderbot.paths import _resolve_db_path
-from traderbot.profiles.models import TradingProfile as Profile
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from traderbot.profiles.models import TradingProfile as Profile
 
 logger = logging.getLogger(__name__)
 

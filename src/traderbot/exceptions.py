@@ -62,7 +62,9 @@ class ConfigurationError(TraderBotError):
     unparsable settings files.
     """
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.CONFIGURATION, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.CONFIGURATION, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 
@@ -72,7 +74,9 @@ class AuthenticationError(TraderBotError):
     Examples: invalid credentials, expired tokens, HTTP 401 / 403.
     """
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.AUTHENTICATION, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.AUTHENTICATION, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 
@@ -115,5 +119,7 @@ class ValidationError(TraderBotError):
     Examples: invalid ticker format, negative quantity, out-of-range prices.
     """
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.VALIDATION, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.VALIDATION, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)

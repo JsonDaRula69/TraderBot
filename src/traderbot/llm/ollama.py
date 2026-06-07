@@ -18,7 +18,9 @@ DEFAULT_TIMEOUT = 60
 class OllamaConnectionError(TraderBotError):
     """Raised when the Ollama server cannot be reached."""
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.OLLAMA_CONNECTION, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.OLLAMA_CONNECTION, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 

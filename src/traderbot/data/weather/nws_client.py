@@ -88,7 +88,9 @@ GridpointCache = dict[str, dict[str, Any]]
 class NwsClientError(DataError):
     """Raised when the NWS API returns an error or fails to respond."""
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.NWS_CLIENT, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.NWS_CLIENT, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 

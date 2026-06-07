@@ -74,7 +74,9 @@ class WalEntry(BaseModel):
 class ConcurrentWriteError(TraderBotError):
     """Raised when another writer is actively writing to the WAL."""
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.CONCURRENT_WRITE, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.CONCURRENT_WRITE, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 

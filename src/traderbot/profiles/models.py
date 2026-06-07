@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from traderbot.kalshi.models import MarketCategory
+if TYPE_CHECKING:
+    from traderbot.kalshi.models import MarketCategory
 
 logger = logging.getLogger(__name__)
 

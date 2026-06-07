@@ -9,10 +9,11 @@ from __future__ import annotations
 import logging
 import sys
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)

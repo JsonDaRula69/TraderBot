@@ -82,13 +82,13 @@ def status() -> None:
     t.add_row("PID", str(s.get("pid")))
     uptime_secs = time.time() - s.get("uptime", time.time())
     t.add_row(
-        "Uptime", "%.0fs" % uptime_secs if uptime_secs < 3600 else "%.1fh" % (uptime_secs / 3600)
+        "Uptime", f"{uptime_secs:.0f}s" if uptime_secs < 3600 else "%.1fh" % (uptime_secs / 3600)
     )
     t.add_row("Cache events", str(s.get("cache_size", 0)))
     last_msg = s.get("last_msg_at")
     if last_msg:
         age = time.time() - last_msg
-        t.add_row("Last msg", "%.0fs ago" % age if age < 3600 else "%.1fh ago" % (age / 3600))
+        t.add_row("Last msg", f"{age:.0f}s ago" if age < 3600 else "%.1fh ago" % (age / 3600))
     console.print(t)
 
 
@@ -134,7 +134,9 @@ def health() -> None:
         raise typer.Exit(code=1)
 
     if not connected:
-        console.print(f"[yellow]DEGRADED[/yellow] — PID {pid} alive but daemon reports DISCONNECTED")
+        console.print(
+            f"[yellow]DEGRADED[/yellow] — PID {pid} alive but daemon reports DISCONNECTED"
+        )
         raise typer.Exit(code=1)
 
     console.print(f"[green]HEALTHY[/green] — PID {pid} alive and CONNECTED")

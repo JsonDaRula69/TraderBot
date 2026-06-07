@@ -71,7 +71,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
                     )
-                    raise typer.Exit(code=1)
+                    raise typer.Exit(code=1) from None
                 report_cli_error(f"Invalid category: {category}. Valid: {valid}")
 
         # Profile-aware category validation: --category must be in enabled_categories
@@ -127,7 +127,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid source: {source}. Valid: {valid}"}, sys.stdout
                     )
-                    raise typer.Exit(code=1)
+                    raise typer.Exit(code=1) from None
                 report_cli_error(f"Invalid source: {source}. Valid: {valid}")
 
         async def _fetch() -> list[NewsItem | DataPoint]:

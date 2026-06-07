@@ -32,7 +32,9 @@ KALSHI_SPKI_PIN = "Iu/+7wHLhGRvN84Vr2fyW7omLlvfmIcGNnaUf9uTkwA="
 class CertPinningError(TraderBotError):
     """TLS certificate public key does not match any trusted SPKI pin."""
 
-    def __init__(self, message: str = "", error_code: int = ErrorCodes.CERT_PINNING, **kwargs) -> None:
+    def __init__(
+        self, message: str = "", error_code: int = ErrorCodes.CERT_PINNING, **kwargs
+    ) -> None:
         super().__init__(message, error_code=error_code, **kwargs)
 
 

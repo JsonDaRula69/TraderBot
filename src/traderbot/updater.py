@@ -40,7 +40,9 @@ def get_current_version() -> str:
         return "0.0.0"
 
 
-def fetch_latest_version(cache_ttl_seconds: int = 3600, force: bool = False) -> tuple[str, str] | None:
+def fetch_latest_version(
+    cache_ttl_seconds: int = 3600, force: bool = False
+) -> tuple[str, str] | None:
     """Fetch latest version tag from GitHub, cached locally to avoid 403 rate limits.
 
     Uses the Git tags API (not releases/latest) so every commit-tagged version

@@ -863,10 +863,7 @@ async def step_system_health(
                 if balance_data:
                     raw = balance_data.get("balance") or balance_data.get("available_balance")
                     if raw is not None:
-                        if isinstance(raw, str):
-                            balance_cents = int(float(raw) * 100)
-                        else:
-                            balance_cents = int(raw)
+                        balance_cents = int(float(raw) * 100) if isinstance(raw, str) else int(raw)
         except Exception:
             logger.debug("Kalshi API health check failed on /events, trying fallback")
             try:

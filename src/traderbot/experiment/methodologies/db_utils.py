@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import random
-import sqlite3
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import sqlite3
 
 
 def select_markets(

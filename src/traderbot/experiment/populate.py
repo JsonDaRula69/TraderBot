@@ -7,13 +7,16 @@ import logging
 import re
 import sqlite3
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
 
 from traderbot.db.experiment_schema import create_tables
 from traderbot.kalshi.client import KalshiClient
 from traderbot.kalshi.markets import MarketService
-from traderbot.kalshi.models import Market
+
+if TYPE_CHECKING:
+    from traderbot.kalshi.models import Market
 
 logger = logging.getLogger(__name__)
 

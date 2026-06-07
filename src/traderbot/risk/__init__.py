@@ -29,7 +29,9 @@ class TradeResult(BaseModel):
 class RiskCheckError(TraderBotError):
     """Raised when risk checks reject a trade, carrying details about which check failed and why."""
 
-    def __init__(self, ticker: str, failures: list, error_code: int = ErrorCodes.RISK_CHECK) -> None:
+    def __init__(
+        self, ticker: str, failures: list, error_code: int = ErrorCodes.RISK_CHECK
+    ) -> None:
         self.ticker = ticker
         self.failures = failures
         details = "; ".join(

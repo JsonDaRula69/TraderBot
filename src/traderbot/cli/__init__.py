@@ -1,12 +1,8 @@
 """CLI entry point — imports all sub-apps and registers them on the main typer app."""
 
-from __future__ import annotations
-
-import importlib
 import json as json_lib
 import logging
 import shutil
-import subprocess as _subprocess
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -181,7 +177,6 @@ def uninstall(
     import subprocess as _sp
 
     from traderbot.paths import get_data_dir, list_all_data_paths
-    from traderbot.profiles.registry import ProfileRegistry
 
     console = Console()
     data_dir = get_data_dir()
@@ -429,12 +424,11 @@ def uninstall(
             if answer:
                 remove_repo = True
 
-    if remove_repo:
-        if repo_dir.exists():
-            shutil.rmtree(repo_dir)
-            removed.append(str(repo_dir))
-            if not json_output:
-                console.print(f"  Removed repo: {repo_dir}")
+    if remove_repo and repo_dir.exists():
+        shutil.rmtree(repo_dir)
+        removed.append(str(repo_dir))
+        if not json_output:
+            console.print(f"  Removed repo: {repo_dir}")
 
     _shell_files = [Path.home() / ".bashrc", Path.home() / ".profile"]
     for _sf in _shell_files:

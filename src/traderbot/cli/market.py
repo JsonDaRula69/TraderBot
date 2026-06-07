@@ -8,13 +8,16 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from traderbot.cli.helpers import report_cli_error
+
+if TYPE_CHECKING:
+    from traderbot.news.models import NewsCategory, NewsItem
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +126,7 @@ def register_commands(parent_app: typer.Typer) -> None:
                     json_lib.dump(
                         {"error": f"Invalid category: {category}. Valid: {valid}"}, sys.stdout
                     )
-                    raise typer.Exit(code=1)
+                    raise typer.Exit(code=1) from None
                 report_cli_error(f"Invalid category: {category}. Valid: {valid}")
 
         try:
@@ -221,7 +224,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.news.cache_paths import get_news_cache_path
         from traderbot.news.classifier import NewsClassifier
         from traderbot.news.impact_assessor import ImpactAssessor
-        from traderbot.news.models import NewsCategory, NewsItem
         from traderbot.news.sentiment_scorer import SentimentScorer
         from traderbot.news.sources import NewsAggregator
         from traderbot.profiles.config import resolve_newsapi_key

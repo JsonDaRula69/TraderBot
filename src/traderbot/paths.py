@@ -1,7 +1,5 @@
 """Centralized path constants for TraderBot data directories."""
 
-from __future__ import annotations
-
 import logging
 import re
 from pathlib import Path
@@ -205,9 +203,12 @@ def _strip_bare_wal_status(content: str) -> str:
 
     cleaned = []
     for i, line in enumerate(lines):
-        if last_wal_idx < i < next_heading_idx:
-            if line.startswith("Status:") and not line.startswith("- Status:"):
-                continue
+        if (
+            last_wal_idx < i < next_heading_idx
+            and line.startswith("Status:")
+            and not line.startswith("- Status:")
+        ):
+            continue
         cleaned.append(line)
 
     return "\n".join(cleaned)

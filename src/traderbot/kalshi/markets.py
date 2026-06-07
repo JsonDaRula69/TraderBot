@@ -7,7 +7,6 @@ import json
 import logging
 import re
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from traderbot.kalshi._normalize import (
@@ -22,9 +21,10 @@ from traderbot.kalshi.models import (
     OrderBook,
     TradeListResponse,
 )
-from traderbot.kalshi.ws_cache import get_event_category
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from traderbot.kalshi.client import KalshiClient
 
 logger = logging.getLogger(__name__)
@@ -437,7 +437,7 @@ class MarketService:
         logger = logging.getLogger(__name__)
         # The series endpoint's category filter works with proper casing
         # (unlike events). Map user-facing categories to API format.
-        _CAT_FMT: dict[str, str] = {
+        _cat_fmt: dict[str, str] = {
             "weather": "Climate and Weather",
             "politics": "Politics and Government",
             "sports": "Sports",
@@ -449,7 +449,7 @@ class MarketService:
             "science": "Science and Technology",
         }
         series_map: dict[str, str] = {}
-        api_cat = _CAT_FMT.get(category, category.title())
+        api_cat = _cat_fmt.get(category, category.title())
         try:
             resp = await self._client.get("/series", limit=500, category=api_cat)
             resp.raise_for_status()
@@ -521,7 +521,7 @@ class MarketService:
                             m.market_category = _map_category(scat)
                     return markets
                 except Exception:
-                    logger.warning("_fetch_for_series failed for series %s", series_ticker)
+                    logger.warning("_fetch_for_series failed for series %s", st)
                     return []
 
         tasks = [_fetch_for_series(st, scat) for st, scat in series_items]

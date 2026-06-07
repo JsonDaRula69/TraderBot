@@ -1,7 +1,5 @@
 """Profile management commands."""
 
-from __future__ import annotations
-
 import json as json_lib
 import logging
 import sys
@@ -712,7 +710,7 @@ def profile_create(
         _interactive_profile_create(console, registry)
         return
 
-    has_flags = any(
+    any(
         v is not None
         for v in [
             mode,
@@ -989,7 +987,7 @@ def profile_revoke(
         return
 
     resolved = resolve_token(token)
-    agent_id = resolved[1] if resolved else None
+    resolved[1] if resolved else None
 
     revoke_token(token)
     console.print(f"[green]✓[/green] Revoked token for profile '{profile_name}'")

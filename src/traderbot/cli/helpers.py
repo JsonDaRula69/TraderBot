@@ -1,7 +1,5 @@
 """Shared CLI utilities — app, console, and common helpers."""
 
-from __future__ import annotations
-
 import logging
 import shutil
 import sys
@@ -12,7 +10,10 @@ import typer
 from rich.console import Console
 
 from traderbot.error_reporter import format_cli_error
-from traderbot.paths import _resolve_db_path, _with_db  # noqa: F401 — re-exported for backward compatibility
+from traderbot.paths import (  # noqa: F401 — re-exported for backward compatibility
+    _resolve_db_path,
+    _with_db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,6 @@ def report_cli_error(error: BaseException | str, code: int | None = None) -> Nev
             err_console.print(f"[red]Error:[/red] {error}")
 
     raise typer.Exit(code=1)
-
 
 
 def _get_strategy(name: str):

@@ -229,7 +229,6 @@ def _t_critical(alpha: float, df: int) -> float:
             }
             return _small_df_crits.get(df, float("inf"))
 
-
         # df >= 16: Cornish-Fisher expansion (Gleason 1999)
         z = _normal_quantile(p)
         z2 = z * z

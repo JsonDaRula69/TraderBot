@@ -1,7 +1,5 @@
 """Trade-related commands: trade, positions, audit, backtest, paper, compare, analyze, performance."""
 
-from __future__ import annotations
-
 import asyncio
 import json as json_lib
 import logging
@@ -90,7 +88,7 @@ async def _analyze_realtime(ticker: str, console: Console, json_output: bool) ->
                         price = change.get("price", "?")
                         size = change.get("size", "?")
                         direction = change.get("direction", "?")
-                        console.print(f"  {side} {direction} @ {price}¢ × {size}")
+                        console.print(f"  {side} {direction} @ {price}¢ x {size}")
 
             elif msg_type == "ticker":
                 if json_output:
@@ -200,7 +198,6 @@ def register_commands(parent_app: typer.Typer) -> None:
         if orderbook:
             console.print("\n[bold]Order Book[/bold]")
             yes_bids = orderbook.yes_bids if orderbook.yes_bids else []
-            no_bids = orderbook.no_bids if orderbook.no_bids else []
 
             if yes_bids:
                 from traderbot.analysis.odds import implied_probability
@@ -834,7 +831,7 @@ def register_commands(parent_app: typer.Typer) -> None:
         from traderbot.simulation.strategies import get_strategy
 
         console = Console()
-        err_console = Console(stderr=True)
+        Console(stderr=True)
 
         strat = get_strategy(strategy)
 
@@ -971,7 +968,9 @@ def register_commands(parent_app: typer.Typer) -> None:
         profile_names = [n.strip() for n in profiles.split(",")]
         unknown = [n for n in profile_names if n not in PRESETS]
         if unknown:
-            report_cli_error(f"Unknown profile(s): {', '.join(unknown)}. Available: {', '.join(PRESETS.keys())}")
+            report_cli_error(
+                f"Unknown profile(s): {', '.join(unknown)}. Available: {', '.join(PRESETS.keys())}"
+            )
 
         selected_profiles = [PRESETS[n] for n in profile_names]
 
