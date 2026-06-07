@@ -24,6 +24,7 @@ from traderbot.cli.market import register_commands as register_market
 from traderbot.cli.news import register_commands as register_news
 from traderbot.cli.profile import profile_app
 from traderbot.cli.sandbox import sandbox_app
+from traderbot.cli.setup import register_commands as register_setup
 from traderbot.cli.trade import register_commands as register_trade
 from traderbot.cli.ws import ws_app
 
@@ -61,6 +62,7 @@ register_trade(app)
 register_market(app)
 register_news(app)
 register_admin(app)
+register_setup(app)
 app.add_typer(ws_app, name="ws")
 
 # Register experiment sub-app (imported from experiment module)

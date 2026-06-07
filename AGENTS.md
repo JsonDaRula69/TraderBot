@@ -10,7 +10,24 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: 0.14.81
+- **Current version**: 0.15.56
+
+## Installation
+
+TraderBot supports two installation methods:
+
+1. **pipx (recommended)** — isolated, always-available CLI:
+   ```bash
+   pipx install traderbot
+   traderbot setup
+   ```
+   pipx isolates TraderBot in its own virtualenv, avoiding the `externally-managed-environment` error on modern Linux. After install, run `traderbot setup` for the interactive configuration wizard.
+
+2. **Installer script** — full-featured, includes Docker sandbox and OpenClaw integration:
+   ```bash
+   bash <(curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh)
+   ```
+   The installer handles venv creation, dependency installation, and interactive configuration.
 
 ## Versioning Scheme
 
@@ -90,6 +107,15 @@ This file defines conventions for AI-assisted development of this project. All A
 - `src/traderbot/cli/` — CLI entry point and sub-command modules
 - `src/traderbot/experiment/` — experiment design, harness, and evaluation framework
 - `src/traderbot/data/` — external data providers (weather, registry)
+
+## CLI Commands
+
+### Setup and Configuration Commands
+
+- `traderbot setup` — Interactive setup wizard (Python check, data dir, DB, credentials, master password, profile). Supports `--dry-run`, `--non-interactive`, `--no-creds`, `--json`.
+- `traderbot bootstrap --full` — Delegates to the setup wizard; legacy bootstrap without `--full` remains unchanged.
+- `traderbot auth set-key <service> <key>` — Store credentials for non-Kalshi services (newsapi, voyage, twitter, reddit, coingecko, openweathermap, fred). Use `--value` for non-interactive/cron. Use `--tier demo|pro` for coingecko.
+- `traderbot auth detect-tier` — Probe CoinGecko API to auto-detect tier (free/demo/pro). Stores result automatically. Supports `--dry-run`, `--json`.
 
 ## Testing Discipline
 
