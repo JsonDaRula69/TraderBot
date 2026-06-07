@@ -353,6 +353,81 @@ def auth_set_kalshi(
     )
 
 
+@auth_app.command("set-key")
+def auth_set_key(
+    service: Annotated[
+        str, typer.Argument(help="Service name (non-Kalshi)")
+    ],
+    key: Annotated[
+        str, typer.Argument(help="Key to set (e.g., api_key, client_secret)")
+    ],
+    value: Annotated[
+        str | None, typer.Option("--value", help="Value (non-interactive/cron)")
+    ] = None,
+    tier: Annotated[
+        str | None, typer.Option("--tier", help="API tier for coingecko (demo/pro)")
+    ] = None,
+) -> None:
+    """Store a credential for a non-Kalshi service via OS keyring (or .env fallback).
+
+    Interactive mode prompts for the value. Use --value for non-interactive (cron) usage.
+    For coingecko, use --tier to set the tier (demo / pro) in addition to the API key.
+    """
+    from traderbot.auth import _ALL_SERVICES, AuthManager
+
+    console = Console()
+
+    if service == "kalshi":
+        report_cli_error(
+            "Use 'traderbot auth set-kalshi' for Kalshi credentials. "
+            "set-key is for non-Kalshi services only."
+        )
+
+    valid_keys = _ALL_SERVICES.get(service)
+    if valid_keys is None:
+        non_kalshi = sorted(s for s in _ALL_SERVICES if s != "kalshi")
+        report_cli_error(
+            f"Unknown service: {service}. Valid services: {', '.join(non_kalshi)}"
+        )
+
+    if key not in valid_keys:
+        report_cli_error(
+            f"Unknown key '{key}' for service '{service}'. "
+            f"Valid keys: {', '.join(valid_keys)}"
+        )
+
+    if tier is not None:
+        if service != "coingecko":
+            report_cli_error("--tier is only valid for service 'coingecko'")
+        if key != "api_key":
+            report_cli_error(
+                "--tier is only valid with key 'api_key' for service 'coingecko'"
+            )
+
+    sensitive_keys = frozenset({"api_key", "client_secret", "private_key_pem"})
+
+    if value is not None:
+        console.print(
+            "[yellow]Warning: Value provided via CLI argument — may be visible "
+            "in process listings and shell history.[/yellow]"
+        )
+    else:
+        value = typer.prompt(
+            f"Enter value for {service}.{key}",
+            hide_input=key in sensitive_keys,
+        )
+
+    mgr = AuthManager()
+    source = mgr.set_credential(service, key, value)
+    console.print(f"[green]✓[/green] {service}.{key} stored in {source}")
+
+    if tier is not None:
+        tier_source = mgr.set_credential("coingecko", "tier", tier)
+        console.print(
+            f"[green]✓[/green] coingecko.tier ({tier}) stored in {tier_source}"
+        )
+
+
 @auth_app.command("migrate")
 def auth_migrate(
     service: Annotated[
@@ -394,6 +469,102 @@ def auth_delete_key(
     else:
         console.print(
             f"[yellow]{service}.{key} not found in keyring or keyring unavailable.[/yellow]"
+        )
+
+
+@auth_app.command("detect-tier")
+def auth_detect_tier(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Detect tier without storing result")
+    ] = False,
+) -> None:
+    """Probe CoinGecko API to determine which tier (free/demo/pro) your API key works with.
+
+    Tries pro endpoint first, then demo, then unauthenticated free tier.
+    Stores detected tier automatically unless --dry-run is used.
+    """
+    import httpx
+
+    from traderbot.auth import AuthManager
+
+    console = Console()
+    mgr = AuthManager()
+
+    result = mgr.get_credential("coingecko", "api_key")
+    api_key = result.value.get_secret_value() if result is not None else None
+
+    if not api_key or not api_key.strip():
+        if json_output:
+            json_lib.dump(
+                {"error": "No CoinGecko API key configured"},
+                sys.stdout,
+            )
+            raise typer.Exit(1)
+        report_cli_error(
+            "No CoinGecko API key configured. "
+            "Use `traderbot auth set-key coingecko api_key`."
+        )
+
+    detected_tier: str | None = None
+    error_detail: str | None = None
+
+    probe_order = [
+        ("pro", "https://pro-api.coingecko.com/api/v3/ping", "x-cg-pro-api-key"),
+        ("demo", "https://api.coingecko.com/api/v3/ping", "x-cg-demo-api-key"),
+        ("free", "https://api.coingecko.com/api/v3/ping", None),
+    ]
+
+    for tier, url, header_name in probe_order:
+        try:
+            headers = {header_name: api_key} if header_name else {}
+            resp = httpx.get(url, headers=headers, timeout=10.0)
+            if resp.status_code == 200:
+                detected_tier = tier
+                break
+            if tier != "free":
+                logger.debug(
+                    "CoinGecko %s tier probe returned %d", tier, resp.status_code
+                )
+        except httpx.TransportError as exc:
+            logger.debug("CoinGecko %s tier probe failed: %s", tier, exc)
+            error_detail = str(exc)
+            continue
+
+    if detected_tier is None:
+        msg = (
+            "Unable to determine CoinGecko API tier. All probe endpoints failed"
+            + (f": {error_detail}" if error_detail else ".")
+        )
+        if json_output:
+            json_lib.dump({"error": msg}, sys.stdout)
+            raise typer.Exit(1)
+        report_cli_error(msg)
+
+    source: str | None = None
+    if not dry_run:
+        source = mgr.set_credential("coingecko", "tier", detected_tier)
+
+    if json_output:
+        json_lib.dump(
+            {
+                "tier": detected_tier,
+                "stored": not dry_run,
+                "source": source,
+            },
+            sys.stdout,
+        )
+        return
+
+    if dry_run:
+        console.print(
+            f"[green]Detected CoinGecko tier: [bold]{detected_tier}[/bold][/green] "
+            f"([dim]dry-run, not stored[/dim])"
+        )
+    else:
+        console.print(
+            f"[green]Detected CoinGecko tier: [bold]{detected_tier}[/bold][/green] "
+            f"([dim]stored in {source}[/dim])"
         )
 
 
