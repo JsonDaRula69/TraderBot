@@ -210,6 +210,31 @@ def _ensure_openclaw_visibility() -> None:
 
 
 def apply_update(restart: bool = False, dev: bool = False, verify_signature: bool = True) -> bool:
+    from traderbot.paths import _is_pipx_installed
+
+    # pipx install — use pipx upgrade
+    if _is_pipx_installed():
+        logger.info("pipx install detected — using pipx upgrade path")
+        try:
+            result = subprocess.run(
+                ["pipx", "upgrade", "traderbot"], capture_output=True, timeout=300
+            )
+            if result.returncode != 0:
+                logger.error(
+                    "pipx upgrade failed: %s",
+                    result.stderr.decode() if result.stderr else "unknown",
+                )
+                return False
+        except Exception as exc:
+            logger.error("pipx upgrade failed: %s", exc)
+            return False
+        _ensure_openclaw_visibility()
+        logger.info("Update applied successfully via pipx")
+        if restart:
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        return True
+
+    # git/source install — use bootstrap script
     try:
         from traderbot.paths import get_source_root
 

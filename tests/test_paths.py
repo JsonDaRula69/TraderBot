@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from traderbot.paths import (
     ensure_data_dir,
     get_agent_workspace_dir,
@@ -99,3 +97,54 @@ class TestListAllDataPaths:
             assert len(paths) > 0
             for p in paths:
                 assert str(p).startswith(str(fake_base))
+
+
+class TestIsPipxInstalled:
+    def test_pipx_venv_returns_true(self) -> None:
+        from traderbot.paths import _is_pipx_installed
+
+        with patch("sys.executable", "/home/user/.local/pipx/venvs/traderbot/bin/python"):
+            assert _is_pipx_installed() is True
+
+    def test_pip_install_returns_false(self) -> None:
+        from traderbot.paths import _is_pipx_installed
+
+        with patch("sys.executable", "/usr/lib/python3.12/site-packages/traderbot"):
+            assert _is_pipx_installed() is False
+
+    def test_git_source_returns_false(self) -> None:
+        from traderbot.paths import _is_pipx_installed
+
+        with patch("sys.executable", "/home/user/traderbot/.venv/bin/python"):
+            assert _is_pipx_installed() is False
+
+
+class TestGetInstallMethod:
+    def test_pipx_when_pipx_installed(self) -> None:
+        from traderbot.paths import get_install_method
+
+        with (
+            patch("sys.executable", "/home/user/.local/pipx/venvs/traderbot/bin/python"),
+        ):
+            assert get_install_method() == "pipx"
+
+    def test_git_when_source_root_found(self, tmp_path: Path) -> None:
+        from traderbot.paths import get_install_method
+
+        with (
+            patch("sys.executable", "/home/user/traderbot/.venv/bin/python"),
+            patch("traderbot.paths.get_source_root", return_value=tmp_path),
+        ):
+            assert get_install_method() == "git"
+
+    def test_pip_when_no_source_root(self) -> None:
+        from traderbot.paths import get_install_method
+
+        def _raise_fnf() -> Path:
+            raise FileNotFoundError
+
+        with (
+            patch("sys.executable", "/usr/lib/python3.12/site-packages/traderbot"),
+            patch("traderbot.paths.get_source_root", side_effect=_raise_fnf),
+        ):
+            assert get_install_method() == "pip"

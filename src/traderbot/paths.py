@@ -88,6 +88,28 @@ def get_master_key_path() -> Path:
     return get_data_dir() / ".master_key"
 
 
+def _is_pipx_installed() -> bool:
+    """Check if traderbot was installed via pipx.
+
+    pipx installs packages into isolated venvs under ~/.local/pipx/venvs/.
+    When running from a pipx venv, the executable path contains 'pipx'.
+    """
+    import sys
+
+    return "pipx" in sys.executable
+
+
+def get_install_method() -> str:
+    """Return how traderbot was installed: 'pipx', 'pip', or 'git'."""
+    if _is_pipx_installed():
+        return "pipx"
+    try:
+        get_source_root()  # raises FileNotFoundError if not in source tree
+        return "git"
+    except FileNotFoundError:
+        return "pip"
+
+
 def get_source_root() -> Path:
     """Return the source tree root (parent of src/traderbot).
 

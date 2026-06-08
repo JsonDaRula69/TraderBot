@@ -24,6 +24,7 @@ from traderbot.cli.market import register_commands as register_market
 from traderbot.cli.news import register_commands as register_news
 from traderbot.cli.profile import profile_app
 from traderbot.cli.sandbox import sandbox_app
+from traderbot.cli.setup import register_commands as register_setup
 from traderbot.cli.trade import register_commands as register_trade
 from traderbot.cli.ws import ws_app
 
@@ -61,6 +62,7 @@ register_trade(app)
 register_market(app)
 register_news(app)
 register_admin(app)
+register_setup(app)
 app.add_typer(ws_app, name="ws")
 
 # Register experiment sub-app (imported from experiment module)
@@ -304,12 +306,31 @@ def uninstall(
                 removed_services.append(str(svc))
     removed.extend(removed_services)
 
-    # Uninstall pip package if installed (not .venv local install)
-    try:
-        import traderbot as _tb_mod
+    from traderbot.paths import _is_pipx_installed
 
-        _tb_path = Path(_tb_mod.__file__).resolve()
-        if "site-packages" in str(_tb_path):
+    is_pipx = _is_pipx_installed()
+
+    if is_pipx:
+        try:
+            if json_output:
+                _sp.run(["pipx", "uninstall", "traderbot"], capture_output=True, timeout=30)
+                removed.append("pipx:traderbot")
+            else:
+                if typer.confirm("  Uninstall pipx package 'traderbot'?", default=True):
+                    _sp.run(["pipx", "uninstall", "traderbot"], capture_output=True, timeout=30)
+                    console.print("  Uninstalled pipx package: traderbot")
+                    removed.append("pipx:traderbot")
+        except Exception as exc:
+            logger.warning("pipx uninstall failed: %s", exc)
+    else:
+        try:
+            import traderbot as _tb_mod
+
+            _tb_path = Path(_tb_mod.__file__).resolve()
+        except Exception:
+            _tb_path = None
+
+        if _tb_path and "site-packages" in str(_tb_path):
             if json_output:
                 _sp.run(
                     [sys.executable, "-m", "pip", "uninstall", "traderbot", "-y"],
@@ -326,10 +347,10 @@ def uninstall(
                     )
                     console.print("  Uninstalled pip package: traderbot")
                     removed.append("pip:traderbot")
-    except Exception as exc:
-        logger.warning("pip uninstall failed: %s", exc)
 
-    _sl_usrs = [Path("/usr/local/bin/traderbot"), Path.home() / ".local/bin/traderbot"]
+    _sl_usrs = [Path("/usr/local/bin/traderbot")]
+    if not is_pipx:
+        _sl_usrs.append(Path.home() / ".local/bin/traderbot")
     for _sl in _sl_usrs:
         if _sl.is_symlink() or _sl.exists():
             try:

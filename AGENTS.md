@@ -10,7 +10,36 @@ This file defines conventions for AI-assisted development of this project. All A
 - **Type checking**: Pydantic models for all API data; no `as any`, `# type: ignore`
 - **Testing**: pytest with async support
 - **Linting**: ruff (formatter + linter)
-- **Current version**: 0.14.81
+- **Current version**: 0.15.56
+
+## Installation
+
+TraderBot supports two installation methods:
+
+1. **pipx (recommended)** — isolated, always-available CLI:
+   ```bash
+   pipx install traderbot
+   traderbot setup
+   ```
+   pipx isolates TraderBot in its own virtualenv, avoiding the `externally-managed-environment` error on modern Linux. After install, run `traderbot setup` for the interactive configuration wizard.
+
+2. **Installer script** — full-featured, includes Docker sandbox and OpenClaw integration:
+   ```bash
+   bash <(curl -fsSL https://raw.githubusercontent.com/JsonDaRula69/TraderBot/main/install/traderbot-installer.sh)
+   ```
+   The installer handles venv creation, dependency installation, and delegates interactive configuration to `traderbot setup`. For pip-installed flows, `traderbot` is on PATH; for git-installed flows, `${INSTALL_DIR}/.venv/bin/traderbot` is used. Environment variables `TRADERBOT_NON_INTERACTIVE`, `TRADERBOT_NO_CREDS`, `TRADERBOT_DRY_RUN`, and `TRADERBOT_JSON` map to `traderbot setup` flags `--non-interactive`, `--no-creds`, `--dry-run`, and `--json` respectively.
+
+   The installer's `--uninstall` delegates to `traderbot uninstall --json` first, then cleans up installer-specific artifacts. The installer's `--update` detects pipx installs and routes to `pipx upgrade traderbot` instead of git pull.
+
+### Uninstalling
+
+- **pipx install**: `traderbot uninstall` detects pipx and uses `pipx uninstall traderbot` to remove the package. Also removes services, data, cron jobs, and OpenClaw state (with prompts per category).
+- **git/source install**: `traderbot uninstall` uses `pip uninstall traderbot -y` as fallback. The installer's `--uninstall` delegates to `traderbot uninstall --json` first.
+
+### Updating
+
+- **pipx install**: `traderbot update` detects pipx and uses `pipx upgrade traderbot`.
+- **git/source install**: `traderbot update` uses git pull via the bootstrap script. The installer's `--update` detects pipx installs and routes to `pipx upgrade traderbot` instead.
 
 ## Versioning Scheme
 
@@ -90,6 +119,17 @@ This file defines conventions for AI-assisted development of this project. All A
 - `src/traderbot/cli/` — CLI entry point and sub-command modules
 - `src/traderbot/experiment/` — experiment design, harness, and evaluation framework
 - `src/traderbot/data/` — external data providers (weather, registry)
+
+## CLI Commands
+
+### Setup and Configuration Commands
+
+- `traderbot setup` — Interactive setup wizard (Python check, data dir, DB, credentials, master password, profile). Supports `--dry-run`, `--non-interactive`, `--no-creds`, `--json`.
+- `traderbot bootstrap --full` — Delegates to the setup wizard; legacy bootstrap without `--full` remains unchanged.
+- `traderbot auth set-key <service> <key>` — Store credentials for non-Kalshi services (newsapi, voyage, twitter, reddit, coingecko, openweathermap, fred). Use `--value` for non-interactive/cron. Use `--tier demo|pro` for coingecko.
+- `traderbot auth detect-tier` — Probe CoinGecko API to auto-detect tier (free/demo/pro). Stores result automatically. Supports `--dry-run`, `--json`.
+- `traderbot uninstall` — Remove TraderBot and all artifacts. Detects pipx installations and uses `pipx uninstall traderbot`. Falls back to `pip uninstall traderbot -y` for legacy installs.
+- `traderbot update` — Check for and apply updates. Detects pipx installations and uses `pipx upgrade traderbot`. Falls back to git pull (source install) or `pip install --upgrade traderbot` (pip install).
 
 ## Testing Discipline
 
@@ -300,7 +340,7 @@ TraderBot agents run inside OpenClaw's Docker sandbox. Key design:
 
 `traderbot update` (Python CLI) and `traderbot-installer.sh --update` both execute this pipeline in order:
 
-1. **pip upgrade** or **git pull** — detects install mode (pip-installed → `pip install --upgrade traderbot`; git-installed → `git pull`)
+1. **pip upgrade** or **git pull** — detects install mode (pipx-installed → `pipx upgrade traderbot`; pip-installed → `pip install --upgrade traderbot`; git-installed → `git pull`)
 2. **pip install -e .** (reinstall package, git mode only)
 3. **Refresh workspace files** (replace templates, preserve user data)
 4. **Rebuild Docker sandbox image** (if Docker available)

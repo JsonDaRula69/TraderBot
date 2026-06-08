@@ -33,16 +33,40 @@ def register_commands(parent_app: typer.Typer) -> None:
         json_output: Annotated[
             bool, typer.Option("--json", help="Output as JSON for machine consumption")
         ] = False,
+        full: Annotated[
+            bool,
+            typer.Option(
+                "--full", help="Run full interactive setup wizard (delegates to 'traderbot setup')"
+            ),
+        ] = False,
     ) -> None:
-        """One-time setup wizard for new users."""
+        """One-time setup wizard for new users.
+
+        Use --full to run the complete interactive setup wizard
+        (Python check, data dir, DB init, credentials, master password,
+        and profile creation). Without --full, runs the legacy bootstrap.
+        """
         configure_root_logger()
+
+        console = Console()
+
+        if full:
+            from traderbot.cli.setup import _run_setup_steps
+
+            exit_code = _run_setup_steps(
+                console,
+                dry_run=dry_run,
+                json_output=json_output,
+                non_interactive=False,
+            )
+            raise typer.Exit(code=exit_code)
+
         import platform
 
         from traderbot.auth import AuthManager
         from traderbot.db import DB_PATH, get_connection, init_schema
         from traderbot.paths import get_data_dir
 
-        console = Console()
         steps: dict[str, str | bool] = {}
 
         # Step 1: Check Python version (3.12.x — chroma-hnswlib has no wheels for 3.13+)
