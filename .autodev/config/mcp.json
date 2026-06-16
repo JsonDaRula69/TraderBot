@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "loreguard": {
+      "command": "node",
+      "args": ["/home/jsondarula/.npm-global/lib/node_modules/loreguard-mcp/dist/bin/loreguard-mcp.js"],
+      "env": {
+        "LOREGUARD_DB_PATH": ".loreguard/lore.db",
+        "LOREGUARD_ALLOW_MCP_ABSENCE": "1"
+      }
+    }
+  }
+}

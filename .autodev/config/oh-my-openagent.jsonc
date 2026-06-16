@@ -1,0 +1,162 @@
+{
+  // AutoDev team configuration for oh-my-openagent
+  // Model routing: Ollama Cloud — GLM 5.1, Deepseek V4 Pro, Deepseek V4 Flash
+  // Token budget is not a concern; optimize for results.
+
+  "team_mode": {
+    "enabled": true,
+    "max_parallel_members": 4,
+    "max_members": 8,
+    "tmux_visualization": true
+  },
+
+  "tmux": {
+    "enabled": true,
+    "layout": "main-vertical"
+  },
+
+  // Agent model assignments — all routed through Ollama Cloud
+  "agents": {
+    "sisyphus": {
+      "model": "ollama-cloud/glm-5.1",
+      "temperature": 0.1
+    },
+    "hephaestus": {
+      "model": "ollama-cloud/deepseek-v4-pro",
+      "temperature": 0.1
+    },
+    "prometheus": {
+      "model": "ollama-cloud/glm-5.1",
+      "temperature": 0.1
+    },
+    "atlas": {
+      "model": "ollama-cloud/glm-5.1",
+      "temperature": 0.1
+    },
+    "oracle": {
+      "model": "ollama-cloud/deepseek-v4-pro",
+      "temperature": 0.1
+    },
+    "librarian": {
+      "model": "ollama-cloud/deepseek-v4-flash",
+      "temperature": 0.2
+    },
+    "explore": {
+      "model": "ollama-cloud/deepseek-v4-flash",
+      "temperature": 0.2
+    },
+    "momus": {
+      "model": "ollama-cloud/deepseek-v4-pro",
+      "temperature": 0.1
+    },
+    "metis": {
+      "model": "ollama-cloud/glm-5.1",
+      "temperature": 0.1
+    }
+  },
+
+  // Category routing — intent-based, not model-name-based
+  "categories": {
+    "visual-engineering": {
+      "model": "ollama-cloud/glm-5.1",
+      "variant": "high"
+    },
+    "artistry": {
+      "model": "ollama-cloud/glm-5.1",
+      "variant": "high"
+    },
+    "ultrabrain": {
+      "model": "ollama-cloud/deepseek-v4-pro",
+      "variant": "xhigh"
+    },
+    "deep": {
+      "model": "ollama-cloud/deepseek-v4-pro",
+      "variant": "medium"
+    },
+    "quick": {
+      "model": "ollama-cloud/deepseek-v4-flash"
+    },
+    "unspecified-low": {
+      "model": "ollama-cloud/deepseek-v4-flash"
+    },
+    "unspecified-high": {
+      "model": "ollama-cloud/glm-5.1",
+      "variant": "max"
+    },
+    "writing": {
+      "model": "ollama-cloud/glm-5.1",
+      "variant": "high"
+    }
+  },
+
+  // Background task concurrency
+  "background_task": {
+    "defaultConcurrency": 5,
+    "modelConcurrency": {
+      "ollama-cloud/glm-5.1": 5,
+      "ollama-cloud/deepseek-v4-pro": 5,
+      "ollama-cloud/deepseek-v4-flash": 8
+    }
+  },
+
+  // OpenClaw integration — liaison bridge
+  "openclaw": {
+    "enabled": true,
+    "gateways": {
+      "autodev-liaison": {
+        "type": "http",
+        "url": "http://localhost:3000/hooks/wake",
+        "headers": {
+          "Authorization": "Bearer ${AUTODEV_HOOK_TOKEN}"
+        },
+        "timeout": 10000
+      }
+    },
+    "hooks": {
+      "autodev:completed": {
+        "enabled": true,
+        "gateway": "autodev-liaison",
+        "instruction": "AutoDev completed work. Check GitHub for details."
+      },
+      "autodev:blocked": {
+        "enabled": true,
+        "gateway": "autodev-liaison",
+        "instruction": "AutoDev is blocked. Check GitHub and escalate to operator."
+      },
+      "autodev:deployed": {
+        "enabled": true,
+        "gateway": "autodev-liaison",
+        "instruction": "AutoDev deployed a change. Validate Traderbot health."
+      }
+    },
+    // Reply listener — enables human ↔ AutoDev communication via Discord/Telegram
+    // and liaison → AutoDev wake signals via shared channel
+    "replyListener": {
+      "enabled": true,
+      "pollIntervalMs": 3000,
+      "rateLimitPerMinute": 10,
+      "maxMessageLength": 4000,
+      "includePrefix": true,
+      // Direct message support: allows humans to start new conversations
+      // with AutoDev from Discord/Telegram, not just reply to existing messages
+      "acceptDirectMessages": true,
+      "directMessageTargetPane": "autodev.0",
+      "directMessagePrefix": "[direct]",
+      // Discord configuration
+      "discordBotToken": "${AUTODEV_DISCORD_BOT_TOKEN}",
+      "discordChannelId": "${AUTODEV_DISCORD_CHANNEL_ID}",
+      "authorizedDiscordUserIds": [],
+      // Telegram configuration (optional)
+      "telegramBotToken": "${AUTODEV_TELEGRAM_BOT_TOKEN}",
+      "telegramChatId": "${AUTODEV_TELEGRAM_CHAT_ID}"
+    }
+  },
+
+  // Hook configuration
+  "disabled_hooks": [],
+
+  // Custom skills path — project-level skills
+  "skills": {
+    "project_paths": [".autodev/skills"]
+  }
+}
