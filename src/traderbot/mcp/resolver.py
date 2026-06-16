@@ -49,7 +49,7 @@ def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None
     """
     import os
 
-    use_hardcoded = os.environ.get("TRADERBOT_USE_HARDCODED_AUTH", "1")
+    use_hardcoded = os.environ.get("TRADERBOT_USE_HARDCODED_AUTH", "0")
 
     if use_hardcoded != "0":
         # Phase 0: hardcoded auth
