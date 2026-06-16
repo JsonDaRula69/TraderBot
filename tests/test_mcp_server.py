@@ -10,9 +10,10 @@ class TestMCPToolDefinitions:
     def test_four_tools_defined(self):
         assert len(TOOL_DEFINITIONS) == 4
 
-    def test_tool_names_use_double_underscore(self):
+    def test_tool_names_are_short(self):
+        """Tool names are short — OpenClaw prefixes them with the server name."""
         for td in TOOL_DEFINITIONS:
-            assert td["name"].startswith("traderbot__"), f"Tool {td['name']} doesn't follow traderbot__ naming"
+            assert not td["name"].startswith("traderbot__"), f"Tool {td['name']} should not include server prefix"
 
     def test_all_tools_have_handlers(self):
         for td in TOOL_DEFINITIONS:
@@ -20,19 +21,19 @@ class TestMCPToolDefinitions:
 
     def test_health_tool_exists(self):
         names = [td["name"] for td in TOOL_DEFINITIONS]
-        assert "traderbot__health" in names
+        assert "health" in names
 
     def test_auth_check_tool_exists(self):
         names = [td["name"] for td in TOOL_DEFINITIONS]
-        assert "traderbot__auth_check" in names
+        assert "auth_check" in names
 
     def test_profile_list_tool_exists(self):
         names = [td["name"] for td in TOOL_DEFINITIONS]
-        assert "traderbot__profile_list" in names
+        assert "profile_list" in names
 
     def test_market_edge_tool_exists(self):
         names = [td["name"] for td in TOOL_DEFINITIONS]
-        assert "traderbot__market_edge" in names
+        assert "market_edge" in names
 
     def test_each_tool_has_description(self):
         for td in TOOL_DEFINITIONS:

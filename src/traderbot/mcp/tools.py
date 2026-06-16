@@ -23,6 +23,10 @@ def _check_permissions(
 ) -> tuple[TradingProfile | None, str | None, dict | None]:
     """Authenticate and authorize a tool call.
 
+    Tool names in MCP are short (e.g. 'health'), but permissions use
+    the full prefixed form (e.g. 'traderbot__health'). This function
+    adds the prefix before checking permissions.
+
     Returns (profile, agent_id, error_dict). If error_dict is not None,
     the call is unauthorized and error_dict should be returned directly.
     """
@@ -30,11 +34,13 @@ def _check_permissions(
     if profile is None:
         return None, None, {"error": "Invalid or expired profile token"}
 
-    if not profile.is_tool_permitted(tool_name):
+    # Permissions use full names (traderbot__*); tool names are short
+    full_name = f"traderbot__{tool_name}"
+    if not profile.is_tool_permitted(full_name):
         return (
             profile,
             agent_id,
-            {"error": f"Permission denied: profile '{profile.name}' cannot use '{tool_name}'"},
+            {"error": f"Permission denied: profile '{profile.name}' cannot use '{full_name}'"},
         )
 
     return profile, agent_id, None
@@ -42,7 +48,7 @@ def _check_permissions(
 
 async def traderbot__health(token: str) -> dict[str, Any]:
     """Combined health check: service, WebSocket, data, auth, circuit breakers."""
-    profile, agent_id, err = _check_permissions(token, "traderbot__health")
+    profile, agent_id, err = _check_permissions(token, "health")
     if err is not None:
         return err
 
@@ -63,7 +69,7 @@ async def traderbot__health(token: str) -> dict[str, Any]:
 
 async def traderbot__auth_check(token: str) -> dict[str, Any]:
     """Verify all API credentials are valid."""
-    profile, agent_id, err = _check_permissions(token, "traderbot__auth_check")
+    profile, agent_id, err = _check_permissions(token, "auth_check")
     if err is not None:
         return err
 
@@ -82,7 +88,7 @@ async def traderbot__auth_check(token: str) -> dict[str, Any]:
 
 async def traderbot__profile_list(token: str) -> dict[str, Any]:
     """List all profiles and their modes."""
-    profile, agent_id, err = _check_permissions(token, "traderbot__profile_list")
+    profile, agent_id, err = _check_permissions(token, "profile_list")
     if err is not None:
         return err
 
@@ -121,7 +127,7 @@ async def traderbot__profile_list(token: str) -> dict[str, Any]:
 
 async def traderbot__market_edge(token: str, category: str, ticker: str) -> dict[str, Any]:
     """Compute the estimated edge for a market (Phase 0: stub response)."""
-    _profile, _agent_id, err = _check_permissions(token, "traderbot__market_edge")
+    _profile, _agent_id, err = _check_permissions(token, "market_edge")
     if err is not None:
         return err
 
@@ -145,7 +151,7 @@ def _hardcoded_token_map() -> set[str]:
 
 TOOL_DEFINITIONS = [
     {
-        "name": "traderbot__health",
+        "name": "health",
         "description": "Combined health check: service, WebSocket, data, auth, circuit breakers.",
         "inputSchema": {
             "type": "object",
@@ -156,7 +162,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "traderbot__auth_check",
+        "name": "auth_check",
         "description": "Verify all API credentials are valid.",
         "inputSchema": {
             "type": "object",
@@ -167,7 +173,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "traderbot__profile_list",
+        "name": "profile_list",
         "description": "List all profiles and their modes.",
         "inputSchema": {
             "type": "object",
@@ -178,7 +184,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "traderbot__market_edge",
+        "name": "market_edge",
         "description": "Compute the estimated edge for a market.",
         "inputSchema": {
             "type": "object",
@@ -196,8 +202,8 @@ TOOL_DEFINITIONS = [
 ]
 
 TOOL_HANDLER_MAP = {
-    "traderbot__health": traderbot__health,
-    "traderbot__auth_check": traderbot__auth_check,
-    "traderbot__profile_list": traderbot__profile_list,
-    "traderbot__market_edge": traderbot__market_edge,
+    "health": traderbot__health,
+    "auth_check": traderbot__auth_check,
+    "profile_list": traderbot__profile_list,
+    "market_edge": traderbot__market_edge,
 }
