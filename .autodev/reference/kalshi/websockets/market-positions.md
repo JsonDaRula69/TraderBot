@@ -1,0 +1,247 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.kalshi.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Market Positions
+
+> Real-time updates of your positions in markets. Requires authentication.
+
+**Requirements:**
+- Authentication required
+- Market specification optional (omit to receive all positions)
+- Filters are by `market_ticker`/`market_tickers` only; `market_id`/`market_ids` are not supported
+- Updates sent when your position changes due to trades, settlements, etc.
+
+**Monetary Values:**
+All monetary values are returned as fixed-point dollar strings (`_dollars` suffix).
+
+**Use case:** Portfolio tracking, position monitoring, P&L calculations
+
+
+
+
+## AsyncAPI
+
+````yaml asyncapi.yaml market_positions
+id: market_positions
+title: Market Positions
+description: >
+  Real-time updates of your positions in markets. Requires authentication.
+
+
+  **Requirements:**
+
+  - Authentication required
+
+  - Market specification optional (omit to receive all positions)
+
+  - Filters are by `market_ticker`/`market_tickers` only;
+  `market_id`/`market_ids` are not supported
+
+  - Updates sent when your position changes due to trades, settlements, etc.
+
+
+  **Monetary Values:**
+
+  All monetary values are returned as fixed-point dollar strings (`_dollars`
+  suffix).
+
+
+  **Use case:** Portfolio tracking, position monitoring, P&L calculations
+servers:
+  - id: production
+    protocol: wss
+    host: external-api-ws.kalshi.com
+    bindings: []
+    variables: []
+address: market_positions
+parameters: []
+bindings: []
+operations:
+  - &ref_1
+    id: receiveMarketPosition
+    title: Market Position Update
+    description: Receive updates for your market positions
+    type: send
+    messages:
+      - &ref_2
+        id: marketPosition
+        contentType: application/json
+        payload:
+          - name: Market Position Update
+            description: Real-time position updates for authenticated user
+            type: object
+            properties:
+              - name: type
+                type: string
+                description: market_position
+                required: true
+              - name: sid
+                type: integer
+                description: >-
+                  Server-generated subscription identifier (sid) used to
+                  identify the channel
+                required: true
+              - name: msg
+                type: object
+                required: true
+                properties:
+                  - name: user_id
+                    type: string
+                    description: User ID for the position
+                    required: true
+                  - name: market_ticker
+                    type: string
+                    description: Unique market identifier
+                    examples: &ref_0
+                      - FED-23DEC-T3.00
+                      - HIGHNY-22DEC23-B53.5
+                    required: true
+                  - name: position_fp
+                    type: string
+                    description: Fixed-point net position (2 decimals)
+                    required: true
+                  - name: position_cost_dollars
+                    type: string
+                    description: >-
+                      Current cost basis of the position as a fixed-point dollar
+                      string
+                    required: true
+                  - name: realized_pnl_dollars
+                    type: string
+                    description: Realized profit/loss as a fixed-point dollar string
+                    required: true
+                  - name: fees_paid_dollars
+                    type: string
+                    description: Total fees paid as a fixed-point dollar string
+                    required: true
+                  - name: position_fee_cost_dollars
+                    type: string
+                    description: Total position fee cost as a fixed-point dollar string
+                    required: true
+                  - name: volume_fp
+                    type: string
+                    description: Fixed-point total volume traded (2 decimals)
+                    required: true
+                  - name: subaccount
+                    type: integer
+                    description: Optional subaccount number for the position
+                    required: false
+        headers: []
+        jsonPayloadSchema:
+          type: object
+          required:
+            - type
+            - sid
+            - msg
+          properties:
+            type:
+              type: string
+              const: market_position
+              x-parser-schema-id: <anonymous-schema-111>
+            sid:
+              type: integer
+              description: >-
+                Server-generated subscription identifier (sid) used to identify
+                the channel
+              minimum: 1
+              x-parser-schema-id: subscriptionId
+            msg:
+              type: object
+              required:
+                - user_id
+                - market_ticker
+                - position_fp
+                - position_cost_dollars
+                - realized_pnl_dollars
+                - fees_paid_dollars
+                - position_fee_cost_dollars
+                - volume_fp
+              properties:
+                user_id:
+                  type: string
+                  description: User ID for the position
+                  x-parser-schema-id: <anonymous-schema-113>
+                market_ticker:
+                  type: string
+                  description: Unique market identifier
+                  pattern: ^[A-Z0-9-]+$
+                  examples: *ref_0
+                  x-parser-schema-id: marketTicker
+                position_fp:
+                  type: string
+                  description: Fixed-point net position (2 decimals)
+                  x-parser-schema-id: <anonymous-schema-114>
+                position_cost_dollars:
+                  type: string
+                  description: >-
+                    Current cost basis of the position as a fixed-point dollar
+                    string
+                  x-parser-schema-id: <anonymous-schema-115>
+                realized_pnl_dollars:
+                  type: string
+                  description: Realized profit/loss as a fixed-point dollar string
+                  x-parser-schema-id: <anonymous-schema-116>
+                fees_paid_dollars:
+                  type: string
+                  description: Total fees paid as a fixed-point dollar string
+                  x-parser-schema-id: <anonymous-schema-117>
+                position_fee_cost_dollars:
+                  type: string
+                  description: Total position fee cost as a fixed-point dollar string
+                  x-parser-schema-id: <anonymous-schema-118>
+                volume_fp:
+                  type: string
+                  description: Fixed-point total volume traded (2 decimals)
+                  x-parser-schema-id: <anonymous-schema-119>
+                subaccount:
+                  type: integer
+                  description: Optional subaccount number for the position
+                  x-parser-schema-id: <anonymous-schema-120>
+              x-parser-schema-id: <anonymous-schema-112>
+          x-parser-schema-id: marketPositionPayload
+        title: Market Position Update
+        description: Real-time position updates for authenticated user
+        example: |-
+          {
+            "type": "market_position",
+            "sid": 14,
+            "msg": {
+              "user_id": "user123",
+              "market_ticker": "FED-23DEC-T3.00",
+              "position_fp": "100.00",
+              "position_cost_dollars": "50.0000",
+              "realized_pnl_dollars": "10.0000",
+              "fees_paid_dollars": "1.0000",
+              "position_fee_cost_dollars": "0.5000",
+              "volume_fp": "15.00"
+            }
+          }
+        bindings: []
+        extensions:
+          - id: x-parser-unique-object-id
+            value: marketPosition
+    bindings: []
+    extensions:
+      - id: x-parser-unique-object-id
+        value: market_positions
+sendOperations: []
+receiveOperations:
+  - *ref_1
+sendMessages: []
+receiveMessages:
+  - *ref_2
+extensions:
+  - id: x-parser-unique-object-id
+    value: market_positions
+securitySchemes:
+  - id: apiKey
+    name: apiKey
+    type: apiKey
+    description: |
+      API key authentication required for WebSocket connections.
+      The API key should be provided during the WebSocket handshake.
+    in: user
+    extensions: []
+
+````

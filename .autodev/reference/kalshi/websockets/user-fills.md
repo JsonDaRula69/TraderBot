@@ -1,0 +1,356 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.kalshi.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# User Fills
+
+> Your order fill notifications. Requires authentication.
+
+**Requirements:**
+- Authentication required
+- Market specification optional via `market_ticker`/`market_tickers` (omit to receive all your fills)
+- Supports `update_subscription` with `add_markets` / `delete_markets`
+- Updates sent immediately when your orders are filled
+
+**Use case:** Tracking your trading activity
+
+
+
+
+## AsyncAPI
+
+````yaml asyncapi.yaml fill
+id: fill
+title: User Fills
+description: >
+  Your order fill notifications. Requires authentication.
+
+
+  **Requirements:**
+
+  - Authentication required
+
+  - Market specification optional via `market_ticker`/`market_tickers` (omit to
+  receive all your fills)
+
+  - Supports `update_subscription` with `add_markets` / `delete_markets`
+
+  - Updates sent immediately when your orders are filled
+
+
+  **Use case:** Tracking your trading activity
+servers:
+  - id: production
+    protocol: wss
+    host: external-api-ws.kalshi.com
+    bindings: []
+    variables: []
+address: fill
+parameters: []
+bindings: []
+operations:
+  - &ref_2
+    id: receiveFill
+    title: Fill Notification
+    description: Receive notifications for your fills
+    type: send
+    messages:
+      - &ref_3
+        id: fill
+        contentType: application/json
+        payload:
+          - name: Fill Update
+            description: Private fill information for authenticated user
+            type: object
+            properties:
+              - name: type
+                type: string
+                description: fill
+                required: true
+              - name: sid
+                type: integer
+                description: >-
+                  Server-generated subscription identifier (sid) used to
+                  identify the channel
+                required: true
+              - name: msg
+                type: object
+                required: true
+                properties:
+                  - name: trade_id
+                    type: string
+                    description: >-
+                      Unique identifier for fills. This is what you use to
+                      differentiate fills
+                    required: true
+                  - name: order_id
+                    type: string
+                    description: >-
+                      Unique identifier for orders. This is what you use to
+                      differentiate fills for different orders
+                    required: true
+                  - name: market_ticker
+                    type: string
+                    description: Unique market identifier
+                    examples: &ref_0
+                      - FED-23DEC-T3.00
+                      - HIGHNY-22DEC23-B53.5
+                    required: true
+                  - name: is_taker
+                    type: boolean
+                    description: If you were a taker on this fill
+                    required: true
+                  - name: side
+                    type: string
+                    description: Market side
+                    enumValues:
+                      - 'yes'
+                      - 'no'
+                    required: true
+                  - name: yes_price_dollars
+                    type: string
+                    description: Price for the yes side of the fill in dollars
+                    required: true
+                  - name: count_fp
+                    type: string
+                    description: Fixed-point contracts filled (2 decimals)
+                    required: true
+                  - name: fee_cost
+                    type: string
+                    description: Exchange fee paid for this fill in fixed-point dollars
+                    required: true
+                  - name: action
+                    type: string
+                    description: Order action type
+                    enumValues:
+                      - buy
+                      - sell
+                    required: true
+                  - name: ts
+                    type: integer
+                    description: >-
+                      Deprecated - Unix timestamp for when the update happened
+                      (in seconds). Use ts_ms instead.
+                    deprecated: true
+                    required: true
+                  - name: ts_ms
+                    type: integer
+                    description: >-
+                      Unix timestamp for when the update happened (in
+                      milliseconds)
+                    required: true
+                  - name: client_order_id
+                    type: string
+                    description: Optional client-provided order ID
+                    required: false
+                  - name: post_position_fp
+                    type: string
+                    description: Fixed-point position after the fill (2 decimals)
+                    required: true
+                  - name: purchased_side
+                    type: string
+                    description: Market side
+                    enumValues:
+                      - 'yes'
+                      - 'no'
+                    required: true
+                  - name: outcome_side
+                    type: string
+                    description: Market side
+                    enumValues:
+                      - 'yes'
+                      - 'no'
+                    required: true
+                  - name: book_side
+                    type: string
+                    description: >-
+                      Side of the book for an order or trade. 'bid' is
+                      equivalent to outcome_side 'yes'; 'ask' is equivalent to
+                      outcome_side 'no'.
+                    enumValues:
+                      - bid
+                      - ask
+                    required: true
+                  - name: subaccount
+                    type: integer
+                    description: Optional subaccount number for the fill
+                    required: false
+        headers: []
+        jsonPayloadSchema:
+          type: object
+          required:
+            - type
+            - sid
+            - msg
+          properties:
+            type:
+              type: string
+              const: fill
+              x-parser-schema-id: <anonymous-schema-98>
+            sid:
+              type: integer
+              description: >-
+                Server-generated subscription identifier (sid) used to identify
+                the channel
+              minimum: 1
+              x-parser-schema-id: subscriptionId
+            msg:
+              type: object
+              required:
+                - trade_id
+                - order_id
+                - market_ticker
+                - is_taker
+                - side
+                - yes_price_dollars
+                - count_fp
+                - fee_cost
+                - action
+                - outcome_side
+                - book_side
+                - ts
+                - ts_ms
+                - post_position_fp
+                - purchased_side
+              properties:
+                trade_id:
+                  type: string
+                  description: >-
+                    Unique identifier for fills. This is what you use to
+                    differentiate fills
+                  format: uuid
+                  x-parser-schema-id: <anonymous-schema-100>
+                order_id:
+                  type: string
+                  description: >-
+                    Unique identifier for orders. This is what you use to
+                    differentiate fills for different orders
+                  format: uuid
+                  x-parser-schema-id: <anonymous-schema-101>
+                market_ticker:
+                  type: string
+                  description: Unique market identifier
+                  pattern: ^[A-Z0-9-]+$
+                  examples: *ref_0
+                  x-parser-schema-id: marketTicker
+                is_taker:
+                  type: boolean
+                  description: If you were a taker on this fill
+                  x-parser-schema-id: <anonymous-schema-102>
+                side: &ref_1
+                  type: string
+                  description: Market side
+                  enum:
+                    - 'yes'
+                    - 'no'
+                  x-parser-schema-id: marketSide
+                yes_price_dollars:
+                  type: string
+                  description: Price for the yes side of the fill in dollars
+                  x-parser-schema-id: <anonymous-schema-103>
+                count_fp:
+                  type: string
+                  description: Fixed-point contracts filled (2 decimals)
+                  x-parser-schema-id: <anonymous-schema-104>
+                fee_cost:
+                  type: string
+                  description: Exchange fee paid for this fill in fixed-point dollars
+                  x-parser-schema-id: <anonymous-schema-105>
+                action:
+                  type: string
+                  description: Order action type
+                  enum:
+                    - buy
+                    - sell
+                  x-parser-schema-id: orderAction
+                ts:
+                  type: integer
+                  deprecated: true
+                  description: >-
+                    Deprecated - Unix timestamp for when the update happened (in
+                    seconds). Use ts_ms instead.
+                  format: int64
+                  x-parser-schema-id: <anonymous-schema-106>
+                ts_ms:
+                  type: integer
+                  description: >-
+                    Unix timestamp for when the update happened (in
+                    milliseconds)
+                  format: int64
+                  x-parser-schema-id: <anonymous-schema-107>
+                client_order_id:
+                  type: string
+                  description: Optional client-provided order ID
+                  x-parser-schema-id: <anonymous-schema-108>
+                post_position_fp:
+                  type: string
+                  description: Fixed-point position after the fill (2 decimals)
+                  x-parser-schema-id: <anonymous-schema-109>
+                purchased_side: *ref_1
+                outcome_side: *ref_1
+                book_side:
+                  type: string
+                  description: >-
+                    Side of the book for an order or trade. 'bid' is equivalent
+                    to outcome_side 'yes'; 'ask' is equivalent to outcome_side
+                    'no'.
+                  enum:
+                    - bid
+                    - ask
+                  x-parser-schema-id: bookSide
+                subaccount:
+                  type: integer
+                  description: Optional subaccount number for the fill
+                  x-parser-schema-id: <anonymous-schema-110>
+              x-parser-schema-id: <anonymous-schema-99>
+          x-parser-schema-id: fillPayload
+        title: Fill Update
+        description: Private fill information for authenticated user
+        example: |-
+          {
+            "type": "fill",
+            "sid": 13,
+            "msg": {
+              "trade_id": "d91bc706-ee49-470d-82d8-11418bda6fed",
+              "order_id": "ee587a1c-8b87-4dcf-b721-9f6f790619fa",
+              "market_ticker": "HIGHNY-22DEC23-B53.5",
+              "is_taker": true,
+              "side": "yes",
+              "yes_price_dollars": "0.750",
+              "count_fp": "278.00",
+              "action": "buy",
+              "ts": 1671899397,
+              "ts_ms": 1671899397000,
+              "post_position_fp": "500.00",
+              "purchased_side": "yes",
+              "subaccount": 3
+            }
+          }
+        bindings: []
+        extensions:
+          - id: x-parser-unique-object-id
+            value: fill
+    bindings: []
+    extensions:
+      - id: x-parser-unique-object-id
+        value: fill
+sendOperations: []
+receiveOperations:
+  - *ref_2
+sendMessages: []
+receiveMessages:
+  - *ref_3
+extensions:
+  - id: x-parser-unique-object-id
+    value: fill
+securitySchemes:
+  - id: apiKey
+    name: apiKey
+    type: apiKey
+    description: |
+      API key authentication required for WebSocket connections.
+      The API key should be provided during the WebSocket handshake.
+    in: user
+    extensions: []
+
+````

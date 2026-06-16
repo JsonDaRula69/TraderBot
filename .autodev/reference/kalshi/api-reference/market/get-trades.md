@@ -1,0 +1,286 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.kalshi.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Get Trades
+
+> Endpoint for getting all trades for all markets. A trade represents a completed transaction between two users on a specific market. Each trade includes the market ticker, price, quantity, and timestamp information. Block trades are included in the response by default and identified by the `is_block_trade` field; use the `is_block_trade` query parameter to filter by block / non-block. This endpoint returns a paginated response. Use the 'limit' parameter to control page size (1-1000, defaults to 100). The response includes a 'cursor' field - pass this value in the 'cursor' parameter of your next request to get the next page. An empty cursor indicates no more pages are available.
+
+
+
+
+## OpenAPI
+
+````yaml /openapi.yaml get /markets/trades
+openapi: 3.0.0
+info:
+  title: Kalshi Trade API Manual Endpoints
+  version: 3.21.0
+  description: >-
+    Manually defined OpenAPI spec for endpoints being migrated to spec-first
+    approach
+servers:
+  - url: https://external-api.kalshi.com/trade-api/v2
+    description: Production Trade API server
+  - url: https://api.elections.kalshi.com/trade-api/v2
+    description: Production shared API server, also supported
+  - url: https://external-api.demo.kalshi.co/trade-api/v2
+    description: Demo Trade API server
+  - url: https://demo-api.kalshi.co/trade-api/v2
+    description: Demo shared API server, also supported
+security: []
+tags:
+  - name: api-keys
+    description: API key management endpoints
+  - name: orders
+    description: Order management endpoints
+  - name: order-groups
+    description: Order group management endpoints
+  - name: portfolio
+    description: Portfolio and balance information endpoints
+  - name: communications
+    description: Request-for-quote (RFQ) endpoints
+  - name: multivariate
+    description: Multivariate event collection endpoints
+  - name: exchange
+    description: Exchange status and information endpoints
+  - name: live-data
+    description: Live data endpoints
+  - name: markets
+    description: Market data endpoints
+  - name: milestone
+    description: Milestone endpoints
+  - name: search
+    description: Search and filtering endpoints
+  - name: incentive-programs
+    description: Incentive program endpoints
+  - name: fcm
+    description: FCM member specific endpoints
+  - name: events
+    description: Event endpoints
+  - name: structured-targets
+    description: Structured targets endpoints
+paths:
+  /markets/trades:
+    get:
+      tags:
+        - market
+      summary: Get Trades
+      description: >
+        Endpoint for getting all trades for all markets. A trade represents a
+        completed transaction between two users on a specific market. Each trade
+        includes the market ticker, price, quantity, and timestamp information.
+        Block trades are included in the response by default and identified by
+        the `is_block_trade` field; use the `is_block_trade` query parameter to
+        filter by block / non-block. This endpoint returns a paginated response.
+        Use the 'limit' parameter to control page size (1-1000, defaults to
+        100). The response includes a 'cursor' field - pass this value in the
+        'cursor' parameter of your next request to get the next page. An empty
+        cursor indicates no more pages are available.
+      operationId: GetTrades
+      parameters:
+        - $ref: '#/components/parameters/MarketLimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+        - $ref: '#/components/parameters/TickerQuery'
+        - $ref: '#/components/parameters/MinTsQuery'
+        - $ref: '#/components/parameters/MaxTsQuery'
+        - $ref: '#/components/parameters/IsBlockTradeQuery'
+      responses:
+        '200':
+          description: Trades retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetTradesResponse'
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+components:
+  parameters:
+    MarketLimitQuery:
+      name: limit
+      in: query
+      description: Number of results per page. Defaults to 100. Maximum value is 1000.
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+        maximum: 1000
+        default: 100
+        x-oapi-codegen-extra-tags:
+          validate: omitempty,gte=0,lte=1000
+    CursorQuery:
+      name: cursor
+      in: query
+      description: >-
+        Pagination cursor. Use the cursor value returned from the previous
+        response to get the next page of results. Leave empty for the first
+        page.
+      schema:
+        type: string
+        x-go-type-skip-optional-pointer: true
+    TickerQuery:
+      name: ticker
+      in: query
+      description: Filter by market ticker
+      schema:
+        type: string
+        x-go-type-skip-optional-pointer: true
+    MinTsQuery:
+      name: min_ts
+      in: query
+      description: Filter items after this Unix timestamp
+      schema:
+        type: integer
+        format: int64
+    MaxTsQuery:
+      name: max_ts
+      in: query
+      description: Filter items before this Unix timestamp
+      schema:
+        type: integer
+        format: int64
+    IsBlockTradeQuery:
+      name: is_block_trade
+      in: query
+      description: >
+        Filter trades by whether they are block trades. Omit to return all
+        trades. Set to `true` to return only block trades. Set to `false` to
+        return only non-block trades.
+      schema:
+        type: boolean
+  schemas:
+    GetTradesResponse:
+      type: object
+      required:
+        - trades
+        - cursor
+      properties:
+        trades:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trade'
+        cursor:
+          type: string
+    Trade:
+      type: object
+      required:
+        - trade_id
+        - ticker
+        - count_fp
+        - yes_price_dollars
+        - no_price_dollars
+        - taker_side
+        - taker_outcome_side
+        - taker_book_side
+        - created_time
+        - is_block_trade
+      properties:
+        trade_id:
+          type: string
+          description: Unique identifier for this trade
+        ticker:
+          type: string
+          description: Unique identifier for the market
+        count_fp:
+          $ref: '#/components/schemas/FixedPointCount'
+          description: >-
+            String representation of the number of contracts bought or sold in
+            this trade
+        yes_price_dollars:
+          $ref: '#/components/schemas/FixedPointDollars'
+          description: Yes price for this trade in dollars
+        no_price_dollars:
+          $ref: '#/components/schemas/FixedPointDollars'
+          description: No price for this trade in dollars
+        taker_side:
+          type: string
+          enum:
+            - 'yes'
+            - 'no'
+          x-enum-varnames:
+            - TradeTakerSideYes
+            - TradeTakerSideNo
+          deprecated: true
+          description: >
+            Deprecated. Use `taker_outcome_side` (or `taker_book_side`) instead.
+            See [Order direction](/getting_started/order_direction). This field
+            will not be removed before May 14, 2026.
+        taker_outcome_side:
+          type: string
+          enum:
+            - 'yes'
+            - 'no'
+          x-enum-varnames:
+            - TradeTakerOutcomeSideYes
+            - TradeTakerOutcomeSideNo
+          description: >
+            The outcome side the taker is positioned for. buy-yes and sell-no
+            produce 'yes'; buy-no and sell-yes produce 'no'.
+
+
+            `taker_outcome_side` describes directional exposure only; it does
+            not change the trade's price. A trade at price `p` with
+            `taker_outcome_side=no` is matched against the maker at the same
+            price `p` with the opposite direction — both parties trade at the
+            same price.
+
+
+            `taker_outcome_side` and `taker_book_side` will become the canonical
+            way to determine trade direction. The legacy `taker_side` field will
+            be deprecated in a future release — please migrate to these new
+            fields.
+        taker_book_side:
+          $ref: '#/components/schemas/BookSide'
+          description: >
+            Same directional bit as taker_outcome_side in book vocabulary. 'bid'
+            is equivalent to taker_outcome_side 'yes'; 'ask' is equivalent to
+            taker_outcome_side 'no'.
+
+
+            `taker_outcome_side` and `taker_book_side` will become the canonical
+            way to determine trade direction. The legacy `taker_side` field will
+            be deprecated in a future release — please migrate to these new
+            fields.
+        created_time:
+          type: string
+          format: date-time
+          description: Timestamp when this trade was executed
+        is_block_trade:
+          type: boolean
+          description: >-
+            True if this trade was matched off-book as a block trade (e.g. via
+            RFQ / negotiated block proposal); false for trades that filled on
+            the standard order book.
+    FixedPointCount:
+      type: string
+      description: >-
+        Fixed-point contract count string (2 decimals, e.g., "10.00"; referred
+        to as "fp" in field names). Requests accept 0–2 decimal places (e.g.,
+        "10", "10.0", "10.00"); responses always emit 2 decimals. Fractional
+        contract values (e.g., "2.50") are supported on markets with fractional
+        trading enabled; the minimum granularity is 0.01 contracts. Integer
+        contract count fields are legacy and will be deprecated; when both
+        integer and fp fields are provided, they must match.
+      example: '10.00'
+    FixedPointDollars:
+      type: string
+      description: >-
+        US dollar amount as a fixed-point decimal string with up to 6 decimal
+        places of precision. This is the maximum supported precision; valid
+        quote intervals for a given market are constrained by that market's
+        price level structure.
+      example: '0.5600'
+    BookSide:
+      type: string
+      enum:
+        - bid
+        - ask
+      description: >-
+        Side of the book for an order or trade. For event markets, this refers
+        to the YES leg only: `bid` means buy YES, `ask` means sell YES. (Selling
+        YES is economically equivalent to buying NO at `1 - price`, but this
+        endpoint quotes everything from the YES side.)
+
+````

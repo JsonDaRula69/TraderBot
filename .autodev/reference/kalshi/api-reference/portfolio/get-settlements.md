@@ -1,0 +1,300 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.kalshi.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Get Settlements
+
+>  Endpoint for getting the member's settlements historical track.
+
+
+
+## OpenAPI
+
+````yaml /openapi.yaml get /portfolio/settlements
+openapi: 3.0.0
+info:
+  title: Kalshi Trade API Manual Endpoints
+  version: 3.21.0
+  description: >-
+    Manually defined OpenAPI spec for endpoints being migrated to spec-first
+    approach
+servers:
+  - url: https://external-api.kalshi.com/trade-api/v2
+    description: Production Trade API server
+  - url: https://api.elections.kalshi.com/trade-api/v2
+    description: Production shared API server, also supported
+  - url: https://external-api.demo.kalshi.co/trade-api/v2
+    description: Demo Trade API server
+  - url: https://demo-api.kalshi.co/trade-api/v2
+    description: Demo shared API server, also supported
+security: []
+tags:
+  - name: api-keys
+    description: API key management endpoints
+  - name: orders
+    description: Order management endpoints
+  - name: order-groups
+    description: Order group management endpoints
+  - name: portfolio
+    description: Portfolio and balance information endpoints
+  - name: communications
+    description: Request-for-quote (RFQ) endpoints
+  - name: multivariate
+    description: Multivariate event collection endpoints
+  - name: exchange
+    description: Exchange status and information endpoints
+  - name: live-data
+    description: Live data endpoints
+  - name: markets
+    description: Market data endpoints
+  - name: milestone
+    description: Milestone endpoints
+  - name: search
+    description: Search and filtering endpoints
+  - name: incentive-programs
+    description: Incentive program endpoints
+  - name: fcm
+    description: FCM member specific endpoints
+  - name: events
+    description: Event endpoints
+  - name: structured-targets
+    description: Structured targets endpoints
+paths:
+  /portfolio/settlements:
+    get:
+      tags:
+        - portfolio
+      summary: Get Settlements
+      description: ' Endpoint for getting the member''s settlements historical track.'
+      operationId: GetSettlements
+      parameters:
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+        - $ref: '#/components/parameters/TickerQuery'
+        - $ref: '#/components/parameters/SingleEventTickerQuery'
+        - $ref: '#/components/parameters/MinTsQuery'
+        - $ref: '#/components/parameters/MaxTsQuery'
+        - $ref: '#/components/parameters/SubaccountQuery'
+      responses:
+        '200':
+          description: Settlements retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSettlementsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+        - kalshiAccessKey: []
+          kalshiAccessSignature: []
+          kalshiAccessTimestamp: []
+components:
+  parameters:
+    LimitQuery:
+      name: limit
+      in: query
+      description: Number of results per page. Defaults to 100.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+        maximum: 1000
+        default: 100
+        x-oapi-codegen-extra-tags:
+          validate: omitempty,min=1,max=1000
+    CursorQuery:
+      name: cursor
+      in: query
+      description: >-
+        Pagination cursor. Use the cursor value returned from the previous
+        response to get the next page of results. Leave empty for the first
+        page.
+      schema:
+        type: string
+        x-go-type-skip-optional-pointer: true
+    TickerQuery:
+      name: ticker
+      in: query
+      description: Filter by market ticker
+      schema:
+        type: string
+        x-go-type-skip-optional-pointer: true
+    SingleEventTickerQuery:
+      name: event_ticker
+      in: query
+      description: Event ticker to filter by. Only a single event ticker is supported.
+      schema:
+        type: string
+        x-go-type-skip-optional-pointer: true
+    MinTsQuery:
+      name: min_ts
+      in: query
+      description: Filter items after this Unix timestamp
+      schema:
+        type: integer
+        format: int64
+    MaxTsQuery:
+      name: max_ts
+      in: query
+      description: Filter items before this Unix timestamp
+      schema:
+        type: integer
+        format: int64
+    SubaccountQuery:
+      name: subaccount
+      in: query
+      description: >-
+        Subaccount number (0 for primary, 1-63 for subaccounts). If omitted,
+        defaults to all subaccounts.
+      schema:
+        type: integer
+  schemas:
+    GetSettlementsResponse:
+      type: object
+      required:
+        - settlements
+      properties:
+        settlements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Settlement'
+        cursor:
+          type: string
+    Settlement:
+      type: object
+      required:
+        - ticker
+        - event_ticker
+        - market_result
+        - yes_count_fp
+        - yes_total_cost_dollars
+        - no_count_fp
+        - no_total_cost_dollars
+        - revenue
+        - settled_time
+        - fee_cost
+      properties:
+        ticker:
+          type: string
+          description: The ticker symbol of the market that was settled.
+        event_ticker:
+          type: string
+          description: The event ticker symbol of the market that was settled.
+        market_result:
+          type: string
+          enum:
+            - 'yes'
+            - 'no'
+            - scalar
+          description: >-
+            The outcome of the market settlement. 'yes' = market resolved to
+            YES, 'no' = market resolved to NO, 'scalar' = scalar market settled
+            at a specific value.
+        yes_count_fp:
+          $ref: '#/components/schemas/FixedPointCount'
+          description: >-
+            String representation of the number of YES contracts owned at the
+            time of settlement.
+        yes_total_cost_dollars:
+          $ref: '#/components/schemas/FixedPointDollars'
+          description: Total cost basis of all YES contracts in fixed-point dollars.
+        no_count_fp:
+          $ref: '#/components/schemas/FixedPointCount'
+          description: >-
+            String representation of the number of NO contracts owned at the
+            time of settlement.
+        no_total_cost_dollars:
+          $ref: '#/components/schemas/FixedPointDollars'
+          description: Total cost basis of all NO contracts in fixed-point dollars.
+        revenue:
+          type: integer
+          description: >-
+            Total revenue earned from this settlement in cents (winning
+            contracts pay out 100 cents each).
+        settled_time:
+          type: string
+          format: date-time
+          description: Timestamp when the market was settled and payouts were processed.
+        fee_cost:
+          $ref: '#/components/schemas/FixedPointDollars'
+          example: '0.3400'
+          description: Total fees paid in fixed point dollars.
+        value:
+          type: integer
+          nullable: true
+          description: Payout of a single yes contract in cents.
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: string
+          description: Additional details about the error, if available
+        service:
+          type: string
+          description: The name of the service that generated the error
+    FixedPointCount:
+      type: string
+      description: >-
+        Fixed-point contract count string (2 decimals, e.g., "10.00"; referred
+        to as "fp" in field names). Requests accept 0–2 decimal places (e.g.,
+        "10", "10.0", "10.00"); responses always emit 2 decimals. Fractional
+        contract values (e.g., "2.50") are supported on markets with fractional
+        trading enabled; the minimum granularity is 0.01 contracts. Integer
+        contract count fields are legacy and will be deprecated; when both
+        integer and fp fields are provided, they must match.
+      example: '10.00'
+    FixedPointDollars:
+      type: string
+      description: >-
+        US dollar amount as a fixed-point decimal string with up to 6 decimal
+        places of precision. This is the maximum supported precision; valid
+        quote intervals for a given market are constrained by that market's
+        price level structure.
+      example: '0.5600'
+  responses:
+    BadRequestError:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  securitySchemes:
+    kalshiAccessKey:
+      type: apiKey
+      in: header
+      name: KALSHI-ACCESS-KEY
+      description: Your API key ID
+    kalshiAccessSignature:
+      type: apiKey
+      in: header
+      name: KALSHI-ACCESS-SIGNATURE
+      description: RSA-PSS signature of the request
+    kalshiAccessTimestamp:
+      type: apiKey
+      in: header
+      name: KALSHI-ACCESS-TIMESTAMP
+      description: Request timestamp in milliseconds
+
+````
