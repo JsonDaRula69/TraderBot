@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 from typing import Any
 
@@ -56,7 +57,11 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
         result = await handler(**arguments)
         return [TextContent(type="text", text=json.dumps(result))]
     except TypeError as e:
-        return [TextContent(type="text", text=json.dumps({"error": f"Invalid arguments for {name}: {e}"}))]
+        return [
+            TextContent(
+                type="text", text=json.dumps({"error": f"Invalid arguments for {name}: {e}"})
+            )
+        ]
     except Exception as e:
         logger.exception("Tool %s failed", name)
         return [TextContent(type="text", text=json.dumps({"error": f"Internal error: {e}"}))]
@@ -64,7 +69,7 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
 
 async def main() -> None:
     """Run the MCP server on stdio."""
-    logger.info("TraderBot MCP server starting (pid=%d)", sys.getpid())
+    logger.info("TraderBot MCP server starting (pid=%s)", os.getpid())
     async with stdio_server() as (read_stream, write_stream):
         await app.run(read_stream, write_stream, app.create_initialization_options())
 

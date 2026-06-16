@@ -10,11 +10,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
-from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.sysadmin import create_sysadmin_profile
 from traderbot.profiles.weather import create_weather_profile
 
 if TYPE_CHECKING:
+    from traderbot.profiles.models import TradingProfile
+
     pass
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,9 @@ def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None
 
     result = _real_resolve(token)
     if result is None:
-        logger.warning("Token resolution failed: %s", token[:4] + "..." if len(token) > 4 else token)
+        logger.warning(
+            "Token resolution failed: %s", token[:4] + "..." if len(token) > 4 else token
+        )
         return None, None
 
     profile_name, agent_id = result
