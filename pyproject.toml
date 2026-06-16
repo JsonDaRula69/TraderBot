@@ -35,6 +35,7 @@ dependencies = [
     "portalocker>=2.8",
     "keyring>=25.0",
     "scipy>=1.13",
+    "mcp>=1.0.0",
 ]
 
 [project.urls]
@@ -58,6 +59,7 @@ sentry = ["sentry-sdk>=2.0.0"]
 
 [project.scripts]
 traderbot = "traderbot.cli:main"
+traderbot-mcp-server = "traderbot.mcp.server:run_server"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
