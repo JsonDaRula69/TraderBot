@@ -7,6 +7,17 @@ from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
 
+# DD-036: SysAdmin is unsandboxed with principled restrictions.
+# Can manage the fleet, coordinate improvements, check health — but NEVER trade.
+SYSADMIN_DENY_TOOLS: list[str] = [
+    "deny:traderbot__trade",
+    "deny:traderbot__scan",
+    "deny:traderbot__analyze",
+    "deny:traderbot__market_edge",
+    "deny:traderbot__market_prices",
+    "deny:traderbot__weather_*",
+]
+
 
 def create_sysadmin_profile() -> TradingProfile:
     return TradingProfile(
@@ -22,4 +33,5 @@ def create_sysadmin_profile() -> TradingProfile:
         min_liquidity_threshold=1,
         min_edge_pct=100.0,
         initial_balance_cents=0,
+        permissions=SYSADMIN_DENY_TOOLS,
     )
