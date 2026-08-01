@@ -341,6 +341,11 @@ _TRADER_CRON_JOBS: list[dict[str, str]] = [
         "message": "Run `traderbot data settle --json` then `traderbot positions --json` — check positions with settlement < 48h, drawdown > 5%. Write any issues to `.learnings/ERRORS.md` and surface to sysadmin. Settlement results are automatically synced to decisions.actual_result before adaptation runs. Verify positions with settlement < 48h are correctly reconciled at the decision level.",
     },
     {
+        "name": "record-bias",
+        "cron_expr": "30 12 * * *",
+        "message": "Run `traderbot data record-bias --city NYC,CHI,LA,PHX,SEA` to record NWS forecast vs actual settlement comparison for the day's weather markets. Stores results in forecast_bias table for city-specific MAE analysis. If error, write to `.learnings/ERRORS.md`.",
+    },
+    {
         "name": "forecast-check",
         "cron_expr": "15,45 * * * *",
         "message": "Run `traderbot data forecasts --cities NYC,CHI,LA,PHX,SEA --json`. Verify NWS and ensemble data availability. If empty, check pipeline timers and fall back to `traderbot data-points weather --json`. If fallback also fails, write to `.learnings/ERRORS.md`. Log status.",

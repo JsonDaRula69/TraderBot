@@ -16,6 +16,13 @@ import httpx
 
 from traderbot.data.base_provider import BaseDataProvider
 from traderbot.data.models import BiasReport, CityForecast, EnsembleRun, ModelConsensus
+from traderbot.data.weather.geo import (
+    _CITY_MAP,
+    resolve_forecast_coords,
+)
+from traderbot.data.weather.geo import (
+    resolve_city as _resolve_city,
+)
 from traderbot.data.weather.nws_client import NwsClient
 from traderbot.db import get_connection
 from traderbot.db.forecast_bias import query_bias as _query_bias
@@ -29,127 +36,6 @@ logger = logging.getLogger(__name__)
 _OPEN_METEO_ENSEMBLE_URL = "https://api.open-meteo.com/v1/forecast"
 _OM_MODELS = ("gfs_seamless", "ecmwf_ifs", "gem_global")
 _REQUEST_TIMEOUT = 20.0
-
-# ------------------------------------------------------------------
-#  City coordinate map (shared with NwsClient)
-# ------------------------------------------------------------------
-
-_CITY_MAP: dict[str, tuple[float, float]] = {
-    "New York": (40.71, -74.01),
-    "Philadelphia": (39.95, -75.16),
-    "Phoenix": (33.45, -112.07),
-    "Minneapolis": (44.98, -93.26),
-    "Seattle": (47.61, -122.33),
-    "Chicago": (41.88, -87.63),
-    "Houston": (29.76, -95.37),
-    "Los Angeles": (34.05, -118.24),
-    "Miami": (25.76, -80.19),
-    "Denver": (39.74, -104.99),
-    "Atlanta": (33.75, -84.39),
-    "Boston": (42.36, -71.06),
-    "Dallas": (32.78, -96.80),
-    "Detroit": (42.33, -83.05),
-    "San Francisco": (37.77, -122.42),
-}
-
-_STATION_MAP: dict[str, tuple[float, float]] = {
-    "KLGA": (40.77, -73.87),
-    "KJFK": (40.64, -73.78),
-    "KLAX": (33.94, -118.41),
-    "KORD": (41.98, -87.90),
-    "KMDW": (41.79, -87.75),
-    "KPHX": (33.43, -112.01),
-    "KSEA": (47.44, -122.31),
-    "KDAL": (32.85, -96.85),
-    "KDFW": (32.90, -97.04),
-    "KMIA": (25.79, -80.29),
-    "KBOS": (42.36, -71.01),
-    "KDEN": (39.86, -104.67),
-    "KIAH": (29.98, -95.34),
-    "KHOU": (29.65, -95.28),
-    "KATL": (33.64, -84.43),
-    "KDTW": (42.21, -83.35),
-    "KSFO": (37.62, -122.38),
-    "KMSP": (44.88, -93.22),
-    "KPHL": (39.87, -75.24),
-    "KPIT": (40.49, -80.23),
-}
-
-_KALSHI_STATION_MAP: dict[str, str] = {
-    "KXHIGHNY": "KLGA",
-    "KXHIGHPHIL": "KPHL",
-    "KXHIGHTPHX": "KPHX",
-    "KXHIGHTMIN": "KMSP",
-    "KXHIGHTSEA": "KSEA",
-    "KXHIGHTCHI": "KORD",
-    "KXHIGHTHOU": "KIAH",
-    "KXHIGHTLA": "KLAX",
-    "KXHIGHTMIA": "KMIA",
-    "KXHIGHTDEN": "KDEN",
-    "KXHIGHTATL": "KATL",
-    "KXHIGHTBOS": "KBOS",
-    "KXHIGHTDAL": "KDAL",
-    "KXHIGHTDET": "KDTW",
-    "KXHIGHTSF": "KSFO",
-}
-
-# Short-code aliases for CLI convenience
-_CITY_ALIASES: dict[str, str] = {
-    "NYC": "New York",
-    "NY": "New York",
-    "PHIL": "Philadelphia",
-    "PHL": "Philadelphia",
-    "PHX": "Phoenix",
-    "MIN": "Minneapolis",
-    "MSP": "Minneapolis",
-    "SEA": "Seattle",
-    "CHI": "Chicago",
-    "HOU": "Houston",
-    "LA": "Los Angeles",
-    "LAX": "Los Angeles",
-    "MIA": "Miami",
-    "DEN": "Denver",
-    "ATL": "Atlanta",
-    "BOS": "Boston",
-    "DAL": "Dallas",
-    "DFW": "Dallas",
-    "DET": "Detroit",
-    "SF": "San Francisco",
-    "SFO": "San Francisco",
-}
-
-
-def _resolve_city(city_input: str) -> str | None:
-    """Resolve a city input (full name, short code, or ticker prefix) to a full city name."""
-    if city_input in _CITY_MAP:
-        return city_input
-    if city_input in _CITY_ALIASES:
-        return _CITY_ALIASES[city_input]
-    # Check ticker prefix
-    for prefix, (name, _, _, _) in _KALSHI_CITY_MAP.items():
-        if prefix == city_input:
-            return name
-    return None
-
-
-# Kalshi ticker → (city_name, lat, lon, timezone)
-_KALSHI_CITY_MAP: dict[str, tuple[str, float, float, str]] = {
-    "KXHIGHNY": ("New York", 40.71, -74.01, "America/New_York"),
-    "KXHIGHPHIL": ("Philadelphia", 39.95, -75.16, "America/New_York"),
-    "KXHIGHTPHX": ("Phoenix", 33.45, -112.07, "America/Phoenix"),
-    "KXHIGHTMIN": ("Minneapolis", 44.98, -93.26, "America/Chicago"),
-    "KXHIGHTSEA": ("Seattle", 47.61, -122.33, "America/Los_Angeles"),
-    "KXHIGHTCHI": ("Chicago", 41.88, -87.63, "America/Chicago"),
-    "KXHIGHTHOU": ("Houston", 29.76, -95.37, "America/Chicago"),
-    "KXHIGHTLA": ("Los Angeles", 34.05, -118.24, "America/Los_Angeles"),
-    "KXHIGHTMIA": ("Miami", 25.76, -80.19, "America/New_York"),
-    "KXHIGHTDEN": ("Denver", 39.74, -104.99, "America/Denver"),
-    "KXHIGHTATL": ("Atlanta", 33.75, -84.39, "America/New_York"),
-    "KXHIGHTBOS": ("Boston", 42.36, -71.06, "America/New_York"),
-    "KXHIGHTDAL": ("Dallas", 32.78, -96.80, "America/Chicago"),
-    "KXHIGHTDET": ("Detroit", 42.33, -83.05, "America/Detroit"),
-    "KXHIGHTSF": ("San Francisco", 37.77, -122.42, "America/Los_Angeles"),
-}
 
 
 class WeatherDataProvider(BaseDataProvider):
@@ -234,12 +120,12 @@ class WeatherDataProvider(BaseDataProvider):
             ]
         else:
             nws_tasks = [
-                self._nws.get_forecast(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset)
+                self._nws.get_forecast(*resolve_forecast_coords(c), offset=offset)
                 for c in resolved
             ]
         # Fire Open-Meteo ensemble fetches in parallel (warm cache, no return needed).
         om_tasks = [
-            self._fetch_open_meteo_ensemble(_CITY_MAP[c][0], _CITY_MAP[c][1], offset=offset)
+            self._fetch_open_meteo_ensemble(*resolve_forecast_coords(c), offset=offset)
             for c in resolved
         ]
 
@@ -285,7 +171,7 @@ class WeatherDataProvider(BaseDataProvider):
             tasks = [self._nws.get_all_forecasts(0, 0, station=station) for _ in resolved]
         else:
             tasks = [
-                self._nws.get_all_forecasts(_CITY_MAP[c][0], _CITY_MAP[c][1]) for c in resolved
+                self._nws.get_all_forecasts(*resolve_forecast_coords(c)) for c in resolved
             ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)

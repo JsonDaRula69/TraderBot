@@ -62,7 +62,7 @@ src/traderbot/
 
 - `__init__.py` — CLI entry point, registers all sub-apps and flat commands
 - `admin.py` — Admin commands: bootstrap, heartbeat, halt, resume, learnings, cache-warm, reconcile, check-settlements
-- `auth.py` — Auth commands: set-kalshi, set-voyage, set-newsapi, set-fred, check-kalshi, setup-master-password
+- `auth.py` — Auth commands: set-kalshi, set-key, list-keys, delete-key, rotate, migrate, check, detect-tier, clear-session, setup-master-password, change-master-password, check-master-password
 - `cron.py` — Cron commands: setup-heartbeat-tasks, remove-heartbeat-tasks; _write_heartbeat_config() using openclaw config set CLI
 - `data.py` — Data sub-app commands: forecasts, signals, bias
 - `helpers.py` — Shared utilities: _SUDO, _SYSTEMCTL, app (main typer), _resolve_db_path, _with_db, _get_strategy

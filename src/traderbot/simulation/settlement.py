@@ -85,7 +85,7 @@ async def _settle_weather_bets(
     """
     import httpx
 
-    from traderbot.data.weather.provider import _KALSHI_CITY_MAP
+    from traderbot.data.weather.geo import _KALSHI_CITY_MAP
     from traderbot.db.positions import update_settlement
 
     settled = 0
@@ -220,7 +220,7 @@ def auto_settle_paper_positions(
     """
     from datetime import UTC, datetime
 
-    from traderbot.data.weather.provider import _KALSHI_CITY_MAP
+    from traderbot.data.weather.geo import _KALSHI_CITY_MAP
     from traderbot.db import get_connection
     from traderbot.db.positions import init_table, list_open_positions
     from traderbot.paths import _resolve_db_path
