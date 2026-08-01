@@ -53,6 +53,6 @@ class TestMCPServerApp:
         assert app is not None
 
     def test_app_is_server(self):
-        from mcp.server.lowlevel.server import Server
+        from mcp.server import Server
 
         assert isinstance(app, Server)
