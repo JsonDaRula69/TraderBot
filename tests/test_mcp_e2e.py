@@ -8,7 +8,6 @@ Run with: pytest tests/test_mcp_e2e.py -v
 """
 
 import asyncio
-import json
 import subprocess
 import sys
 
@@ -36,7 +35,6 @@ class TestMCPEndToEnd:
     def test_health_tool_via_jsonrpc(self):
         """traderbot__health tool can be called directly."""
         from traderbot.mcp.tools import traderbot__health
-        import asyncio
 
         response = asyncio.run(traderbot__health(token="sysadmin-test-token"))
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
@@ -45,7 +43,6 @@ class TestMCPEndToEnd:
     def test_auth_check_tool_via_jsonrpc(self):
         """traderbot__auth_check tool can be called directly."""
         from traderbot.mcp.tools import traderbot__auth_check
-        import asyncio
 
         response = asyncio.run(traderbot__auth_check(token="sysadmin-test-token"))
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
@@ -54,10 +51,11 @@ class TestMCPEndToEnd:
     def test_invalid_token_rejected(self):
         """Invalid token returns error in tool response."""
         from traderbot.mcp.tools import traderbot__health
-        import asyncio
 
         response = asyncio.run(traderbot__health(token="invalid-token"))
-        assert response.get("error") is not None, f"Expected error for invalid token, got: {response}"
+        assert response.get("error") is not None, (
+            f"Expected error for invalid token, got: {response}"
+        )
 
     def test_permission_denied_for_trading_tool(self):
         """SysAdmin cannot call traderbot__trade (should be denied)."""
@@ -65,8 +63,9 @@ class TestMCPEndToEnd:
 
         profile, agent_id = resolve_token_adapter("sysadmin-test-token")
         assert profile is not None
-        assert not profile.is_tool_permitted("traderbot__trade"), \
+        assert not profile.is_tool_permitted("traderbot__trade"), (
             "SysAdmin should not have permission to trade"
+        )
 
     def test_permission_denied_for_analysis_tool(self):
         """SysAdmin cannot call traderbot__analyze."""
@@ -74,8 +73,9 @@ class TestMCPEndToEnd:
 
         profile, agent_id = resolve_token_adapter("sysadmin-test-token")
         assert profile is not None
-        assert not profile.is_tool_permitted("traderbot__analyze"), \
+        assert not profile.is_tool_permitted("traderbot__analyze"), (
             "SysAdmin should not have permission to analyze"
+        )
 
     def test_dev_liaison_cannot_trade(self):
         """Dev-Liaison cannot call traderbot__trade."""
@@ -83,8 +83,9 @@ class TestMCPEndToEnd:
 
         profile, agent_id = resolve_token_adapter("dev-liaison-test-token")
         assert profile is not None
-        assert not profile.is_tool_permitted("traderbot__trade"), \
+        assert not profile.is_tool_permitted("traderbot__trade"), (
             "Dev-Liaison should not have permission to trade"
+        )
 
     def test_weather_can_trade(self):
         """Weather agent CAN call traderbot__trade (category agents trade)."""
@@ -92,13 +93,13 @@ class TestMCPEndToEnd:
 
         profile, agent_id = resolve_token_adapter("weather-test-token")
         assert profile is not None
-        assert profile.is_tool_permitted("traderbot__trade"), \
+        assert profile.is_tool_permitted("traderbot__trade"), (
             "Weather agent should have permission to trade"
+        )
 
     def test_health_tool_returns_ok(self):
         """traderbot__health returns status=ok for valid sysadmin token."""
         from traderbot.mcp.tools import traderbot__health
-        import asyncio
 
         response = asyncio.run(traderbot__health(token="sysadmin-test-token"))
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
@@ -108,7 +109,6 @@ class TestMCPEndToEnd:
     def test_auth_check_returns_profile_info(self):
         """traderbot__auth_check returns profile info for valid token."""
         from traderbot.mcp.tools import traderbot__auth_check
-        import asyncio
 
         response = asyncio.run(traderbot__auth_check(token="dev-liaison-test-token"))
         assert response.get("status") == "ok"

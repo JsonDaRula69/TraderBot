@@ -16,8 +16,6 @@ from traderbot.profiles.weather import create_weather_profile
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
 
-    pass
-
 logger = logging.getLogger(__name__)
 
 # Phase 0: Hardcoded token-to-profile mapping.

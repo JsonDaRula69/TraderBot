@@ -19,3 +19,15 @@ traderbot-mcp-server = "traderbot.mcp.server:run_server"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "PIE", "PYI", "UP"]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests that validate the full MCP transport chain",
+]
