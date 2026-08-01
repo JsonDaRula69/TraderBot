@@ -54,7 +54,9 @@ Return result
 
 Returns market-implied probability, spread, liquidity, and edge assessment for a ticker.
 
-**Parameters**: `token` (str), `ticker` (str)
+**Parameters**: `token` (str), `category` (str), `ticker` (str)
+
+`category` enables per-agent access control per DD-011 (market edge is only computed for the caller's enabled categories).
 
 **Response**:
 ```json

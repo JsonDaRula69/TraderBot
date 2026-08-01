@@ -200,6 +200,7 @@
 5. **Database creation** — Create per-agent databases with isolation. Shared ChromaDB with category-scoped queries. Sysadmin gets cross-agent access.
 6. **Backfill** — Populate enabled datasource databases with 6 months of historical data, filtered by enabled categories.
 7. **Simulation start** — All agents begin by backtesting on already-settled markets using historical data (DD-017, DD-019). Mechanism to promote to paper trading and live trading exists (DD-017).
+8. **Verification** — `traderbot setup` ends with a verification step confirming: OpenClaw gateway is running and reachable; all agents have valid tokens (resolve_token succeeds for each); all agents can authenticate with Kalshi (`traderbot auth check --json`); cron jobs are registered and visible via `openclaw cron list`; database paths exist and are writable; ChromaDB is accessible and collections are initialized; Docker sandbox is running and the TraderBot image exists (if configured). This is distinct from `openclaw doctor` (which checks OpenClaw health) — TraderBot's verify checks TraderBot-specific health. Implemented as a `traderbot setup --verify` command (or a verification step within setup) that runs all checks and reports pass/fail.
 
 **Additional note**: SysAdmin should always use the `main` agent. Creating a separate sysadmin agent adds complexity without benefit, since the sysadmin's workspace files already assume it IS the main agent. Recommendation: make step 2 non-optional — sysadmin is always `main`.
 
@@ -354,21 +355,18 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 - [ ] Should the master key be derived from the user's master password (existing `master_password.py`), or be independent?
 
 
-### DD-013: Verification step at end of deploy
+### DD-013: Three-mode trading (backtesting/paper/live)
 **Date**: 2025-06-08
 **Status**: Decided
-**Context**: After the full deploy flow, there's no automated verification that everything is working. Misconfigurations (wrong token, missing API key, failed cron registration) would only surface when an agent tries to trade.
-**Decision**: `traderbot setup` ends with a verification step that confirms:
-- OpenClaw gateway is running and reachable
-- All agents have valid tokens (resolve_token succeeds for each)
-- All agents can authenticate with Kalshi (`traderbot auth check --json`)
-- Cron jobs are registered and visible via `openclaw cron list`
-- Database paths exist and are writable
-- ChromaDB is accessible and collections are initialized
-- Docker sandbox is running and the TraderBot image exists (if configured)
+**Context**: Agents need a safe progression from validation on historical data to real-money trading. A single always-live model is unsafe; a purely simulated model never validates against live market conditions. Trading operates in three distinct modes with a defined promotion path.
+**Decision**: Agents trade in three modes — BACKTESTING, PAPER, LIVE — with the same MCP tools regardless of mode. TraderBot routes on the backend based on the calling agent's profile mode (profile-aware MCP routing). Promotion and demotion follow the lifecycle defined in DD-017; backtest mechanics in DD-019; paper/live architecture in DD-021.
 **Consequences**:
-- A new `traderbot setup --verify` command (or a verification step within setup) that runs all checks and reports pass/fail
-- This is distinct from `openclaw doctor` (which checks OpenClaw health) — TraderBot's verify checks TraderBot-specific health
+- All agents start in BACKTESTING (validation on settled markets with historical data)
+- Promotion to PAPER requires passing the deployment bar (Sharpe ≥ 1.0, win rate ≥ 55%, sample size ≥ 30)
+- Promotion to LIVE requires 30+ paper trades and minimum 14 days of paper trading
+- Demotion (to backtesting or suspended) occurs if metrics fall below threshold or risk limits breach
+- MCP tools behave identically across modes at the interface level; mode routing happens server-side (see DD-021 mode table)
+- Three-mode database isolation: backtest DB (read-only reference), paper DB, live DB (read-write + Kalshi sync)
 
 ---
 
@@ -499,7 +497,7 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 Agent (Docker container)
    │
    ├── Calls MCP tools via OpenClaw tool interface
-   │   (traderbot_scan, traderbot_analyze, traderbot_trade, etc.)
+   │   (traderbot__scan, traderbot__analyze, traderbot__trade, etc.)
    │
    └── OpenClaw gateway routes tool calls →
            TraderBot MCP server (host process)
@@ -511,10 +509,12 @@ Agent (Docker container)
 ```
 
 **MCP tool design:**
-- Common tools: `traderbot_scan`, `traderbot_positions`, `traderbot_heartbeat`, `traderbot_performance`, `traderbot_audit`, `traderbot_learnings`
-- Category-scoped tools: `traderbot_weather_forecast`, `traderbot_weather_data`, `traderbot_economics_indicators`, etc.
-- Trading tools: `traderbot_trade`, `traderbot_analyze`
-- Sysadmin tools: `traderbot_profile_list`, `traderbot_auth_check`, `traderbot_cron_setup`
+- Common tools: `traderbot__scan`, `traderbot__positions`, `traderbot__heartbeat`, `traderbot__performance`, `traderbot__audit`, `traderbot__learnings`
+- Category-scoped tools: `traderbot__weather_forecast`, `traderbot__weather_data`, `traderbot__economics_indicators`, etc.
+- Trading tools: `traderbot__trade`, `traderbot__analyze`
+- Sysadmin tools: `traderbot__profile_list`, `traderbot__auth_check`, `traderbot__cron_setup`
+
+The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this list is illustrative, not exhaustive.
 
 **Category isolation via OpenClaw per-agent tool config:**
 ```json5
@@ -2226,7 +2226,7 @@ Every TraderBot MCP tool accepts a `token` parameter. The agent's workspace inst
 ```python
 # MCP tool definition
 @tool
-async def traderbot_scan(token: str, category: str, ...):
+async def traderbot__scan(token: str, category: str, ...):
     profile_name, agent_id = resolve_token(token)
     if profile_name is None:
         return {"error": "Invalid or expired profile token"}
