@@ -21,8 +21,7 @@ def create_dev_liaison_profile() -> TradingProfile:
         name="dev-liaison",
         mode="paper",
         description=(
-            "Architecture expert and AutoDev liaison — reference, "
-            "health, and coordination only"
+            "Architecture expert and AutoDev liaison — reference, health, and coordination only"
         ),
         enabled_categories=[],
         risk_multiplier=0.001,

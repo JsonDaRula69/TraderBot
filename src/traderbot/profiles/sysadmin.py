@@ -24,8 +24,7 @@ def create_sysadmin_profile() -> TradingProfile:
         name="sysadmin",
         mode="paper",
         description=(
-            "TraderBot system administrator — oversight, evaluation, "
-            "and test lab management"
+            "TraderBot system administrator — oversight, evaluation, and test lab management"
         ),
         enabled_categories=[c for c in MarketCategory],
         risk_multiplier=0.001,

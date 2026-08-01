@@ -37,9 +37,7 @@ class TestMCPToolDefinitions:
 
     def test_each_tool_has_description(self):
         for td in TOOL_DEFINITIONS:
-            assert len(td.get("description", "")) > 0, (
-                f"Tool {td['name']} has no description"
-            )
+            assert len(td.get("description", "")) > 0, f"Tool {td['name']} has no description"
 
     def test_each_tool_has_required_token_param(self):
         for td in TOOL_DEFINITIONS:
@@ -47,9 +45,7 @@ class TestMCPToolDefinitions:
             properties = schema.get("properties", {})
             required = schema.get("required", [])
             assert "token" in properties, f"Tool {td['name']} missing token parameter"
-            assert "token" in required, (
-                f"Tool {td['name']} token not marked as required"
-            )
+            assert "token" in required, f"Tool {td['name']} token not marked as required"
 
 
 class TestMCPServerApp:
