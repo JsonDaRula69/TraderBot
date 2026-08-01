@@ -59,3 +59,4 @@ test-keys.txt
 *.xml
 state-ses_*.xml
 .omo/
+.trash/
