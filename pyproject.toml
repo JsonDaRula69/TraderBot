@@ -20,6 +20,12 @@ traderbot-mcp-server = "traderbot.mcp.server:run_server"
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

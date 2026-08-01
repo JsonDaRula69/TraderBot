@@ -12,7 +12,8 @@ from enum import Enum
 class MarketCategory(str, Enum):
     """Kalshi market categories.
 
-    Used by TradingProfile.enabled_categories for per-agent category isolation (DD-011).
+    Used by TradingProfile.enabled_categories for per-agent
+    category isolation (DD-011).
     """
 
     WEATHER = "weather"

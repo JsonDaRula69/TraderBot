@@ -1,7 +1,6 @@
 """Unit tests for MCP token resolver (Phase 0: hardcoded auth)."""
 
 import os
-import pytest
 
 from traderbot.mcp.resolver import resolve_token_adapter
 
@@ -37,7 +36,9 @@ class TestHardcodedTokenResolver:
 
     def test_hardcoded_auth_env_var(self):
         os.environ["TRADERBOT_USE_HARDCODED_AUTH"] = "1"
-        profile, agent_id = resolve_token_adapter("sysadmin-test-token")
-        assert profile is not None
-        assert profile.name == "sysadmin"
-        del os.environ["TRADERBOT_USE_HARDCODED_AUTH"]
+        try:
+            profile, agent_id = resolve_token_adapter("sysadmin-test-token")
+            assert profile is not None
+            assert profile.name == "sysadmin"
+        finally:
+            del os.environ["TRADERBOT_USE_HARDCODED_AUTH"]

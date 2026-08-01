@@ -2,13 +2,17 @@
 
 import pytest
 
-from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.sysadmin import create_sysadmin_profile
 
 
-def _make_profile(name: str = "test", mode: str = "paper", permissions: list[str] | None = None, **kwargs) -> TradingProfile:
+def _make_profile(
+    name: str = "test",
+    mode: str = "paper",
+    permissions: list[str] | None = None,
+    **kwargs,
+) -> TradingProfile:
     defaults = dict(
         description="test profile",
         enabled_categories=[],

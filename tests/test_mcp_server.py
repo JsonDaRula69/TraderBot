@@ -1,7 +1,5 @@
 """Unit tests for MCP server (Phase 0: tool registration and basic server setup)."""
 
-import pytest
-
 from traderbot.mcp.server import app
 from traderbot.mcp.tools import TOOL_DEFINITIONS, TOOL_HANDLER_MAP
 
@@ -13,7 +11,9 @@ class TestMCPToolDefinitions:
     def test_tool_names_are_short(self):
         """Tool names are short — OpenClaw prefixes them with the server name."""
         for td in TOOL_DEFINITIONS:
-            assert not td["name"].startswith("traderbot__"), f"Tool {td['name']} should not include server prefix"
+            assert not td["name"].startswith("traderbot__"), (
+                f"Tool {td['name']} should not include server prefix"
+            )
 
     def test_all_tools_have_handlers(self):
         for td in TOOL_DEFINITIONS:
@@ -37,7 +37,9 @@ class TestMCPToolDefinitions:
 
     def test_each_tool_has_description(self):
         for td in TOOL_DEFINITIONS:
-            assert len(td.get("description", "")) > 0, f"Tool {td['name']} has no description"
+            assert len(td.get("description", "")) > 0, (
+                f"Tool {td['name']} has no description"
+            )
 
     def test_each_tool_has_required_token_param(self):
         for td in TOOL_DEFINITIONS:
@@ -45,7 +47,9 @@ class TestMCPToolDefinitions:
             properties = schema.get("properties", {})
             required = schema.get("required", [])
             assert "token" in properties, f"Tool {td['name']} missing token parameter"
-            assert "token" in required, f"Tool {td['name']} token not marked as required"
+            assert "token" in required, (
+                f"Tool {td['name']} token not marked as required"
+            )
 
 
 class TestMCPServerApp:
@@ -54,4 +58,5 @@ class TestMCPServerApp:
 
     def test_app_is_server(self):
         from mcp.server.lowlevel.server import Server
+
         assert isinstance(app, Server)
