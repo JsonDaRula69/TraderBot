@@ -314,9 +314,7 @@ def uninstall(
     # e.g. a prior pipx install left its venv behind, but we're running from git/source.
     _pipx_has_traderbot = False
     try:
-        _pipx_check = _sp.run(
-            ["pipx", "list"], capture_output=True, text=True, timeout=10
-        )
+        _pipx_check = _sp.run(["pipx", "list"], capture_output=True, text=True, timeout=10)
         if _pipx_check.returncode == 0 and "traderbot" in _pipx_check.stdout:
             _pipx_has_traderbot = True
     except Exception:
@@ -364,9 +362,7 @@ def uninstall(
     if not is_pipx and _pipx_has_traderbot:
         do_pipx_clean = True
         if not json_output:
-            do_pipx_clean = typer.confirm(
-                "  Remove stale pipx 'traderbot' venv?", default=True
-            )
+            do_pipx_clean = typer.confirm("  Remove stale pipx 'traderbot' venv?", default=True)
         if do_pipx_clean:
             try:
                 _sp.run(["pipx", "uninstall", "traderbot"], capture_output=True, timeout=30)
