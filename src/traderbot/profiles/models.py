@@ -40,7 +40,7 @@ class TradingProfile(BaseModel):
     # Empty list = all tools permitted. Examples: "deny:traderbot__trade", "traderbot__*"
     permissions: list[str] = Field(default_factory=list)
 
-    def model_post_init(self, __context: object) -> None:
+    def model_post_init(self, __context: object, /) -> None:
         logger.debug(
             "Profile %s: mode=%s risk_mult=%.2f", self.name, self.mode, self.risk_multiplier
         )

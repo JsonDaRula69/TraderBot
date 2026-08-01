@@ -6,10 +6,10 @@ Phase 0 only needs MarketCategory for profile construction.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class MarketCategory(str, Enum):
+class MarketCategory(StrEnum):
     """Kalshi market categories.
 
     Used by TradingProfile.enabled_categories for per-agent
