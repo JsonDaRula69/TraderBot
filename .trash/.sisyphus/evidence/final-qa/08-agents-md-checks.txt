@@ -1,8 +1,0 @@
-=== AGENTS.md ===
-14577 /home/jsondarula/.openclaw/workspace/weather/AGENTS.md
-=== Signal formula ===
-182:Confidence is not a single number — it's the product of:
-=== Category count ===
-258:All 16 supported market categories (from `kalshi.models.MarketCategory`):
-=== TOOLS.md ===
-0

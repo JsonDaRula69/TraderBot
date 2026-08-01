@@ -1,2 +1,0 @@
-39:        "Use 'traderbot scan --category <cat> --json' for structured market data. "
-56:        "Use 'traderbot heartbeat --json' for structured output. "

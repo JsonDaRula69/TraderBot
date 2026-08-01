@@ -1,6 +1,0 @@
-FULL IMPORT CHAIN VERIFIED
-  models: ['DataPoint', 'MarketCategory', 'NewsSource']
-  sources: ['NewsAggregator', 'DataSourcesConfig']
-  profiles.models: TradingProfile
-  profiles.runtime: get_current_profile
-  profiles.config: resolve_kalshi_credentials, resolve_newsapi_key, resolve_openweather_key, resolve_fred_key

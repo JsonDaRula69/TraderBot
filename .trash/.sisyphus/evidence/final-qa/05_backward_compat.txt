@@ -1,8 +1,0 @@
-=== DataSourcesConfig Backward Compatibility ===
-
-1. Legacy constructor (newsapi_key='...'): OK -> key=test_legacy_key_123
-2. Config object constructor: OK -> key=test_config_key_456
-3. Individual field wins: OK -> key=individual_key (expected individual_key)
-4. Independent configs not shared: OK
-
-VERDICT: Backward compatibility PASS

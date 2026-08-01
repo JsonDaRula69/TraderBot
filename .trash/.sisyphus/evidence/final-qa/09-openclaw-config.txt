@@ -1,6 +1,0 @@
-Total agents: 5
-  Agent: main - 0 loops - enabled=None
-  Agent: mentions - 0 loops - enabled=None
-  Agent: sports - 0 loops - enabled=None
-  Agent: politics - 0 loops - enabled=None
-  Agent: weather - 0 loops - enabled=None
