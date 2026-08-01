@@ -338,7 +338,8 @@ def record_bias_cmd(
     console = Console()
     from datetime import UTC, datetime
 
-    from traderbot.data.weather.provider import _CITY_MAP, WeatherDataProvider, _resolve_city
+    from traderbot.data.weather.geo import _CITY_MAP, resolve_forecast_coords
+    from traderbot.data.weather.provider import WeatherDataProvider, _resolve_city
 
     city_codes = [c.strip().upper() for c in city.split(",") if c.strip()]
     target_date = forecast_date or datetime.now(UTC).strftime("%Y-%m-%d")
@@ -383,7 +384,7 @@ def record_bias_cmd(
                     forecast_high = fc.high_temp_f if fc else None
 
                     # Fetch actual temperature from Open-Meteo archive API
-                    lat, lon = _CITY_MAP[resolved]
+                    lat, lon = resolve_forecast_coords(resolved)
                     actual_high = await _fetch_actual(lat, lon)
 
                     if forecast_high is None or actual_high is None:

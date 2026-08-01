@@ -1,0 +1,5 @@
+# CODEOWNERS — required reviewers for branch protection
+# Tradebot-Liaison is the designated reviewer for all bot-submitted PRs.
+# JsonDaRula69 is also a code owner so Tradebot-Liaison's own PRs aren't blocked.
+
+* @Tradebot-Liaison @JsonDaRula69

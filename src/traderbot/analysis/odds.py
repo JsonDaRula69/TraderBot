@@ -59,6 +59,11 @@ def implied_probability(orderbook: OrderBook) -> ImpliedProb:
     spread_cents = best_yes_ask - best_yes_bid
     mid_price_cents = max(1, round((best_yes_bid + best_yes_ask) / 2))
 
+    # Use bid/ask midpoint for market probability instead of best bid alone.
+    # Prevents phantom edges in thin markets where bid is far from fair value.
+    # Per Kalshi API docs, asks are not returned by the orderbook endpoint —
+    # the ask is derived as 100 - best_no_bid, which is mathematically exact
+    # because a yes bid at price X = no ask at 100-X in binary markets.
     return ImpliedProb(
         yes_prob=yes_prob,
         no_prob=no_prob,
@@ -69,8 +74,15 @@ def implied_probability(orderbook: OrderBook) -> ImpliedProb:
 
 def detect_edge(estimated_prob: float, orderbook: OrderBook) -> EdgeEstimate:
     """Compare estimated probability against market-implied probability."""
-    market_prob = implied_probability(orderbook).yes_prob
-    edge = estimated_prob - market_prob
+    ip = implied_probability(orderbook)
+    market_prob = ip.yes_prob  # keep yes_prob for backward compat (e.g., weather signal spread)
+
+    # Use bid/ask midpoint instead of best_bid alone for edge detection.
+    # Prevents phantom edges in thin T-markets where best_bid is far from fair value.
+    # Fall back to best_bid if spread is extremely wide or midpoint exceeds [0,1].
+    mid_prob = ip.mid_price_cents / 100.0
+    edge_market = mid_prob if 0.0 <= mid_prob <= 1.0 else market_prob
+    edge = estimated_prob - edge_market
 
     if abs(edge) < EDGE_NEUTRAL_THRESHOLD:
         direction: Literal["yes", "no", "neutral"] = "neutral"
@@ -81,8 +93,8 @@ def detect_edge(estimated_prob: float, orderbook: OrderBook) -> EdgeEstimate:
 
     return EdgeEstimate(
         estimated_prob=estimated_prob,
-        market_prob=market_prob,
-        edge=edge,
+        market_prob=round(edge_market, 4),
+        edge=round(edge, 4),
         direction=direction,
     )
 

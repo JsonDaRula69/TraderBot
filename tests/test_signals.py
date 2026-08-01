@@ -186,8 +186,9 @@ def test_generate_signal_edge_cents() -> None:
         orderbook=ob,
         estimated_prob=0.75,
     )
-    # edge = 0.75 - 0.50 = 0.25, edge_cents = round(0.25 * 100) = 25
-    assert signal.edge_cents == 25
+    # midpoint = round((50 + 55) / 2) = 52¢ (banker's rounding on 52.5)
+    # edge = 0.75 - 0.52 = 0.23, edge_cents = 23
+    assert signal.edge_cents == 23
 
 
 @pytest.mark.unit

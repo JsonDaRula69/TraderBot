@@ -310,6 +310,16 @@ def uninstall(
 
     is_pipx = _is_pipx_installed()
 
+    # Check for stale pipx registration even when running outside pipx context.
+    # e.g. a prior pipx install left its venv behind, but we're running from git/source.
+    _pipx_has_traderbot = False
+    try:
+        _pipx_check = _sp.run(["pipx", "list"], capture_output=True, text=True, timeout=10)
+        if _pipx_check.returncode == 0 and "traderbot" in _pipx_check.stdout:
+            _pipx_has_traderbot = True
+    except Exception:
+        pass
+
     if is_pipx:
         try:
             if json_output:
@@ -347,6 +357,20 @@ def uninstall(
                     )
                     console.print("  Uninstalled pip package: traderbot")
                     removed.append("pip:traderbot")
+
+    # Stale pipx cleanup: running from git/source context but pipx still has traderbot registered
+    if not is_pipx and _pipx_has_traderbot:
+        do_pipx_clean = True
+        if not json_output:
+            do_pipx_clean = typer.confirm("  Remove stale pipx 'traderbot' venv?", default=True)
+        if do_pipx_clean:
+            try:
+                _sp.run(["pipx", "uninstall", "traderbot"], capture_output=True, timeout=30)
+                removed.append("pipx:traderbot")
+                if not json_output:
+                    console.print("  Uninstalled stale pipx package: traderbot")
+            except Exception as exc:
+                logger.warning("pipx uninstall (stale) failed: %s", exc)
 
     _sl_usrs = [Path("/usr/local/bin/traderbot")]
     if not is_pipx:
@@ -505,7 +529,7 @@ def uninstall(
                 console.print("  Removed OpenClaw npm package")
             removed.append("npm:openclaw")
 
-    _sbx_name = "traderbot-sandbox:bookworm-slim"
+    _sbx_names = ["traderbot-sandbox:bookworm-slim", "openclaw-sandbox:bookworm-slim"]
     try:
         _containers = _sp.run(
             ["docker", "ps", "-aq", "--filter", "name=openclaw-sbx"],
@@ -528,23 +552,24 @@ def uninstall(
     except Exception as exc:
         logger.warning("Docker container removal failed: %s", exc)
 
-    try:
-        _img_res = _sp.run(
-            ["docker", "images", "-q", _sbx_name], capture_output=True, text=True, timeout=10
-        )
-        if _img_res.stdout.strip():
-            _remove_img = True
-            if not json_output:
-                _remove_img = typer.confirm(
-                    f"  Remove Docker sandbox image ({_sbx_name})?", default=False
-                )
-            if _remove_img:
-                _sp.run(["docker", "rmi", "-f", _sbx_name], capture_output=True, timeout=30)
-                removed.append(f"docker:{_sbx_name}")
+    for _sn in _sbx_names:
+        try:
+            _img_res = _sp.run(
+                ["docker", "images", "-q", _sn], capture_output=True, text=True, timeout=10
+            )
+            if _img_res.stdout.strip():
+                _remove_img = True
                 if not json_output:
-                    console.print(f"  Removed Docker image: {_sbx_name}")
-    except Exception as exc:
-        logger.warning("Docker image removal failed for %s: %s", _sbx_name, exc)
+                    _remove_img = typer.confirm(
+                        f"  Remove Docker sandbox image ({_sn})?", default=False
+                    )
+                if _remove_img:
+                    _sp.run(["docker", "rmi", "-f", _sn], capture_output=True, timeout=30)
+                    removed.append(f"docker:{_sn}")
+                    if not json_output:
+                        console.print(f"  Removed Docker image: {_sn}")
+        except Exception as exc:
+            logger.warning("Docker image removal failed for %s: %s", _sn, exc)
 
     # Prune Docker build cache (accumulates from repeated sandbox builds)
     try:

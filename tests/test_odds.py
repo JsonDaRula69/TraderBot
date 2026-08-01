@@ -81,8 +81,9 @@ def test_detect_edge_yes_direction():
 
     assert isinstance(result, EdgeEstimate)
     assert result.direction == "yes"
-    assert result.edge == pytest.approx(0.15)
-    assert result.market_prob == pytest.approx(0.55)
+    # midpoint = (55 + 60) / 2 = 58¢ → market_prob = 0.58
+    assert result.edge == pytest.approx(0.12)
+    assert result.market_prob == pytest.approx(0.58)
     assert result.estimated_prob == pytest.approx(0.7)
 
 
@@ -92,23 +93,33 @@ def test_detect_edge_no_direction():
     result = detect_edge(0.50, ob)
 
     assert result.direction == "no"
-    assert result.edge == pytest.approx(-0.05)
+    # midpoint = 0.58, edge = 0.50 - 0.58 = -0.08
+    assert result.edge == pytest.approx(-0.08)
 
 
 @pytest.mark.unit
 def test_detect_edge_neutral():
     ob = _make_orderbook(yes_price=55, no_price=40)
-    result = detect_edge(0.555, ob)  # within 0.01 of 0.55
+    result = detect_edge(0.555, ob)  # within 0.03 of 0.58
 
     assert result.direction == "neutral"
+    # midpoint = 0.58, edge = 0.555 - 0.58 = -0.025 (abs < 0.03)
 
 
 @pytest.mark.unit
-def test_detect_edge_neutral_exact():
-    ob = _make_orderbook(yes_price=55, no_price=40)
-    result = detect_edge(0.55, ob)
+def test_detect_edge_thin_market_midpoint():
+    """Thin market: best_yes_bid=1¢, no_bids missing → implied ask=100¢.
+    Midpoint = 50¢ should prevent phantom edge vs bid-only 1¢."""
+    ob = OrderBook(
+        yes_bids=[OrderBookLevel(price=1, size=1)],
+        no_bids=[],
+    )
+    result = detect_edge(0.5, ob)
 
+    # midpoint = (1 + 100) / 2 = 50¢ → market_prob = 0.50
+    # edge = 0.50 - 0.50 = 0.0 → neutral
     assert result.direction == "neutral"
+    assert result.market_prob == pytest.approx(0.5)
     assert result.edge == pytest.approx(0.0)
 
 

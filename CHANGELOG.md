@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `traderbot data-points --count` flag — returns `{"count": N}` in JSON mode for quick health checks (#149)
+- `traderbot scan --watch-new` flag — diffs against persisted snapshot to detect newly listed tickers (#141)
+- `traderbot data record-bias` cron job — daily 12:30 UTC run compares NWS forecasts vs actual settlement (#152)
+- Consolidated weather coordinate maps into `src/traderbot/data/weather/geo.py` single source of truth (#139)
+- Auto station-coordinate resolution for Kalshi-settled cities — forecasts and settlement now target airport stations (KLAX, KLGA, KORD) instead of city centers (#139)
+
 ### Changed
+- Edge detection uses bid/ask midpoint instead of best bid alone — prevents phantom edges in thin markets (#151)
+- `docs/structure.md` auth command list corrected to reflect actual CLI commands (#150)
 - Added unit tests for `_is_pipx_installed()` and `get_install_method()` in `test_paths.py`
 - Added unit test for pipx uninstall path in `test_cli.py`
 - Added unit test for pipx update path in `test_updater.py`

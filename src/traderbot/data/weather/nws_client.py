@@ -22,65 +22,11 @@ _NWS_USER_AGENT = "TraderBot/1.0 (traderbot@example.com)"
 _REQUEST_TIMEOUT = 15.0
 _CACHE_FILE_NAME = "nws_gridpoints.json"
 
-_CITY_MAP: dict[str, tuple[float, float]] = {
-    "New York": (40.71, -74.01),
-    "Philadelphia": (39.95, -75.16),
-    "Phoenix": (33.45, -112.07),
-    "Minneapolis": (44.98, -93.26),
-    "Seattle": (47.61, -122.33),
-    "Chicago": (41.88, -87.63),
-    "Houston": (29.76, -95.37),
-    "Los Angeles": (34.05, -118.24),
-    "Miami": (25.76, -80.19),
-    "Denver": (39.74, -104.99),
-    "Atlanta": (33.75, -84.39),
-    "Boston": (42.36, -71.06),
-    "Dallas": (32.78, -96.80),
-    "Detroit": (42.33, -83.05),
-    "San Francisco": (37.77, -122.42),
-}
-
-_STATION_MAP: dict[str, tuple[float, float]] = {
-    "KLGA": (40.77, -73.87),
-    "KJFK": (40.64, -73.78),
-    "KLAX": (33.94, -118.41),
-    "KORD": (41.98, -87.90),
-    "KMDW": (41.79, -87.75),
-    "KPHX": (33.43, -112.01),
-    "KSEA": (47.44, -122.31),
-    "KDAL": (32.85, -96.85),
-    "KDFW": (32.90, -97.04),
-    "KMIA": (25.79, -80.29),
-    "KBOS": (42.36, -71.01),
-    "KDEN": (39.86, -104.67),
-    "KIAH": (29.98, -95.34),
-    "KHOU": (29.65, -95.28),
-    "KATL": (33.64, -84.43),
-    "KDTW": (42.21, -83.35),
-    "KSFO": (37.62, -122.38),
-    "KMSP": (44.88, -93.22),
-    "KPHL": (39.87, -75.24),
-    "KPIT": (40.49, -80.23),
-}
-
-# Map Kalshi weather ticker prefixes to ICAO airport station codes
-_KALSHI_STATION_MAP: dict[str, str] = {
-    "KXHIGHNY": "KLGA",
-    "KXHIGHPHIL": "KPHL",
-    "KXHIGHTPHX": "KPHX",
-    "KXHIGHTMIN": "KMSP",
-    "KXHIGHTSEA": "KSEA",
-    "KXHIGHTCHI": "KORD",
-    "KXHIGHTHOU": "KIAH",
-    "KXHIGHTLA": "KLAX",
-    "KXHIGHTMIA": "KMIA",
-    "KXHIGHTDEN": "KDEN",
-    "KXHIGHTATL": "KATL",
-    "KXHIGHTBOS": "KBOS",
-    "KXHIGHTDAL": "KDAL",
-    "KXHIGHTDET": "KDTW",
-    "KXHIGHTSF": "KSFO",
-}
+from traderbot.data.weather.geo import (
+    _CITY_MAP,
+    _KALSHI_CITY_MAP,
+    _STATION_MAP,
+)
 
 GridpointCache = dict[str, dict[str, Any]]
 
@@ -396,22 +342,3 @@ class NwsClient:
             if name == city_name:
                 return prefix
         return f"KXHIGH{city_name[:4].upper()}"
-
-
-_KALSHI_CITY_MAP: dict[str, tuple[str, float, float, str]] = {
-    "KXHIGHNY": ("New York", 40.71, -74.01, "America/New_York"),
-    "KXHIGHPHIL": ("Philadelphia", 39.95, -75.16, "America/New_York"),
-    "KXHIGHTPHX": ("Phoenix", 33.45, -112.07, "America/Phoenix"),
-    "KXHIGHTMIN": ("Minneapolis", 44.98, -93.26, "America/Chicago"),
-    "KXHIGHTSEA": ("Seattle", 47.61, -122.33, "America/Los_Angeles"),
-    "KXHIGHTCHI": ("Chicago", 41.88, -87.63, "America/Chicago"),
-    "KXHIGHTHOU": ("Houston", 29.76, -95.37, "America/Chicago"),
-    "KXHIGHTLA": ("Los Angeles", 34.05, -118.24, "America/Los_Angeles"),
-    "KXHIGHTMIA": ("Miami", 25.76, -80.19, "America/New_York"),
-    "KXHIGHTDEN": ("Denver", 39.74, -104.99, "America/Denver"),
-    "KXHIGHTATL": ("Atlanta", 33.75, -84.39, "America/New_York"),
-    "KXHIGHTBOS": ("Boston", 42.36, -71.06, "America/New_York"),
-    "KXHIGHTDAL": ("Dallas", 32.78, -96.80, "America/Chicago"),
-    "KXHIGHTDET": ("Detroit", 42.33, -83.05, "America/Detroit"),
-    "KXHIGHTSF": ("San Francisco", 37.77, -122.42, "America/Los_Angeles"),
-}

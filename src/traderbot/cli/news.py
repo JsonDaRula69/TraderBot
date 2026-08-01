@@ -427,6 +427,12 @@ def register_commands(parent_app: typer.Typer) -> None:
             int | None,
             typer.Option("--freshness-threshold", help="Exit code 1 if newest data > N hours old"),
         ] = None,
+        count_only: Annotated[
+            bool,
+            typer.Option(
+                "--count", help="Return only the count of data points (JSON: count field only)"
+            ),
+        ] = False,
         json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     ) -> None:
         """Query data point readings for a market category.
@@ -448,6 +454,10 @@ def register_commands(parent_app: typer.Typer) -> None:
         if json_output:
             import json as _json
 
+            if count_only:
+                _json.dump({"count": ctx["count"]}, sys.stdout)
+                return
+
             if freshness_threshold is not None and ctx["count"] > 0:
                 now = time.time()
                 newest = max(dp.get("timestamp_epoch", 0) for dp in ctx.get("data_points", []))
@@ -458,6 +468,9 @@ def register_commands(parent_app: typer.Typer) -> None:
             return
 
         if ctx["count"] == 0:
+            if count_only:
+                console.print("0")
+                return
             console.print(
                 f"[yellow]No data points found for '{category}' in the last {hours}h.[/yellow]"
             )
@@ -467,6 +480,10 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         console.print(f"[bold]Data Points:[/bold] {category} — last {hours}h")
         console.print(f"  Readings: {ctx['count']}")
+
+        if count_only:
+            console.print(str(ctx["count"]))
+            return
 
         if freshness_threshold is not None:
             now = time.time()

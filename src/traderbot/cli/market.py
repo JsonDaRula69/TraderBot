@@ -7,7 +7,9 @@ import json as json_lib
 import logging
 import os
 import sys
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -30,6 +32,15 @@ def register_commands(parent_app: typer.Typer) -> None:
         category: Annotated[
             str | None, typer.Option("--category", help="Filter by category")
         ] = None,
+        watch_new: Annotated[
+            bool,
+            typer.Option(
+                "--watch-new",
+                "--watch",
+                help="Diff against previous scan, emit only newly listed tickers. "
+                "First run seeds the baseline — all tickers are recorded, none emitted.",
+            ),
+        ] = False,
         continuous: Annotated[
             bool,
             typer.Option(
@@ -46,6 +57,32 @@ def register_commands(parent_app: typer.Typer) -> None:
 
         console = Console()
 
+        # ── Snapshot helpers for --watch-new ─────────────────────────────────
+        def _load_snapshot() -> set[str]:
+            snap_path = Path.home() / ".traderbot" / "scan_snapshot.json"
+            if not snap_path.exists():
+                return set()
+            try:
+                data = json_lib.loads(snap_path.read_text(encoding="utf-8"))
+                return set(data.get("reported_tickers", []))
+            except (json_lib.JSONDecodeError, KeyError, OSError):
+                logger.warning("Failed to read scan snapshot, starting fresh")
+                return set()
+
+        def _save_snapshot(tickers: set[str]) -> None:
+            snap_path = Path.home() / ".traderbot" / "scan_snapshot.json"
+            snap_path.parent.mkdir(parents=True, exist_ok=True)
+            snap_path.write_text(
+                json_lib.dumps(
+                    {
+                        "reported_tickers": sorted(tickers),
+                        "last_scan_ts": time.time(),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        # ── Core scan logic ─────────────────────────────────────────────────
         async def _scan_once() -> list[dict[str, object]]:
             for attempt in range(3):
                 try:
@@ -70,11 +107,20 @@ def register_commands(parent_app: typer.Typer) -> None:
                     await asyncio.sleep(5)
             return []
 
-        if continuous:
-            import time
+        # ── Watch-new: filter against snapshot ──────────────────────────────
+        def _filter_new(current: list[dict[str, object]]) -> list[dict[str, object]]:
+            prev = _load_snapshot()
+            current_tickers = {m["ticker"] for m in current}
+            new_tickers = current_tickers - prev
+            _save_snapshot(prev | current_tickers)
+            return [m for m in current if m["ticker"] in new_tickers]
 
+        # ── Continuous mode ─────────────────────────────────────────────────
+        if continuous:
             while True:
                 markets = asyncio.run(_scan_once())
+                if watch_new:
+                    markets = _filter_new(markets)
                 if json_output:
                     json_lib.dump(markets, sys.stdout, default=str)
                     sys.stdout.flush()
@@ -82,10 +128,12 @@ def register_commands(parent_app: typer.Typer) -> None:
                     console.print(
                         f"[{datetime.now(UTC).isoformat()}] Scan complete: {len(markets)} markets"
                     )
-                # time.sleep() is safe here — this runs in a dedicated sync thread from typer
-                time.sleep(300)  # 5-minute polling interval to match decision loop cadence
+                time.sleep(300)
 
         markets = asyncio.run(_scan_once())
+
+        if watch_new:
+            markets = _filter_new(markets)
 
         if json_output:
             json_lib.dump(markets, sys.stdout, default=str)
