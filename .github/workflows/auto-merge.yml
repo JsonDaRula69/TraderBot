@@ -3,7 +3,7 @@ name: Auto-merge (jsondarula)
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
+    branches: [v1-main]
 
 permissions:
   contents: write
