@@ -60,3 +60,5 @@ test-keys.txt
 state-ses_*.xml
 .omo/
 .trash/
+.pytest_cache/
+.ruff_cache/

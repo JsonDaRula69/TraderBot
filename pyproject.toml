@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "traderbot"
+version = "2.0.0a0"
+description = "Autonomous prediction market trading toolkit for OpenClaw agents (MCP-based v2)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+traderbot-mcp-server = "traderbot.mcp.server:run_server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/traderbot"]
