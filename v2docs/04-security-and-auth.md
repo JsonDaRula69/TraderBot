@@ -2,9 +2,21 @@
 
 > This document covers the complete security architecture: Infisical secrets management, MCP authentication, per-agent isolation, token rotation, and the division of secrets responsibility. Grounded in DD-010, DD-011, DD-015, DD-025, DD-036, DD-037.
 
+> **Implementation status:** Phase 1 is a development milestone, not a
+> deployable release. The current code implements profile-token resolution,
+> permission and category enforcement, strict MCP inputs, and a hardened local
+> profile-token store. Infisical, provider credential validation, automatic
+> rotation, and deploy integration remain planned for Phase 1.5. Secure
+> per-agent token injection through OpenClaw is blocked pending a proxy/plugin
+> or isolated-gateway architecture; issue #164 remains open until that design
+> and macpro-linux testing are complete.
+
 ---
 
-## Security Architecture Overview
+## Target Security Architecture (Phase 1.5)
+
+The diagram below is the planned Infisical-backed architecture. It is not the
+current Phase 1 runtime.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53,7 +65,21 @@
 
 ---
 
-## Infisical Secrets Management (DD-037)
+## Current Phase 1 Authentication
+
+- Every tool receives an explicit `token` argument.
+- `TRADERBOT_USE_HARDCODED_AUTH=0` selects real auth through `TokenStore`;
+  every other value, including an unset variable, uses the Phase 0 hardcoded
+  development mapping.
+- `LocalTokenStore` persists 256-bit profile tokens at
+  `~/.traderbot/tokens.json`. Writes use a private same-directory temporary
+  file and atomic replacement; the final file is mode `0600` on POSIX.
+- The local store is not encrypted and has no expiry timer or automatic
+  rotation. Corrupt or malformed payloads fail closed as an empty store.
+- API credentials and Infisical are outside the current phase. Phase 1 does
+  not validate Kalshi, VoyageAI, NewsAPI, or other provider credentials.
+
+## Planned Infisical Secrets Management (Phase 1.5, DD-037)
 
 ### Two-Project Structure
 
@@ -95,7 +121,7 @@ dev-liaison_token       → resolves to dev-liaison profile
 - `traderbot-service`: read/write access to both projects. This is the bootstrap secret stored in OpenClaw SecretRef as `INFISICAL_TOKEN`.
 - Per-agent machine identities: read access only to their own token in "TraderBot Agent Tokens".
 
-### Token Provisioning Flow
+### Planned Token Provisioning Flow
 
 1. TraderBot generates a profile token (cryptographically random, 256-bit)
 2. Profile token stored as Infisical secret in "TraderBot Agent Tokens" project
@@ -109,7 +135,11 @@ dev-liaison_token       → resolves to dev-liaison profile
 4. Token is passed to agent via `TRADERBOT_PROFILE_TOKEN` environment variable
 5. When agent calls an MCP tool, TraderBot MCP server resolves the token to a profile
 
-### Token Rotation (4-hour cycle)
+This flow is not currently representable by the pinned OpenClaw configuration schema. Agent entries are strict and do not accept `env` or `mcp`; root environment values are global, and `mcp.servers.*.env` is shared by the one server process. The committed config remediation removes the invalid agent fields and intentionally omits token injection. Secure per-agent delivery
+remains blocked until TraderBot uses an OpenClaw proxy/plugin or isolated
+gateway/MCP instances per agent.
+
+### Planned Token Rotation (4-hour cycle)
 
 1. TraderBot service maintains a rotation timer
 2. Every 4 hours, for each active profile:
@@ -124,9 +154,10 @@ dev-liaison_token       → resolves to dev-liaison profile
    - Retry every 15 minutes
    - After 24 hours of failed rotation, fleet is suspended
 
-### Local Encrypted Fallback
+### Planned API-Secret Local Fallback
 
-For users who don't want Infisical (air-gapped systems, minimal setups, testing):
+For future Phase 1.5 users who do not want Infisical (air-gapped systems,
+minimal setups, testing), the design proposes:
 
 ```
 ~/.traderbot/secrets/secrets.json (0600 permissions)
@@ -137,6 +168,9 @@ For users who don't want Infisical (air-gapped systems, minimal setups, testing)
 - **Audit logging**: Last-read and last-write timestamps per secret in `secrets.json.meta`
 - **Limitations**: No automatic token rotation (must manually `traderbot token rotate --agent <name>`), basic audit logging only
 - **Clear warning at deploy**: "⚠ Local storage provides basic security but no automatic token rotation or Infisical's audit logging. Infisical is recommended for production deployments."
+
+This planned API-secret store is separate from the current
+`LocalTokenStore` profile-token file at `~/.traderbot/tokens.json`.
 
 ---
 
@@ -153,54 +187,71 @@ async def traderbot_scan(token: str, category: str, ...):
     if profile_name is None:
         return {"error": "Invalid or expired profile token"}
     profile = registry.get_profile(profile_name)
+    if not profile.is_tool_permitted("traderbot__scan"):
+        return {"error": "Permission denied"}
     if category not in profile.enabled_categories:
         return {"error": f"Category '{category}' not enabled for agent '{agent_id}'"}
     # ... execute scan
 ```
 
-> **Implementation status (Phase 0)**: Phase 0 (issue #163) resolves the token to a
-> profile and enforces tool permissions, but the category check above lands in
-> **Phase 1 (issue #164)** — see DD-011. Phase 0's hardcoded tokens are
-> development-only and must never run against live data.
+> **Current Phase 1 behavior:** each implemented tool evaluates access in the
+> order **token → tool permission → category**. Category validation is applied
+> only to category-bearing tools; currently that is `market_edge`. The current
+> `auth_check` validates the profile token and `auth_check` permission, then
+> reports profile, agent, mode, enabled categories, and permissions. It does
+> not check external API credentials.
 
-### Security Properties
+### Current Security Properties
 
-- Tokens are 256-bit cryptographically random, stored in Infisical
-- An agent can only use its own token — it doesn't know other agents' tokens
-- Even if an agent reads another agent's token from OpenClaw config, the MCP server validates that the token matches the agent's profile categories
+- Tokens generated by `generate_token()` are 256-bit cryptographically random
+- The token file is private on POSIX and replaced atomically
+- A valid token resolves to one profile and agent; profile permissions are checked before category access
 - The `permissions` field on `TradingProfile` provides an additional layer of control
-- Tokens rotate every 4 hours (Infisical) or manually (local fallback)
+- Category-bearing tools reject unknown or disabled categories
+
+The current code cannot prove which OpenClaw agent supplied a token. Securely
+giving each agent only its own token is the unresolved injection blocker, not
+an implemented security property. Infisical storage and four-hour rotation are
+future Phase 1.5 design details.
 
 ### Why Not OpenClaw Agent Context?
 
-OpenClaw's MCP protocol does not currently pass agent identity (`_meta.agent_id`) in tool calls. Approach A (token as explicit parameter) works today with existing infrastructure. If OpenClaw adds agent context in the future, we can migrate transparently — the MCP server would check both the `token` parameter and the `_meta.agent_id` field.
+OpenClaw's MCP protocol does not currently pass agent identity
+(`_meta.agent_id`) in tool calls. Explicit token parameters work in TraderBot
+and local transport tests, but deployment still needs secure per-agent token
+delivery. If OpenClaw adds trusted agent context, TraderBot can check both the
+token and `_meta.agent_id`.
 
 ---
 
 ## Per-Agent Isolation (DD-010, DD-011)
 
-### Docker Sandbox
+### Docker Sandbox Configuration Status
 
-All category agents run in Docker containers (mandatory, no opt-out):
+The target architecture requires all category agents to run in Docker containers with the properties below. A separate OpenClaw remediation hardens agent tool policies only; it does not encode these bind mounts and has not been deployed or tested on target hardware:
 - Base image: `python:3.12-slim-bookworm`
 - Agent data dir bind-mounted RW: `~/.traderbot/paper-{category}/`
 - Workspace files bind-mounted RO: `~/.openclaw/workspace/{category}/`
 - No blanket `~/.traderbot/` mount — each agent only sees its own data
-- No API tokens or secrets inside containers — only `TRADERBOT_PROFILE_TOKEN` via SecretRef
+- No profile token is injected by the remediation fragments
 - SysAdmin runs unsandboxed on host (DD-036)
 
 ### Tool-Level Filtering
 
-OpenClaw's `toolFilter` and per-agent `alsoAllow` enforce which MCP tools each agent can see:
+The remediation fragments use explicit `allow` and `deny` policies. This is intentional: first-party OpenClaw code treats a lone
+`alsoAllow` as additive to an implicit `*`, so it is not a restrictive
+allowlist. Sandboxed agents also use a second sandbox-tool gate for
+`bundle-mcp` and required session tools:
 
 ```json5
 {
   id: "weather",
   sandbox: { mode: "all" },
   tools: {
-    deny: ["group:runtime", "group:fs"],
-    alsoAllow: [
-      "bundle-mcp",
+    allow: [
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
       "traderbot__weather_forecast_prob",
       "traderbot__weather_accuracy",
       "traderbot__weather_seasonal_context",
@@ -214,13 +265,20 @@ OpenClaw's `toolFilter` and per-agent `alsoAllow` enforce which MCP tools each a
       "traderbot__audit",
       "traderbot__learnings",
     ],
+    deny: ["group:runtime", "group:fs"],
+    sandbox: {
+      tools: { allow: ["bundle-mcp", "sessions_send"] },
+    },
   },
 }
 ```
 
-SysAdmin's deny list explicitly blocks trading and category-specific tools (DD-036).
+Only `health`, `auth_check`, `profile_list`, and `market_edge` currently exist;
+the remaining names in the full design are planned. SysAdmin stays unsandboxed
+per DD-036 and its deny list explicitly blocks trading and category-specific
+tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the remediation agent fragments omit invalid nested `mcp` and per-agent `env` fields.
 
-### Data Isolation
+### Target Data Isolation (not implemented in Phase 1)
 
 - Per-agent per-mode SQLite databases (DD-032)
 - ChromaDB shared collections with category metadata filtering
@@ -229,7 +287,7 @@ SysAdmin's deny list explicitly blocks trading and category-specific tools (DD-0
 
 ---
 
-## Division of Secrets Responsibility
+## Planned Division of Secrets Responsibility (Phase 1.5)
 
 | Secret Type | Manager | Storage | Access |
 |---|---|---|---|
@@ -239,4 +297,7 @@ SysAdmin's deny list explicitly blocks trading and category-specific tools (DD-0
 | Infisical machine identity token | OpenClaw SecretRef | OpenClaw config (env provider) | TraderBot service only |
 | TraderBot service auth token | Infisical | Infisical project "TraderBot" | TraderBot service only |
 
-**Key principle**: Agents never see API tokens. They interact with TraderBot through MCP tools only. TraderBot handles all API communication on the backend.
+**Target principle**: Agents never see API tokens. They interact with TraderBot
+through MCP tools only, and TraderBot handles API communication on the backend.
+This table is planned architecture, not a claim that Infisical, provider
+credential validation, token injection, rotation, or deployment is complete.

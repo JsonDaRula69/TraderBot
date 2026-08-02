@@ -66,8 +66,12 @@
 - [x] Database efficiency: indexes, PRAGMA optimization, connection pooling, settlement cache consolidation, circuit breaker to DB, retention policy, ChromaDB model migration
 - [x] ROADMAP_PROGRESS.md removed from tracking
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
+- [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
+- [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
+- [ ] Phase 1 deployment readiness: secure OpenClaw per-agent token injection is blocked pending a proxy/plugin or isolated-gateway architecture; macpro-linux testing is still required and issue #164 remains open
 
 **Remaining open items:**
+- [ ] Resolve OpenClaw per-agent profile-token injection architecture and complete macpro-linux testing for issue #164
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — decided, implementation pending
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
@@ -219,9 +223,16 @@
 ### DD-011: Per-agent data source access control
 **Date**: 2025-06-08
 **Status**: Decided
-**Context**: Currently, any agent with a TraderBot token can access any CLI command and any data source. The weather agent could theoretically call `traderbot scan --category economics`. This is both a distraction risk (agents trading outside their category) and a security risk.
-**Decision**: Each category agent can only access data sources and trading commands relevant to its assigned categories. Access control is enforced at the TraderBot CLI level, not just at the workspace instruction level.
-**Consequences**:
+
+> **Phase 1 implementation update:** Current `HEAD` enforces access in the MCP
+> tool layer through `mcp/tools.py` and `mcp/auth.py`, in the order token → tool
+> permission → category. The CLI-specific context and audit below are retained
+> as the historical pre-MCP rationale; those legacy CLI paths and symbols are
+> not present in the v2 source tree.
+
+**Historical context (pre-v2):** Any agent with a TraderBot token could access any CLI command and any data source. The weather agent could theoretically call `traderbot scan --category economics`. This was both a distraction risk (agents trading outside their category) and a security risk.
+**Decision**: Each category agent can only access data sources and trading operations relevant to its assigned categories. Current enforcement belongs in the TraderBot MCP tool layer, not only in workspace instructions. The original CLI consequences remain historical design rationale for any future equivalent tools.
+**Historical pre-MCP consequences**:
 - The `TradingProfile.enabled_categories` field (already exists in the model) becomes the enforcement mechanism
 - When a profile token is resolved, the profile's `enabled_categories` are loaded
 - CLI commands that accept `--category` will reject categories not in the agent's profile
@@ -230,21 +241,23 @@
 - `traderbot news-context` filters to enabled category sources
 - `traderbot data-points` filters to enabled category data
 - ChromaDB queries add `where={"category": "weather"}` when a profile is active
-- The sysadmin profile has `enabled_categories: []` (all permitted) — it can see everything
+- The current SysAdmin factory explicitly enumerates every `MarketCategory`; `TradingProfile` also treats an empty category list as all permitted
 - This is enforced at the CLI level, not at the OpenClaw/workspace level. Even if an agent's AGENTS.md is modified, the CLI will reject out-of-category commands
 
-**Current enforcement status**:
+**Historical pre-v2 enforcement audit (not current `HEAD`)**:
 - `evaluate_trade()` already checks `profile.is_category_enabled(market_category)` and returns 0 for disabled categories ✓
 - `traderbot news` commands already filter by profile categories ✓
 - `traderbot scan --category` does NOT currently enforce profile categories ✗ (needs fix)
 - `traderbot data-points` does NOT currently enforce profile categories ✗ (needs fix)
 - ChromaDB queries do NOT currently filter by profile categories ✗ (needs fix)
 - `traderbot analyze` does NOT enforce profile categories ✗ (needs fix)
-- MCP tool layer (`traderbot__*`) does NOT enforce profile categories ✗ — deferred to Phase 1 (2026-08-01 decision, issue #164)
+
+**Current Phase 1 enforcement**:
+- MCP tool layer authenticates the token, checks tool permission, then enforces category access for category-bearing tools ✓ — `market_edge` is the current category-bearing tool; planned tools remain unimplemented
 
 ### DD-012: Authentication redesign — encrypted vault + OpenClaw SecretRef hybrid
 **Date**: 2025-06-08
-**Status**: Decision framework defined, specific implementation pending
+**Status**: Superseded by DD-037; historical design discussion only, not implemented
 **Context**: The current authentication system has three problems:
 
 1. **Keyring is insufficient on headless Linux.** The `keyring` package falls back to a plaintext `.env` file when no OS keyring backend is available (no D-Bus session on headless servers). API keys are stored in plaintext on the most security-sensitive deployments.
@@ -356,28 +369,25 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 - [ ] Should the master key be derived from the user's master password (existing `master_password.py`), or be independent?
 
 
-### DD-013: Verification step at end of deploy
+### DD-013: Three-mode trading (backtesting/paper/live)
 **Date**: 2025-06-08
 **Status**: Decided
-**Context**: After the full deploy flow, there's no automated verification that everything is working. Misconfigurations (wrong token, missing API key, failed cron registration) would only surface when an agent tries to trade.
-**Decision**: `traderbot setup` ends with a verification step that confirms:
-- OpenClaw gateway is running and reachable
-- All agents have valid tokens (resolve_token succeeds for each)
-- All agents can authenticate with Kalshi (`traderbot auth check --json`)
-- Cron jobs are registered and visible via `openclaw cron list`
-- Database paths exist and are writable
-- ChromaDB is accessible and collections are initialized
-- Docker sandbox is running and the TraderBot image exists (if configured)
+**Context**: Agents need a safe progression from validation on historical data to real-money trading. A single always-live model is unsafe; a purely simulated model never validates against live market conditions. Trading operates in three distinct modes with a defined promotion path.
+**Decision**: Agents trade in three modes — BACKTESTING, PAPER, LIVE — with the same MCP tools regardless of mode. TraderBot routes on the backend based on the calling agent's profile mode (profile-aware MCP routing). Promotion and demotion follow the lifecycle defined in DD-017; backtest mechanics in DD-019; paper/live architecture in DD-021.
 **Consequences**:
-- A new `traderbot setup --verify` command (or a verification step within setup) that runs all checks and reports pass/fail
-- This is distinct from `openclaw doctor` (which checks OpenClaw health) — TraderBot's verify checks TraderBot-specific health
+- All agents start in BACKTESTING (validation on settled markets with historical data)
+- Promotion to PAPER requires passing the deployment bar (Sharpe ≥ 1.0, win rate ≥ 55%, sample size ≥ 30)
+- Promotion to LIVE requires 30+ paper trades and minimum 14 days of paper trading
+- Demotion (to backtesting or suspended) occurs if metrics fall below threshold or risk limits breach
+- MCP tools behave identically across modes at the interface level; mode routing happens server-side (see DD-021 mode table)
+- Three-mode database isolation: backtest DB (read-only reference), paper DB, live DB (read-write + Kalshi sync)
 
 ---
 
 ### DD-014: Authentication and secrets architecture
 
 **Date**: 2025-06-08
-**Status**: Proposed (awaiting decision on Phase 1 vs Phase 2 approach)
+**Status**: Superseded by DD-015, DD-025, and DD-037; historical design discussion only, not implemented
 
 **Context**: The current architecture has three credential systems: (1) `auth.py` uses keyring → env → `.env` fallback for API tokens, (2) `profiles/tokens.py` uses Fernet-encrypted tokens for agent authentication, and (3) `master_password.py` uses PBKDF2 for trade/simulate command gating. All three systems have problems:
 
@@ -485,15 +495,15 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 
 1. **MCP servers run on the host** — When OpenClaw launches an MCP stdio server (`mcp.servers.<name>.command`), it runs as a child process of the OpenClaw gateway, which runs on the host. The MCP server has full host filesystem access.
 
-2. **MCP tools are available to sandboxed agents** — OpenClaw's sandbox tool policy includes `bundle-mcp` as an allowable entry. Sandboxed agents can call MCP tools if they're in the `tools.sandbox.tools.alsoAllow` list. The tool call is routed from the sandbox container through the gateway to the host-side MCP server process.
+2. **MCP tools are available to sandboxed agents** — OpenClaw's sandbox tool policy requires `bundle-mcp` in the nested `tools.sandbox.tools.allow` gate. The tool call is routed from the sandbox container through the gateway to the host-side MCP server process.
 
-3. **Per-agent tool filtering** — OpenClaw supports per-agent `tools.alsoAllow` and `tools.deny` lists, plus per-server `toolFilter.include/exclude`. This means each category agent can be restricted to only the MCP tools relevant to their category.
+3. **Per-agent tool filtering** — Restrictive policy uses an explicit per-agent `tools.allow` list plus `tools.deny`. `tools.alsoAllow` is additive to an implicit wildcard and must not be used as a restrictive allowlist.
 
 4. **`tools.exec.host`** — OpenClaw supports four exec host modes: `auto`, `sandbox`, `gateway`, `node`. For sandboxed agents, `auto` resolves to `sandbox`. Setting `host=gateway` makes exec commands run on the host. However, this applies to ALL exec commands for that agent, which would bypass the sandbox entirely.
 
-5. **OpenClaw SecretRef** — Supports `env`, `file`, and `exec` providers for injecting credentials into agent environments. This can be used to inject TraderBot profile tokens into container environments without exposing API keys.
+5. **OpenClaw SecretRef limitation** — Secret providers exist, but the pinned schema rejects per-agent `env` and nested `mcp` fields while root and MCP-server environments are shared. Config-only secure per-agent profile-token injection is therefore blocked.
 
-**Decision**: TraderBot will register as an MCP server with OpenClaw. This is the standard way to give agents new abilities and solves both the authentication and category isolation problems.
+**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side; it does not solve secure per-agent token delivery, which remains blocked under issue #164.
 
 **Architecture:**
 
@@ -501,24 +511,33 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 Agent (Docker container)
    │
    ├── Calls MCP tools via OpenClaw tool interface
-   │   (traderbot_scan, traderbot_analyze, traderbot_trade, etc.)
+   │   (traderbot__scan, traderbot__analyze, traderbot__trade, etc.)
    │
    └── OpenClaw gateway routes tool calls →
            TraderBot MCP server (host process)
-           ├── Authenticates via OpenClaw session context
+           ├── Authenticates the explicit profile-token tool parameter
            ├── Validates category permissions per tool
-           ├── Reads API tokens from secrets store (host-side)
+           ├── Will read provider credentials from the future secrets store
            ├── Makes external API calls (Kalshi, Voyage, etc.)
            └── Returns data to agent
 ```
 
 **MCP tool design:**
-- Common tools: `traderbot_scan`, `traderbot_positions`, `traderbot_heartbeat`, `traderbot_performance`, `traderbot_audit`, `traderbot_learnings`
-- Category-scoped tools: `traderbot_weather_forecast`, `traderbot_weather_data`, `traderbot_economics_indicators`, etc.
-- Trading tools: `traderbot_trade`, `traderbot_analyze`
-- Sysadmin tools: `traderbot_profile_list`, `traderbot_auth_check`, `traderbot_cron_setup`
+- Common tools: `traderbot__scan`, `traderbot__positions`, `traderbot__heartbeat`, `traderbot__performance`, `traderbot__audit`, `traderbot__learnings`
+- Category-scoped tools: `traderbot__weather_forecast`, `traderbot__weather_data`, `traderbot__economics_indicators`, etc.
+- Trading tools: `traderbot__trade`, `traderbot__analyze`
+- Sysadmin tools: `traderbot__profile_list`, `traderbot__auth_check`, `traderbot__cron_setup`
+
+The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this list is illustrative, not exhaustive.
 
 **Category isolation via OpenClaw per-agent tool config:**
+
+> **Historical non-deployable sketch:** This example predates the pinned
+> `d1c96302` schema audit. Its `alsoAllow` entries are additive rather than
+> restrictive, and its sandbox gate uses the obsolete shape. It is retained to
+> preserve the original MCP design rationale; use the explicit `allow` plus
+> nested `tools.sandbox.tools.allow` form in DD-025 instead.
+
 ```json5
 {
   agents: {
@@ -1431,6 +1450,13 @@ Note: this is a single `traderbot.service` unit (not a template unit `@.service`
 **Date**: 2025-06-15
 **Status**: Decided
 
+> **Implementation status:** DD-023 records the target orchestration and deploy
+> architecture plus a historical pre-v2 module inventory. Current `HEAD` does
+> not contain the described cron, deploy, CLI, service, database, or external
+> credential modules. Phase 1 currently implements MCP profile-token auth and
+> profile factories only; external provider credentials and secure OpenClaw
+> token injection remain deferred and issue #164 remains open.
+
 **Context**: The current `traderbot cron setup` registers all cron jobs for an agent immediately during deploy, regardless of the agent's lifecycle phase. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and the cron jobs they need differ by phase. Additionally, SysAdmin orchestrates when each category agent is activated — the first agent doesn't start until SysAdmin has verified data streams and its own health checks pass.
 
 Under DD-016, TraderBot's always-on service handles data collection proactively. Several current cron jobs (`forecast-check`, `news-scan`, `pipeline-health`) exist because agents had to trigger data fetching themselves. These are no longer needed.
@@ -1664,7 +1690,7 @@ This section describes the v2 architecture that emerges from the design decision
 - Receives experiment designs from category agents
 - Executes backtests, validates results, deploys improvements
 - Monitors circuit breakers, agent health, system status
-- Has access to ALL agent trade histories and data sources (via sysadmin profile with `enabled_categories: []`)
+- Target oversight spans all categories; the current SysAdmin factory represents this by explicitly enumerating every `MarketCategory`
 
 #### Category Agents
 - Trade ONLY within their assigned category
@@ -1755,23 +1781,23 @@ This section describes the v2 architecture that emerges from the design decision
 3. Each category agent should only access its own trade history and relevant data sources
 4. SysAdmin has access to all trade histories and data sources
 
-#### Current State
+#### Phase 1 Authentication Status and Historical Data Baseline
 - Single global DB: `~/.traderbot/traderbot.db`
 - Per-profile DB: `~/.traderbot/paper-{profile_name}/db/decisions.db`
 - ChromaDB collections: `news`, `data_points`, `decisions`, `market_patterns`, `news_signals`, `market_conditions`
 - No category-scoped access control on DB or ChromaDB
-- Token resolution via `TRADERBOT_PROFILE_TOKEN` env var → `resolve_token()` → profile name
-- Keyring for credentials (falls back to plaintext `.env` on headless Linux)
+- MCP token resolution via explicit tool parameter → `LocalTokenStore` (`tokens.json`) → profile name and agent ID
+- External provider credential loading and validation are not implemented in Phase 1; they are deferred to the Phase 1.5 secrets/provider/deploy work
 
 #### Recommended Layout
 
 ```
 ~/.traderbot/
 ├── traderbot.db                    # Global DB (schema version, config, profile registry)
-├── vault.enc                       # Encrypted credential vault (DD-012)
-├── .vault_key                      # Vault master key (0600)
-├── tokens.enc                      # Agent token registry (existing, Fernet-encrypted)
-├── profiles.enc                    # Profile registry (existing, Fernet-encrypted)
+├── vault.enc                       # Historical DD-012 credential-vault proposal; not current Phase 1 storage
+├── .vault_key                      # Historical DD-012 key proposal; not used by current Phase 1 auth
+├── tokens.json                     # Current LocalTokenStore agent-token registry (0600 on POSIX)
+├── profiles.enc                    # Historical DD-012 profile-registry proposal; no current Phase 1 file
 ├── chromadb/                       # SHARED: all agents read, category filtering via metadata
 │   ├── news/                       # News embeddings (category metadata on each doc)
 │   ├── data_points/                # Quantitative data (category metadata)
@@ -1792,17 +1818,23 @@ This section describes the v2 architecture that emerges from the design decision
     └── db/decisions.db             # Live trade history (separate from paper)
 ```
 
+`LocalTokenStore` is the current Phase 1 backend. It stores profile-token
+mappings as private, atomic JSON without Fernet encryption. A future Phase 1.5
+backend may implement the same `TokenStore` interface with Infisical. The older
+Fernet-based `tokens.enc` and `profiles.enc` layout remains historical rationale,
+not current storage.
+
 #### Key Design Choices
 
-**SQLite per agent per mode** — Each agent gets its own SQLite DB for decisions, positions, learnings, and forecast_bias. The DB path is determined by `~/.traderbot/{mode}-{category}/db/decisions.db`. This is what the current profile system already does (see `profiles/isolation.py`). The sysadmin gets its own DB at `~/.traderbot/sysadmin/db/decisions.db`.
+**SQLite per agent per mode** — This remains target architecture. Current `TradingProfile.base_dir` derives `~/.traderbot/{mode}-{name}/`, but `profiles/isolation.py` and the per-agent database stack are not present in Phase 1 `HEAD`.
 
 **ChromaDB is shared with metadata filtering** — The `news`, `data_points`, `market_patterns`, `news_signals`, and `market_conditions` collections are global resources. News ingestion runs once (not per-agent) and all agents read from the same collections. Category filtering happens at query time via ChromaDB metadata filters (`where={"category": "weather"}`). This avoids duplicating 6 months of news data per agent.
 
-**Category access control is enforced at the CLI level** — When a profile token is resolved, the profile's `enabled_categories` are loaded. CLI commands that accept `--category` filter results to enabled categories. `traderbot trade` rejects trades in disabled categories (already enforced in `evaluate_trade()`). This is a two-layer defense: workspace instructions tell the agent what to do, and the CLI enforces what the agent CAN do.
+**Category access control** — Current Phase 1 enforcement is in the MCP tool layer: the token resolves to a profile, tool permission is checked, and category access is enforced for category-bearing tools. The legacy CLI enforcement discussion is historical rationale, not current v2 behavior.
 
 **Paper → live migration** — When an agent transitions from paper to live mode, a new DB path is created: `~/.traderbot/live-{name}/db/decisions.db`. The paper DB is preserved (not overwritten) per the existing DB integrity rules. The profile's `mode` field changes from `"paper"` to `"live"`, and `base_dir` changes accordingly.
 
-**API key storage** — Global keys (Kalshi, VoyageAI, NewsAPI) go in the encrypted vault under the `global` namespace. Category-specific keys go under per-agent namespaces. The sysadmin profile can read all namespaces.
+**Future API key storage (Phase 1.5)** — Global and category-specific provider credentials are planned for the Infisical-backed secrets architecture in DD-037. No encrypted provider-credential vault or credential validation is implemented in Phase 1.
 
 #### Why not separate ChromaDB per agent?
 - ChromaDB vectors for news and data_points are ~6 months of historical data, potentially hundreds of thousands of embeddings. Duplicating per agent would multiply disk usage by N.
@@ -1822,7 +1854,7 @@ The `news` and `data_points` collections already have `category` metadata fields
 
 ### Category → Workspace Template Mapping
 
-Currently only weather workspace files exist. For full category support, we need templates for each:
+Phase 1 `HEAD` includes workspace files for weather, SysAdmin, and Dev-Liaison. Category-specific templates beyond weather remain future work:
 
 | Category | IDENTITY.md Name | SOUL.md Theme | Data Sources |
 |---|---|---|---|
@@ -1840,7 +1872,9 @@ Currently only weather workspace files exist. For full category support, we need
 
 ## Module Review
 
-> This section evaluates each module against the v2 architecture decisions (DD-001 through DD-021). Issues irrelevant under the new architecture are dropped; issues that persist or are created by v2 decisions are highlighted.
+> This section preserves the 2025 pre-v2 module inventory and migration
+> rationale. Paths and symbols in its legacy tables are not claims about
+> current `HEAD` unless a row explicitly carries a Phase 1 update.
 
 ### Retired Code (Cleanup Inventory)
 
@@ -1882,7 +1916,7 @@ Currently only weather workspace files exist. For full category support, we need
 | `cron.py` | `_install_news_ingest_timer()` with systemd template path logic | Keep, update path references |
 | `sandbox.py` | `get_source_root()` for src lockdown | Needs pipx-aware path resolution |
 | `auth.py` | `_is_keyring_available()` catches exceptions | Replace with encrypted vault (DD-012) |
-| `profiles/tokens.py` | Plaintext `.env` token storage | Replace with encrypted vault (DD-012) |
+| `profiles/tokens.py` | Current `TokenStore` interface and `LocalTokenStore` JSON persistence | Keep the interface; add a future Infisical-backed implementation in Phase 1.5 (DD-037) |
 | `profiles/auth.py` | Keyring-first credential resolution with `.env` fallback | Replace with encrypted vault (DD-012) |
 
 ---
@@ -1952,7 +1986,7 @@ Module sizes (lines of Python, excluding `__pycache__`):
 ### DD-024: Authentication implementation details — secrets store, MCP identity, and container isolation
 
 **Date**: 2025-06-15
-**Status**: Decided
+**Status**: Superseded by DD-025 and DD-037; historical implementation design only, not implemented
 
 **Context**: DD-014 established the auth architecture (secrets store replaces keyring + .env, MCP server replaces CLI-in-container). DD-015 established the MCP server architecture (TraderBot registers as MCP server, agents call tools through OpenClaw gateway, per-agent tool filtering). This decision details the implementation: secrets store format, MCP server identity resolution, Docker bind mount restructuring, profile token injection, and migration path.
 
@@ -2199,16 +2233,27 @@ The `permissions` field allows fine-grained control over which MCP tools an agen
 **Date**: 2025-06-15
 **Status**: Decided
 
+> **Phase 1 implementation update:** TraderBot now supports explicit profile
+> tokens through `TokenStore`, with a hardened `LocalTokenStore` at
+> `~/.traderbot/tokens.json`. Every implemented tool checks access in the order
+> **token → tool permission → category**. This has been verified through the
+> real MCP transport locally, but Phase 1 is not deployable: secure per-agent
+> token injection through OpenClaw is blocked and external provider credential
+> checks are deferred to secrets/provider/deploy work. Issue #164 remains open
+> pending a proxy/plugin or isolated-gateway architecture and macpro-linux
+> testing.
+
 **Context**: DD-024 established the overall auth architecture (secrets store, MCP server, per-agent bind mounts). This decision resolves the critical implementation gap: **how does the TraderBot MCP server identify which agent is calling a tool?**
 
 The MCP server (`traderbot-mcp-server`) runs as a single shared process on the host, launched by the OpenClaw gateway via stdio. All agents route tool calls through this same process. The standard MCP protocol's `tools/call` method does not include caller identity. The MCP server cannot read environment variables from inside Docker containers — it's a separate host process.
 
 **Investigation: OpenClaw MCP identity passing**
 
-OpenClaw's MCP server configuration (`mcp.servers.<name>`) supports:
-- `command` / `args` / `env` — for stdio server launch
-- `toolFilter.include` / `toolFilter.exclude` — to filter which MCP tools are exposed
-- Per-agent `tools.alsoAllow` / `tools.deny` — to control which tools each agent can access
+The pinned first-party OpenClaw schema and policy implementation establish:
+- MCP registration belongs at root `mcp.servers`; a root gateway artifact in `configs/openclaw/` registers TraderBot once
+- Agent entries are strict and do not accept per-agent `env`, nested `mcp`, or annotation fields
+- Restrictive per-agent policies require explicit `tools.allow`/`tools.deny`; a lone `alsoAllow` is additive to an implicit wildcard
+- Root environment values and `mcp.servers.*.env` apply globally or to the shared MCP process, not to one calling agent
 
 OpenClaw does NOT currently pass agent identity (agent ID, session context) to MCP tool calls. The MCP protocol's `tools/call` method is agent-agnostic. There is no `_meta.agent_id` or similar field in the standard.
 
@@ -2216,23 +2261,29 @@ OpenClaw does NOT currently pass agent identity (agent ID, session context) to M
 
 | Approach | How it works | Pros | Cons |
 |---|---|---|---|
-| **A: Token as tool parameter** | Every MCP tool accepts a `token` parameter. Agent passes `TRADERBOT_PROFILE_TOKEN` from its env. MCP server resolves token → profile → categories. | Simple, no OpenClaw mods needed, stateless, works with existing SecretRef injection | Token visible to agent (already in env), adds one param to every call |
-| **B: Per-agent MCP server instances** | Each agent gets its own MCP server config with unique `env` var containing its profile token. MCP server reads token from startup env. | Clean separation, no token in tool calls | Wasteful (N processes for N agents), complex config, doesn't scale |
-| **C: OpenClaw gateway adds agent context** | OpenClaw injects `_meta.agent_id` in tool calls. MCP server maps agent ID to profile. | Most architecturally correct, no token exposure | Requires OpenClaw modification, not currently supported |
+| **A: Token as tool parameter** | Every MCP tool accepts a `token` parameter. MCP server resolves token → profile → permissions → categories. | Implemented and transport-tested in TraderBot; simple and stateless | Still requires a secure mechanism to give each agent only its own token; neither the legacy nor remediation config can do this |
+| **B: Isolated gateway/MCP instances** | Give each agent an isolated gateway or MCP process with its own launch environment. | Strong process-level separation; no shared token environment | More processes and deployment complexity; architecture not selected or tested |
+| **C: OpenClaw proxy/plugin adds identity or token** | A gateway plugin/proxy identifies the caller and injects the matching token or trusted identity. | Centralized and compatible with one TraderBot server | Requires plugin/proxy implementation and a trust-boundary review |
 | **D: Token in MCP server env** | Single MCP server process gets all tokens in its env. Agent passes agent_id in tool call, server looks up corresponding token. | No token in tool calls | Agent could pass wrong agent_id and access another agent's data (security hole) |
 
-**Decision: Approach A — Token as explicit tool parameter**
+**Decision: Approach A inside TraderBot — token as explicit tool parameter**
 
-Every TraderBot MCP tool accepts a `token` parameter. The agent's workspace instructions (TOOLS.md) include the token in every call. The MCP server validates the token via `resolve_token()`, loads the profile, and enforces category access control.
+Every TraderBot MCP tool accepts a `token` parameter. The workspace instructions
+require it in every call. The MCP server resolves the token, checks the full
+`traderbot__*` tool permission, and then enforces category access when the tool
+has a category. This server-side decision is implemented. Secure token delivery
+from OpenClaw is a separate unresolved deployment requirement.
 
 ```python
 # MCP tool definition
 @tool
-async def traderbot_scan(token: str, category: str, ...):
+async def traderbot__scan(token: str, category: str, ...):
     profile_name, agent_id = resolve_token(token)
     if profile_name is None:
         return {"error": "Invalid or expired profile token"}
     profile = registry.get_profile(profile_name)
+    if not profile.is_tool_permitted("traderbot__scan"):
+        return {"error": "Permission denied"}
     if category not in profile.enabled_categories:
         return {"error": f"Category '{category}' not enabled for agent '{agent_id}'"}
     # ... execute scan
@@ -2241,35 +2292,45 @@ async def traderbot_scan(token: str, category: str, ...):
 The agent's TOOLS.md workspace file includes:
 ```
 When calling any TraderBot tool, always include your profile token as the `token` parameter.
-Your token is available as the TRADERBOT_PROFILE_TOKEN environment variable.
+Your deployment must provide the token securely; current local tests pass it explicitly.
 ```
 
-**Why this is secure:**
-- Tokens are 12-char URL-safe strings with ~72 bits of entropy, stored Fernet-encrypted in `tokens.enc`
-- An agent can only use its own token — it doesn't know other agents' tokens
-- Even if an agent reads another agent's token from the OpenClaw config, the MCP server validates that the token matches the agent's profile categories
-- The `permissions` field on TradingProfile provides an additional layer of control
+**Current security properties:**
+- `generate_token()` creates 256-bit URL-safe tokens
+- `LocalTokenStore` writes `~/.traderbot/tokens.json` atomically with mode `0600` on POSIX; it does not use Fernet or `tokens.enc`
+- A valid token resolves to one profile and agent, then tool permissions and category access are enforced
+- Strict Pydantic inputs reject extra or malformed arguments
+- The unresolved OpenClaw injection blocker means the committed config artifacts cannot guarantee that an agent knows only its own token
 
-**Why not wait for OpenClaw to add agent context:**
-- OpenClaw doesn't currently support this, and we can't control their roadmap
-- Approach A works today with the existing OpenClaw infrastructure
-- If OpenClaw adds agent context in the future, we can migrate to Approach C transparently (the MCP server would check both the `token` parameter and the `_meta.agent_id` field)
+**Architecture still required:**
+- A proxy/plugin may inject trusted caller identity or the matching token before the tool reaches TraderBot
+- Alternatively, each agent may use an isolated gateway/MCP instance with a private launch environment
+- Until one option is implemented and tested, the config artifacts are hardening references, not deployable token provisioning
 
 **MCP server configuration (OpenClaw)**
 
-Registered during deploy:
+The separate remediation registers TraderBot as:
 
-```bash
-openclaw mcp add traderbot \
-  --command traderbot-mcp-server \
-  --env TRADERBOT_SECRETS_PATH="$HOME/.traderbot/secrets/secrets.json"
+```json
+{
+  "mcp": {
+    "servers": {
+      "traderbot": {
+        "command": "traderbot-mcp-server",
+        "transport": "stdio"
+      }
+    }
+  }
+}
 ```
 
-The MCP server reads `TRADERBOT_SECRETS_PATH` from its own environment (not from agent environments) to locate the secrets store.
+`TRADERBOT_SECRETS_PATH` is not part of current Phase 1 behavior. External API
+secret resolution is deferred to the secrets/provider/deploy phases.
 
 **Per-agent tool filtering (OpenClaw config)**
 
-Each category agent gets `bundle-mcp` in its `alsoAllow` list plus specific TraderBot tool names:
+The remediation fragments use exact tool names in a restrictive normal `allow` list. Sandboxed agents separately allow `bundle-mcp` at the
+sandbox gate:
 
 ```json5
 {
@@ -2280,11 +2341,13 @@ Each category agent gets `bundle-mcp` in its `alsoAllow` list plus specific Trad
         sandbox: { mode: "all" },
         tools: {
           deny: ["group:runtime", "group:fs"],
-          alsoAllow: [
-            "bundle-mcp",
-            // TraderBot tools are filtered by the MCP server based on profile token,
-            // but we also deny at the OpenClaw level for defense in depth
+          allow: [
+            "traderbot__health",
+            "traderbot__auth_check",
+            "traderbot__profile_list",
+            "traderbot__market_edge"
           ],
+          sandbox: { tools: { allow: ["bundle-mcp"] } },
         },
       },
     ],
@@ -2292,60 +2355,91 @@ Each category agent gets `bundle-mcp` in its `alsoAllow` list plus specific Trad
 }
 ```
 
-OpenClaw's `bundle-mcp` allows all registered MCP tools. The MCP server enforces per-agent category access based on the profile token. This is defense in depth — even if OpenClaw allows a tool call, the MCP server rejects it if the agent's profile doesn't permit the category.
+`bundle-mcp` opens the sandbox route to MCP; it is not in the normal agent
+allowlist. The request must pass both OpenClaw gates and TraderBot's token,
+permission, and category checks. The remediation fragments also include
+planned tool names, but only four TraderBot tools currently exist. At this
+documentation commit, these strict fragments and the root gateway artifact are
+not part of `HEAD`; the committed fragments retain the legacy unsupported
+shape.
 
-**Token lifecycle under MCP:**
+**Current token lifecycle:**
 
-1. **Creation**: `traderbot profile create <category> --mode backtest` generates a 12-char token and stores it Fernet-encrypted in `~/.traderbot/tokens.enc`
-2. **Injection**: During deploy, the token value is registered as an OpenClaw SecretRef (env provider) → `TRADERBOT_PROFILE_TOKEN` env var for the agent
-3. **Usage**: Agent includes token in every MCP tool call. MCP server resolves token → profile → categories
-4. **Rotation**: `traderbot profile rotate-token <profile>` generates a new token, invalidates the old one, updates OpenClaw SecretRef
-5. **Expiry**: Tokens have a 30-day TTL (existing behavior). SysAdmin heartbeat checks token staleness and rotates proactively.
+1. **Creation/storage**: `LocalTokenStore` stores caller-provided or generated 256-bit tokens in `~/.traderbot/tokens.json`
+2. **Mode selection**: `TRADERBOT_USE_HARDCODED_AUTH=0` selects `TokenStore`; every other value uses the hardcoded development mapping
+3. **Usage**: The caller includes the token in every MCP call; TraderBot resolves token → profile → permission → category
+4. **Rotation**: `LocalTokenStore.rotate_token()` removes all old tokens for the profile/agent and persists one fresh token
+5. **Not implemented**: OpenClaw token injection, TTL expiry, Infisical synchronization, and scheduled rotation
 
 **SysAdmin auth (host-side, unsandboxed):**
 
-SysAdmin runs on the host (sandbox mode: off) and can use the CLI directly. It authenticates via its profile token set in the environment (`TRADERBOT_PROFILE_TOKEN`). SysAdmin's profile has `enabled_categories: []` (all categories) and full permissions including `profile_list` and `auth_check`.
+The current SysAdmin factory explicitly enumerates every `MarketCategory` and
+uses deny rules for trading, scanning, analysis, market data, and weather tools;
+its deny-only permission set therefore permits `health`, `auth_check`, and
+`profile_list`. The remediation fragment applies corresponding OpenClaw restrictions. Supplying the profile token through an environment
+variable is not implemented by either the legacy or remediation config.
 
 **Service authentication (always-on daemon):**
 
-The TraderBot always-on service (DD-016) runs on the host and reads API tokens directly from `~/.traderbot/secrets/secrets.json`. No profile token needed — the service IS the MCP server. It has full access to all secrets in the global namespace plus all category namespaces.
+The Phase 1 MCP server does not read or validate external API credentials.
+Infisical-backed service authentication and provider credentials are deferred
+to Phase 1.5 secrets/provider/deploy work.
 
 **Migration implementation order:**
 
 1. **Create `src/traderbot/secrets/store.py`** — `SecretsStore` class with `get/set/delete/migrate`
-2. **Create `src/traderbot/mcp/server.py`** — MCP server entry point (`traderbot-mcp-server` CLI command)
-3. **Create `src/traderbot/mcp/tools.py`** — MCP tool definitions with `token` parameter
-4. **Create `src/traderbot/mcp/auth.py`** — Token resolution, profile loading, category validation
+2. **[x] Create `src/traderbot/mcp/server.py`** — MCP server entry point (`traderbot-mcp-server` CLI command) — already exists (Phase 0)
+3. **[x] Create `src/traderbot/mcp/tools.py`** — MCP tool definitions with `token` parameter — already exists (Phase 0)
+4. **[x] Create `src/traderbot/mcp/auth.py`** — Token resolution, profile loading, category validation — completed in Phase 1
 5. **Update `traderbot/setup`** — Migrate credentials from `.env` + keyring to `secrets.json`, delete `.env`
 6. **Update `traderbot auth`** — `set-key` writes to `secrets.json`, `check` validates from `secrets.json`, `migrate` handles legacy sources
-7. **Remove `keyring` dependency** from `pyproject.toml`
-8. **Retire `auth.py`** — Replace all consumers with `SecretsStore`
-9. **Retire `master_password.py`** — Paper mode auto-authenticates via profile token; live mode requires explicit confirmation
-10. **Simplify `profiles/tokens.py`** — Remove `.env` fallback, token resolution becomes MCP-only
-11. **Retire `profiles/auth.py`** — Keyring resolution removed, credentials come from `SecretsStore`
-12. **Update `profiles/models.py`** — Add `mode: "backtest"`, `permissions` field
-13. **Update `profiles/isolation.py`** — Add `backtest-{name}` path support
+7. **[x] Keep `keyring` out of v2 dependencies** — absent from `pyproject.toml` in Phase 1 `HEAD`
+8. **[x] Legacy `auth.py` is absent from v2 `HEAD`** — future provider credential handling remains tracked by item 1
+9. **[x] Legacy `master_password.py` is absent from v2 `HEAD`** — future live-mode confirmation remains unimplemented
+10. **[x] Simplify `profiles/tokens.py`** — `TokenStore` ABC + hardened `LocalTokenStore`, no `.env` fallback
+11. **[x] Legacy `profiles/auth.py` is absent from v2 `HEAD`** — provider credentials remain deferred to the future `SecretsStore`
+12. **[x] Update `profiles/models.py`** — `mode` and `permissions` already exist
+13. **Implement the future database-isolation layer** — current `TradingProfile.base_dir` is mode-aware, but no `profiles/isolation.py` module exists in Phase 1 `HEAD`
 14. **Update Docker bind mounts** — Per-agent selective mounts, remove blanket mount
 15. **Update workspace templates** — TOOLS.md includes `token` parameter in every tool call
 16. **Register MCP server with OpenClaw** — `openclaw mcp add traderbot --command traderbot-mcp-server`
 17. **Update deploy flow** — Configure per-agent SecretRef for profile token injection
 
-**Current code that references the legacy auth system (to be migrated):**
+Items 1, 5-6, 13-14, and the deployment parts of 16-17 remain pending. Items 8,
+9, and 11 preserve the historical migration intent, but their pre-v2 source
+paths are already absent. Item 17 is blocked by the OpenClaw schema constraint
+described above; it cannot be completed by adding unsupported agent fields.
 
-| File | Uses | Migration |
+**Verified Phase 1 auth/profile/token source in `HEAD`:**
+
+| Path | Verified current role |
+|---|---|
+| `src/traderbot/mcp/auth.py` | `check_category_access()` enforces category access after authentication and tool permission checks |
+| `src/traderbot/mcp/resolver.py` | `resolve_token_adapter()` selects hardcoded or real profile-token resolution |
+| `src/traderbot/mcp/tools.py` | Four MCP handlers authenticate explicit tokens and enforce tool permissions; `market_edge` also enforces category access |
+| `src/traderbot/profiles/models.py` | `TradingProfile` provides modes, category rules, tool permissions, and mode-aware `base_dir` |
+| `src/traderbot/profiles/registry.py` | `ProfileRegistry` loads the SysAdmin, Dev-Liaison, and weather profile factories |
+| `src/traderbot/profiles/tokens.py` | `TokenStore` plus `LocalTokenStore` JSON persistence, generation, resolution, listing, and rotation |
+
+**Historical pre-v2 auth migration inventory (not current `HEAD`):**
+
+The paths and symbols below are retained to explain the original migration
+rationale. None exists in Phase 1 `HEAD`; their successor provider-credential
+functionality remains future Phase 1.5 work.
+
+| Historical path | 2025 behavior | Intended successor |
 |---|---|---|
-| `auth.py` (376 lines) | `AuthManager` with keyring → env → .env fallback | → `SecretsStore` in `secrets/store.py` |
-| `profiles/auth.py` (185 lines) | `ProfileAuthStore` with keyring → env fallback | → `SecretsStore.get(namespace=category)` |
-| `profiles/tokens.py` (358 lines) | Token generation, resolution, `.env` fallback | Simplify: remove `.env` fallback, add MCP resolution |
-| `master_password.py` (284 lines) | PBKDF2 master password for trade/simulate gating | → Retire (paper mode auto-auth, live mode via profile token) |
-| `profiles/runtime.py` | `get_current_profile()` reads `TRADERBOT_PROFILE_TOKEN` from env/.env | → MCP server receives token as tool parameter |
-| `profiles/config.py` | `resolve_kalshi_credentials()` via keyring/env | → `SecretsStore.get("kalshi", "api_key")` |
-| `cli/auth.py` | Auth CLI commands (set-key, rotate, check) | → Rewrite to use `SecretsStore`, add `--namespace` flag |
-| `cli/setup.py` | Uses `AuthManager` for credential setup | → Use `SecretsStore`, add migration step |
-| `cli/trade.py` | Uses `master_password.require_auth()` for live trade gating | → Profile token auth + live mode confirmation |
-| `kalshi/ws_daemon.py` | `get_credential("kalshi", ...)` for WS auth | → `SecretsStore.get()` (service runs on host) |
-| `news/sources.py` | `get_credential()` for NewsAPI, CoinGecko, FRED | → `SecretsStore.get()` with namespace |
-| `news/ingest.py` | `get_credential()` for FRED | → `SecretsStore.get("fred", "api_key", namespace="economics")` |
+| `src/traderbot/auth.py` | `AuthManager` with keyring → env → `.env` fallback | `SecretsStore` in `secrets/store.py` |
+| `src/traderbot/profiles/auth.py` | `ProfileAuthStore` with keyring → env fallback | `SecretsStore.get(namespace=category)` |
+| `src/traderbot/master_password.py` | PBKDF2 master password for trade/simulate gating | Profile-token auth plus live-mode confirmation |
+| `src/traderbot/profiles/runtime.py` | `get_current_profile()` read `TRADERBOT_PROFILE_TOKEN` from env/`.env` | Explicit token parameter at the MCP boundary |
+| `src/traderbot/profiles/config.py` | `resolve_kalshi_credentials()` used keyring/env | `SecretsStore.get("kalshi", "api_key")` |
+| `src/traderbot/cli/auth.py` | Auth CLI commands | Human-facing `SecretsStore` management |
+| `src/traderbot/cli/setup.py` | Used `AuthManager` for credential setup | Setup-time `SecretsStore` migration |
+| `src/traderbot/cli/trade.py` | Used `master_password.require_auth()` | Profile-token auth plus live-mode confirmation |
+| `src/traderbot/kalshi/ws_daemon.py` | Used `get_credential("kalshi", ...)` | Host service `SecretsStore.get()` |
+| `src/traderbot/news/sources.py` | Used `get_credential()` for provider APIs | Namespaced `SecretsStore.get()` |
+| `src/traderbot/news/ingest.py` | Used `get_credential()` for FRED | Namespaced `SecretsStore.get()` |
 
 
 ### DD-026: Secrets management — 1Password as primary vault (SUPERSEDED by DD-037 — see below)
@@ -2742,6 +2836,11 @@ The P&L direction logic (`yes wins when actual < threshold` vs `no wins when act
 
 **Context**: Module-by-module review of the current codebase to identify code debt, overlaps, and architectural gaps that need addressing in v2.
 
+> **Phase 1 update:** The module inventory below preserves the 2025 review
+> context. The `tokens.py` entry and related action are updated to current
+> `TokenStore`/`LocalTokenStore` behavior; legacy `.env`, keyring, and module
+> references remain as historical rationale for the future secrets migration.
+
 **1. `simulation/` — Mode-aware redesign needed**
 
 Current state (10 files, ~3,500 lines):
@@ -2776,7 +2875,7 @@ Actions:
 Current state (12 files, ~2,334 lines):
 - `models.py` — `TradingProfile` with risk parameters and category filters
 - `auth.py` — Profile-auth using keyring + env (to be replaced by Infisical, DD-037)
-- `tokens.py` — Token generation/rotation with Fernet encryption (to be replaced by Infisical, DD-037)
+- `tokens.py` — `TokenStore` interface plus `LocalTokenStore` generation, resolution, listing, rotation, and atomic `tokens.json` persistence; no Fernet encryption
 - `isolation.py` — Per-profile DB/ChromaDB/audit path isolation
 - `injection.py` — Workspace file injection (fenced merge strategies)
 - `injection_strategies.py` — Merge strategy definitions (FENCED_MERGE, INIT_IF_MISSING, ASK_THEN_MERGE)
@@ -2788,15 +2887,15 @@ Current state (12 files, ~2,334 lines):
 - `openclaw_config.py` — OpenClaw configuration reader/writer
 
 Issues:
-- `auth.py` and `tokens.py` are fully replaced by DD-037 (Infisical)
-- `config.py` has profile-aware credential resolution (keyring → env → .env) that needs rewriting for 1Password backend
+- Legacy `auth.py` credential handling remains scheduled for DD-037; `TokenStore` stays as the abstraction while Phase 1.5 may replace only its local backend with Infisical
+- `config.py` has historical profile-aware credential resolution (keyring → env → .env) that needs rewriting for the future Infisical-backed secrets flow
 - `TradingProfile.mode` is `Literal["paper", "live"]` — needs "backtesting" added
 - `injection_strategies.py` uses "ASK_THEN_MERGE" strategy which is incompatible with v2's prebuilt agent design (DD-020 says agents are no longer customizable)
 - `discovery.py` resolves agents from `openclaw.json` — needs updating for v2 deploy flow where agents are created by `traderbot deploy`
 - `sysadmin.py` is a thin helper — needs expansion for v2 SysAdmin lifecycle management
 
 Actions:
-- Replace `auth.py` and `tokens.py` with `secrets/` package (DD-026)
+- Replace legacy `auth.py` credential handling with the future secrets package and add an Infisical-backed `TokenStore` implementation (DD-037)
 - Add "backtesting" to `TradingProfile.mode`
 - Remove ASK_THEN_MERGE strategy (agents are prebuilt, no user prompting)
 - Update `discovery.py` for v2 deploy-created agents
@@ -3494,14 +3593,19 @@ The Dev-Liaison runs unsandboxed (like SysAdmin) because it needs access to the 
 
 **OpenClaw tool allowlist:**
 
+The Dev-Liaison is unsandboxed in this target design, so the sandbox
+`bundle-mcp` gate does not apply. Its normal policy uses one explicit
+restrictive `allow` list; planned TraderBot tools remain names in the target
+policy, not claims that they are currently implemented.
+
 ```json5
 {
   tools: {
-    allow: ["read", "write", "exec", "github"],
-    alsoAllow: [
+    allow: [
+      "read", "write", "exec", "github",
       "traderbot__reference",     // Knowledge retrieval (DD-034 §4)
       "traderbot__experiment",    // Experiment harness tools
-      "traderbot__auth_check",    // Credential verification
+      "traderbot__auth_check",    // Profile-token validation and access context
     ],
     deny: [
       "traderbot__trade",         // No trading
@@ -3754,15 +3858,18 @@ Event types the Dev-Liaison can send: `autodev:wake` (new work), `autodev:cancel
 
 **Agent configuration:**
 
+The target AgentEntry below uses only the pinned schema fields `id`, `sandbox`,
+and `tools`. Because this role is unsandboxed, no sandbox `bundle-mcp` gate is
+required. Workspace/name details remain role documentation rather than fields
+in this config object.
+
 ```json5
 {
   id: "dev-liaison",
-  name: "AutoDev Liaison",
   sandbox: { mode: "off" },
-  workspace: "~/.openclaw/workspace/dev-liaison",
   tools: {
-    allow: ["read", "write", "exec", "github"],
-    alsoAllow: [
+    allow: [
+      "read", "write", "exec", "github",
       "traderbot__reference",
       "traderbot__experiment",
       "traderbot__auth_check",
@@ -3779,6 +3886,11 @@ Event types the Dev-Liaison can send: `autodev:wake` (new work), `autodev:cancel
 ```
 
 **OpenClaw webhook configuration (`openclaw.json`):**
+
+> **Conceptual routing pseudocode, not deployable configuration:** The hook
+> field names below have not been validated against pinned `d1c96302`. This
+> block records event-routing intent only and must not be pasted into
+> `openclaw.json` without a separate schema review.
 
 ```json5
 {
@@ -4154,6 +4266,15 @@ Under the new design, the experiment harness (DD-034) tests *treatments* — dif
 **Date**: 2026-06-15
 **Status**: Decided
 
+> **Phase 1 implementation update:** `profiles/sysadmin.py` currently creates a
+> paper-mode SysAdmin profile that enumerates every `MarketCategory` and applies
+> deny rules for trading, scanning, analysis, market data, and weather tools.
+> Only `health`, `auth_check`, `profile_list`, and `market_edge` exist in the MCP
+> server; SysAdmin denies `market_edge`, and `auth_check` validates the profile
+> token and reports access context rather than provider credentials. The broader
+> management allowlist, workspace immutability controls, and lifecycle
+> confirmations below remain target design. OpenClaw hardening config is committed, and secure profile-token injection remains blocked.
+
 **Context**: DD-010 mandates Docker sandboxing for all category agents, but explicitly leaves SysAdmin unsandboxed (`mode: off`). The pending discussion item "SysAdmin sandbox decision" asks whether this is appropriate given SysAdmin's enormous power — fleet orchestration, lifecycle management, self-improvement coordination, and cross-agent data access.
 
 SysAdmin's responsibilities (DD-017) include:
@@ -4187,15 +4308,15 @@ However, SysAdmin needs legitimate host-level access:
 
 **Decision**: SysAdmin remains **unsandboxed on the host**, with three additional safeguard layers that the current design lacks:
 
-#### 1. Principled MCP tool allowlist
+#### 1. Target MCP tool allowlist
 
-SysAdmin gets a broad but specific tool allowlist. It has oversight of everything but direct control of trading. The principle: SysAdmin monitors, coordinates, and manages, but does not trade.
+The target design gives SysAdmin a broad but specific tool allowlist. It has oversight of everything but direct control of trading. The principle: SysAdmin monitors, coordinates, and manages, but does not trade. Names beyond the four current Phase 1 tools are planned, not implemented.
 
 ```
 SysAdmin tool allowlist:
   ALLOWED (oversight and management):
     traderbot__health          — System and pipeline health checks
-    traderbot__auth_check      — Credential verification
+    traderbot__auth_check      — Profile-token validation and access-context reporting
     traderbot__profile_list    — List all agent profiles and their status
     traderbot__profile_update  — Update agent profiles (mode, parameters)
     traderbot__performance     — Performance metrics for any agent
@@ -4217,9 +4338,9 @@ SysAdmin tool allowlist:
     traderbot__market_prices   — No direct market data
 ```
 
-This means a compromised SysAdmin can monitor the fleet, manage lifecycle transitions, and coordinate agents — but it cannot place trades, access category-specific analysis, or directly interact with market data APIs. It can only *read* performance data and *coordinate* other agents.
+Once the full target surface exists, these restrictions are intended to let a compromised SysAdmin monitor the fleet, manage lifecycle transitions, and coordinate agents without placing trades or using category-specific analysis. In current Phase 1, the profile deny rules block the implemented `market_edge` tool; the broader management controls remain unimplemented.
 
-#### 2. Workspace file immutability enforcement
+#### 2. Target workspace file immutability enforcement (not implemented in Phase 1)
 
 SysAdmin can read all agent workspace files (AGENTS.md, SOUL.md, TOOLS.md, MEMORY.md, .learnings/) but can only *write* to:
 - `.learnings/` — for promoting learning patterns
@@ -4230,7 +4351,7 @@ All other workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.
 
 This prevents a compromised SysAdmin from altering agent operating procedures, identity, or tool definitions.
 
-#### 3. Critical action confirmation for lifecycle transitions
+#### 3. Target critical-action confirmation for lifecycle transitions (not implemented in Phase 1)
 
 The most powerful actions SysAdmin can take are lifecycle transitions: promoting an agent from backtesting to paper, from paper to live, or suspending an agent. These should require a confirmation mechanism:
 
@@ -4256,7 +4377,7 @@ This prevents a compromised SysAdmin from unilaterally moving an agent to live t
 | Can read all agent data | Yes (oversight role) | No (only experiment data) |
 | Can write GitHub issues | No (not its role) | Yes (via GitHub skill) |
 
-**Consequences**:
+**Target consequences**:
 - SysAdmin remains unsandboxed — host-level access is required for legitimate operational needs
 - The real security boundary is the MCP tool layer, not the container layer
 - SysAdmin cannot place trades, access market data, or modify agent operating procedures — even if compromised, it can only monitor, coordinate, and manage lifecycle transitions
@@ -4270,6 +4391,12 @@ This prevents a compromised SysAdmin from unilaterally moving an agent to live t
 
 **Date**: 2026-06-15
 **Status**: Decided
+
+> **Implementation status:** This section records the future Phase 1.5 design.
+> Infisical integration, API credential validation, machine identities,
+> scheduled rotation, deploy verification, and local API-secret fallback are
+> not implemented in Phase 1. Current profile-token storage is
+> `LocalTokenStore`/`tokens.json`.
 
 **Context**: DD-026 established 1Password as the primary secrets vault, but 1Password Connect requires a Business/Teams subscription ($7.99+/month), which is a significant barrier for TraderBot's target users. This decision replaces 1Password with Infisical, a free open-source (MIT) secrets management platform that provides the same capabilities — vaults, access control, secret rotation, audit logging, and a Python SDK — at no cost, with self-hosted deployment alongside TraderBot's existing Docker infrastructure.
 
@@ -4466,6 +4593,11 @@ This is the single bootstrap secret: `INFISICAL_TOKEN` → TraderBot authenticat
 
 #### 6. Agent profile token provisioning (unchanged from DD-026/037)
 
+> **Blocked design requirement:** The provisioning sequence below states the
+> intended outcome, but the shown config-only injection is not valid for the
+> pinned OpenClaw schema. Secure per-agent injection requires a proxy/plugin or
+> isolated gateway/MCP architecture.
+
 The token provisioning flow is identical to the 1Password design, just using Infisical as the backend:
 
 1. TraderBot generates a profile token (cryptographically random, 256-bit)
@@ -4547,6 +4679,10 @@ The local fallback:
 
 #### 10. OpenClaw SecretRef configuration
 
+> **Historical design sketch, not valid current config:** OpenClaw agent entries
+> do not accept the per-agent `env` field shown below. The sketch is retained to
+> document the intended secret mapping, not as deployable syntax.
+
 OpenClaw SecretRef entries for each agent:
 
 ```json5
@@ -4580,6 +4716,11 @@ OpenClaw SecretRef entries for each agent:
 ```
 
 Each agent's OpenClaw configuration injects the corresponding token:
+
+> **Schema-invalid historical continuation:** Per-agent `env` is rejected by
+> pinned `d1c96302`; this object is retained only to show the intended mapping
+> and is not deployable.
+
 ```json5
 {
   id: "weather",
@@ -4764,6 +4905,9 @@ Round 5: Final Selection & Implementation
 
 OpenClaw's `sessions_spawn` tool supports model overrides per spawn. The configuration for a debate cycle:
 
+> **Conceptual orchestration notes:** The comments-only JSON5 fence below is
+> pseudocode, not an `openclaw.json` object.
+
 ```json5
 // Debate agent configuration (spawned by SysAdmin via sessions_spawn)
 // Each debate cycle creates 4 temporary sub-agents with different models
@@ -4807,6 +4951,11 @@ OpenClaw's `sessions_spawn` tool supports model overrides per spawn. The configu
 **OpenClaw configuration for debate sub-agents:**
 
 The existing agent configurations are extended with a `debate` profile that SysAdmin can activate:
+
+> **Historical non-deployable pseudocode:** This sketch uses additive
+> `alsoAllow` as though it were restrictive, omits the required sandbox
+> `bundle-mcp` gate, and includes fields not validated against pinned
+> `d1c96302`. It is retained only to document the debate-agent intent.
 
 ```json5
 // In openclaw.json, each debate sub-agent gets:
@@ -5003,9 +5152,14 @@ Investigation of OpenClaw's `sessions_spawn`, `sessions_send`, and `sessions_yie
 
 - `maxSpawnDepth` defaults to 1 (leaf sub-agents only, no recursive spawning). For the debate pattern, depth 1 is sufficient — SysAdmin spawns debate sub-agents, they don't spawn further children.
 - If `maxSpawnDepth >= 2`, depth-1 orchestrator sub-agents get `sessions_spawn`, `subagents`, `sessions_list`, `sessions_history`. For our design, SysAdmin is already at the orchestrator level and has these tools. Debate sub-agents are leaf agents (depth 1) and do NOT get session orchestration tools.
-- Debate sub-agents need `sessions_send` for cross-examination, but this is a messaging tool, not an orchestration tool. It's included in the `messaging` profile, which can be added to their `alsoAllow` list.
+- Debate sub-agents need `sessions_send` for cross-examination, but this is a messaging tool, not an orchestration tool. A deployable restrictive policy must include it in the explicit `allow` list and, for sandboxed agents, in the nested sandbox gate.
 
 **Configuration for debate sub-agents:**
+
+> **Historical non-deployable combined pseudocode:** The block below mixes
+> `allow` and additive `alsoAllow`, includes unvalidated agent fields, and embeds
+> a `sessions_spawn(...)` call inside a JSON5 fence. It records orchestration
+> intent only; it is not valid `openclaw.json` syntax.
 
 ```json5
 // SysAdmin agent configuration (orchestrator)
@@ -5062,4 +5216,3 @@ sessions_spawn({
 4. **Ephemeral sessions**: Debate sub-agents are created for a single cycle and terminated after convergence. OpenClaw's sub-agent lifecycle supports this — `sessions_spawn` creates isolated sessions, and they can be terminated via the `subagents` tool when the cycle completes.
 
 5. **No recursive spawning**: Debate sub-agents are leaf agents (depth 1). They cannot spawn further children. This prevents debate sub-agents from spawning their own sub-agents, which maintains the orchestrated debate structure.
-
