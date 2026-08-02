@@ -9,9 +9,9 @@ message framing and handler dispatch run unchanged.
 Run with: pytest tests/test_mcp_e2e.py -v
 """
 
-import asyncio
 import json
 
+import anyio
 import pytest
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_client_server_memory_streams
@@ -25,6 +25,10 @@ pytestmark = pytest.mark.e2e
 class TestMCPEndToEnd:
     """E2E tests that validate the MCP transport chain."""
 
+    @pytest.fixture(autouse=True)
+    def _hardcoded_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TRADERBOT_USE_HARDCODED_AUTH", "1")
+
     def _round_trip(self, scenario):
         """Run a scenario against the real server over in-memory JSON-RPC streams.
 
@@ -33,21 +37,16 @@ class TestMCPEndToEnd:
 
         async def _run():
             async with create_client_server_memory_streams() as (client_streams, server_streams):
-                server_task = asyncio.create_task(
-                    app.run(*server_streams, app.create_initialization_options())
-                )
-                try:
+                async with anyio.create_task_group() as task_group:
+                    _ = task_group.start_soon(
+                        app.run, *server_streams, app.create_initialization_options()
+                    )
                     async with ClientSession(*client_streams) as session:
-                        await session.initialize()
+                        _ = await session.initialize()
                         await scenario(session)
-                finally:
-                    server_task.cancel()
-                    try:
-                        await server_task
-                    except asyncio.CancelledError:
-                        pass
+                    task_group.cancel_scope.cancel()
 
-        asyncio.run(_run())
+        anyio.run(_run)
 
     def test_jsonrpc_initialize_and_list_tools(self):
         """initialize + tools/list return exactly the 4 Phase 0 tools."""
@@ -76,9 +75,7 @@ class TestMCPEndToEnd:
         """tools/call auth_check returns profile info for a valid token."""
 
         async def scenario(session):
-            result = await session.call_tool(
-                "auth_check", {"token": "dev-liaison-test-token"}
-            )
+            result = await session.call_tool("auth_check", {"token": "dev-liaison-test-token"})
             assert result.is_error is False
             text = json.loads(result.content[0].text)
             assert text["status"] == "ok"
@@ -107,11 +104,12 @@ class TestMCPEndToEnd:
             assert "Unknown tool" in text["error"]
 
         self._round_trip(scenario)
+
     def test_health_tool_via_jsonrpc(self):
         """traderbot__health tool can be called directly."""
         from traderbot.mcp.tools import traderbot__health
 
-        response = asyncio.run(traderbot__health(token="sysadmin-test-token"))
+        response = anyio.run(traderbot__health, "sysadmin-test-token")
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
         assert response.get("profile") == "sysadmin"
 
@@ -119,7 +117,7 @@ class TestMCPEndToEnd:
         """traderbot__auth_check tool can be called directly."""
         from traderbot.mcp.tools import traderbot__auth_check
 
-        response = asyncio.run(traderbot__auth_check(token="sysadmin-test-token"))
+        response = anyio.run(traderbot__auth_check, "sysadmin-test-token")
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
         assert response.get("profile") == "sysadmin"
 
@@ -127,7 +125,7 @@ class TestMCPEndToEnd:
         """Invalid token returns error in tool response."""
         from traderbot.mcp.tools import traderbot__health
 
-        response = asyncio.run(traderbot__health(token="invalid-token"))
+        response = anyio.run(traderbot__health, "invalid-token")
         assert response.get("error") is not None, (
             f"Expected error for invalid token, got: {response}"
         )
@@ -176,7 +174,7 @@ class TestMCPEndToEnd:
         """traderbot__health returns status=ok for valid sysadmin token."""
         from traderbot.mcp.tools import traderbot__health
 
-        response = asyncio.run(traderbot__health(token="sysadmin-test-token"))
+        response = anyio.run(traderbot__health, "sysadmin-test-token")
         assert response.get("status") == "ok", f"Expected status=ok, got: {response}"
         assert response.get("profile") == "sysadmin"
         assert response.get("mode") == "paper"
@@ -185,7 +183,68 @@ class TestMCPEndToEnd:
         """traderbot__auth_check returns profile info for valid token."""
         from traderbot.mcp.tools import traderbot__auth_check
 
-        response = asyncio.run(traderbot__auth_check(token="dev-liaison-test-token"))
+        response = anyio.run(traderbot__auth_check, "dev-liaison-test-token")
         assert response.get("status") == "ok"
         assert response.get("profile") == "dev-liaison"
         assert response.get("mode") == "paper"
+
+    def test_market_edge_category_enforced_e2e(self):
+        async def scenario(session):
+            result = await session.call_tool(
+                "market_edge",
+                {
+                    "token": "weather-test-token",
+                    "category": "economics",
+                    "ticker": "KXGDP-26",
+                },
+            )
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert text == {"error": "Category 'economics' not enabled for agent 'weather'"}
+
+        self._round_trip(scenario)
+
+    def test_market_edge_invalid_category_string_e2e(self):
+        async def scenario(session):
+            result = await session.call_tool(
+                "market_edge",
+                {"token": "weather-test-token", "category": "bogus", "ticker": "KX-BOGUS"},
+            )
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert text == {"error": "Unknown category: bogus"}
+
+        self._round_trip(scenario)
+
+    def test_pydantic_validation_missing_field_e2e(self):
+        async def scenario(session):
+            result = await session.call_tool(
+                "market_edge", {"token": "weather-test-token", "category": "weather"}
+            )
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert text["error"].startswith("Invalid input: ")
+            assert "ticker" in text["error"]
+
+        self._round_trip(scenario)
+
+    def test_weather_permissions_new_names(self):
+        async def scenario(session):
+            result = await session.call_tool("auth_check", {"token": "weather-test-token"})
+            assert result.is_error is False
+            text = json.loads(result.content[0].text)
+            assert text["profile"] == "weather"
+            permissions = set(text["permissions"])
+            assert {
+                "traderbot__weather_forecast_prob",
+                "traderbot__weather_accuracy",
+                "traderbot__weather_seasonal_context",
+                "traderbot__weather_decision_brief",
+            } <= permissions
+            assert {
+                "traderbot__weather_historical",
+                "traderbot__weather_alert",
+                "traderbot__weather_analysis",
+            }.isdisjoint(permissions)
+
+        self._round_trip(scenario)

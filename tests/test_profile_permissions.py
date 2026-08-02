@@ -5,6 +5,7 @@ import pytest
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.sysadmin import create_sysadmin_profile
+from traderbot.profiles.weather import create_weather_profile
 
 
 def _make_profile(
@@ -139,3 +140,34 @@ class TestDevLiaisonProfile:
     def test_dev_liaison_mode_is_paper(self):
         p = create_dev_liaison_profile()
         assert p.mode == "paper"
+
+
+def test_weather_permits_forecast_prob() -> None:
+    assert create_weather_profile().is_tool_permitted("traderbot__weather_forecast_prob") is True
+
+
+def test_weather_permits_accuracy() -> None:
+    assert create_weather_profile().is_tool_permitted("traderbot__weather_accuracy") is True
+
+
+def test_weather_permits_seasonal_context() -> None:
+    profile = create_weather_profile()
+
+    assert profile.is_tool_permitted("traderbot__weather_seasonal_context") is True
+
+
+def test_weather_permits_decision_brief() -> None:
+    profile = create_weather_profile()
+
+    assert profile.is_tool_permitted("traderbot__weather_decision_brief") is True
+
+
+def test_weather_denies_historical() -> None:
+    assert create_weather_profile().is_tool_permitted("traderbot__weather_historical") is False
+
+
+def test_weather_denies_scan_analyze() -> None:
+    profile = create_weather_profile()
+
+    assert profile.is_tool_permitted("traderbot__scan") is False
+    assert profile.is_tool_permitted("traderbot__analyze") is False

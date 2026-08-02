@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a10] — 2026-08-01
+
+### Added
+
+- test: enforce weather permissions and MCP E2E validation — Tests enforce weather permissions and validate MCP end-to-end behavior.
+
 ## [2.0.0a9] — 2026-08-01
 
 ### Added
