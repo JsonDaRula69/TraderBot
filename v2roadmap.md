@@ -65,6 +65,7 @@
 - [x] Database restructuring: DD-032 (per-agent per-mode isolation, unified schema, generalized bias tracking, forecast snapshots, indexes, connection pooling, migration system)
 - [x] Database efficiency: indexes, PRAGMA optimization, connection pooling, settlement cache consolidation, circuit breaker to DB, retention policy, ChromaDB model migration
 - [x] ROADMAP_PROGRESS.md removed from tracking
+- [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
 
 **Remaining open items:**
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
@@ -239,6 +240,7 @@
 - `traderbot data-points` does NOT currently enforce profile categories ✗ (needs fix)
 - ChromaDB queries do NOT currently filter by profile categories ✗ (needs fix)
 - `traderbot analyze` does NOT enforce profile categories ✗ (needs fix)
+- MCP tool layer (`traderbot__*`) does NOT enforce profile categories ✗ — deferred to Phase 1 (2026-08-01 decision, issue #164)
 
 ### DD-012: Authentication redesign — encrypted vault + OpenClaw SecretRef hybrid
 **Date**: 2025-06-08
