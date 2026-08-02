@@ -1,17 +1,22 @@
 """E2E test harness for MCP server (Phase 0 verification).
 
-Tests that the MCP server can be started, accepts JSON-RPC calls,
-and responds correctly to tool invocations. This validates the
-OpenClaw → MCP → TraderBot transport chain.
+Tests that the MCP server accepts real JSON-RPC exchanges — initialize,
+tools/list, and tools/call — through the actual protocol layer, validating
+the OpenClaw → MCP → TraderBot transport chain in-process (no subprocess,
+no external network). Uses mcp's in-memory stream transport so the full
+message framing and handler dispatch run unchanged.
 
 Run with: pytest tests/test_mcp_e2e.py -v
 """
 
 import asyncio
-import subprocess
-import sys
+import json
 
 import pytest
+from mcp.client.session import ClientSession
+from mcp.shared.memory import create_client_server_memory_streams
+
+from traderbot.mcp.server import app
 
 # Mark all tests in this module as e2e
 pytestmark = pytest.mark.e2e
@@ -20,18 +25,88 @@ pytestmark = pytest.mark.e2e
 class TestMCPEndToEnd:
     """E2E tests that validate the MCP transport chain."""
 
-    def test_mcp_server_starts(self):
-        """MCP server process starts without error."""
-        result = subprocess.run(
-            [sys.executable, "-m", "traderbot.mcp.server", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        # Server should at least start (may show help or start running)
-        # Exit code 0 for --help, or we just check it doesn't crash immediately
-        assert result.returncode is not None, "Server process failed to start"
+    def _round_trip(self, scenario):
+        """Run a scenario against the real server over in-memory JSON-RPC streams.
 
+        scenario is an async callable receiving an initialized ClientSession.
+        """
+
+        async def _run():
+            async with create_client_server_memory_streams() as (client_streams, server_streams):
+                server_task = asyncio.create_task(
+                    app.run(*server_streams, app.create_initialization_options())
+                )
+                try:
+                    async with ClientSession(*client_streams) as session:
+                        await session.initialize()
+                        await scenario(session)
+                finally:
+                    server_task.cancel()
+                    try:
+                        await server_task
+                    except asyncio.CancelledError:
+                        pass
+
+        asyncio.run(_run())
+
+    def test_jsonrpc_initialize_and_list_tools(self):
+        """initialize + tools/list return exactly the 4 Phase 0 tools."""
+
+        async def scenario(session):
+            result = await session.list_tools()
+            names = {t.name for t in result.tools}
+            assert names == {"health", "auth_check", "profile_list", "market_edge"}
+
+        self._round_trip(scenario)
+
+    def test_jsonrpc_call_tool_health(self):
+        """tools/call health returns status=ok for a valid sysadmin token."""
+
+        async def scenario(session):
+            result = await session.call_tool("health", {"token": "sysadmin-test-token"})
+            assert result.is_error is False
+            text = json.loads(result.content[0].text)
+            assert text["status"] == "ok"
+            assert text["profile"] == "sysadmin"
+            assert text["mode"] == "paper"
+
+        self._round_trip(scenario)
+
+    def test_jsonrpc_call_tool_auth_check(self):
+        """tools/call auth_check returns profile info for a valid token."""
+
+        async def scenario(session):
+            result = await session.call_tool(
+                "auth_check", {"token": "dev-liaison-test-token"}
+            )
+            assert result.is_error is False
+            text = json.loads(result.content[0].text)
+            assert text["status"] == "ok"
+            assert text["profile"] == "dev-liaison"
+
+        self._round_trip(scenario)
+
+    def test_jsonrpc_call_tool_invalid_token(self):
+        """An invalid token is rejected with an error result over the transport."""
+
+        async def scenario(session):
+            result = await session.call_tool("health", {"token": "bogus-token"})
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert "Invalid or expired profile token" in text["error"]
+
+        self._round_trip(scenario)
+
+    def test_jsonrpc_call_tool_unknown_tool(self):
+        """An unknown tool name returns an error result over the transport."""
+
+        async def scenario(session):
+            result = await session.call_tool("nonexistent_tool", {})
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert "Unknown tool" in text["error"]
+
+        self._round_trip(scenario)
     def test_health_tool_via_jsonrpc(self):
         """traderbot__health tool can be called directly."""
         from traderbot.mcp.tools import traderbot__health
