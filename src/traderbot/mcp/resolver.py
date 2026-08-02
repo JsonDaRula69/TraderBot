@@ -1,7 +1,7 @@
 """Token resolution for MCP tool calls (DD-025).
 
 Phase 0: Hardcoded token-to-profile mapping.
-Phase 1: Swaps to real ProfileRegistry.resolve_token() with zero tool code changes.
+Phase 1: Swaps to real auth via tokens.resolve_token() + ProfileRegistry.get_profile()
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Phase 0: Hardcoded token-to-profile mapping.
-# Phase 1 will replace this with ProfileRegistry.resolve_token().
+# Phase 1 will replace this with tokens.resolve_token().
 _HARDCODED_TOKENS: dict[str, tuple[str, str]] = {
     "sysadmin-test-token": ("sysadmin", "sysadmin"),
     "dev-liaison-test-token": ("dev-liaison", "dev-liaison"),
@@ -36,7 +36,7 @@ _HARDCODED_PROFILES: dict[str, TradingProfile] = {
 def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None]:
     """Resolve a profile token to (TradingProfile, agent_id).
 
-    Phase 0: Hardcoded mapping. Phase 1: delegates to ProfileRegistry.resolve_token().
+    Phase 0: Hardcoded mapping. Phase 1: delegates to tokens.resolve_token().
 
     Args:
         token: The profile token from the MCP tool call.
