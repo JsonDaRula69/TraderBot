@@ -66,6 +66,13 @@ async def handle_call_tool(
 
     try:
         result = await handler(**arguments)
+        # Handlers signal failure via an {"error": ...} dict; surface that as
+        # a protocol-level error result so clients see the call failed.
+        if isinstance(result, dict) and "error" in result:
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(result))],
+                is_error=True,
+            )
         return CallToolResult(content=[TextContent(type="text", text=json.dumps(result))])
     except TypeError as e:
         return CallToolResult(
@@ -106,3 +113,9 @@ def run_server() -> None:
         stream=sys.stderr,
     )
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    # Allows `python -m traderbot.mcp.server` as an alternative to the
+    # traderbot-mcp-server console script (handy for local debugging).
+    run_server()

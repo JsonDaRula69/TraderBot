@@ -92,29 +92,18 @@ async def traderbot__profile_list(token: str) -> dict[str, Any]:
     if err is not None:
         return err
 
+    # Derived from the profile registry, not a static snapshot, so the
+    # listing can never drift from the actual profiles (Phase 1 swaps the
+    # source to ProfileRegistry alongside resolver.py).
+    from traderbot.mcp.resolver import _HARDCODED_PROFILES
+
     profiles = {
-        "sysadmin": {
-            "mode": "paper",
-            "categories": ["all"],
-            "permissions": [
-                "deny:traderbot__trade",
-                "deny:traderbot__scan",
-                "deny:traderbot__analyze",
-                "deny:traderbot__market_edge",
-                "deny:traderbot__market_prices",
-                "deny:traderbot__weather_*",
-            ],
-        },
-        "dev-liaison": {
-            "mode": "paper",
-            "categories": [],
-            "permissions": [
-                "traderbot__reference",
-                "traderbot__health",
-                "traderbot__auth_check",
-                "traderbot__profile_list",
-            ],
-        },
+        name: {
+            "mode": p.mode,
+            "categories": [c.value for c in p.enabled_categories] or ["all"],
+            "permissions": p.permissions or ["all"],
+        }
+        for name, p in _HARDCODED_PROFILES.items()
     }
 
     return {

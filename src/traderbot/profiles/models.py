@@ -68,8 +68,10 @@ class TradingProfile(BaseModel):
     @computed_field
     @property
     def env_file(self) -> str:
-        """Environment file path for this profile."""
-        return f".env.{self.mode}"
+        """Environment file path for this profile (absolute, under the data dir)."""
+        from traderbot.paths import get_data_dir
+
+        return str(get_data_dir() / f".env.{self.mode}")
 
     def is_category_enabled(self, category: MarketCategory) -> bool:
         """Check if a market category is enabled for this profile.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "traderbot"
-version = "2.0.0a0"
+dynamic = ["version"]
 description = "Autonomous prediction market trading toolkit for OpenClaw agents (MCP-based v2)"
 readme = "README.md"
 license = "MIT"
@@ -19,6 +19,11 @@ traderbot-mcp-server = "traderbot.mcp.server:run_server"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
+
+[tool.hatch.version]
+path = "VERSION"
+# Bare-version file (no `__version__ = "..."` assignment): capture the whole line.
+pattern = "(?P<version>.+)"
 
 [dependency-groups]
 dev = [

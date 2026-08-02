@@ -158,6 +158,11 @@ async def traderbot_scan(token: str, category: str, ...):
     # ... execute scan
 ```
 
+> **Implementation status (Phase 0)**: Phase 0 (issue #163) resolves the token to a
+> profile and enforces tool permissions, but the category check above lands in
+> **Phase 1 (issue #164)** — see DD-011. Phase 0's hardcoded tokens are
+> development-only and must never run against live data.
+
 ### Security Properties
 
 - Tokens are 256-bit cryptographically random, stored in Infisical
