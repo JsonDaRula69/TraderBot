@@ -7,10 +7,15 @@ Every tool accepts `token` as first parameter for authentication.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from traderbot.mcp.auth import check_category_access
 from traderbot.mcp.resolver import resolve_token_adapter
+from traderbot.profiles import ProfileRegistry
 
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
@@ -18,8 +23,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class HealthInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+
+
+class AuthCheckInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+
+
+class ProfileListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+
+
+class MarketEdgeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    category: str
+    ticker: str
+
+
 def _check_permissions(
-    token: str, tool_name: str
+    token: str, tool_name: str, category: str | None = None
 ) -> tuple[TradingProfile | None, str | None, dict | None]:
     """Authenticate and authorize a tool call.
 
@@ -43,14 +74,26 @@ def _check_permissions(
             {"error": f"Permission denied: profile '{profile.name}' cannot use '{full_name}'"},
         )
 
+    category_error = check_category_access(profile, agent_id, category, full_name)
+    if category_error is not None:
+        return profile, agent_id, category_error
+
     return profile, agent_id, None
 
 
-async def traderbot__health(token: str) -> dict[str, Any]:
+async def traderbot__health(token: str, **kwargs: Any) -> dict[str, Any]:
     """Combined health check: service, WebSocket, data, auth, circuit breakers."""
-    profile, agent_id, err = _check_permissions(token, "health")
+    profile, agent_id, err = _check_permissions(token, "health", category=None)
     if err is not None:
         return err
+
+    try:
+        _input = HealthInput(token=token, **kwargs)
+    except ValidationError as exc:
+        return {"error": f"Invalid input: {exc}"}
+
+    assert profile is not None
+    use_hardcoded_auth = os.environ.get("TRADERBOT_USE_HARDCODED_AUTH", "1") != "0"
 
     return {
         "status": "ok",
@@ -60,18 +103,25 @@ async def traderbot__health(token: str) -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
         "components": {
             "mcp_server": "running",
-            "auth": "hardcoded" if token in _hardcoded_token_map() else "resolved",
+            "auth": "hardcoded" if use_hardcoded_auth else "resolved",
             "data_pipeline": "not_started",
             "websocket": "not_connected",
         },
     }
 
 
-async def traderbot__auth_check(token: str) -> dict[str, Any]:
+async def traderbot__auth_check(token: str, **kwargs: Any) -> dict[str, Any]:
     """Verify all API credentials are valid."""
-    profile, agent_id, err = _check_permissions(token, "auth_check")
+    profile, agent_id, err = _check_permissions(token, "auth_check", category=None)
     if err is not None:
         return err
+
+    try:
+        _input = AuthCheckInput(token=token, **kwargs)
+    except ValidationError as exc:
+        return {"error": f"Invalid input: {exc}"}
+
+    assert profile is not None
 
     return {
         "status": "ok",
@@ -86,25 +136,19 @@ async def traderbot__auth_check(token: str) -> dict[str, Any]:
     }
 
 
-async def traderbot__profile_list(token: str) -> dict[str, Any]:
+async def traderbot__profile_list(token: str, **kwargs: Any) -> dict[str, Any]:
     """List all profiles and their modes."""
-    profile, agent_id, err = _check_permissions(token, "profile_list")
+    profile, agent_id, err = _check_permissions(token, "profile_list", category=None)
     if err is not None:
         return err
 
-    # Derived from the profile registry, not a static snapshot, so the
-    # listing can never drift from the actual profiles (Phase 1 swaps the
-    # source to ProfileRegistry alongside resolver.py).
-    from traderbot.mcp.resolver import _HARDCODED_PROFILES
+    try:
+        _input = ProfileListInput(token=token, **kwargs)
+    except ValidationError as exc:
+        return {"error": f"Invalid input: {exc}"}
 
-    profiles = {
-        name: {
-            "mode": p.mode,
-            "categories": [c.value for c in p.enabled_categories] or ["all"],
-            "permissions": p.permissions or ["all"],
-        }
-        for name, p in _HARDCODED_PROFILES.items()
-    }
+    assert profile is not None
+    profiles = ProfileRegistry().list_profiles()
 
     return {
         "status": "ok",
@@ -114,79 +158,50 @@ async def traderbot__profile_list(token: str) -> dict[str, Any]:
     }
 
 
-async def traderbot__market_edge(token: str, category: str, ticker: str) -> dict[str, Any]:
+async def traderbot__market_edge(token: str, **kwargs: Any) -> dict[str, Any]:
     """Compute the estimated edge for a market (Phase 0: stub response)."""
-    _profile, _agent_id, err = _check_permissions(token, "market_edge")
+    raw_category = kwargs.get("category")
+    category = raw_category if isinstance(raw_category, str) else None
+    _profile, _agent_id, err = _check_permissions(token, "market_edge", category=category)
     if err is not None:
         return err
+
+    try:
+        input_data = MarketEdgeInput(token=token, **kwargs)
+    except ValidationError as exc:
+        return {"error": f"Invalid input: {exc}"}
 
     return {
         "status": "stub",
         "message": "market_edge not yet implemented (Phase 0 skeleton)",
-        "category": category,
-        "ticker": ticker,
+        "category": input_data.category,
+        "ticker": input_data.ticker,
         "edge_pct": 0.0,
         "confidence": 0.0,
         "sample_size": 0,
     }
 
 
-def _hardcoded_token_map() -> set[str]:
-    """Return the set of valid hardcoded tokens for Phase 0 auth detection."""
-    from traderbot.mcp.resolver import _HARDCODED_TOKENS
-
-    return set(_HARDCODED_TOKENS.keys())
-
-
 TOOL_DEFINITIONS = [
     {
         "name": "health",
         "description": "Combined health check: service, WebSocket, data, auth, circuit breakers.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "token": {"type": "string", "description": "Profile authentication token"},
-            },
-            "required": ["token"],
-        },
+        "inputSchema": HealthInput.model_json_schema(),
     },
     {
         "name": "auth_check",
         "description": "Verify all API credentials are valid.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "token": {"type": "string", "description": "Profile authentication token"},
-            },
-            "required": ["token"],
-        },
+        "inputSchema": AuthCheckInput.model_json_schema(),
     },
     {
         "name": "profile_list",
         "description": "List all profiles and their modes.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "token": {"type": "string", "description": "Profile authentication token"},
-            },
-            "required": ["token"],
-        },
+        "inputSchema": ProfileListInput.model_json_schema(),
     },
     {
         "name": "market_edge",
         "description": "Compute the estimated edge for a market.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "token": {"type": "string", "description": "Profile authentication token"},
-                "category": {
-                    "type": "string",
-                    "description": "Market category (e.g. weather, economics)",
-                },
-                "ticker": {"type": "string", "description": "Market ticker symbol"},
-            },
-            "required": ["token", "category", "ticker"],
-        },
+        "inputSchema": MarketEdgeInput.model_json_schema(),
     },
 ]
 
