@@ -42,3 +42,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv build
       - run: pip install dist/*.whl && python -c "import traderbot; print('import OK')"
+      - name: Entry point smoke test
+        # Starts the real server (__main__ guard) with closed stdin; the
+        # server must initialize and exit cleanly (or timeout = failure).
+        run: timeout 15 python -m traderbot.mcp.server </dev/null
+      - name: Console script registered
+        run: python -c "from importlib.metadata import entry_points; eps=[e.name for e in entry_points(group='console_scripts')]; assert 'traderbot-mcp-server' in eps, f'missing, got {eps}'; print('console script OK')"
