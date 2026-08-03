@@ -6,7 +6,7 @@
 > only `health`, `auth_check`, `profile_list`, and `market_edge`. Later sections
 > describe the planned tool surface and are not claims of implementation,
 > deployment, CI, or on-target verification. Per-agent token injection is
-> architecturally resolved in issue #187; the plugin hook is not yet implemented.
+> architecturally resolved in issue #187; the plugin hook is implemented (commit 5b5088e).
 > Issue #164 remains open until macpro-linux testing succeeds.
 
 ---
@@ -508,5 +508,5 @@ so neither the legacy nor remediation config can securely deliver distinct
 agent tokens. Secure per-agent token injection will be implemented with a Phase
 1.1 OpenClaw `before_tool_call` plugin hook that resolves per-agent Vault
 SecretRefs and rewrites tool call params (see `04-security-and-auth.md` and
-`.omo/plans/phase1-1-token-injector.md`). That plugin is not yet in `HEAD`; neither config state is deployable until the hook
+`.omo/plans/phase1-1-token-injector.md`). The plugin is implemented and committed (commit 5b5088e); neither config state is deployable until the hook
 is implemented and tested on macpro-linux.

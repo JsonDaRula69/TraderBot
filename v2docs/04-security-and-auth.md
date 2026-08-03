@@ -227,7 +227,7 @@ token and `_meta.agent_id`.
 
 ## Per-agent token injection via OpenClaw plugin hook
 
-> **Phase 1.1 design — not implemented in current `HEAD`.** This section
+> **Phase 1.1 — implemented (commit 5b5088e).** This section
 > documents the verified architecture for secure per-agent token injection using
 > OpenClaw's first-party `before_tool_call` plugin hook.
 > 
