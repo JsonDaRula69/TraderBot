@@ -2,21 +2,41 @@
 
 > This document provides a complete reference for all MCP tools exposed by TraderBot's MCP server, including category-specific toolkits, SysAdmin tools, and the token-based authentication mechanism. Grounded in DD-015, DD-025, DD-035, DD-036.
 
+> **Implementation status:** the current Phase 1 development server exposes
+> only `health`, `auth_check`, `profile_list`, and `market_edge`. Later sections
+> describe the planned tool surface and are not claims of implementation,
+> deployment, CI, or on-target verification. Issue #164 remains open.
+
 ---
 
 ## MCP Server Architecture
 
-TraderBot registers as an MCP server with the OpenClaw gateway via stdio:
+A Phase 1 configuration remediation registers TraderBot once at root scope:
 
-```bash
-openclaw mcp add traderbot \
-  --command traderbot-mcp-server \
-  --env TRADERBOT_SECRETS_PATH="$HOME/.traderbot/secrets/secrets.json"
+```json
+{
+  "mcp": {
+    "servers": {
+      "traderbot": {
+        "command": "traderbot-mcp-server",
+        "transport": "stdio"
+      }
+    }
+  }
+}
 ```
 
-The MCP server reads `TRADERBOT_SECRETS_PATH` from its own environment to locate the secrets store (or Infisical connection config).
+The agent fragments in `configs/openclaw/` remove the legacy unsupported per-agent `env` and nested `mcp` fields. The example above describes the checked-in remediation.
 
-All tools accept a `token` parameter for authentication and identity resolution. The MCP server resolves `token → profile → categories + mode + permissions` on every call.
+The MCP server uses `TRADERBOT_USE_HARDCODED_AUTH` env var to select auth mode.
+Default (any value other than "0") uses hardcoded Phase 0 tokens.
+`TRADERBOT_USE_HARDCODED_AUTH=0` enables real auth via `TokenStore` (Phase 1) or
+Infisical (Phase 1.5).
+
+All tools accept a `token` parameter for authentication and identity
+resolution. The MCP server resolves `token → profile`, checks the tool
+permission, then checks the category for category-bearing tools. The profile
+also supplies mode and access context.
 
 ---
 
@@ -34,13 +54,18 @@ resolve_token(token) → (profile_name, agent_id)
   ├── Invalid/expired token → return {"error": "Invalid or expired profile token"}
   │
   ▼
-Load profile → enabled_categories, permissions, mode
+Load profile → permissions, enabled_categories, mode
   │
-  ├── Category not in enabled_categories → return {"error": "Category not enabled"}
   ├── Tool not in permissions → return {"error": "Permission denied"}
   │
   ▼
-Execute tool with mode-aware routing (backtest/paper/live)
+Validate category for category-bearing tools
+  │
+  ├── Unknown category → return {"error": "Unknown category"}
+  ├── Category not in enabled_categories → return {"error": "Category not enabled"}
+  │
+  ▼
+Execute current handler (future handlers add mode-aware routing)
   │
   ▼
 Return result
@@ -48,11 +73,45 @@ Return result
 
 ---
 
-## General-Purpose Tools (All Categories)
+The enforced order is **token → tool permission → category**. Tools without a
+category skip the final check.
 
-### `traderbot__market_edge`
+## Current Phase 1 Tools
 
-Returns market-implied probability, spread, liquidity, and edge assessment for a ticker.
+| Tool | Actual current behavior |
+|---|---|
+| `traderbot__health` | Authenticates the caller and reports profile context plus placeholder component states. |
+| `traderbot__auth_check` | Validates the profile token and `auth_check` permission, then reports profile, agent, mode, enabled categories, and permissions. It does **not** validate external provider credentials. |
+| `traderbot__profile_list` | Authenticates and authorizes the caller, then lists the in-process profile registry. |
+| `traderbot__market_edge` | Authenticates, checks `market_edge` permission, enforces DD-011 category access, validates strict input, and returns a stub response. |
+
+External API credential validation is deferred to the secrets, provider, and
+deploy phases. Infisical and automatic rotation remain Phase 1.5 plans.
+
+## Planned Tool Surface
+
+Unless explicitly described as current above, the tools and rich responses in
+the following sections are target designs.
+
+### `traderbot__market_edge` (current stub, planned full response)
+
+The current implementation returns a placeholder while preserving auth,
+permission, category, and input-validation behavior. Its response is:
+
+```json
+{
+  "status": "stub",
+  "message": "market_edge not yet implemented (Phase 0 skeleton)",
+  "category": "weather",
+  "ticker": "KXHIGHTCHI-26JUN02-T81",
+  "edge_pct": 0.0,
+  "confidence": 0.0,
+  "sample_size": 0
+}
+```
+
+The target implementation will return market-implied probability, spread,
+liquidity, and edge assessment for a ticker.
 
 **Parameters**: `token` (str), `category` (str), `ticker` (str)
 
@@ -74,7 +133,7 @@ Returns market-implied probability, spread, liquidity, and edge assessment for a
 }
 ```
 
-**Mode behavior**: Backtest returns market edge at sim-time. Paper/Live returns current data from WebSocket cache.
+**Planned mode behavior**: Backtest returns market edge at sim-time. Paper/Live returns current data from WebSocket cache.
 
 ---
 
@@ -190,7 +249,8 @@ Get quantitative data points for a category.
 
 ## Weather Toolkit
 
-Available only to the weather agent via OpenClaw `alsoAllow` filtering.
+The planned weather toolkit is restricted through the weather agent's explicit
+OpenClaw `allow` policy and TraderBot's server-side authorization.
 
 ### `traderbot__weather_forecast_prob`
 
@@ -318,7 +378,7 @@ SysAdmin has a restricted toolset focused on oversight and management, with no t
 | Tool | Purpose |
 |---|---|
 | `traderbot__health` | Combined health check: service, WS, data, auth, circuit breakers |
-| `traderbot__auth_check` | Verify all credentials are valid |
+| `traderbot__auth_check` | Validate the profile token and report its access context; does not validate provider credentials |
 | `traderbot__profile_list` | List all profiles and their modes |
 | `traderbot__profile_update` | Update profile mode (backtest → paper → live), risk parameters |
 | `traderbot__performance` | View any agent's performance metrics |
@@ -351,7 +411,7 @@ The Dev-Liaison agent has a focused toolset for architecture expertise, experime
 |---|---|
 | `traderbot__reference` | Knowledge retrieval (searches indexed source code, docs, and design decisions) |
 | `traderbot__experiment` | Experiment harness tools (create, run, verify treatments) |
-| `traderbot__auth_check` | Credential verification |
+| `traderbot__auth_check` | Profile-token validation and access-context reporting |
 | `traderbot__health` | System health checks |
 | `sessions_spawn` | Spawn sub-agents for debate coordination |
 | `sessions_send` | Send messages to agents |
@@ -385,24 +445,27 @@ The Dev-Liaison sends wake signals to AutoDev via a shared Discord channel: `aut
 
 ---
 
-## OpenClaw Tool Configuration
+## OpenClaw Tool Configuration Status
 
-Each category agent's OpenClaw configuration includes:
+The separate configuration remediation is split into one gateway artifact and strict agent fragments. The `configs/openclaw/gateway.json` registers the stdio MCP server once at root `mcp.servers`; its agent entries contain only `id`, `sandbox`, and `tools`. The pinned OpenClaw schema rejects per-agent `env`, nested `mcp`, and annotation fields.
+
+Remediation weather policy excerpt:
 
 ```json5
 {
   id: "weather",
   sandbox: { mode: "all" },  // Mandatory Docker sandbox (DD-010)
   tools: {
-    deny: ["group:runtime", "group:fs"],  // Block filesystem and runtime access
-    alsoAllow: [
-      "bundle-mcp",  // Required for MCP tool access
+    allow: [
       // Weather toolkit
       "traderbot__weather_forecast_prob",
       "traderbot__weather_accuracy",
       "traderbot__weather_seasonal_context",
       "traderbot__weather_decision_brief",
       // General tools
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
       "traderbot__market_edge",
       "traderbot__market_prices",
       "traderbot__trade",
@@ -416,11 +479,23 @@ Each category agent's OpenClaw configuration includes:
       // Session tools (for debate subs)
       "sessions_send",
     ],
-  },
-  env: {
-    TRADERBOT_PROFILE_TOKEN: { secretRef: "traderbot_weather_token" }
+    deny: ["group:runtime", "group:fs"],
+    sandbox: {
+      tools: { allow: ["bundle-mcp", "sessions_send"] },
+    },
   }
 }
 ```
 
-MCP server-side filtering (`alsoAllow` at the OpenClaw config level) and server-side validation (`resolve_token → profile → categories + permissions`) provide defense in depth. Even if an agent's TOOLS.md is modified, the MCP server will reject out-of-category tool calls.
+The normal policy uses `allow`, not `alsoAllow`, because `alsoAllow` is
+additive to an implicit wildcard in OpenClaw. `bundle-mcp` appears only in the
+sandbox gate; exact `traderbot__*` names are used in the normal agent allowlist.
+TraderBot then validates `token → tool permission → category` server-side.
+
+The remediation fragments do **not** inject `TRADERBOT_PROFILE_TOKEN`. Root
+`env.vars` is global and `mcp.servers.*.env` applies to the shared MCP process,
+so neither the legacy nor remediation config can securely deliver distinct
+agent tokens. Secure per-agent injection remains blocked pending an OpenClaw
+proxy/plugin that adds caller identity or tokens, or isolated gateway/MCP
+instances per agent. Neither config state is deployable until that architecture
+is selected and macpro-linux testing succeeds.

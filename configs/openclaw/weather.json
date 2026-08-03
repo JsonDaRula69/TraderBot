@@ -1,0 +1,40 @@
+{
+  "id": "weather",
+  "sandbox": {
+    "mode": "all"
+  },
+  "tools": {
+    "allow": [
+      "traderbot__weather_forecast_prob",
+      "traderbot__weather_accuracy",
+      "traderbot__weather_seasonal_context",
+      "traderbot__weather_decision_brief",
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
+      "traderbot__market_edge",
+      "traderbot__market_prices",
+      "traderbot__trade",
+      "traderbot__positions",
+      "traderbot__heartbeat",
+      "traderbot__performance",
+      "traderbot__audit",
+      "traderbot__learnings",
+      "traderbot__news_context",
+      "traderbot__data_points",
+      "sessions_send"
+    ],
+    "deny": [
+      "group:runtime",
+      "group:fs"
+    ],
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "bundle-mcp",
+          "sessions_send"
+        ]
+      }
+    }
+  }
+}

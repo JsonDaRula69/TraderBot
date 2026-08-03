@@ -1,0 +1,37 @@
+{
+  "id": "dev-liaison",
+  "sandbox": {
+    "mode": "all"
+  },
+  "tools": {
+    "allow": [
+      "traderbot__reference",
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
+      "sessions_spawn",
+      "sessions_send",
+      "sessions_yield",
+      "sessions_list",
+      "sessions_history",
+      "subagents"
+    ],
+    "deny": [
+      "group:runtime",
+      "group:fs"
+    ],
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "bundle-mcp",
+          "sessions_spawn",
+          "sessions_send",
+          "sessions_yield",
+          "sessions_list",
+          "sessions_history",
+          "subagents"
+        ]
+      }
+    }
+  }
+}

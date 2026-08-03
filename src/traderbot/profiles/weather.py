@@ -12,13 +12,17 @@ def create_weather_profile() -> TradingProfile:
     """Create the weather category agent profile.
 
     Weather agent has access to:
-    - Weather analysis tools (traderbot__weather_*)
-    - General tools (health, auth_check, profile_list, reference)
-    - Market tools (scan, analyze, market_edge, market_prices)
-    - Trading tools (trade, positions, performance)
+    - Weather toolkit (traderbot__weather_forecast_prob, weather_accuracy,
+      weather_seasonal_context, weather_decision_brief)
+    - General tools (health, auth_check, profile_list)
+    - Market tools (market_edge, market_prices)
+    - Trading tools (trade, positions, performance, heartbeat)
+    - Ops tools (audit, learnings, news_context, data_points)
 
     Weather agent does NOT have access to:
-    - SysAdmin-only tools (profile_update, experiment, cron_setup)
+    - SysAdmin-only tools (reference, data_status, ws_status)
+    - Legacy generic tools replaced by DD-035 toolkits (scan, analyze)
+    - Retired weather tools (weather_historical, weather_alert, weather_analysis)
     """
     return TradingProfile(
         name="weather",
@@ -33,26 +37,27 @@ def create_weather_profile() -> TradingProfile:
         min_liquidity_threshold=500,
         min_edge_pct=3.0,
         permissions=[
-            # Allow weather-specific tools
+            # Allow weather toolkit (v2docs/09-mcp-tools.md lines 195-308)
             "traderbot__weather_forecast_prob",
-            "traderbot__weather_historical",
-            "traderbot__weather_alert",
-            "traderbot__weather_analysis",
+            "traderbot__weather_accuracy",
+            "traderbot__weather_seasonal_context",
+            "traderbot__weather_decision_brief",
             # Allow general tools
             "traderbot__health",
             "traderbot__auth_check",
             "traderbot__profile_list",
-            "traderbot__reference",
-            "traderbot__data_status",
-            "traderbot__ws_status",
             # Allow market tools
-            "traderbot__scan",
-            "traderbot__analyze",
             "traderbot__market_edge",
             "traderbot__market_prices",
             # Allow trading tools
             "traderbot__trade",
             "traderbot__positions",
+            "traderbot__heartbeat",
+            # Allow ops tools
             "traderbot__performance",
+            "traderbot__audit",
+            "traderbot__learnings",
+            "traderbot__news_context",
+            "traderbot__data_points",
         ],
     )
