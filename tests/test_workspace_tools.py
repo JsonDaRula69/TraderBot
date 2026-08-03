@@ -24,4 +24,6 @@ def test_tools_md_matches_definitions() -> None:
 
 def test_token_instruction_present() -> None:
     for tools_path in TOOLS_PATHS:
-        assert "TRADERBOT_PROFILE_TOKEN" in tools_path.read_text(encoding="utf-8")
+        content = tools_path.read_text(encoding="utf-8")
+        assert "Token Injector" in content
+        assert "host-side" in content

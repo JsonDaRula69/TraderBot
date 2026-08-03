@@ -1,6 +1,6 @@
 # TraderBot Tools — Weather Agent
 
-When calling any TraderBot tool, always include your profile token as the `token` parameter. Your token is available as the TRADERBOT_PROFILE_TOKEN environment variable.
+Your profile `token` is injected host-side by the TraderBot Token Injector plugin. The `token` parameter remains in the tool schema (required by the MCP SDK), but you do not need to provide it yourself.
 
 ## Currently Available Tools
 

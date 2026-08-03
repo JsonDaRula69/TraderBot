@@ -1,0 +1,54 @@
+{
+  "plugins": {
+    "load": {
+      "paths": [
+        "plugins/traderbot-token-injector"
+      ]
+    },
+    "entries": {
+      "traderbot-token-injector": {
+        "config": {
+          "agentTokenMap": {
+            "weather": {
+              "source": "exec",
+              "provider": "vault",
+              "id": "traderbot/weather/token"
+            },
+            "sysadmin": {
+              "source": "exec",
+              "provider": "vault",
+              "id": "traderbot/sysadmin/token"
+            },
+            "dev-liaison": {
+              "source": "exec",
+              "provider": "vault",
+              "id": "traderbot/dev-liaison/token"
+            }
+          }
+        }
+      }
+    }
+  },
+  "secrets": {
+    "providers": {
+      "vault": {
+        "type": "exec",
+        "command": "/usr/local/bin/openclaw-vault-resolver",
+        "args": [],
+        "passEnv": [
+          "VAULT_ADDR",
+          "VAULT_TOKEN"
+        ],
+        "jsonOnly": true
+      }
+    }
+  },
+  "mcp": {
+    "servers": {
+      "traderbot": {
+        "command": "traderbot-mcp-server",
+        "transport": "stdio"
+      }
+    }
+  }
+}

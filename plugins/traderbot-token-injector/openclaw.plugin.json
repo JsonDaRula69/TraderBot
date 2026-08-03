@@ -1,0 +1,11 @@
+{
+  "id": "traderbot-token-injector",
+  "name": "TraderBot Token Injector",
+  "description": "Injects per-agent TraderBot profile tokens via before_tool_call hook",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": []
+  }
+}

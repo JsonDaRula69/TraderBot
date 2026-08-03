@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a19] — 2026-08-03
+
+### Added
+
+- feat: Phase 1.1 token injector plugin — add `plugins/traderbot-token-injector/` OpenClaw plugin implementing the `before_tool_call` hook for host-side profile-token injection.
+- feat: add unit and integration test suites for the token injector plugin (8 unit + 3 integration, Vitest).
+- feat: add OpenClaw config example `configs/openclaw/with-plugin.json` registering the token injector plugin.
+- feat: update workspace TOOLS.md files (weather, sysadmin, dev-liaison) to document host-side token injection via the plugin.
+- test: add Python negative regression test `tests/test_missing_token.py` verifying missing-token behavior.
+
 ## [2.0.0a18] — 2026-08-02
 
 ### Changed
