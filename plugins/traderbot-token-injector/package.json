@@ -12,5 +12,12 @@
   "devDependencies": {
     "typescript": "latest",
     "vitest": "latest"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "compat": {
+      "pluginApi": ">=2026.7.1",
+      "minGatewayVersion": "2026.6.1"
+    }
   }
 }

@@ -7,5 +7,26 @@
   },
   "contracts": {
     "tools": []
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "agentTokenMap": {
+        "type": "object",
+        "description": "Maps agent ID to SecretRef for that agent's TraderBot token",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string", "enum": ["env", "file", "exec"] },
+            "provider": { "type": "string" },
+            "id": { "type": "string" }
+          },
+          "required": ["source", "provider", "id"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["agentTokenMap"]
   }
 }
