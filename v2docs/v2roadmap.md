@@ -68,7 +68,7 @@
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
 - [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
-- [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification remains pending
+- [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification complete (see next line)
 - [x] Phase 1.1 deployment verification (2026-08-03): E2E injection verified on macpro-linux — plugin loads, hook fires at priority 100, token resolved from env provider, injected into MCP call params, server resolves weather profile. Three fixes required: manifest metadata + configSchema (f8b5065), token optional in schemas (f1aa518), and MCP server env must explicitly set TRADERBOT_USE_HARDCODED_AUTH=0 (0dbc981) — the subprocess does not inherit the gateway's systemd drop-in. Fail-closed verified for unmapped agents (main). Token never enters model context (agent confirms it passed no token). 113 Python + 11 TypeScript tests pass on-target.
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — decided, implementation pending
@@ -1485,9 +1485,10 @@ Note: this is a single `traderbot.service` unit (not a template unit `@.service`
 > **Implementation status:** DD-023 records the target orchestration and deploy
 > architecture plus a historical pre-v2 module inventory. Current `HEAD` does
 > not contain the described cron, deploy, CLI, service, database, or external
-> credential modules. Phase 1 currently implements MCP profile-token auth and
-> profile factories only; external provider credentials and secure OpenClaw
-> token injection remain deferred and issue #164 remains open.
+> credential modules. Phase 1 implements MCP profile-token auth and
+> profile factories; secure OpenClaw token injection is deployment-verified
+> (Phase 1.1, issue #187 closed); external provider credentials are deferred
+> to Phase 1.5 (issue #165).
 
 **Context**: The current `traderbot cron setup` registers all cron jobs for an agent immediately during deploy, regardless of the agent's lifecycle phase. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and the cron jobs they need differ by phase. Additionally, SysAdmin orchestrates when each category agent is activated — the first agent doesn't start until SysAdmin has verified data streams and its own health checks pass.
 
@@ -2269,11 +2270,11 @@ The `permissions` field allows fine-grained control over which MCP tools an agen
 > tokens through `TokenStore`, with a hardened `LocalTokenStore` at
 > `~/.traderbot/tokens.json`. Every implemented tool checks access in the order
 > **token → tool permission → category**. This has been verified through the
-> real MCP transport locally, but Phase 1 is not deployable: secure per-agent
-> token injection through OpenClaw is blocked and external provider credential
-> checks are deferred to secrets/provider/deploy work. Issue #164 remains open
-> pending a proxy/plugin or isolated-gateway architecture and macpro-linux
-> testing.
+> real MCP transport locally. Phase 1 is now deployable: per-agent token
+> injection via the `before_tool_call` plugin hook is built and
+> deployment-verified on macpro-linux (Phase 1.1, issue #187 closed).
+> External provider credential checks are deferred to secrets/provider/deploy
+> work (Phase 1.5, issue #165).
 
 **Context**: DD-024 established the overall auth architecture (secrets store, MCP server, per-agent bind mounts). This decision resolves the critical implementation gap: **how does the TraderBot MCP server identify which agent is calling a tool?**
 
@@ -2340,12 +2341,15 @@ Your deployment must provide the token securely; current local tests pass it exp
 - `LocalTokenStore` writes `~/.traderbot/tokens.json` atomically with mode `0600` on POSIX; it does not use Fernet or `tokens.enc`
 - A valid token resolves to one profile and agent, then tool permissions and category access are enforced
 - Strict Pydantic inputs reject extra or malformed arguments
-- The unresolved OpenClaw injection blocker means the committed config artifacts cannot guarantee that an agent knows only its own token
+- The OpenClaw injection blocker is now resolved: the `before_tool_call` plugin
+  hook (Phase 1.1, issue #187 closed) injects per-agent tokens host-side.
 
-**Architecture still required:**
-- A proxy/plugin may inject trusted caller identity or the matching token before the tool reaches TraderBot
-- Alternatively, each agent may use an isolated gateway/MCP instance with a private launch environment
-- Until one option is implemented and tested, the config artifacts are hardening references, not deployable token provisioning
+**Architecture (implemented):**
+- A `before_tool_call` plugin hook injects the agent's token into tool call
+  params before the MCP server receives them (commit `5b5088e`, verified
+  on macpro-linux).
+- The config artifacts are now deployable with the plugin active.
+- Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
 
 **MCP server configuration (OpenClaw)**
 
@@ -4312,8 +4316,9 @@ Under the new design, the experiment harness (DD-034) tests *treatments* — dif
 > Only `health`, `auth_check`, `profile_list`, and `market_edge` exist in the MCP
 > server; SysAdmin denies `market_edge`, and `auth_check` validates the profile
 > token and reports access context rather than provider credentials. The broader
-> management allowlist, workspace immutability controls, and lifecycle
-> confirmations below remain target design. OpenClaw hardening config is committed, and secure profile-token injection remains blocked.
+> confirmations below remain target design. OpenClaw hardening config is
+> committed, and secure profile-token injection is deployment-verified via
+> the `before_tool_call` plugin hook (Phase 1.1, issue #187 closed).
 
 **Context**: DD-010 mandates Docker sandboxing for all category agents, but explicitly leaves SysAdmin unsandboxed (`mode: off`). The pending discussion item "SysAdmin sandbox decision" asks whether this is appropriate given SysAdmin's enormous power — fleet orchestration, lifecycle management, self-improvement coordination, and cross-agent data access.
 
@@ -4759,7 +4764,8 @@ Each agent's OpenClaw configuration injects the corresponding token:
 
 > **Schema-invalid historical continuation:** Per-agent `env` is rejected by
 > pinned `d1c96302`; this object is retained only to show the intended mapping
-> and is not deployable.
+> and is not deployable. Per-agent token injection is now handled by the
+> `before_tool_call` plugin hook (Phase 1.1, issue #187 closed).
 
 ```json5
 {

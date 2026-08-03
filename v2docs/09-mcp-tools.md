@@ -512,8 +512,9 @@ TraderBot then validates `token → tool permission → category` server-side.
 The remediation fragments do **not** inject `TRADERBOT_PROFILE_TOKEN`. Root
 `env.vars` is global and `mcp.servers.*.env` applies to the shared MCP process,
 so neither the legacy nor remediation config can securely deliver distinct
-agent tokens. Secure per-agent token injection will be implemented with a Phase
-1.1 OpenClaw `before_tool_call` plugin hook that resolves per-agent Vault
+agent tokens. Secure per-agent token injection is implemented with a Phase
+1.1 OpenClaw `before_tool_call` plugin hook that resolves per-agent
 SecretRefs and rewrites tool call params (see `04-security-and-auth.md` and
-`.omo/plans/phase1-1-token-injector.md`). The plugin code is complete and committed (commit 5b5088e) but not yet deployed to a real OpenClaw gateway or tested with real Vault; neither config state is deployable until the hook
-is implemented and tested on macpro-linux.
+`.omo/plans/phase1-1-token-injector.md`). The plugin is complete and
+deployment-verified on macpro-linux (commits `5b5088e`, `f8b5065`, `f1aa518`,
+`0dbc981`); Vault SecretRef integration is deferred to Phase 1.5 (issue #165).

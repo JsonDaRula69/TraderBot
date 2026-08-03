@@ -177,3 +177,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix: remove duplicate unreachable `return err` in tools.py (AFT warning)
 - fix: type-check `properties` with isinstance in test_mcp_server.py (AFT error)
 - fix: add basedpyright venv config to pyproject.toml (AFT import error)
+
+## [2.0.0a28] — 2026-08-03
+
+### Changed
+
+- docs: close #187 (Phase 1.1 complete), fix stale "pending"/"blocked" references across v2roadmap DD-025 and v2docs/09-mcp-tools.md
