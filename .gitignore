@@ -32,6 +32,8 @@ Thumbs.db
 *.pem
 *.key
 credentials.json
+infisical-credentials.json
+*.infisical-token
 
 # TraderBot runtime data (preserved across updates)
 .traderbot/
