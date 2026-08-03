@@ -224,6 +224,57 @@ token and `_meta.agent_id`.
 
 ---
 
+## Per-agent token injection via OpenClaw plugin hook
+
+> **Phase 1.5 design — not implemented in current `HEAD`.** This section
+> documents the verified architecture for secure per-agent token injection using
+> OpenClaw's first-party `before_tool_call` plugin hook.
+
+### Architecture
+
+```
+Agent (model) → OpenClaw tool dispatch → before_tool_call hook
+  → reads ctx.agentId (trusted)
+  → resolves Vault SecretRef for that agent
+  → injects token into params.token
+  → MCP call to TraderBot with authenticated token
+  → TraderBot resolver.py validates token → TradingProfile → auth.py
+```
+
+The hook runs host-side in the OpenClaw gateway, so the model never sees or
+controls the injected token. `ctx.agentId` is host-derived from the caller's
+OpenClaw agent session, not from anything the model supplies. The hook resolves
+the agent's token from a Vault-backed SecretRef using OpenClaw's
+`resolveSecretRefValues` helper, then returns the full params object with the
+extra `token` field. Unrecognized agents fail closed.
+
+### Security properties
+
+- Token never enters model context — the agent workspace does not contain tokens
+- Token never written to config files — Vault SecretRefs resolve to in-memory snapshots
+- Per-agent isolation via `ctx.agentId`
+- Unknown agents fail closed (`{ block: true }`)
+- TraderBot server-side auth preserved — `resolver.py` → `TradingProfile` → `auth.py` is still the enforcement boundary
+
+### Critical constraints
+
+All verified against OpenClaw source at commit `cbd4b8de`:
+
+1. **`params` is a full replace** — always return `{ ...event.params, token }`, never `{ token }` alone
+2. **`token` must be declared in the tool's `inputSchema`** — or the MCP SDK silently strips it
+3. **Run at high priority** (e.g., `priority: 100`) — if another hook requests approval first, `freezeParamsForDifferentPlugin` can silently discard injected params
+4. **`ctx.agentId` is conditional** — fail closed when absent
+5. **Codex app-server native relay cannot rewrite params** — only blocking. Verify TraderBot tools aren't consumed exclusively through that path
+
+### References
+
+- [Plugin hooks — before_tool_call](https://docs.openclaw.ai/plugins/hooks)
+- [Vault SecretRefs](https://docs.openclaw.ai/plugins/vault/)
+- [SecretRef credential surface](https://docs.openclaw.ai/reference/secretref-credential-surface)
+- Production reference: [dev.to/micelclaw — before_tool_call token hook](https://dev.to/micelclaw/deterministic-agent-identity-a-beforetoolcall-hook-fills-the-token-the-model-kept-getting-wrong-3nln)
+
+---
+
 ## Per-Agent Isolation (DD-010, DD-011)
 
 ### Docker Sandbox Configuration Status

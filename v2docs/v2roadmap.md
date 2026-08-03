@@ -68,10 +68,10 @@
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
 - [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
-- [ ] Phase 1 deployment readiness: secure OpenClaw per-agent token injection is blocked pending a proxy/plugin or isolated-gateway architecture; macpro-linux testing is still required and issue #164 remains open
+- [ ] Phase 1 deployment readiness: `before_tool_call` plugin hook identified as the secure per-agent token injection path (issue #187); plugin implementation and macpro-linux verification remain pending, so issue #164 stays open until tested
 
 **Remaining open items:**
-- [ ] Resolve OpenClaw per-agent profile-token injection architecture and complete macpro-linux testing for issue #164
+- [ ] Implement and verify the `before_tool_call` plugin hook token injection (issue #187) and complete macpro-linux testing for issue #164
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — decided, implementation pending
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
@@ -503,7 +503,20 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 
 5. **OpenClaw SecretRef limitation** — Secret providers exist, but the pinned schema rejects per-agent `env` and nested `mcp` fields while root and MCP-server environments are shared. Config-only secure per-agent profile-token injection is therefore blocked.
 
-**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side; it does not solve secure per-agent token delivery, which remains blocked under issue #164.
+> **Phase 1.5 solution: `before_tool_call` plugin hook**
+>
+> Research into OpenClaw's plugin hook system ([docs.openclaw.ai/plugins/hooks](https://docs.openclaw.ai/plugins/hooks)) identified a first-party-supported mechanism that solves the per-agent token injection problem without a separate proxy server.
+>
+> An OpenClaw plugin registers a `before_tool_call` hook that:
+> 1. Matches `traderbot__*` tool names
+> 2. Reads `ctx.agentId` (host-derived, trusted, not model-controllable)
+> 3. Resolves the agent's token from a Vault-backed SecretRef via `resolveSecretRefValues` from `openclaw/plugin-sdk/secret-ref-runtime`
+> 4. Returns `{ params: { ...event.params, token: resolvedToken } }` to inject the token
+> 5. Blocks unrecognized agents (`{ block: true }`)
+>
+> The model never sees or controls the token. TraderBot's existing `resolver.py` → `TradingProfile` → `auth.py` pipeline still validates the injected token server-side.
+
+**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery will be handled by an OpenClaw `before_tool_call` plugin hook (planned in issue #187, Phase 1.5), not by static configuration. The plugin is not yet implemented; until it is deployed and tested on macpro-linux, the config artifacts are hardening references, not deployable token provisioning.
 
 **Architecture:**
 
@@ -2272,7 +2285,15 @@ Every TraderBot MCP tool accepts a `token` parameter. The workspace instructions
 require it in every call. The MCP server resolves the token, checks the full
 `traderbot__*` tool permission, and then enforces category access when the tool
 has a category. This server-side decision is implemented. Secure token delivery
-from OpenClaw is a separate unresolved deployment requirement.
+from OpenClaw is handled by the Phase 1.5 `before_tool_call` plugin hook, not by
+static configuration.
+
+> **Token delivery (Phase 1.5):** Per-agent tokens are injected at the OpenClaw
+> plugin layer via a `before_tool_call` hook, not passed by the model. The hook
+> reads `ctx.agentId` (trusted, host-derived), resolves the agent's token from
+> Vault, and rewrites the tool call params to include the `token` field. This
+> preserves TraderBot's server-side token-to-profile authorization as the
+> enforcement boundary.
 
 ```python
 # MCP tool definition

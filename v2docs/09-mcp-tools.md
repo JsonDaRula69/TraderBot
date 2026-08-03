@@ -5,7 +5,9 @@
 > **Implementation status:** the current Phase 1 development server exposes
 > only `health`, `auth_check`, `profile_list`, and `market_edge`. Later sections
 > describe the planned tool surface and are not claims of implementation,
-> deployment, CI, or on-target verification. Issue #164 remains open.
+> deployment, CI, or on-target verification. Per-agent token injection is
+> architecturally resolved in issue #187; the plugin hook is not yet implemented.
+> Issue #164 remains open until macpro-linux testing succeeds.
 
 ---
 
@@ -69,6 +71,12 @@ Execute current handler (future handlers add mode-aware routing)
   │
   ▼
 Return result
+
+> **Token injection (Phase 1.5):** The `token` parameter on all `traderbot__*`
+> tools is injected host-side by an OpenClaw `before_tool_call` plugin hook, not
+> provided by the model. The `token` field MUST be declared in each tool's
+> `inputSchema` or the MCP SDK silently strips it before dispatch. See
+> `04-security-and-auth.md` for the full architecture and critical constraints.
 ```
 
 ---
@@ -495,7 +503,8 @@ TraderBot then validates `token → tool permission → category` server-side.
 The remediation fragments do **not** inject `TRADERBOT_PROFILE_TOKEN`. Root
 `env.vars` is global and `mcp.servers.*.env` applies to the shared MCP process,
 so neither the legacy nor remediation config can securely deliver distinct
-agent tokens. Secure per-agent injection remains blocked pending an OpenClaw
-proxy/plugin that adds caller identity or tokens, or isolated gateway/MCP
-instances per agent. Neither config state is deployable until that architecture
-is selected and macpro-linux testing succeeds.
+agent tokens. Secure per-agent token injection will be implemented with a Phase
+1.5 OpenClaw `before_tool_call` plugin hook that resolves per-agent Vault
+SecretRefs and rewrites tool call params (see `04-security-and-auth.md`). That
+plugin is not yet in `HEAD`; neither config state is deployable until the hook
+is implemented and tested on macpro-linux.
