@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a22] — 2026-08-02
+
+### Added
+
+- docs: add comprehensive dev-liaison testing protocols for all v2 phases (docs/dev-liaison-testing-protocols.md).
+  Defines per-phase testing objectives, executable procedures (exact commands), metrics, deliverables, and
+  pass/fail criteria for Phase 1.1 (token injector), 1.5 (Infisical secrets), 2 (daemon/data pipeline/WS),
+  3 (database isolation), 4 (deploy wizard), 5 (Docker sandbox), 6 (weather toolkit), 7a (backtesting),
+  7b (paper/live trading + risk), 7c (lifecycle), 8 (self-improvement), and 9 (additional categories),
+  plus a shared general protocol for environment verification and reporting.
+
 ## [2.0.0a21] — 2026-08-02
 
 ### Changed
