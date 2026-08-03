@@ -42,3 +42,7 @@ select = ["E", "F", "I", "W", "PIE", "PYI", "UP"]
 markers = [
     "e2e: end-to-end tests that validate the full MCP transport chain",
 ]
+
+[tool.basedpyright]
+venvPath = "."
+venv = ".venv"

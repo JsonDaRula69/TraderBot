@@ -43,6 +43,7 @@ class TestMCPToolDefinitions:
         for td in TOOL_DEFINITIONS:
             schema = td.get("inputSchema", {})
             properties = schema.get("properties", {})
+            assert isinstance(properties, dict), f"Tool {td['name']} properties is not a dict"
             assert "token" in properties, f"Tool {td['name']} missing token parameter"
             # token is optional: the before_tool_call hook injects it host-side.
             # Server-side _check_permissions still rejects missing/None tokens.

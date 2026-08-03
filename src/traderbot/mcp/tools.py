@@ -101,7 +101,6 @@ async def traderbot__health(token: str, **kwargs: JsonValue) -> JsonObject:
     profile, agent_id, err = _check_permissions(token, "health", category=None)
     if err is not None:
         return err
-        return err
 
     try:
         _input = HealthInput.model_validate({"token": token, **kwargs})

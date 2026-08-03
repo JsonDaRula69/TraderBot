@@ -169,3 +169,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - fix: ruff E501 line-too-long in test_mcp_server.py comment (CI lint failure)
+
+## [2.0.0a27] — 2026-08-03
+
+### Fixed
+
+- fix: remove duplicate unreachable `return err` in tools.py (AFT warning)
+- fix: type-check `properties` with isinstance in test_mcp_server.py (AFT error)
+- fix: add basedpyright venv config to pyproject.toml (AFT import error)
