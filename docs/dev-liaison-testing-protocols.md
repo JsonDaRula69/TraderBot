@@ -148,13 +148,72 @@ Dev-liaison sends this template to Sisyphus for every phase:
 
 - OpenClaw gateway on macpro-linux with the plugin installed and registered:
   `plugins.load.paths` includes the `traderbot-token-injector` plugin path.
-- Vault SecretRef provider configured per `configs/openclaw/with-plugin.json`
-  (`secrets.providers.vault` with `type: exec`, `command: /usr/local/bin/openclaw-vault-resolver`).
-- Vault secrets present for each test agent: `traderbot/weather/token`,
-  `traderbot/sysadmin/token`, `traderbot/dev-liaison/token`.
+- **Gateway version**: the gateway binary must be `v2026.7.1-2` or newer —
+  verified 2026-08-03 that older gateways do not fire `before_tool_call` for
+  MCP tool calls. Check with `~/.npm-global/bin/openclaw --version` and compare
+  against the running process (`ps aux | grep openclaw | grep -v grep`).
+  Upgrade with `npm install -g openclaw@2026.7.1-2` if stale.
+- **Plugin manifest**: `package.json` must contain the `openclaw` metadata block
+  (`{"extensions": ["./src/index.ts"], "compat": {...}}`) and
+  `openclaw.plugin.json` must contain a `configSchema` field — without both the
+  gateway rejects the plugin at load. Both are committed at `f8b5065`.
+- **Token parameter optional**: the TraderBot MCP tool `inputSchema`s must
+  declare `token` as optional (`str | None = None`) — the SDK validates the
+  schema BEFORE the hook runs, so a required token field rejects the call
+  before injection. Committed at `f1aa518`.
+- Token provider configured per `configs/openclaw/with-plugin.json`. Two valid
+  providers:
+  - **Vault (production)**: `secrets.providers.vault` with `type: exec`,
+    `command: /usr/local/bin/openclaw-vault-resolver`.
+  - **Env (test fallback, no Vault)**: `secrets.providers.env` with the token
+    values in `TRADERBOT_WEATHER_TOKEN` / `TRADERBOT_SYSADMIN_TOKEN` /
+    `TRADERBOT_DEV_LIAISON_TOKEN` set in the gateway unit's environment
+    (systemd drop-in `Environment=` lines, then `daemon-reload` +
+    `restart`).
+- TraderBot profile tokens provisioned on the host via `LocalTokenStore`
+  (real-auth path, `TRADERBOT_USE_HARDCODED_AUTH=0`):
+  `~/.traderbot/tokens.json` exists with entries for `weather`, `sysadmin`,
+  `dev-liaison`.
 - TraderBot MCP server registered at root scope (`mcp.servers.traderbot`).
-- **Pre-condition (external)**: a functioning Vault instance with the three
-  agent tokens provisioned. This protocol does not create them.
+- **Pre-condition (external)**: either a functioning Vault instance with the
+  three agent tokens, or the env-provider fallback with the three env vars set.
+  This protocol does not create them.
+
+### Deployment (step 0 — run before any test)
+
+1. **Pull latest code** on macpro-linux:
+   ```bash
+   cd ~/worktrees/TraderBot/main
+   git stash push -m "local-testing"   # if local edits exist
+   git pull origin v2-main
+   git stash pop                       # restore any local edits
+   ```
+2. **Install Python deps** (rebuilds the `traderbot-mcp-server` entry point):
+   ```bash
+   cd ~/worktrees/TraderBot/main
+   ~/.local/bin/uv sync
+   ```
+3. **Install plugin deps**:
+   ```bash
+   cd ~/worktrees/TraderBot/main/plugins/traderbot-token-injector
+   npm install
+   ```
+4. **Verify gateway version** (must be v2026.7.1-2+):
+   ```bash
+   ~/.npm-global/bin/openclaw --version
+   ```
+5. **Ensure plugin is registered** in `plugins.load.paths` (the plugin entry
+   points at the worktree `src/index.ts`); verify with
+   `openclaw plugins inspect traderbot-token-injector` — status must be
+   `enabled`.
+6. **Provision tokens** (real-auth store) and **set env vars** (env provider) or
+   **provision Vault secrets** (Vault provider).
+7. **Restart the gateway** and confirm the plugin appears in the plugin list:
+   ```bash
+   systemctl --user restart openclaw-gateway
+   journalctl --user -u openclaw-gateway -n 50 | grep -i "plugins:"
+   ```
+   Observe: `traderbot-token-injector` appears in the loaded plugin list.
 
 ### Test procedures
 
@@ -215,6 +274,31 @@ Dev-liaison sends this template to Sisyphus for every phase:
    ```
    Observe: denied server-side (dev-liaison has no trade permission) even though
    its token resolves. This proves injection does not bypass `auth.py`.
+
+### Server-side-only test path (when the agent/model is unavailable)
+
+When the OpenClaw model provider is rate-limited or offline (e.g., ollama-cloud
+session limit resets at midnight), the entire server-side auth chain can still
+be verified directly over MCP stdio — this covers procedures 3, 4, 5's
+server-side half. Drive `traderbot-mcp-server` as a subprocess with
+`TRADERBOT_USE_HARDCODED_AUTH=0`:
+
+```python
+import json, subprocess
+proc = subprocess.Popen([".venv/bin/traderbot-mcp-server"],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    text=True, env={"TRADERBOT_USE_HARDCODED_AUTH": "0", "HOME": "/home/jsondarula", "PATH": "/usr/bin:/usr/local/bin"})
+# initialize -> notifications/initialized (NO readline — notifications get no response)
+# then tools/call for: auth_check with valid token (resolves profile),
+# auth_check with unknown token (fail-closed), profile_list (sysadmin tool),
+# health with no token (fail-closed at dispatch)
+```
+
+Verified 2026-08-03: `auth_check` with a weather token resolves the weather
+profile and categories; unknown tokens return `Invalid or expired profile
+token`; missing tokens fail closed at dispatch; `profile_list` succeeds for a
+weather token. Note: `market_edge` makes an external Kalshi call and can hang if
+the network is unavailable — scope it out of the local-only path.
 
 ### Metrics
 

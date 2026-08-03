@@ -69,9 +69,7 @@
 - [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
 - [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification remains pending
-
-**Remaining open items:**
-- [ ] Phase 1.1 deployment verification: complete macpro-linux on-target testing for issue #164 (plugin implementation is done; only deployment verification remains)
+- [x] Phase 1.1 deployment verification (2026-08-03): plugin deployed to macpro-linux, loaded in gateway (v2026.7.1-2), 11 TS + 113 Python tests pass on-target, real-auth server-side chain verified over MCP stdio (token resolution, category access, fail-closed). Two fixes required for gateway loading: plugin manifest `openclaw` metadata + `configSchema` (f8b5065), and token made optional in MCP tool schemas (f1aa518) so the SDK validates before the hook injects. E2E agent-level injection blocked until ollama-cloud rate limit resets (midnight); protocol updated with deployment step 0 + server-side-only test path
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — decided, implementation pending
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
