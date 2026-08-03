@@ -4,16 +4,7 @@
     "mode": "off"
   },
   "tools": {
-    "deny": [
-      "traderbot__trade",
-      "traderbot__scan",
-      "traderbot__analyze",
-      "traderbot__market_edge",
-      "traderbot__market_prices",
-      "traderbot__weather_*"
-    ],
-    "alsoAllow": [
-      "bundle-mcp",
+    "allow": [
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",
@@ -28,19 +19,14 @@
       "traderbot__ws_status",
       "traderbot__backfill",
       "traderbot__reference"
+    ],
+    "deny": [
+      "traderbot__trade",
+      "traderbot__scan",
+      "traderbot__analyze",
+      "traderbot__market_edge",
+      "traderbot__market_prices",
+      "traderbot__weather_*"
     ]
-  },
-  "env": {
-    "TRADERBOT_PROFILE_TOKEN": {
-      "secretRef": "traderbot_sysadmin_token"
-    }
-  },
-  "mcp": {
-    "servers": {
-      "traderbot": {
-        "command": "traderbot-mcp-server"
-      }
-    }
-  },
-  "_note": "SysAdmin runs unsandboxed (DD-036). server-side deny-list plus OpenClaw allow-list for defense-in-depth. Some allow-listed tools are future-phase, not yet implemented in Phase 1."
+  }
 }

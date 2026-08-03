@@ -4,12 +4,7 @@
     "mode": "all"
   },
   "tools": {
-    "deny": [
-      "group:runtime",
-      "group:fs"
-    ],
-    "alsoAllow": [
-      "bundle-mcp",
+    "allow": [
       "traderbot__weather_forecast_prob",
       "traderbot__weather_accuracy",
       "traderbot__weather_seasonal_context",
@@ -28,19 +23,18 @@
       "traderbot__news_context",
       "traderbot__data_points",
       "sessions_send"
-    ]
-  },
-  "env": {
-    "TRADERBOT_PROFILE_TOKEN": {
-      "secretRef": "traderbot_weather_token"
-    }
-  },
-  "mcp": {
-    "servers": {
-      "traderbot": {
-        "command": "traderbot-mcp-server"
+    ],
+    "deny": [
+      "group:runtime",
+      "group:fs"
+    ],
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "bundle-mcp",
+          "sessions_send"
+        ]
       }
     }
-  },
-  "_note": "weather toolkit tools are future-phase (Phase 6/#170), not yet implemented in Phase 1"
+  }
 }

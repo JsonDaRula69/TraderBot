@@ -1,51 +1,170 @@
-import json
 from pathlib import Path
-from typing import Final
+from typing import ClassVar, Final, Literal
 
-from traderbot.mcp.tools import TOOL_DEFINITIONS
-from traderbot.profiles import ProfileRegistry
+from pydantic import BaseModel, ConfigDict
 
 CONFIG_DIR: Final = Path(__file__).parents[1] / "configs" / "openclaw"
-CONFIG_PATHS: Final = {
+AGENT_CONFIG_PATHS: Final = {
     agent: CONFIG_DIR / f"{agent}.json" for agent in ("sysadmin", "dev-liaison", "weather")
 }
-
-
-def test_configs_are_valid_json() -> None:
-    for config_path in CONFIG_PATHS.values():
-        _ = json.loads(config_path.read_text(encoding="utf-8"))
-
-
-def test_configs_match_registry_list_profiles() -> None:
-    registry_profiles = ProfileRegistry().list_profiles()
-    current_tools = {f"traderbot__{str(definition['name'])}" for definition in TOOL_DEFINITIONS}
-    general_tools = {
-        "traderbot__health",
-        "traderbot__auth_check",
-        "traderbot__profile_list",
+GATEWAY_CONFIG_PATH: Final = CONFIG_DIR / "gateway.json"
+STRICT_AGENT_FIELDS: Final = frozenset({"id", "sandbox", "tools"})
+ROLE_TRADERBOT_TOOLS: Final[dict[str, frozenset[str]]] = {
+    "dev-liaison": frozenset(
+        {
+            "traderbot__reference",
+            "traderbot__health",
+            "traderbot__auth_check",
+            "traderbot__profile_list",
+        }
+    ),
+    "weather": frozenset(
+        {
+            "traderbot__weather_forecast_prob",
+            "traderbot__weather_accuracy",
+            "traderbot__weather_seasonal_context",
+            "traderbot__weather_decision_brief",
+            "traderbot__health",
+            "traderbot__auth_check",
+            "traderbot__profile_list",
+            "traderbot__market_edge",
+            "traderbot__market_prices",
+            "traderbot__trade",
+            "traderbot__positions",
+            "traderbot__heartbeat",
+            "traderbot__performance",
+            "traderbot__audit",
+            "traderbot__learnings",
+            "traderbot__news_context",
+            "traderbot__data_points",
+        }
+    ),
+}
+BUILT_IN_TOOLS: Final[dict[str, frozenset[str]]] = {
+    "dev-liaison": frozenset(
+        {
+            "sessions_spawn",
+            "sessions_send",
+            "sessions_yield",
+            "sessions_list",
+            "sessions_history",
+            "subagents",
+        }
+    ),
+    "weather": frozenset({"sessions_send"}),
+}
+SYSADMIN_DENIALS: Final = frozenset(
+    {
+        "traderbot__trade",
+        "traderbot__scan",
+        "traderbot__analyze",
+        "traderbot__market_edge",
+        "traderbot__market_prices",
+        "traderbot__weather_*",
     }
-
-    for agent, config_path in CONFIG_PATHS.items():
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        allowed = set(config["tools"]["alsoAllow"])
-        denied = set(config["tools"]["deny"])
-        effective_current = (allowed & current_tools) - denied
-        profile_permissions = set(registry_profiles[agent]["permissions"])
-        assert effective_current <= profile_permissions | general_tools
-
-    weather_config = json.loads(CONFIG_PATHS["weather"].read_text(encoding="utf-8"))
-    weather_allowed = set(weather_config["tools"]["alsoAllow"])
-    weather_extras = {"bundle-mcp", "sessions_send"}
-    assert weather_allowed - weather_extras == set(registry_profiles["weather"]["permissions"])
+)
 
 
-def test_secretref_names_correct() -> None:
-    expected = {
-        "sysadmin": "traderbot_sysadmin_token",
-        "dev-liaison": "traderbot_dev_liaison_token",
-        "weather": "traderbot_weather_token",
-    }
+class StrictConfigModel(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    for agent, secret_ref in expected.items():
-        config = json.loads(CONFIG_PATHS[agent].read_text(encoding="utf-8"))
-        assert config["env"]["TRADERBOT_PROFILE_TOKEN"]["secretRef"] == secret_ref
+
+class SandboxConfig(StrictConfigModel):
+    mode: Literal["off", "non-main", "all"]
+
+
+class SandboxToolPolicy(StrictConfigModel):
+    allow: list[str]
+
+
+class SandboxToolsConfig(StrictConfigModel):
+    tools: SandboxToolPolicy
+
+
+class AgentToolsConfig(StrictConfigModel):
+    allow: list[str]
+    deny: list[str]
+    sandbox: SandboxToolsConfig | None = None
+
+
+class AgentConfig(StrictConfigModel):
+    id: str
+    sandbox: SandboxConfig
+    tools: AgentToolsConfig
+
+
+class McpServerConfig(StrictConfigModel):
+    command: Literal["traderbot-mcp-server"]
+    transport: Literal["stdio"]
+
+
+class McpServersConfig(StrictConfigModel):
+    traderbot: McpServerConfig
+
+
+class McpConfig(StrictConfigModel):
+    servers: McpServersConfig
+
+
+class GatewayConfig(StrictConfigModel):
+    mcp: McpConfig
+
+
+def load_agent(path: Path) -> AgentConfig:
+    return AgentConfig.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def test_agent_fragments_reject_nested_mcp_and_other_unknown_fields() -> None:
+    for config_path in AGENT_CONFIG_PATHS.values():
+        config = load_agent(config_path)
+
+        assert config.model_fields_set == STRICT_AGENT_FIELDS
+
+
+def test_agent_policies_use_restrictive_allow_instead_of_additive_also_allow() -> None:
+    for config_path in AGENT_CONFIG_PATHS.values():
+        allowed = load_agent(config_path).tools.allow
+
+        assert allowed
+        assert "*" not in allowed
+        assert "group:plugins" not in allowed
+        assert "bundle-mcp" not in allowed
+
+
+def test_agent_allowlists_match_role_permissions() -> None:
+    for agent in ("dev-liaison", "weather"):
+        expected = ROLE_TRADERBOT_TOOLS[agent] | BUILT_IN_TOOLS[agent]
+
+        assert set(load_agent(AGENT_CONFIG_PATHS[agent]).tools.allow) == expected
+
+
+def test_sysadmin_stays_unsandboxed_and_denies_trading_tools() -> None:
+    config = load_agent(AGENT_CONFIG_PATHS["sysadmin"])
+
+    assert config.sandbox.mode == "off"
+    assert set(config.tools.deny) == SYSADMIN_DENIALS
+
+
+def test_dev_liaison_has_no_host_runtime_or_filesystem_access() -> None:
+    config = load_agent(AGENT_CONFIG_PATHS["dev-liaison"])
+
+    assert config.sandbox.mode == "all"
+    assert {"group:runtime", "group:fs"} <= set(config.tools.deny)
+
+
+def test_weather_sandbox_has_second_mcp_tool_gate() -> None:
+    config = load_agent(AGENT_CONFIG_PATHS["weather"])
+
+    assert config.sandbox.mode == "all"
+    assert {"group:runtime", "group:fs"} <= set(config.tools.deny)
+    assert config.tools.sandbox is not None
+    assert "bundle-mcp" in config.tools.sandbox.tools.allow
+
+
+def test_gateway_registers_traderbot_mcp_server_once() -> None:
+    gateway = GatewayConfig.model_validate_json(GATEWAY_CONFIG_PATH.read_text(encoding="utf-8"))
+
+    assert gateway.model_fields_set == {"mcp"}
+    assert gateway.mcp.servers.model_fields_set == {"traderbot"}
+    assert gateway.mcp.servers.traderbot.command == "traderbot-mcp-server"
+    assert gateway.mcp.servers.traderbot.transport == "stdio"

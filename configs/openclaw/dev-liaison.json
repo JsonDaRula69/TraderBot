@@ -1,36 +1,37 @@
 {
   "id": "dev-liaison",
   "sandbox": {
-    "mode": "off"
+    "mode": "all"
   },
   "tools": {
-    "deny": [],
-    "alsoAllow": [
-      "bundle-mcp",
+    "allow": [
       "traderbot__reference",
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",
-      "traderbot__experiment",
       "sessions_spawn",
       "sessions_send",
       "sessions_yield",
       "sessions_list",
       "sessions_history",
       "subagents"
-    ]
-  },
-  "env": {
-    "TRADERBOT_PROFILE_TOKEN": {
-      "secretRef": "traderbot_dev_liaison_token"
-    }
-  },
-  "mcp": {
-    "servers": {
-      "traderbot": {
-        "command": "traderbot-mcp-server"
+    ],
+    "deny": [
+      "group:runtime",
+      "group:fs"
+    ],
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "bundle-mcp",
+          "sessions_spawn",
+          "sessions_send",
+          "sessions_yield",
+          "sessions_list",
+          "sessions_history",
+          "subagents"
+        ]
       }
     }
-  },
-  "_note": "reference and sessions_* tools are future-phase, not yet implemented in Phase 1"
+  }
 }
