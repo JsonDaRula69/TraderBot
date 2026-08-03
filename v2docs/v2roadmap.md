@@ -4638,10 +4638,11 @@ This is the single bootstrap secret: `INFISICAL_TOKEN` → TraderBot authenticat
 
 #### 6. Agent profile token provisioning (unchanged from DD-026/037)
 
-> **Blocked design requirement:** The provisioning sequence below states the
-> intended outcome, but the shown config-only injection is not valid for the
-> pinned OpenClaw schema. Secure per-agent injection requires a proxy/plugin or
-> isolated gateway/MCP architecture.
+> **Resolved:** The `before_tool_call` plugin hook (Phase 1.1, issue #187
+> closed) now handles per-agent token injection host-side. The config-only
+> injection sequence shown below is replaced by the plugin, which resolves
+> per-agent tokens from Infisical-backed SecretRefs and injects them into
+> tool call params. The OpenClaw config does not need per-agent env fields.
 
 The token provisioning flow is identical to the 1Password design, just using Infisical as the backend:
 
