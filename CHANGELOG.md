@@ -163,3 +163,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - feat: add profiles/tokens.py with TokenStore ABC and LocalTokenStore — TokenStore ABC and LocalTokenStore provide 256-bit profile-token persistence.
+
+## [2.0.0a26] — 2026-08-03
+
+### Fixed
+
+- fix: ruff E501 line-too-long in test_mcp_server.py comment (CI lint failure)

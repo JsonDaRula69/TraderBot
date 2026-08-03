@@ -44,7 +44,7 @@ class TestMCPToolDefinitions:
             schema = td.get("inputSchema", {})
             properties = schema.get("properties", {})
             assert "token" in properties, f"Tool {td['name']} missing token parameter"
-            # token is optional in the schema (Phase 1.1: before_tool_call hook injects it host-side).
+            # token is optional: the before_tool_call hook injects it host-side.
             # Server-side _check_permissions still rejects missing/None tokens.
 
 
