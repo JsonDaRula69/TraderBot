@@ -94,6 +94,16 @@ class TestMCPEndToEnd:
 
         self._round_trip(scenario)
 
+    @pytest.mark.parametrize("token", (["not", "a", "string"], {"nested": "token"}, None))
+    def test_jsonrpc_call_tool_non_string_token_is_invalid_input(self, token):
+        async def scenario(session):
+            result = await session.call_tool("health", {"token": token})
+            assert result.is_error is True
+            text = json.loads(result.content[0].text)
+            assert text["error"].startswith("Invalid input: ")
+
+        self._round_trip(scenario)
+
     def test_jsonrpc_call_tool_unknown_tool(self):
         """An unknown tool name returns an error result over the transport."""
 
