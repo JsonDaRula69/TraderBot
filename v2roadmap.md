@@ -68,10 +68,10 @@
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
 - [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
-- [ ] Phase 1 deployment readiness: `before_tool_call` plugin hook identified as the secure per-agent token injection path (issue #187); plugin implementation and macpro-linux verification remain pending, so issue #164 stays open until tested
+- [ ] Phase 1.1 deployment readiness: `before_tool_call` plugin hook token injection — plan written at `.omo/plans/phase1-1-token-injector.md`, implementation in progress (issue #187); plugin implementation and macpro-linux verification remain pending, so issue #164 stays open until tested
 
 **Remaining open items:**
-- [ ] Implement and verify the `before_tool_call` plugin hook token injection (issue #187) and complete macpro-linux testing for issue #164
+- [ ] Phase 1.1 implementation: implement and verify the `before_tool_call` plugin hook token injection (issue #187) and complete macpro-linux testing for issue #164
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — decided, implementation pending
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
@@ -503,7 +503,7 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 
 5. **OpenClaw SecretRef limitation** — Secret providers exist, but the pinned schema rejects per-agent `env` and nested `mcp` fields while root and MCP-server environments are shared. Config-only secure per-agent profile-token injection is therefore blocked.
 
-> **Phase 1.5 solution: `before_tool_call` plugin hook**
+> **Phase 1.1 solution: `before_tool_call` plugin hook**
 >
 > Research into OpenClaw's plugin hook system ([docs.openclaw.ai/plugins/hooks](https://docs.openclaw.ai/plugins/hooks)) identified a first-party-supported mechanism that solves the per-agent token injection problem without a separate proxy server.
 >
@@ -516,7 +516,7 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 >
 > The model never sees or controls the token. TraderBot's existing `resolver.py` → `TradingProfile` → `auth.py` pipeline still validates the injected token server-side.
 
-**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery will be handled by an OpenClaw `before_tool_call` plugin hook (planned in issue #187, Phase 1.5), not by static configuration. The plugin is not yet implemented; until it is deployed and tested on macpro-linux, the config artifacts are hardening references, not deployable token provisioning.
+**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery will be handled by an OpenClaw `before_tool_call` plugin hook (planned in issue #187, Phase 1.1), not by static configuration. Implementation plan: `.omo/plans/phase1-1-token-injector.md`. The plugin is not yet implemented; until it is deployed and tested on macpro-linux, the config artifacts are hardening references, not deployable token provisioning.
 
 **Architecture:**
 

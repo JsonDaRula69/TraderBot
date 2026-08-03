@@ -7,9 +7,10 @@
 > permission and category enforcement, strict MCP inputs, and a hardened local
 > profile-token store. Infisical, provider credential validation, automatic
 > rotation, and deploy integration remain planned for Phase 1.5. Secure
-> per-agent token injection through OpenClaw is blocked pending a proxy/plugin
-> or isolated-gateway architecture; issue #164 remains open until that design
-> and macpro-linux testing are complete.
+> per-agent token injection through OpenClaw is blocked pending the Phase 1.1
+> `before_tool_call` plugin hook, an OpenClaw proxy/plugin, or isolated-gateway
+> architecture; issue #164 remains open until that design and macpro-linux
+> testing are complete. Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
 
 ---
 
@@ -226,9 +227,11 @@ token and `_meta.agent_id`.
 
 ## Per-agent token injection via OpenClaw plugin hook
 
-> **Phase 1.5 design — not implemented in current `HEAD`.** This section
+> **Phase 1.1 design — not implemented in current `HEAD`.** This section
 > documents the verified architecture for secure per-agent token injection using
 > OpenClaw's first-party `before_tool_call` plugin hook.
+> 
+> Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
 
 ### Architecture
 

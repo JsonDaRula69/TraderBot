@@ -33,7 +33,8 @@ The agent fragments in `configs/openclaw/` remove the legacy unsupported per-age
 The MCP server uses `TRADERBOT_USE_HARDCODED_AUTH` env var to select auth mode.
 Default (any value other than "0") uses hardcoded Phase 0 tokens.
 `TRADERBOT_USE_HARDCODED_AUTH=0` enables real auth via `TokenStore` (Phase 1) or
-Infisical (Phase 1.5).
+Infisical (Phase 1.5). For the Phase 1.1 `before_tool_call` token injection hook,
+see `04-security-and-auth.md` and `.omo/plans/phase1-1-token-injector.md`.
 
 All tools accept a `token` parameter for authentication and identity
 resolution. The MCP server resolves `token → profile`, checks the tool
@@ -72,11 +73,12 @@ Execute current handler (future handlers add mode-aware routing)
   ▼
 Return result
 
-> **Token injection (Phase 1.5):** The `token` parameter on all `traderbot__*`
+> **Token injection (Phase 1.1):** The `token` parameter on all `traderbot__*`
 > tools is injected host-side by an OpenClaw `before_tool_call` plugin hook, not
 > provided by the model. The `token` field MUST be declared in each tool's
 > `inputSchema` or the MCP SDK silently strips it before dispatch. See
-> `04-security-and-auth.md` for the full architecture and critical constraints.
+> `04-security-and-auth.md` and `.omo/plans/phase1-1-token-injector.md` for the
+> full architecture, implementation plan, and critical constraints.
 ```
 
 ---
@@ -504,7 +506,7 @@ The remediation fragments do **not** inject `TRADERBOT_PROFILE_TOKEN`. Root
 `env.vars` is global and `mcp.servers.*.env` applies to the shared MCP process,
 so neither the legacy nor remediation config can securely deliver distinct
 agent tokens. Secure per-agent token injection will be implemented with a Phase
-1.5 OpenClaw `before_tool_call` plugin hook that resolves per-agent Vault
-SecretRefs and rewrites tool call params (see `04-security-and-auth.md`). That
-plugin is not yet in `HEAD`; neither config state is deployable until the hook
+1.1 OpenClaw `before_tool_call` plugin hook that resolves per-agent Vault
+SecretRefs and rewrites tool call params (see `04-security-and-auth.md` and
+`.omo/plans/phase1-1-token-injector.md`). That plugin is not yet in `HEAD`; neither config state is deployable until the hook
 is implemented and tested on macpro-linux.

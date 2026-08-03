@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a18] — 2026-08-02
+
+### Changed
+
+- docs: rename token injection phase from Phase 1.5 to Phase 1.1 across roadmap, security, and MCP docs; reference implementation plan at `.omo/plans/phase1-1-token-injector.md`; update issue #187 and issue #164 comments.
+
 ## [2.0.0a17] — 2026-08-02
 
 ### Added
