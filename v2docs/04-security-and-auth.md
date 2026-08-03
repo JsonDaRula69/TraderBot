@@ -7,10 +7,10 @@
 > permission and category enforcement, strict MCP inputs, and a hardened local
 > profile-token store. Infisical, provider credential validation, automatic
 > rotation, and deploy integration remain planned for Phase 1.5. Secure
-> per-agent token injection through OpenClaw is blocked pending the Phase 1.1
-> `before_tool_call` plugin hook, an OpenClaw proxy/plugin, or isolated-gateway
-> architecture; issue #164 remains open until that design and macpro-linux
-> testing are complete. Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
+> per-agent token injection through OpenClaw is deployment-verified via the
+> Phase 1.1 `before_tool_call` plugin hook (issue #187 closed; issue #164
+> closed). Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
+> Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
 
 ---
 
@@ -136,9 +136,7 @@ dev-liaison_token       → resolves to dev-liaison profile
 4. Token is passed to agent via `TRADERBOT_PROFILE_TOKEN` environment variable
 5. When agent calls an MCP tool, TraderBot MCP server resolves the token to a profile
 
-This flow is not currently representable by the pinned OpenClaw configuration schema. Agent entries are strict and do not accept `env` or `mcp`; root environment values are global, and `mcp.servers.*.env` is shared by the one server process. The committed config remediation removes the invalid agent fields and intentionally omits token injection. Secure per-agent delivery
-remains blocked until TraderBot uses an OpenClaw proxy/plugin or isolated
-gateway/MCP instances per agent.
+This flow is not currently representable by the pinned OpenClaw configuration schema. Agent entries are strict and do not accept `env` or `mcp`; root environment values are global, and `mcp.servers.*.env` is shared by the one server process. The committed config remediation removes the invalid agent fields. Secure per-agent delivery is now handled by the `before_tool_call` plugin hook (Phase 1.1, issue #187 closed), which injects per-agent tokens host-side without requiring schema-invalid config fields.
 
 ### Planned Token Rotation (4-hour cycle)
 
