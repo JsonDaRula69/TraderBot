@@ -38,25 +38,25 @@ class ToolDefinition(TypedDict):
 class HealthInput(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    token: str
+    token: str | None = None
 
 
 class AuthCheckInput(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    token: str
+    token: str | None = None
 
 
 class ProfileListInput(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    token: str
+    token: str | None = None
 
 
 class MarketEdgeInput(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    token: str
+    token: str | None = None
     category: str
     ticker: str
 

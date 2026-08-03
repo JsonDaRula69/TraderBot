@@ -39,13 +39,13 @@ class TestMCPToolDefinitions:
         for td in TOOL_DEFINITIONS:
             assert len(td.get("description", "")) > 0, f"Tool {td['name']} has no description"
 
-    def test_each_tool_has_required_token_param(self):
+    def test_each_tool_has_token_param(self):
         for td in TOOL_DEFINITIONS:
             schema = td.get("inputSchema", {})
             properties = schema.get("properties", {})
-            required = schema.get("required", [])
             assert "token" in properties, f"Tool {td['name']} missing token parameter"
-            assert "token" in required, f"Tool {td['name']} token not marked as required"
+            # token is optional in the schema (Phase 1.1: before_tool_call hook injects it host-side).
+            # Server-side _check_permissions still rejects missing/None tokens.
 
 
 class TestMCPServerApp:
