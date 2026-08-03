@@ -80,6 +80,27 @@
 - [x] Secrets management (Infisical) — DD-037
 - [x] Self-improvement framework — DD-038 (Round 5 defined, debate integration, sub-agent config, TEMPLATE.md mods)
 
+### Dev-Liaison Testing Protocols
+
+Each development phase has a detailed testing protocol designed for partnership with the dev-liaison agent on macpro-linux. The full protocols are at `docs/dev-liaison-testing-protocols.md`.
+
+| Phase | Issue | Testing Focus | Key Metrics |
+|-------|------|--------------|------------|
+| 1.1 | #187 | Token injector plugin loads, tokens inject, fail-closed works | 11 TS tests pass, 0 token leaks, fail-closed on unknown agent |
+| 1.5 | #165 | Infisical secrets resolution, token rotation, fallback chain | Rotation < 15min, fallback chain works, 0 plaintext secrets |
+| 2 | #166 | Always-on service, WebSocket, data pipeline resilience | Service uptime 24h, WS reconnect < 5s, 0 REST polling |
+| 3 | #167 | Database isolation, per-agent SQLite, ChromaDB filtering | 0 cross-agent reads, migration exit 0, < 10ms cached read |
+| 4 | #168 | pipx install, deploy wizard, service registration | pipx install succeeds, all 8 steps complete, services registered |
+| 5 | #169 | Docker sandbox builds, isolation, bind mounts | Sandbox builds, no host file access, bind mounts correct |
+| 6 | #170 | Weather toolkit tools, category isolation enforcement | Weather tools respond, non-weather tools denied, category filter works |
+| 7a | #171 | Backtesting engine, SimulationClock, edge filtering | Backtest completes, clock advances, edge filter reduces runtime |
+| 7b | #172 | Paper trading, risk limits, circuit breaker, promotion | Paper fills simulated, risk limits enforced, breaker triggers on breach |
+| 7c | #173 | Mode transitions, demotion, suspension, recovery | Transitions logged, demotion on metrics drop, recovery via backtest |
+| 8 | #174 | Debate cycle, learning promotion, experiment harness | 5-round cycle completes, learnings promote at ≥3, experiments run |
+| 9 | #175 | New category agents deploy, isolate, and trade | New agents sandboxed, category isolation, tools available |
+
+Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphus using the standard report format defined in the protocols document.
+
 ### Pending Discussion Topics
 
 - [ ] ~~**Update pipeline**~~: Deferred until roadmap is complete
