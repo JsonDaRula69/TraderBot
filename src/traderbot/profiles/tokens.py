@@ -18,11 +18,44 @@ import json
 import logging
 import os
 import secrets
-import sys
+import tempfile
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar, TypedDict, override
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 logger = logging.getLogger(__name__)
+
+
+class TokenListEntry(TypedDict):
+    token: str
+    profile: str
+    agent_id: str
+
+
+class PersistedTokenEntry(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    profile: str
+    agent_id: str
+
+
+class PersistedTokenPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    tokens: dict[str, PersistedTokenEntry]
+
+
+@dataclass(frozen=True, slots=True)
+class TokenNotFoundError(KeyError):
+    profile_name: str
+    agent_id: str
+
+    @override
+    def __str__(self) -> str:
+        return f"No token for profile={self.profile_name!r} agent_id={self.agent_id!r}"
 
 
 class TokenStore(ABC):
@@ -54,7 +87,7 @@ class TokenStore(ABC):
         """
 
     @abstractmethod
-    def list_tokens(self) -> list[dict]:
+    def list_tokens(self) -> list[TokenListEntry]:
         """Return all tokens as ``[{"token", "profile", "agent_id"}, ...]``."""
 
 
@@ -76,91 +109,90 @@ class LocalTokenStore(TokenStore):
         """Initialize the store rooted at ``base_path`` (default ``~/.traderbot``)."""
         if base_path is None:
             base_path = Path.home() / ".traderbot"
-        self.base_path = Path(base_path)
-        self.token_file = self.base_path / "tokens.json"
+        self.base_path: Path = Path(base_path)
+        self.token_file: Path = self.base_path / "tokens.json"
 
-    def _load(self) -> dict:
-        """Read the token file into a dict, tolerant of a missing or corrupt file.
+    def _load(self) -> PersistedTokenPayload:
+        """Read and validate the token file, tolerating missing or corrupt data.
 
         Returns:
-            The parsed store payload, or ``{"tokens": {}}`` when the file is
+            The parsed store payload, or an empty payload when the file is
             missing or corrupt. Corrupt files are logged as warnings so callers
             can retry without crashing.
         """
         try:
-            with self.token_file.open("r", encoding="utf-8") as fh:
-                data = json.load(fh)
+            contents = self.token_file.read_text(encoding="utf-8")
+            return PersistedTokenPayload.model_validate_json(contents, strict=True)
         except FileNotFoundError:
-            return {"tokens": {}}
-        except (json.JSONDecodeError, OSError):
+            return PersistedTokenPayload(tokens={})
+        except (OSError, UnicodeDecodeError, ValidationError):
             logger.warning("Token store %s is unreadable; treating as empty", self.token_file)
-            return {"tokens": {}}
-        if not isinstance(data, dict):
-            logger.warning(
-                "Token store %s has unexpected shape; treating as empty", self.token_file
-            )
-            return {"tokens": {}}
-        data.setdefault("tokens", {})
-        return data
+            return PersistedTokenPayload(tokens={})
 
-    def _save(self, data: dict) -> None:
+    def _save(self, data: PersistedTokenPayload) -> None:
         """Write ``data`` atomically to the token file.
 
-        Writes to a temp file in the same directory, then ``os.replace``s it
-        into place (cross-platform atomic replace). On POSIX the file is chmod
-        0600. Write failures propagate as :class:`OSError` — they are never
-        swallowed, since silent persistence failure is a security risk.
+        Securely creates a mode-0600 temp file in the same directory, then
+        ``os.replace``s it into place. Write failures propagate as
+        :class:`OSError` and the temp file is always removed.
         """
         self.base_path.mkdir(parents=True, exist_ok=True, mode=0o755)
 
-        tmp = self.token_file.with_name(f"{self.token_file.name}.{os.getpid()}.tmp")
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=f".{self.token_file.name}.",
+            suffix=".tmp",
+            dir=self.base_path,
+            delete=False,
+        )
+        tmp = Path(temp_file.name)
         try:
-            with tmp.open("w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=2)
-                fh.write("\n")
-            if sys.platform != "win32":
-                os.chmod(tmp, 0o600)
+            with temp_file as fh:
+                json.dump(data.model_dump(mode="json"), fh, indent=2)
+                _ = fh.write("\n")
             os.replace(tmp, self.token_file)
-        except BaseException:
+        finally:
             tmp.unlink(missing_ok=True)
-            raise
 
+    @override
     def store_token(self, profile_name: str, agent_id: str, token: str) -> None:
         data = self._load()
-        data["tokens"][token] = {"profile": profile_name, "agent_id": agent_id}
-        self._save(data)
+        tokens = dict(data.tokens)
+        tokens[token] = PersistedTokenEntry(profile=profile_name, agent_id=agent_id)
+        self._save(PersistedTokenPayload(tokens=tokens))
 
+    @override
     def resolve_token(self, token: str) -> tuple[str, str] | None:
-        entry = self._load()["tokens"].get(token)
+        entry = self._load().tokens.get(token)
         if entry is None:
             return None
-        return entry["profile"], entry["agent_id"]
+        return entry.profile, entry.agent_id
 
+    @override
     def rotate_token(self, profile_name: str, agent_id: str) -> str:
         data = self._load()
-        tokens = data["tokens"]
+        matching_tokens = [
+            token
+            for token, entry in data.tokens.items()
+            if entry.profile == profile_name and entry.agent_id == agent_id
+        ]
+        if not matching_tokens:
+            raise TokenNotFoundError(profile_name=profile_name, agent_id=agent_id)
 
-        old_token = next(
-            (
-                tok
-                for tok, entry in tokens.items()
-                if entry.get("profile") == profile_name and entry.get("agent_id") == agent_id
-            ),
-            None,
-        )
-        if old_token is None:
-            raise KeyError(f"No token for profile={profile_name!r} agent_id={agent_id!r}")
-
+        tokens = dict(data.tokens)
+        for old_token in matching_tokens:
+            del tokens[old_token]
         new_token = generate_token()
-        del tokens[old_token]
-        tokens[new_token] = {"profile": profile_name, "agent_id": agent_id}
-        self._save(data)
+        tokens[new_token] = PersistedTokenEntry(profile=profile_name, agent_id=agent_id)
+        self._save(PersistedTokenPayload(tokens=tokens))
         return new_token
 
-    def list_tokens(self) -> list[dict]:
+    @override
+    def list_tokens(self) -> list[TokenListEntry]:
         return [
-            {"token": tok, "profile": entry["profile"], "agent_id": entry["agent_id"]}
-            for tok, entry in self._load()["tokens"].items()
+            {"token": token, "profile": entry.profile, "agent_id": entry.agent_id}
+            for token, entry in self._load().tokens.items()
         ]
 
 
