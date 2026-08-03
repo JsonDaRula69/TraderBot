@@ -6,8 +6,9 @@
 > only `health`, `auth_check`, `profile_list`, and `market_edge`. Later sections
 > describe the planned tool surface and are not claims of implementation,
 > deployment, CI, or on-target verification. Per-agent token injection is
-> architecturally resolved in issue #187; the plugin hook code is complete and locally tested (commit 5b5088e); not yet deployed to a real OpenClaw gateway.
-> Issue #164 remains open until macpro-linux testing succeeds.
+> architecturally resolved in issue #187 and **deployment-verified on macpro-linux**
+> (2026-08-03, commits `5b5088e`/`f8b5065`/`f1aa518`/`0dbc981`). Issue #187 tracks
+> the remaining Vault provider integration (Phase 1.5).
 
 ---
 
@@ -33,8 +34,11 @@ The agent fragments in `configs/openclaw/` remove the legacy unsupported per-age
 The MCP server uses `TRADERBOT_USE_HARDCODED_AUTH` env var to select auth mode.
 Default (any value other than "0") uses hardcoded Phase 0 tokens.
 `TRADERBOT_USE_HARDCODED_AUTH=0` enables real auth via `TokenStore` (Phase 1) or
-Infisical (Phase 1.5). For the Phase 1.1 `before_tool_call` token injection hook,
-see `04-security-and-auth.md` and `.omo/plans/phase1-1-token-injector.md`.
+Infisical (Phase 1.5). **The MCP server subprocess does NOT inherit the gateway's
+systemd drop-in env vars** — set `TRADERBOT_USE_HARDCODED_AUTH=0` explicitly in
+`mcp.servers.traderbot.env` in `openclaw.json` (commit `0dbc981`). For the Phase 1.1
+`before_tool_call` token injection hook, see `04-security-and-auth.md` and
+`.omo/plans/phase1-1-token-injector.md`.
 
 All tools accept a `token` parameter for authentication and identity
 resolution. The MCP server resolves `token → profile`, checks the tool
@@ -76,9 +80,12 @@ Return result
 > **Token injection (Phase 1.1):** The `token` parameter on all `traderbot__*`
 > tools is injected host-side by an OpenClaw `before_tool_call` plugin hook, not
 > provided by the model. The `token` field MUST be declared in each tool's
-> `inputSchema` or the MCP SDK silently strips it before dispatch. See
-> `04-security-and-auth.md` and `.omo/plans/phase1-1-token-injector.md` for the
-> full architecture, implementation plan, and critical constraints.
+> `inputSchema` **as optional** (`str | None = None`) — the SDK validates the
+> schema BEFORE the hook runs, so a required token field rejects the call
+> before injection (commit `f1aa518`). Server-side `_check_permissions` still
+> rejects missing/None tokens. See `04-security-and-auth.md` and
+> `.omo/plans/phase1-1-token-injector.md` for the full architecture,
+> implementation plan, and critical constraints.
 ```
 
 ---

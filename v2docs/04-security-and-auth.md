@@ -227,10 +227,13 @@ token and `_meta.agent_id`.
 
 ## Per-agent token injection via OpenClaw plugin hook
 
-> **Phase 1.1 — code complete and locally tested (commit 5b5088e); not yet deployed or on-target verified.** This section
-> documents the verified architecture for secure per-agent token injection using
-> OpenClaw's first-party `before_tool_call` plugin hook.
-> 
+> **Phase 1.1 — deployment verified on macpro-linux (2026-08-03).** E2E
+> token injection confirmed: plugin loads, hook fires at priority 100, token
+> resolved from env provider, MCP server resolves the weather profile.
+> Three fixes were required during deployment testing (see Constraints below).
+> This section documents the verified architecture for secure per-agent token
+> injection using OpenClaw's first-party `before_tool_call` plugin hook.
+>
 > Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
 
 ### Architecture
@@ -261,13 +264,17 @@ extra `token` field. Unrecognized agents fail closed.
 
 ### Critical constraints
 
-All verified against OpenClaw source at commit `cbd4b8de`:
+All verified against OpenClaw source at commit `cbd4b8de` and confirmed
+on-target on macpro-linux (2026-08-03, gateway v2026.7.1-2):
 
 1. **`params` is a full replace** — always return `{ ...event.params, token }`, never `{ token }` alone
-2. **`token` must be declared in the tool's `inputSchema`** — or the MCP SDK silently strips it
+2. **`token` must be declared in the tool's `inputSchema`** — or the MCP SDK silently strips it. **Must be optional** (`str | None = None`): the SDK validates the schema BEFORE the hook runs, so a required token field rejects the call before injection (commit `f1aa518`).
 3. **Run at high priority** (e.g., `priority: 100`) — if another hook requests approval first, `freezeParamsForDifferentPlugin` can silently discard injected params
 4. **`ctx.agentId` is conditional** — fail closed when absent
 5. **Codex app-server native relay cannot rewrite params** — only blocking. Verify TraderBot tools aren't consumed exclusively through that path
+6. **Gateway must be v2026.7.1-2+** for `before_tool_call` to fire on MCP tool calls — older gateways silently skip the hook (commit `f8b5065`)
+7. **Plugin manifest requires `openclaw` metadata + `configSchema`** — `package.json` must contain the `openclaw` block (`{"extensions": ["./src/index.ts"], "compat": {...}}`) and `openclaw.plugin.json` must contain a `configSchema` field, or the gateway rejects the plugin at load (commit `f8b5065`)
+8. **MCP server subprocess does NOT inherit gateway systemd drop-in env vars** — `TRADERBOT_USE_HARDCODED_AUTH=0` must be set explicitly in `mcp.servers.traderbot.env` in `openclaw.json`, not just the gateway's systemd unit (commit `0dbc981`). Without it the subprocess runs in hardcoded mode and rejects real tokens.
 
 ### References
 

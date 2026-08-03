@@ -18,6 +18,18 @@ This file defines conventions for AI-assisted development of this project. All A
 
 The **v2 decision index** (DD-001 through DD-038) in `v2docs/10-decision-index.md` is the canonical record of all design decisions. Superseded decisions (DD-012, DD-014, DD-024, DD-026) are no longer valid. All implementation must conform to active decisions.
 
+## Documentation Sync (Standing Order)
+
+**Before every `git push`, update all relevant documentation to reflect the changes in that push.** This is a standing order that applies to every push, every time — not just when the user asks.
+
+1. **`v2docs/`** — update any section affected by the changes (architecture, security, tools, deploy, etc.). Keep `v2docs/v2roadmap.md` synced with `v2roadmap.md` (they must be byte-identical).
+2. **`v2roadmap.md`** — update the progress tracking section if a milestone, phase, or decision status changed.
+3. **GitHub issues** — post a comment on any issue whose status, findings, or blockers are affected by the changes. Link the commit SHA.
+4. **`CHANGELOG.md`** — add a one-liner under the current version describing the user-visible impact.
+5. **`docs/`** — update any feature/module docs that reference the changed code.
+
+The update must happen BEFORE the push, not after. If documentation cannot be completed before the push, hold the push until it can. Never push code whose documentation is stale.
+
 ## Versioning Scheme
 
 - **Format**: `MAJOR.MINOR.PATCH` (e.g. `0.15.00`)

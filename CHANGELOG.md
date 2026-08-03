@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a25] — 2026-08-03
+
+### Fixed
+
+- fix: set `TRADERBOT_USE_HARDCODED_AUTH=0` in MCP server env config — subprocess does not inherit gateway systemd drop-in env vars (0dbc981)
+
+### Changed
+
+- docs: update v2docs/04-security-and-auth.md and 09-mcp-tools.md with Phase 1.1 deployment findings: token optional in schema, gateway version requirement, manifest requirements, MCP server env inheritance
+- docs: mark Phase 1.1 deployment verification complete in v2roadmap
+- docs: add standing documentation-sync rule to AGENTS.md
+
+## [2.0.0a24] — 2026-08-03
+
+### Fixed
+
+- fix: make `token` optional in MCP tool schemas (`str | None = None`) — SDK validates schema BEFORE the before_tool_call hook runs, so a required token field rejects the call before injection (f1aa518)
+
 ## [2.0.0a23] — 2026-08-03
 
 ### Fixed
