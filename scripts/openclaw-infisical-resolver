@@ -60,7 +60,7 @@ class ResolverRequest(BaseModel):
 class InfisicalCredentials(BaseModel):
     """``~/.traderbot/infisical-credentials.json`` contents (strict)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     host: str
     projectId: str

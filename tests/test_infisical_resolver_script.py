@@ -174,11 +174,12 @@ class TestValidResolution:
     def test_multiple_ids_all_resolved(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        factory = FakeClientFactory(
-            {"weather_token": "tok-123", "kalshi_api_key": "key-abc"}
-        )
-        request = {"protocolVersion": 1, "provider": "infisical",
-                   "ids": ["weather_token", "kalshi_api_key"]}
+        factory = FakeClientFactory({"weather_token": "tok-123", "kalshi_api_key": "key-abc"})
+        request = {
+            "protocolVersion": 1,
+            "provider": "infisical",
+            "ids": ["weather_token", "kalshi_api_key"],
+        }
         out, code = _run(
             monkeypatch,
             tmp_path,
@@ -279,9 +280,7 @@ class TestFailClosed:
 
 
 class TestMalformedStdin:
-    def test_non_json_stdin_exits_1(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_non_json_stdin_exits_1(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         out, code = _run(
             monkeypatch,
             tmp_path,
@@ -309,8 +308,7 @@ class TestMalformedStdin:
         out, code = _run(
             monkeypatch,
             tmp_path,
-            json.dumps({"protocolVersion": 1, "provider": "infisical",
-                        "ids": [], "bogus": True}),
+            json.dumps({"protocolVersion": 1, "provider": "infisical", "ids": [], "bogus": True}),
             env={"INFISICAL_TOKEN": "t", "INFISICAL_DOMAIN": "https://x"},
         )
         assert code == 1
@@ -321,11 +319,12 @@ class TestRouting:
     def test_token_suffix_routes_to_agent_tokens_project(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        factory = FakeClientFactory(
-            {"weather_token": "tok-123", "kalshi_api_key": "key-abc"}
-        )
-        request = {"protocolVersion": 1, "provider": "infisical",
-                   "ids": ["weather_token", "kalshi_api_key"]}
+        factory = FakeClientFactory({"weather_token": "tok-123", "kalshi_api_key": "key-abc"})
+        request = {
+            "protocolVersion": 1,
+            "provider": "infisical",
+            "ids": ["weather_token", "kalshi_api_key"],
+        }
         out, code = _run(
             monkeypatch,
             tmp_path,
@@ -339,8 +338,7 @@ class TestRouting:
             "kalshi_api_key": "key-abc",
         }
         recorded = [
-            (call["secret_name"], call["project_id"])
-            for call in factory.clients[0].secrets.calls
+            (call["secret_name"], call["project_id"]) for call in factory.clients[0].secrets.calls
         ]
         assert recorded == [
             ("weather_token", CREDENTIALS["agentTokensProjectId"]),
@@ -389,8 +387,11 @@ class TestPartialFailure:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         factory = FakeClientFactory({"weather_token": "tok-123"})
-        request = {"protocolVersion": 1, "provider": "infisical",
-                   "ids": ["weather_token", "missing_secret"]}
+        request = {
+            "protocolVersion": 1,
+            "provider": "infisical",
+            "ids": ["weather_token", "missing_secret"],
+        }
         out, code = _run(
             monkeypatch,
             tmp_path,

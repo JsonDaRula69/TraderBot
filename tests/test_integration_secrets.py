@@ -73,9 +73,7 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch, created: list[_FakeSdkCli
     """Replace ``InfisicalSDKClient.__init__`` with a fake that records instances."""
     from infisical_sdk import InfisicalSDKClient
 
-    def fake_init(
-        self: object, host: str, token: str | None = None, cache_ttl: int = 60
-    ) -> None:
+    def fake_init(self: object, host: str, token: str | None = None, cache_ttl: int = 60) -> None:
         del token, cache_ttl
         fake = _FakeSdkClient()
         created.append(fake)
@@ -135,7 +133,7 @@ class TestResolverWithInfisical:
             assert adapter.resolve_token("tok-1") == ("weather", "weather-agent")
             create_calls = [c for c in created[0].secrets.calls if c[0] == "create"]
             assert create_calls[0][1]["secret_name"] == "weather-agent_token"
-            assert create_calls[0][1]["project_slug"] == "TraderBot Agent Tokens"
+            assert create_calls[0][1]["project_slug"] == "traderbot-agent-tokens"
             assert create_calls[0][1]["environment_slug"] == "prod"
         finally:
             set_store(None)
@@ -254,9 +252,7 @@ class TestMigrationE2E:
         store = SecretsStore(infisical_client=client)
         tokens_path = tmp_path / "tokens.json"
         _ = tokens_path.write_text(
-            json.dumps(
-                {"tokens": {"tok-weather": {"profile": "weather", "agent_id": "weather"}}}
-            ),
+            json.dumps({"tokens": {"tok-weather": {"profile": "weather", "agent_id": "weather"}}}),
             encoding="utf-8",
         )
 
@@ -274,9 +270,7 @@ class TestMigrationE2E:
         store = SecretsStore(infisical_client=client)
         tokens_path = tmp_path / "tokens.json"
         _ = tokens_path.write_text(
-            json.dumps(
-                {"tokens": {"tok-weather": {"profile": "weather", "agent_id": "weather"}}}
-            ),
+            json.dumps({"tokens": {"tok-weather": {"profile": "weather", "agent_id": "weather"}}}),
             encoding="utf-8",
         )
         original = tokens_path.read_bytes()
@@ -314,8 +308,7 @@ class TestWithPluginConfig:
 
     def test_agent_token_map_uses_exec_infisical_ids(self) -> None:
         token_map = (
-            load_with_plugin_config()
-            .plugins.entries.traderbot_token_injector.config.agentTokenMap
+            load_with_plugin_config().plugins.entries.traderbot_token_injector.config.agentTokenMap
         )
 
         assert set(token_map) == {"weather", "sysadmin", "dev-liaison"}

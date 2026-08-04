@@ -76,7 +76,7 @@ def test_rotate_all_uses_rotate_profile_token_composite() -> None:
     update_calls = [c for c in client.secrets.calls if c[0] == "update"]
     assert len(update_calls) == 1
     assert update_calls[0][1]["current_secret_name"] == "weather_token"
-    assert update_calls[0][1]["project_slug"] == "TraderBot Agent Tokens"
+    assert update_calls[0][1]["project_slug"] == "traderbot-agent-tokens"
     assert update_calls[0][1]["environment_slug"] == "prod"
 
 
