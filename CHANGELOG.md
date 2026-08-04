@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a44] — 2026-08-04
+
+### Docs
+
+- docs: fix stale DD-037 config example (source vs type, wrapper script) and update implementation status to deployment-verified
+
 ## [2.0.0a43] — 2026-08-04
 
 ### Docs

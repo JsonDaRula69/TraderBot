@@ -4438,8 +4438,13 @@ This prevents a compromised SysAdmin from unilaterally moving an agent to live t
 **Date**: 2026-06-15
 **Status**: Decided
 
-> **Implementation status:** Phase 1.5 implemented (commits leading to
-> 2.0.0a38). `SecretsStore` (Infisical primary + `LocalEncryptedStore`
+> **Implementation status:** Phase 1.5 deployment-verified (2026-08-04,
+> commits leading to 2.0.0a43). Live agent-driven E2E verified on macpro-linux:
+> weather agent → plugin hook → Infisical exec provider → wrapper resolves
+> `weather_token` → plugin extracts raw token from 5-field JSON doc → injects
+> → MCP server resolves via Infisical-backed SecretsStore →
+> `{"status":"ok","auth":"resolved"}`. Fail-closed: unknown agent blocked.
+> Token never enters model context. `SecretsStore` (Infisical primary + `LocalEncryptedStore`
 > fallback), `TokenStoreAdapter`, `SecretsResolver`, token rotation/scheduler,
 > the `openclaw-infisical-resolver` exec provider, plugin SecretRef migration
 > (vault → infisical), and the local-token migration script are all committed
@@ -4733,37 +4738,27 @@ The local fallback:
 > do not accept the per-agent `env` field shown below. The sketch is retained to
 > document the intended secret mapping, not as deployable syntax.
 
-OpenClaw SecretRef entries for each agent:
+OpenClaw SecretRef configuration for agent-token resolution:
 
 ```json5
 {
   secrets: {
     providers: {
-      // Infisical service token for TraderBot
-      traderbot_infisical: {
-        type: "env",
-        env: "INFISICAL_TOKEN"
-      },
-      // Per-agent profile tokens — resolved via Infisical CLI
-      traderbot_weather_token: {
-        type: "exec",
-        command: "infisical",
-        args: ["secrets", "get", "weather_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
-      },
-      traderbot_sysadmin_token: {
-        type: "exec",
-        command: "infisical",
-        args: ["secrets", "get", "sysadmin_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
-      },
-      traderbot_dev-liaison_token: {
-        type: "exec",
-        command: "infisical",
-        args: ["secrets", "get", "dev-liaison_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
+      infisical: {
+        source: "exec",
+        command: "/usr/local/bin/openclaw-infisical-resolver",
+        args: [],
+        passEnv: ["INFISICAL_TOKEN", "INFISICAL_DOMAIN"],
+        jsonOnly: true
       }
     }
   }
 }
 ```
+
+The `openclaw-infisical-resolver` wrapper resolves agent tokens from the Infisical `traderbot-agent-tokens` project (prod environment). The plugin's `agentTokenMap` maps each agent to `{source: "exec", provider: "infisical", id: "<agent>_token"}`. The wrapper returns the 5-field JSON document (`{token, profile, agent_id, categories, permissions}`) per DD-037 §4; the plugin extracts the raw `token` field before injecting it into the MCP call.
+
+> **Deployment note:** The exec provider command must be owned by the gateway user (not root) — OpenClaw's security check rejects commands owned by other users.
 
 Each agent's OpenClaw configuration injects the corresponding token:
 
