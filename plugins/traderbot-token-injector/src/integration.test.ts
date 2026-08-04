@@ -54,7 +54,7 @@ function createFakeApi(pluginConfig: Record<string, unknown>) {
 
 const validPluginConfig = {
   agentTokenMap: {
-    weather: { source: "exec", provider: "vault", id: "traderbot/weather/token" },
+    weather: { source: "exec", provider: "infisical", id: "weather_token" },
   },
 };
 
@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("traderbot-token-injector integration (MCP token injection)", () => {
-  it("injects the resolved Vault token into a health tool call with empty params", async () => {
+  it("injects the resolved Infisical token into a health tool call with empty params", async () => {
     const { handler } = createFakeApi(validPluginConfig);
     const transport = createMCPTransportFake();
     vi.mocked(resolveSecretRefValues).mockResolvedValue(
@@ -87,7 +87,7 @@ describe("traderbot-token-injector integration (MCP token injection)", () => {
     }
     transport.call(event.toolName, result.params);
 
-    // The transport boundary receives the resolved Vault token, not any model input.
+    // The transport boundary receives the resolved Infisical token, not any model input.
     expect(transport.calls).toEqual([
       { toolName: "traderbot__health", params: { token: "resolved-weather-token" } },
     ]);

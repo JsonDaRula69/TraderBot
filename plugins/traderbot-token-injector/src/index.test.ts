@@ -37,7 +37,7 @@ function createFakeApi(pluginConfig: Record<string, unknown>) {
 
 const validPluginConfig = {
   agentTokenMap: {
-    weather: { source: "exec", provider: "vault", id: "traderbot/weather/token" },
+    weather: { source: "exec", provider: "infisical", id: "weather_token" },
   },
 };
 
@@ -138,7 +138,7 @@ describe("traderbot-token-injector before_tool_call hook", () => {
 
   it("blocks when token resolution fails", async () => {
     const { handler } = createFakeApi(validPluginConfig);
-    vi.mocked(resolveSecretRefValues).mockRejectedValue(new Error("vault down"));
+    vi.mocked(resolveSecretRefValues).mockRejectedValue(new Error("infisical down"));
 
     const result = await handler(event({}), ctx("weather"));
 

@@ -11,18 +11,18 @@
           "agentTokenMap": {
             "weather": {
               "source": "exec",
-              "provider": "vault",
-              "id": "traderbot/weather/token"
+              "provider": "infisical",
+              "id": "weather_token"
             },
             "sysadmin": {
               "source": "exec",
-              "provider": "vault",
-              "id": "traderbot/sysadmin/token"
+              "provider": "infisical",
+              "id": "sysadmin_token"
             },
             "dev-liaison": {
               "source": "exec",
-              "provider": "vault",
-              "id": "traderbot/dev-liaison/token"
+              "provider": "infisical",
+              "id": "dev-liaison_token"
             }
           }
         }
@@ -31,13 +31,13 @@
   },
   "secrets": {
     "providers": {
-      "vault": {
+      "infisical": {
         "type": "exec",
-        "command": "/usr/local/bin/openclaw-vault-resolver",
+        "command": "/usr/local/bin/openclaw-infisical-resolver",
         "args": [],
         "passEnv": [
-          "VAULT_ADDR",
-          "VAULT_TOKEN"
+          "INFISICAL_TOKEN",
+          "INFISICAL_DOMAIN"
         ],
         "jsonOnly": true
       }
@@ -47,7 +47,10 @@
     "servers": {
       "traderbot": {
         "command": "traderbot-mcp-server",
-        "transport": "stdio"
+        "transport": "stdio",
+        "env": {
+          "TRADERBOT_USE_HARDCODED_AUTH": "0"
+        }
       }
     }
   }

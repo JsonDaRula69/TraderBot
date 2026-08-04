@@ -28,11 +28,17 @@ vault structure).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, TypedDict, override
 
 from infisical_sdk.infisical_requests import APIError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from traderbot.secrets.protocols import InfisicalClient, LocalStore
+
+# The Infisical secret name for an agent's profile token is ``<agent_id>_token``
+# (DD-037 §4), which matches the ``{service}_{key}`` composite of the existing
+# interface: ``service=agent_id`` + ``key="token"``.
+_PROFILE_TOKEN_KEY = "token"
 
 # namespace -> (Infisical project, environment slug). The production
 # environment slug is "prod" (matches the deployed Infisical instance).
@@ -56,6 +62,33 @@ class SecretNotFoundError(KeyError):
             f"No secret for service={self.service!r} key={self.key!r} "
             f"in namespace={self.namespace!r}"
         )
+
+
+class ProfileTokenPayload(BaseModel):
+    """The 5-field profile-token value document (DD-037 §4).
+
+    Fields: ``token``, ``profile``, ``agent_id``, ``categories``,
+    ``permissions``. Strict and frozen, so stored values are validated at the
+    parse boundary and cannot be mutated after construction.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    token: str
+    profile: str
+    agent_id: str
+    categories: list[str]
+    permissions: list[str]
+
+
+class ProfileTokenEntry(TypedDict):
+    """A parsed profile-token entry returned by the token accessors."""
+
+    token: str
+    profile: str
+    agent_id: str
+    categories: list[str]
+    permissions: list[str]
 
 
 class SecretsStore:
@@ -118,6 +151,97 @@ class SecretsStore:
             project, env = self._infisical_target(namespace)
             return self._infisical_list(project, env)
         return self._local_list(namespace)
+
+    # Profile tokens (DD-037 §4) -------------------------------------------
+
+    def store_profile_token(
+        self,
+        agent_id: str,
+        token: str,
+        profile: str,
+        categories: list[str],
+        permissions: list[str],
+    ) -> None:
+        """Store a profile token under ``namespace="tokens"`` (idempotent).
+
+        The value is the 5-field JSON document from DD-037 §4 (``token``,
+        ``profile``, ``agent_id``, ``categories``, ``permissions``) and the
+        secret name is ``f"{agent_id}_token``.
+        """
+        value = ProfileTokenPayload(
+            token=token,
+            profile=profile,
+            agent_id=agent_id,
+            categories=categories,
+            permissions=permissions,
+        ).model_dump_json()
+        self.set(service=agent_id, key=_PROFILE_TOKEN_KEY, value=value, namespace="tokens")
+
+    def get_profile_token(self, agent_id: str) -> ProfileTokenEntry | None:
+        """Return the stored token entry for ``agent_id``, or ``None`` if missing.
+
+        A direct secret lookup by name — O(1) on the backend.
+        """
+        raw = self.get(service=agent_id, key=_PROFILE_TOKEN_KEY, namespace="tokens")
+        return self._parse_token_value(raw)
+
+    def resolve_profile_token(self, token: str) -> tuple[str, str] | None:
+        """Return ``(profile, agent_id)`` for ``token``, or ``None`` if unknown.
+
+        Scans every stored token in ``namespace="tokens"`` (O(n), n ≤ 10 per
+        DD-037 §4) until one matches ``token``.
+        """
+        for entry in self.list_profile_tokens():
+            if entry["token"] == token:
+                return entry["profile"], entry["agent_id"]
+        return None
+
+    def rotate_profile_token(self, agent_id: str, new_token: str) -> None:
+        """Rotate ``agent_id``'s token value, keeping profile and permissions.
+
+        Raises:
+            KeyError: if ``agent_id`` has no stored profile token.
+        """
+        entry = self.get_profile_token(agent_id)
+        if entry is None:
+            raise KeyError(f"No profile token stored for agent_id={agent_id!r}")
+        self.store_profile_token(
+            agent_id=agent_id,
+            token=new_token,
+            profile=entry["profile"],
+            categories=entry["categories"],
+            permissions=entry["permissions"],
+        )
+
+    def list_profile_tokens(self) -> list[ProfileTokenEntry]:
+        """Return every stored profile-token entry in ``namespace="tokens"``.
+
+        Entries whose value is not a valid 5-field document are skipped.
+        """
+        tokens: list[ProfileTokenEntry] = []
+        for name, raw in self.get_namespace("tokens").items():
+            if not name.endswith("_token"):
+                continue
+            entry = self._parse_token_value(raw)
+            if entry is not None:
+                tokens.append(entry)
+        return tokens
+
+    def _parse_token_value(self, raw: str | None) -> ProfileTokenEntry | None:
+        """Parse a stored 5-field JSON value, or ``None`` when absent/invalid."""
+        if raw is None:
+            return None
+        try:
+            payload = ProfileTokenPayload.model_validate_json(raw)
+        except ValidationError:
+            return None
+        return ProfileTokenEntry(
+            token=payload.token,
+            profile=payload.profile,
+            agent_id=payload.agent_id,
+            categories=payload.categories,
+            permissions=payload.permissions,
+        )
 
     # Infisical backend ------------------------------------------------------
 

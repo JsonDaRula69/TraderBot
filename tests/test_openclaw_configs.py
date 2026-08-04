@@ -96,6 +96,7 @@ class AgentConfig(StrictConfigModel):
 class McpServerConfig(StrictConfigModel):
     command: Literal["traderbot-mcp-server"]
     transport: Literal["stdio"]
+    env: dict[str, str] | None = None
 
 
 class McpServersConfig(StrictConfigModel):
