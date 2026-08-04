@@ -66,7 +66,30 @@ export default definePluginEntry({
           return { block: true, blockReason: `Token resolution failed for agent: ${agentId}` };
         }
 
-        return { params: { ...event.params, token: String(resolvedToken) } };
+        // Phase 1.5: the Infisical exec provider returns profile tokens as
+        // 5-field JSON documents ({"token", "profile", "agent_id",
+        // "categories", "permissions"}) per DD-037 §4. Extract the raw token
+        // field; fall back to the raw string for env/file providers (Phase
+        // 1.1) whose value is the token itself.
+        let tokenValue = String(resolvedToken);
+        try {
+          const parsed: unknown = JSON.parse(tokenValue);
+          if (typeof parsed === "object" && parsed !== null) {
+            if (typeof (parsed as Record<string, unknown>).token === "string") {
+              tokenValue = (parsed as Record<string, unknown>).token as string;
+            } else {
+              // Malformed secret: JSON object without a string `token` field.
+              return { block: true, blockReason: `Token resolution failed for agent: ${agentId}` };
+            }
+          }
+        } catch {
+          // Not JSON — raw token string (env/file provider mode).
+        }
+        if (tokenValue === "") {
+          return { block: true, blockReason: `Token resolution failed for agent: ${agentId}` };
+        }
+
+        return { params: { ...event.params, token: tokenValue } };
       },
       { priority: 100 },
     );

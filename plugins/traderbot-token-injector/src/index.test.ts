@@ -136,6 +136,44 @@ describe("traderbot-token-injector before_tool_call hook", () => {
     expect(result).toEqual({ params: { token: "resolved-real-token" } });
   });
 
+  it("extracts the raw token from a 5-field JSON document (Infisical exec provider)", async () => {
+    const { handler } = createFakeApi(validPluginConfig);
+    const doc = JSON.stringify({
+      token: "raw-token-from-infisical",
+      profile: "weather",
+      agent_id: "weather",
+      categories: [],
+      permissions: [],
+    });
+    vi.mocked(resolveSecretRefValues).mockResolvedValue(new Map([["key", doc]]));
+
+    const result = await handler(event({}), ctx("weather"));
+
+    expect(result).toEqual({ params: { token: "raw-token-from-infisical" } });
+  });
+
+  it("falls back to the raw string when the resolved value is not JSON", async () => {
+    const { handler } = createFakeApi(validPluginConfig);
+    vi.mocked(resolveSecretRefValues).mockResolvedValue(
+      new Map([["key", "plain-raw-token"]]),
+    );
+
+    const result = await handler(event({}), ctx("weather"));
+
+    expect(result).toEqual({ params: { token: "plain-raw-token" } });
+  });
+
+  it("blocks when the resolved JSON document has no token field", async () => {
+    const { handler } = createFakeApi(validPluginConfig);
+    vi.mocked(resolveSecretRefValues).mockResolvedValue(
+      new Map([["key", JSON.stringify({ profile: "weather", agent_id: "weather" })]]),
+    );
+
+    const result = await handler(event({}), ctx("weather"));
+
+    expect(result).toEqual({ block: true, blockReason: expect.stringContaining("Token resolution failed") });
+  });
+
   it("blocks when token resolution fails", async () => {
     const { handler } = createFakeApi(validPluginConfig);
     vi.mocked(resolveSecretRefValues).mockRejectedValue(new Error("infisical down"));
