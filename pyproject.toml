@@ -30,7 +30,7 @@ pattern = "(?P<version>.+)"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.24",
+    "pytest-asyncio>=1.4.0",
 ]
 
 [tool.ruff]
