@@ -98,9 +98,7 @@ class FakeSecretsClient:
     ) -> Secret:
         self._record("update", locals())
         del secret_path, kwargs
-        self.store[(project_slug or "", environment_slug, current_secret_name)] = (
-            secret_value or ""
-        )
+        self.store[(project_slug or "", environment_slug, current_secret_name)] = secret_value or ""
         return Secret(secretKey=current_secret_name, secretValue=secret_value or "")
 
     def delete_secret_by_name(

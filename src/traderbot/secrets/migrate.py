@@ -57,9 +57,7 @@ def _load_local_tokens(path: Path) -> PersistedTokenPayload:
         FileNotFoundError: if ``path`` does not exist.
     """
     if not path.exists():
-        raise FileNotFoundError(
-            f"Local token store not found: {path} — nothing to migrate"
-        )
+        raise FileNotFoundError(f"Local token store not found: {path} — nothing to migrate")
     contents = path.read_text(encoding="utf-8")
     return PersistedTokenPayload.model_validate_json(contents, strict=True)
 
@@ -107,9 +105,7 @@ def migrate_local_to_infisical(
                 f"Infisical unreachable while migrating agent_id={entry.agent_id!r}"
             ) from exc
         count += 1
-        logger.info(
-            "Migrated token for agent_id=%s profile=%s", entry.agent_id, entry.profile
-        )
+        logger.info("Migrated token for agent_id=%s profile=%s", entry.agent_id, entry.profile)
 
     logger.info("Migrated %d token(s) to Infisical (original file kept)", count)
     return count

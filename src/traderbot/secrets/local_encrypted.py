@@ -139,6 +139,22 @@ def _read_machine_id() -> str:
                 if len(parts) >= 4 and parts[3] != "":
                     return parts[3]
         return ""
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["wmic", "csproduct", "get", "UUID"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
+            for line in result.stdout.splitlines():
+                stripped = line.strip()
+                if stripped and stripped != "UUID":
+                    return stripped
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return ""
     logger.warning("Unsupported platform %r for machine ID lookup", sys.platform)
     return ""
 
@@ -255,21 +271,21 @@ class LocalEncryptedStore:
             indent=2,
         )
         envelope += "\n"
-        self._atomic_write(self.secrets_file, envelope)
-        digest = hashlib.sha256(envelope.encode("utf-8")).hexdigest()
-        self._atomic_write(self.integrity_file, f"{digest}\n")
+        # Write in binary mode to avoid Windows \r\n line-ending translation,
+        # which would break the integrity hash (computed on the exact bytes).
+        envelope_bytes = envelope.encode("utf-8")
+        self._atomic_write_bytes(self.secrets_file, envelope_bytes)
+        digest = hashlib.sha256(envelope_bytes).hexdigest()
+        self._atomic_write_bytes(self.integrity_file, f"{digest}\n".encode())
 
-    def _atomic_write(self, path: Path, contents: str) -> None:
+    def _atomic_write_bytes(self, path: Path, contents: bytes) -> None:
         """Write ``contents`` to ``path`` atomically with mode 0600 (POSIX).
 
-        Securely creates a mode-0600 temp file in the same directory, then
-        ``os.replace``s it into place. Write failures propagate as
-        :class:`OSError` and the temp file is always removed.
+        Uses binary mode to avoid platform-specific line-ending translation.
         """
         self.secrets_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         temp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             prefix=f".{path.name}.",
             suffix=".tmp",
             dir=self.secrets_dir,
@@ -281,5 +297,13 @@ class LocalEncryptedStore:
                 _ = fh.write(contents)
             os.chmod(tmp, 0o600)
             os.replace(tmp, path)
-        finally:
+        except OSError:
             tmp.unlink(missing_ok=True)
+            raise
+
+    def _atomic_write(self, path: Path, contents: str) -> None:
+        """Write ``contents`` to ``path`` atomically with mode 0600 (POSIX).
+
+        Delegates to :meth:`_atomic_write_bytes` with UTF-8 encoded contents.
+        """
+        self._atomic_write_bytes(path, contents.encode("utf-8"))
