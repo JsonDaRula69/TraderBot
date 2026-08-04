@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""OpenClaw exec-provider bridge to Infisical secrets (protocol v1).
+
+Reads a JSON request from stdin and writes a JSON response to stdout:
+
+* Request:  ``{"protocolVersion": 1, "provider": "infisical", "ids": ["weather_token"]}``
+* Response: ``{"protocolVersion": 1, "values": {...}}`` plus a per-id
+  ``errors`` map for every id that could not be resolved. OpenClaw's exec
+  protocol requires **each** requested id to appear in exactly one of
+  ``values`` or ``errors`` — failed ids are never returned as empty values.
+
+Routing: ids ending in ``_token`` resolve from the ``agentTokensProjectId``
+project (TraderBot Agent Tokens); everything else resolves from the
+``projectId`` project (TraderBot). Both targets use ``environment_slug="prod"``
+and ``secret_path="/"`` (matching the deployed Infisical instance and the
+``traderbot.secrets.store`` convention). Project ids come from
+``~/.traderbot/infisical-credentials.json``; SDK auth comes from the
+``INFISICAL_TOKEN`` and ``INFISICAL_DOMAIN`` environment variables.
+
+The script fails closed: any unavailability (missing ``INFISICAL_TOKEN`` or
+``INFISICAL_DOMAIN``, missing/unreadable credentials file, unreachable
+Infisical, per-secret SDK/HTTP failure) produces per-id errors, never partial
+empty values. Malformed stdin is a hard protocol violation and exits with
+status 1.
+
+The SDK is constructed with ``cache_ttl=None`` (caching disabled) so rotated
+secret values are never masked by the 60s default cache.
+
+Requires ``infisicalsdk`` (installed in the TraderBot venv).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any, NoReturn, Protocol, cast
+
+from infisical_sdk import InfisicalSDKClient
+from pydantic import BaseModel, ConfigDict
+
+PROTOCOL_VERSION = 1
+ENVIRONMENT_SLUG = "prod"
+SECRET_PATH = "/"
+
+CREDENTIALS_PATH = Path.home() / ".traderbot" / "infisical-credentials.json"
+
+
+class ResolverRequest(BaseModel):
+    """Parsed stdin request — strict so malformed payloads fail fast."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    protocolVersion: int
+    provider: str
+    ids: list[str]
+
+
+class InfisicalCredentials(BaseModel):
+    """``~/.traderbot/infisical-credentials.json`` contents (strict)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    host: str
+    projectId: str
+    agentTokensProjectId: str
+
+
+class SecretResult(Protocol):
+    """The ``get_secret_by_name`` result surface (structural).
+
+    The SDK's ``BaseSecret.secretValue`` is typed ``Optional[Any]``, so the
+    protocol mirrors that — the resolver validates the value before use.
+    """
+
+    @property
+    def secretValue(self) -> Any: ...
+
+
+class SecretsResource(Protocol):
+    """The ``client.secrets`` surface the resolver needs (structural)."""
+
+    def get_secret_by_name(
+        self,
+        *,
+        secret_name: str,
+        project_id: str,
+        environment_slug: str,
+        secret_path: str,
+        view_secret_value: bool,
+    ) -> SecretResult: ...
+
+
+class ResolverClient(Protocol):
+    """The :class:`InfisicalSDKClient` surface the resolver needs (structural)."""
+
+    @property
+    def secrets(self) -> SecretsResource: ...
+
+
+def _load_credentials() -> InfisicalCredentials:
+    """Load and validate ``~/.traderbot/infisical-credentials.json``.
+
+    Raises:
+        OSError: if the file cannot be read.
+        (ValueError, ValidationError): if the contents do not match the schema.
+    """
+    with CREDENTIALS_PATH.open(encoding="utf-8") as f:
+        data = json.load(f)
+    return InfisicalCredentials.model_validate(data)
+
+
+def _build_client() -> ResolverClient:
+    """Build the Infisical SDK client from env config (fails closed)."""
+    token = os.environ.get("INFISICAL_TOKEN")
+    host = os.environ.get("INFISICAL_DOMAIN")
+    if not token or not host:
+        raise RuntimeError("INFISICAL_TOKEN and INFISICAL_DOMAIN must both be set")
+    # cache_ttl=None disables the SDK's secrets cache (the constructor
+    # annotation says int, but SecretsCache(None) sets enabled=False at
+    # runtime — documented behavior, so rotated tokens are never masked).
+    kwargs: dict[str, Any] = {"host": host, "token": token, "cache_ttl": None}
+    client: Any = InfisicalSDKClient(**kwargs)
+    return cast(ResolverClient, client)
+
+
+def _route_project_id(credentials: InfisicalCredentials, secret_id: str) -> str:
+    """Route ``secret_id`` to its Infisical project id.
+
+    Ids ending in ``_token`` resolve from the Agent Tokens project; all other
+    ids resolve from the main TraderBot project.
+    """
+    if secret_id.endswith("_token"):
+        return credentials.agentTokensProjectId
+    return credentials.projectId
+
+
+def _resolve_id(client: ResolverClient, credentials: InfisicalCredentials, secret_id: str) -> str:
+    """Resolve one secret id to its value.
+
+    Raises:
+        Exception: any SDK/HTTP failure (missing secret, unreachable host).
+    """
+    project_id = _route_project_id(credentials, secret_id)
+    result = client.secrets.get_secret_by_name(
+        secret_name=secret_id,
+        project_id=project_id,
+        environment_slug=ENVIRONMENT_SLUG,
+        secret_path=SECRET_PATH,
+        view_secret_value=True,
+    )
+    value = result.secretValue
+    if not isinstance(value, str):
+        # The SDK types the value as Optional[Any]; a non-string (e.g. None)
+        # would serialize as an empty/null value, violating the protocol.
+        raise RuntimeError(f"secret {secret_id!r} resolved to a non-string value")
+    return value
+
+
+def _resolve_all(
+    client: ResolverClient,
+    credentials: InfisicalCredentials,
+    request: ResolverRequest,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Resolve every requested id into ``(values, errors)`` maps.
+
+    A per-id failure is isolated — other ids still resolve. Failures are
+    reported as per-id errors (never empty values) per the OpenClaw protocol.
+    """
+    values: dict[str, str] = {}
+    errors: dict[str, str] = {}
+    for secret_id in request.ids:
+        try:
+            values[secret_id] = _resolve_id(client, credentials, secret_id)
+        except Exception:
+            errors[secret_id] = "Not found"
+    return values, errors
+
+
+def _all_errors(request: ResolverRequest) -> str:
+    """Render a fail-closed response: every id errors out."""
+    errors = {secret_id: "Not found" for secret_id in request.ids}
+    return json.dumps(
+        {"protocolVersion": PROTOCOL_VERSION, "errors": errors},
+        separators=(",", ":"),
+    )
+
+
+def _read_request() -> ResolverRequest:
+    """Read and parse the request JSON from stdin.
+
+    Raises:
+        OSError: if stdin cannot be read.
+        (ValueError, ValidationError): if the payload is not valid request JSON.
+    """
+    raw = sys.stdin.read()
+    return ResolverRequest.model_validate(json.loads(raw))
+
+
+def _run() -> None:
+    """Main entrypoint: read request, resolve, print JSON response."""
+    request = _read_request()
+    try:
+        credentials = _load_credentials()
+        client = _build_client()
+    except Exception:
+        # Missing/unreadable credentials or missing env auth — fail closed
+        # with per-id errors for every id (never exit 1 for missing config).
+        print(_all_errors(request))
+        return
+    values, errors = _resolve_all(client, credentials, request)
+    response: dict[str, object] = {"protocolVersion": PROTOCOL_VERSION}
+    if values:
+        response["values"] = values
+    if errors:
+        response["errors"] = errors
+    print(
+        json.dumps(
+            response,
+            separators=(",", ":"),
+        )
+    )
+
+
+def _fail_impossible(msg: str) -> NoReturn:
+    """Write a hard failure to stderr and exit 1."""
+    print(f"openclaw-infisical-resolver: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def main() -> None:
+    try:
+        _run()
+    except KeyboardInterrupt:
+        _fail_impossible("interrupted")
+    except Exception:
+        # Malformed stdin (or an impossible branch) — a hard protocol
+        # violation, exit 1.
+        _fail_impossible("invalid input")
+
+
+if __name__ == "__main__":
+    main()
