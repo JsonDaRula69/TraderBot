@@ -7,6 +7,7 @@ Phase 1: Swaps to real auth via tokens.resolve_token() + ProfileRegistry.get_pro
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
@@ -17,6 +18,12 @@ if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
 
 logger = logging.getLogger(__name__)
+
+# Profiles administratively suspended from real-auth resolution (Phase 1.5).
+# Populated by the secret/security layer; resolution returns (None, None) for
+# any profile in this set, so a suspended profile is indistinguishable from an
+# invalid token.
+_SUSPENDED_PROFILES: set[str] = set()
 
 # Phase 0: Hardcoded token-to-profile mapping.
 # Phase 1 will replace this with tokens.resolve_token().
@@ -64,7 +71,25 @@ def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None
         return profile, agent_id
 
     # Phase 1: real auth via ProfileRegistry
-    from traderbot.profiles.tokens import resolve_token as _real_resolve
+    # Lazy init: install the SecretsStore-backed adapter on first real-auth
+    # call. Guard: only install when the active store is the default
+    # LocalTokenStore at ~/.traderbot — a test-injected store (different
+    # path) is left untouched.
+    from traderbot.profiles.tokens import (
+        LocalTokenStore as _LocalTokenStore,
+    )
+    from traderbot.profiles.tokens import (
+        get_store as _get_store,
+    )
+    from traderbot.profiles.tokens import (
+        resolve_token as _real_resolve,
+    )
+
+    _active = _get_store()
+    if isinstance(_active, _LocalTokenStore) and _active.base_path == Path.home() / ".traderbot":
+        from traderbot.secrets.resolver import get_resolver as _get_resolver
+
+        _ = _get_resolver()
 
     result = _real_resolve(token)
     if result is None:
@@ -74,6 +99,9 @@ def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None
         return None, None
 
     profile_name, agent_id = result
+    if profile_name is not None and profile_name in _SUSPENDED_PROFILES:
+        return None, None
+
     from traderbot.profiles import ProfileRegistry
 
     registry = ProfileRegistry()

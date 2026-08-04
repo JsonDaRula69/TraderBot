@@ -26,6 +26,7 @@ class TradingProfile(BaseModel):
 
     name: str
     mode: Literal["backtest", "paper", "live"]
+    suspended: bool = False
     description: str
     enabled_categories: list[MarketCategory] = Field(default_factory=list)
     risk_multiplier: Annotated[float, Field(gt=0, le=1.0)]
