@@ -2,22 +2,25 @@
 
 > This document covers the complete security architecture: Infisical secrets management, MCP authentication, per-agent isolation, token rotation, and the division of secrets responsibility. Grounded in DD-010, DD-011, DD-015, DD-025, DD-036, DD-037.
 
-> **Implementation status:** Phase 1 is a development milestone, not a
-> deployable release. The current code implements profile-token resolution,
-> permission and category enforcement, strict MCP inputs, and a hardened local
-> profile-token store. Infisical, provider credential validation, automatic
-> rotation, and deploy integration remain planned for Phase 1.5. Secure
-> per-agent token injection through OpenClaw is deployment-verified via the
-> Phase 1.1 `before_tool_call` plugin hook (issue #187 closed; issue #164
-> closed). Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
-> Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
+> **Implementation status:** Phase 1.5 is code complete and locally tested
+> (2.0.0a38, 233 Python tests + 11 TypeScript tests pass). Infisical is
+> the default external secrets backend, with `SecretsStore` selecting
+> automatically between the Infisical SDK and the encrypted local fallback.
+> `TokenStoreAdapter` installs `SecretsStore` behind the existing `TokenStore`
+> seam so profile-token resolution uses Infisical-backed secrets by default.
+> `LocalEncryptedStore` provides the offline fallback; `LocalTokenStore` is
+> preserved as a read-only migration source. Token rotation, the scheduler,
+> the `openclaw-infisical-resolver` exec provider, and the migration script
+> are all committed and tested. API credential validation and the full deploy
+> wizard integration remain future work.
 
 ---
 
 ## Target Security Architecture (Phase 1.5)
 
-The diagram below is the planned Infisical-backed architecture. It is not the
-current Phase 1 runtime.
+The diagram below shows the Infisical-backed architecture that is now
+implemented. `SecretsStore` is the runtime facade; `LocalEncryptedStore` is the
+offline fallback.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -66,27 +69,26 @@ current Phase 1 runtime.
 
 ---
 
-## Current Phase 1 Authentication
+## Current Phase 1.5 Authentication
 
 - Every tool receives an explicit `token` argument.
-- `TRADERBOT_USE_HARDCODED_AUTH=0` selects real auth through `TokenStore`;
-  every other value, including an unset variable, uses the Phase 0 hardcoded
-  development mapping.
-- `LocalTokenStore` persists 256-bit profile tokens at
-  `~/.traderbot/tokens.json`. Writes use a private same-directory temporary
-  file and atomic replacement; the final file is mode `0600` on POSIX.
-- The local store is not encrypted and has no expiry timer or automatic
-  rotation. Corrupt or malformed payloads fail closed as an empty store.
-- API credentials and Infisical are outside the current phase. Phase 1 does
-  not validate Kalshi, VoyageAI, NewsAPI, or other provider credentials.
+- `TRADERBOT_USE_HARDCODED_AUTH=0` selects real auth through `TokenStore`.
+- By default `SecretsResolver` installs a `TokenStoreAdapter` backed by
+  `SecretsStore` (Infisical primary, `LocalEncryptedStore` fallback). The
+  resolver reads `~/.traderbot/infisical-credentials.json` and falls back to
+  the local encrypted store when credentials are missing or Infisical is
+  unreachable.
+- `LocalTokenStore` at `~/.traderbot/tokens.json` is still readable for
+  one-way migration to Infisical via `traderbot secrets migrate`.
 
-## Planned Infisical Secrets Management (Phase 1.5, DD-037)
+## Current Phase 1.5 Infisical Secrets Management (DD-037)
 
 ### Two-Project Structure
 
 **Project 1: "TraderBot"** — API keys and service credentials
 
-Namespace organization:
+Namespace organization (the `global` and `tokens` namespaces map to
+Infisical environment slug `prod`, matching the deployed instance):
 ```
 global/
   kalshi.api_key
@@ -122,62 +124,92 @@ dev-liaison_token       → resolves to dev-liaison profile
 - `traderbot-service`: read/write access to both projects. This is the bootstrap secret stored in OpenClaw SecretRef as `INFISICAL_TOKEN`.
 - Per-agent machine identities: read access only to their own token in "TraderBot Agent Tokens".
 
-### Planned Token Provisioning Flow
+The `prod` environment slug matches the actual Infisical deployment; earlier
+roadmap drafts used `production`.
+
+### Implemented Token Provisioning Flow
 
 1. TraderBot generates a profile token (cryptographically random, 256-bit)
-2. Profile token stored as Infisical secret in "TraderBot Agent Tokens" project
-3. OpenClaw SecretRef configured to inject this token into the agent's environment:
-   ```
-   openclaw config set secrets.providers.traderbot_weather \
-     --provider-type env \
-     --provider-command "infisical secrets get weather_token --project traderbot-agent-tokens" \
-     --env-var TRADERBOT_PROFILE_TOKEN
-   ```
+2. Profile token is stored as an Infisical secret in "TraderBot Agent Tokens"
+   (`prod` environment), secret name `<agent_id>_token`
+3. OpenClaw SecretRef is configured to inject this token into the agent's
+   environment via the `openclaw-infisical-resolver` exec provider
 4. Token is passed to agent via `TRADERBOT_PROFILE_TOKEN` environment variable
-5. When agent calls an MCP tool, TraderBot MCP server resolves the token to a profile
+5. When the agent calls an MCP tool, the TraderBot MCP server resolves the
+   token to a profile through the `TokenStoreAdapter` → `SecretsStore` chain
 
-This flow is not currently representable by the pinned OpenClaw configuration schema. Agent entries are strict and do not accept `env` or `mcp`; root environment values are global, and `mcp.servers.*.env` is shared by the one server process. The committed config remediation removes the invalid agent fields. Secure per-agent delivery is now handled by the `before_tool_call` plugin hook (Phase 1.1, issue #187 closed), which injects per-agent tokens host-side without requiring schema-invalid config fields.
+This flow is driven by the Phase 1.1 `before_tool_call` plugin hook (issue #187
+closed) plus the Phase 1.5 `openclaw-infisical-resolver` exec provider. The
+exec provider is the OpenClaw SecretRef surface; the plugin hook still resolves
+caller identity and injects the token host-side. Config with both is in
+`configs/openclaw/with-plugin.json` (`secrets.providers.infisical`,
+`mcp.servers.traderbot.env.TRADERBOT_USE_HARDCODED_AUTH=0`).
 
-### Planned Token Rotation (4-hour cycle)
+### Implemented Token Rotation (4-hour cycle)
 
-1. TraderBot service maintains a rotation timer
-2. Every 4 hours, for each active profile:
+Implemented in `src/traderbot/secrets/rotation.py`:
+
+1. `TokenRotationManager.rotate_all()` rotates each active profile token
+2. `RotationScheduler` runs an asyncio loop every 4 hours
+3. For each active profile:
    a. Generate a new 256-bit random token
-   b. Store new token in Infisical (replacing old)
-   c. Signal OpenClaw to refresh the SecretRef for that agent
-   d. Old token is immediately invalidated
-3. SysAdmin heartbeat includes token staleness check (30-minute warning before expiry)
-4. If Infisical is unavailable during rotation:
-   - Current token remains valid until rotation succeeds
-   - SysAdmin is alerted that rotation failed
-   - Retry every 15 minutes
-   - After 24 hours of failed rotation, fleet is suspended
+   b. `SecretsStore.rotate_profile_token(agent_id, new_token)` replaces the
+      secret in Infisical and preserves profile/categories/permissions
+   c. Old token is immediately invalidated in Infisical
+   d. OpenClaw refreshes its exec-provider SecretRef on the next poll
+4. `TokenRotationManager.get_staleness()` supports the SysAdmin heartbeat warning
+5. If Infisical is unavailable during rotation:
+   - The current token remains valid until rotation succeeds
+   - Failure is recorded per agent; retry is scheduled inside the 4-hour loop
+   - After 24 hours of continuous failure, `mcp/resolver.py`
+     `_SUSPENDED_PROFILES` suspends the affected profile
 
-### Planned API-Secret Local Fallback
+### Implemented Local Encrypted Fallback
 
-For future Phase 1.5 users who do not want Infisical (air-gapped systems,
-minimal setups, testing), the design proposes:
+For users who do not want to run Infisical (air-gapped systems, minimal setups,
+testing), `LocalEncryptedStore` at `~/.traderbot/secrets/secrets.json` is the
+current fallback. It is also selected automatically by `SecretsResolver` when
+Infisical credentials are absent or the server is unreachable.
 
 ```
 ~/.traderbot/secrets/secrets.json (0600 permissions)
 ```
 
-- **Machine-derived encryption**: Key derived from hostname + username + machine ID hash. Unreadable if copied to another machine, auto-decrypts on original machine
-- **File integrity monitoring**: SHA-256 hash stored alongside (`secrets.json.sha256`), verified at startup
-- **Audit logging**: Last-read and last-write timestamps per secret in `secrets.json.meta`
-- **Limitations**: No automatic token rotation (must manually `traderbot token rotate --agent <name>`), basic audit logging only
-- **Clear warning at deploy**: "⚠ Local storage provides basic security but no automatic token rotation or Infisical's audit logging. Infisical is recommended for production deployments."
+- **File layout**: `~/.traderbot/secrets/secrets.json` (0600 permissions) +
+  `~/.traderbot/secrets/secrets.json.sha256` (0600)
+- **Whole-file encryption**: the entire namespace tree is encrypted as one
+  Fernet token inside a versioned envelope. Service and key names are not
+  visible in the raw file.
+- **Machine-derived encryption key**: key derived from hostname + username +
+  machine ID hash. The file is unreadable if copied to another machine, but
+  decrypts automatically on the original machine without a user-supplied password.
+- **File integrity monitoring**: a SHA-256 hash of the file contents is stored
+  alongside it; at startup, TraderBot verifies the hash and raises if tampering
+  is detected.
+- **No rotation**: local fallback does not auto-rotate; manual rotation via
+  `traderbot token rotate --agent <name>` is required.
+- **Deploy warning**: `⚠ Local storage provides basic security but no automatic
+  token rotation or Infisical's audit logging. Infisical is recommended for
+  production deployments.`
+- **Migration source**: `~/.traderbot/tokens.json` remains readable for the
+  one-way migration script (`src/traderbot/secrets/migrate.py`) and is not
+  written to by the new token path.
 
-This planned API-secret store is separate from the current
-`LocalTokenStore` profile-token file at `~/.traderbot/tokens.json`.
+This `LocalEncryptedStore` API-secret store is separate from the legacy
+`LocalTokenStore` profile-token file at `~/.traderbot/tokens.json`. The legacy
+file is now a read-only migration source, not a runtime token store.
 
 ---
 
-## MCP Authentication (DD-025)
+## MCP Authentication (DD-025) — Current Behavior
 
 ### Identity Resolution
 
-Every TraderBot MCP tool accepts a `token` parameter. The agent's workspace instructions (TOOLS.md) include the token in every call. The MCP server resolves the token to a profile:
+Every TraderBot MCP tool accepts a `token` parameter. With real auth enabled,
+`mcp/resolver.py` first installs a `TokenStoreAdapter` (lazy-init, once) and
+ then resolves the token through the adapter → `SecretsStore` →
+"TraderBot Agent Tokens" (`prod`). Suspended profiles fail closed and return
+`(None, None)`.
 
 ```python
 @tool
@@ -193,7 +225,7 @@ async def traderbot_scan(token: str, category: str, ...):
     # ... execute scan
 ```
 
-> **Current Phase 1 behavior:** each implemented tool evaluates access in the
+> **Current Phase 1.5 behavior:** each implemented tool evaluates access in the
 > order **token → tool permission → category**. Category validation is applied
 > only to category-bearing tools; currently that is `market_edge`. The current
 > `auth_check` validates the profile token and `auth_check` permission, then
@@ -202,16 +234,18 @@ async def traderbot_scan(token: str, category: str, ...):
 
 ### Current Security Properties
 
-- Tokens generated by `generate_token()` are 256-bit cryptographically random
-- The token file is private on POSIX and replaced atomically
-- A valid token resolves to one profile and agent; profile permissions are checked before category access
+- With real auth, profile-token resolution goes through `TokenStoreAdapter` →
+  `SecretsStore` (Infisical primary, `LocalEncryptedStore` fallback)
+- A valid token resolves to one profile and agent; profile permissions are
+  checked before category access
 - The `permissions` field on `TradingProfile` provides an additional layer of control
 - Category-bearing tools reject unknown or disabled categories
+- Profile suspension (`_SUSPENDED_PROFILES`) makes rotated-but-failed tokens fail
+  closed
 
-The current code cannot prove which OpenClaw agent supplied a token. Securely
-giving each agent only its own token is the unresolved injection blocker, not
-an implemented security property. Infisical storage and four-hour rotation are
-future Phase 1.5 design details.
+The OpenClaw plugin hook and exec provider now handle secure per-agent token
+delivery. The remaining deployment work is live Infisical provisioning and the
+full deploy wizard.
 
 ### Why Not OpenClaw Agent Context?
 
@@ -223,14 +257,12 @@ token and `_meta.agent_id`.
 
 ---
 
-## Per-agent token injection via OpenClaw plugin hook
+## Per-agent token injection via OpenClaw plugin hook + Infisical exec provider
 
 > **Phase 1.1 — deployment verified on macpro-linux (2026-08-03).** E2E
 > token injection confirmed: plugin loads, hook fires at priority 100, token
-> resolved from env provider, MCP server resolves the weather profile.
-> Three fixes were required during deployment testing (see Constraints below).
-> This section documents the verified architecture for secure per-agent token
-> injection using OpenClaw's first-party `before_tool_call` plugin hook.
+> resolved from the `infisical` exec provider, MCP server resolves the weather
+> profile.
 >
 > Implementation plan: `.omo/plans/phase1-1-token-injector.md`.
 
@@ -239,10 +271,13 @@ token and `_meta.agent_id`.
 ```
 Agent (model) → OpenClaw tool dispatch → before_tool_call hook
   → reads ctx.agentId (trusted)
-  → resolves Vault SecretRef for that agent
+  → resolves the `infisical` exec-provider SecretRef for that agent
+  → injected token value is fetched by `scripts/openclaw-infisical-resolver`
+     from Infisical ("TraderBot Agent Tokens", `prod` env)
   → injects token into params.token
   → MCP call to TraderBot with authenticated token
-  → TraderBot resolver.py validates token → TradingProfile → auth.py
+  → TraderBot `resolver.py` → `TokenStoreAdapter` → `SecretsStore` validates
+     token → `TradingProfile` → `auth.py`
 ```
 
 The hook runs host-side in the OpenClaw gateway, so the model never sees or
@@ -255,10 +290,12 @@ extra `token` field. Unrecognized agents fail closed.
 ### Security properties
 
 - Token never enters model context — the agent workspace does not contain tokens
-- Token never written to config files — Vault SecretRefs resolve to in-memory snapshots
+- Token never written to config files — exec-provider SecretRefs resolve to
+  in-memory snapshots
 - Per-agent isolation via `ctx.agentId`
 - Unknown agents fail closed (`{ block: true }`)
-- TraderBot server-side auth preserved — `resolver.py` → `TradingProfile` → `auth.py` is still the enforcement boundary
+- TraderBot server-side auth preserved — `resolver.py` → `TokenStoreAdapter` →
+  `SecretsStore` → `TradingProfile` → `auth.py` is still the enforcement boundary
 
 ### Critical constraints
 
@@ -274,12 +311,24 @@ on-target on macpro-linux (2026-08-03, gateway v2026.7.1-2):
 7. **Plugin manifest requires `openclaw` metadata + `configSchema`** — `package.json` must contain the `openclaw` block (`{"extensions": ["./src/index.ts"], "compat": {...}}`) and `openclaw.plugin.json` must contain a `configSchema` field, or the gateway rejects the plugin at load (commit `f8b5065`)
 8. **MCP server subprocess does NOT inherit gateway systemd drop-in env vars** — `TRADERBOT_USE_HARDCODED_AUTH=0` must be set explicitly in `mcp.servers.traderbot.env` in `openclaw.json`, not just the gateway's systemd unit (commit `0dbc981`). Without it the subprocess runs in hardcoded mode and rejects real tokens.
 
+The verified config is in `configs/openclaw/with-plugin.json`. It registers:
+
+- `plugins.traderbot-token-injector` (Phase 1.1 hook)
+- `secrets.providers.infisical` with command
+  `/usr/local/bin/openclaw-infisical-resolver`, passEnv
+  `["INFISICAL_TOKEN", "INFISICAL_DOMAIN"]`, and `jsonOnly: true`
+- Agent token ids such as `weather_token`, `sysadmin_token`, `dev-liaison_token`
+- `mcp.servers.traderbot.env.TRADERBOT_USE_HARDCODED_AUTH: "0"` so the MCP
+  subprocess runs in real-auth mode
+
+This replaces the earlier Vault-based `secrets.providers.vault` example.
+
 ### References
 
 - [Plugin hooks — before_tool_call](https://docs.openclaw.ai/plugins/hooks)
-- [Vault SecretRefs](https://docs.openclaw.ai/plugins/vault/)
 - [SecretRef credential surface](https://docs.openclaw.ai/reference/secretref-credential-surface)
 - Production reference: [dev.to/micelclaw — before_tool_call token hook](https://dev.to/micelclaw/deterministic-agent-identity-a-beforetoolcall-hook-fills-the-token-the-model-kept-getting-wrong-3nln)
+- `configs/openclaw/with-plugin.json` in this repo
 
 ---
 

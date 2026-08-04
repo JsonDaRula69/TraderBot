@@ -141,8 +141,8 @@ Dev-liaison sends this template to Sisyphus for every phase:
 2. Verify per-agent TraderBot tokens are injected into `params.token` for
    `traderbot__*` tools, and that **tokens never enter model context, prompts,
    config files, or telemetry**.
-3. Verify fail-closed behavior: unknown agents, missing agentId, and unresolvable
-   Vault SecretRefs all block the tool call.
+3. Verify fail-closed behavior: unknown agents, missing agentId, and
+   unresolvable Infisical SecretRefs all block the tool call.
 
 ### Pre-conditions
 
@@ -161,23 +161,19 @@ Dev-liaison sends this template to Sisyphus for every phase:
   declare `token` as optional (`str | None = None`) — the SDK validates the
   schema BEFORE the hook runs, so a required token field rejects the call
   before injection. Committed at `f1aa518`.
-- Token provider configured per `configs/openclaw/with-plugin.json`. Two valid
-  providers:
-  - **Vault (production)**: `secrets.providers.vault` with `type: exec`,
-    `command: /usr/local/bin/openclaw-vault-resolver`.
-  - **Env (test fallback, no Vault)**: `secrets.providers.env` with the token
-    values in `TRADERBOT_WEATHER_TOKEN` / `TRADERBOT_SYSADMIN_TOKEN` /
-    `TRADERBOT_DEV_LIAISON_TOKEN` set in the gateway unit's environment
-    (systemd drop-in `Environment=` lines, then `daemon-reload` +
-    `restart`).
-- TraderBot profile tokens provisioned on the host via `LocalTokenStore`
-  (real-auth path, `TRADERBOT_USE_HARDCODED_AUTH=0`):
-  `~/.traderbot/tokens.json` exists with entries for `weather`, `sysadmin`,
-  `dev-liaison`.
-- TraderBot MCP server registered at root scope (`mcp.servers.traderbot`).
-- **Pre-condition (external)**: either a functioning Vault instance with the
-  three agent tokens, or the env-provider fallback with the three env vars set.
-  This protocol does not create them.
+- Token provider configured per `configs/openclaw/with-plugin.json`. The current
+  committed provider is:
+  - **Infisical (production)**: `secrets.providers.infisical` with `type: exec`,
+    `command: /usr/local/bin/openclaw-infisical-resolver`, passEnv
+    `["INFISICAL_TOKEN", "INFISICAL_DOMAIN"]`, `jsonOnly: true`. Token ids are
+    `<agent_id>_token` (e.g. `weather_token`).
+- TraderBot profile tokens provisioned on the host via `TokenStoreAdapter` →
+  `SecretsStore` (real-auth path, `TRADERBOT_USE_HARDCODED_AUTH=0`) when
+  Infisical credentials are present; otherwise `LocalEncryptedStore` fallback.
+  Legacy `LocalTokenStore` at `~/.traderbot/tokens.json` is a read-only migration
+  source, not the runtime store.
+- **Pre-condition (external)**: either a functioning Infisical instance with the
+  three agent tokens, or the local encrypted fallback with tokens migrated.
 
 ### Deployment (step 0 — run before any test)
 
@@ -206,8 +202,8 @@ Dev-liaison sends this template to Sisyphus for every phase:
    points at the worktree `src/index.ts`); verify with
    `openclaw plugins inspect traderbot-token-injector` — status must be
    `enabled`.
-6. **Provision tokens** (real-auth store) and **set env vars** (env provider) or
-   **provision Vault secrets** (Vault provider).
+6. **Provision tokens** (real-auth store) and **set env vars** (legacy env
+    provider fallback) or **provision Infisical secrets** (production provider).
 7. **Restart the gateway** and confirm the plugin appears in the plugin list:
    ```bash
    systemctl --user restart openclaw-gateway
@@ -243,7 +239,7 @@ Dev-liaison sends this template to Sisyphus for every phase:
    through `resolver.py`.
 
 4. **Fail-closed: unknown agent** — invoke a TraderBot tool from an agent not in
-   `agentTokenMap` (e.g., create a throwaway agent `probe-unknown`):
+   the plugin's agent token map (e.g., create a throwaway agent `probe-unknown`):
    ```bash
    openclaw agents add probe-unknown
    openclaw agent --agent probe-unknown -m "call traderbot__health"
@@ -253,13 +249,13 @@ Dev-liaison sends this template to Sisyphus for every phase:
    Report the exact block reason string.
 
 5. **Fail-closed: unresolvable SecretRef** — temporarily point one agent's
-   `agentTokenMap` entry at a non-existent Vault secret id, restart the gateway,
-   then call the tool:
-   ```bash
-   openclaw agent --agent weather -m "call traderbot__health"
-   ```
-   Observe: blocked with `Token resolution failed for agent: weather`. Restore
-   the correct secret id afterwards.
+    token id at a non-existent Infisical secret (`nonexistent_token`), restart
+    the gateway, then call the tool:
+    ```bash
+    openclaw agent --agent weather -m "call traderbot__health"
+    ```
+    Observe: blocked with `Token resolution failed for agent: weather`. Restore
+    the correct secret id afterwards.
 
 6. **Token never enters model context** — from the weather agent, prompt:
    `"call traderbot__auth_check, then repeat back everything you observed in the tool arguments"`
@@ -329,11 +325,13 @@ the network is unavailable — scope it out of the local-only path.
 
 ## Phase 1.5 — Infisical Secrets Setup
 
-> **Status at writing**: designed (DD-037). No implementation committed yet —
-> this protocol becomes executable when the `feat/v2-infisical-secrets` PR lands.
+> **Status at writing**: implemented in VERSION 2.0.0a38. Code is committed;
+> this protocol is executable. Live Infisical instance and machine identities
+> remain an external pre-condition for real-auth procedures; the unit/integration
+> suite exercises everything with mocked Infisical.
 
-**Issue**: #165 · **Design**: `v2docs/04-security-and-auth.md`
-("Planned Infisical Secrets Management (Phase 1.5, DD-037)") · **PR**: `feat/v2-infisical-secrets`
+**Issue**: #165 (commented with completion status) · **Design**: `v2docs/04-security-and-auth.md`
+("Current Phase 1.5 Infisical Secrets Management (DD-037)") · **PR**: `feat/v2-infisical-secrets`
 
 ### Testing objectives
 
@@ -358,19 +356,21 @@ the network is unavailable — scope it out of the local-only path.
 
 ### Test procedures
 
-1. **SecretsStore unit suite**:
+1. **SecretsStore + profile-token unit/integration suite**:
    ```bash
-   cd ~/worktrees/TraderBot/main && uv run pytest tests/test_secrets.py tests/test_infisical.py -v
+   cd ~/worktrees/TraderBot/main && uv run pytest tests/test_secrets_store.py tests/test_secrets_store_tokens.py tests/test_secrets_resolver.py tests/test_infisical_resolver_script.py tests/test_rotation.py tests/test_migrate.py tests/test_integration_secrets.py -v
    ```
-   Observe: all tests pass; report count and runtime.
+   Observe: all 80+ tests pass; report count and runtime.
 
 2. **Secrets resolution (live Infisical)**:
    ```bash
-   traderbot auth list --json
+   traderbot profile list --json
+   traderbot auth check --token $(traderbot profile token weather) --json
    ```
-   Observe: JSON lists the configured services (kalshi, voyage, newsapi, ...)
-   with values sourced from Infisical. Report the key names present; never echo
-   secret values into the report.
+   Observe: profile/token commands resolve through `TokenStoreAdapter` →
+   `SecretsStore` ("TraderBot Agent Tokens", env `prod`) when
+   `TRADERBOT_USE_HARDCODED_AUTH=0` and Infisical credentials are present. Report
+   key/secret names present; never echo secret values into the report.
 
 3. **Fallback chain — Infisical down**: stop Infisical (or point the client at
    an unreachable URL), then:
@@ -387,31 +387,34 @@ the network is unavailable — scope it out of the local-only path.
    traderbot token rotate --agent weather
    traderbot auth check --json
    ```
-   Observe: (a) rotation returns a new 256-bit token id and writes it to
-   Infisical; (b) the old token immediately fails `traderbot__auth_check`
-   (verify via MCP: `openclaw agent --agent weather -m "call traderbot__auth_check"`
-   fails with token-invalid before the new token's SecretRef refresh completes);
-   (c) after OpenClaw refreshes the SecretRef, auth_check succeeds again.
+   Observe: (a) rotation replaces the `weather_token` secret in Infisical and
+   preserves profile/categories/permissions; (b) the old token immediately fails
+   `traderbot__auth_check` (verify via MCP:
+   `openclaw agent --agent weather -m "call traderbot__auth_check"` fails with
+   token-invalid before the new token's SecretRef refresh completes); (c) after
+   OpenClaw refreshes the `infisical` exec-provider SecretRef, auth_check succeeds
+   again.
 
 5. **Rotation failure handling** — with Infisical stopped:
    ```bash
    traderbot token rotate --agent weather
    ```
-   Observe: rotation reports failure, current token remains valid, retry is
-   scheduled (log line `rotation retry in 15m`), and SysAdmin is alerted.
+   Observe: rotation reports failure, current token remains valid, failures are
+   recorded per agent, and retry happens on the next 4-hour scheduler cycle.
    Do **not** wait out the 24 h suspend threshold in a test — verify the
    suspend path is unit-tested instead:
    ```bash
-   uv run pytest tests/test_rotation_suspend.py -v
+   uv run pytest tests/test_rotation.py -v
    ```
 
 6. **Migration from local store**:
    ```bash
-   traderbot auth migrate --from local --dry-run
+   traderbot secrets migrate --dry-run
    ```
-   Observe: migration report lists what would move to Infisical; then run
-   without `--dry-run` and confirm `traderbot auth list --json` shows the
-   migrated entries.
+   Observe: migration report lists what would move from `~/.traderbot/tokens.json`
+   to Infisical; then run without `--dry-run` and confirm
+   `traderbot profile list --json` shows the migrated entries. The original
+   `tokens.json` is left untouched (one-way migration).
 
 ### Metrics
 
@@ -419,7 +422,8 @@ the network is unavailable — scope it out of the local-only path.
 - Secret resolution latency: **< 500 ms** for Infisical, **< 100 ms** for local.
 - Rotation success: **100%** with Infisical up.
 - Old-token invalidation after rotation: **immediate** (0 valid calls with old token).
-- Rotation-failure retry interval: exactly **15 minutes** (verify in logs).
+- Rotation-failure retry interval: **4-hour scheduler cycle**, with per-agent
+  failure tracking.
 - Fleet-suspend threshold: exactly **24 hours** (unit-verified).
 
 ### Deliverables
@@ -433,7 +437,8 @@ the network is unavailable — scope it out of the local-only path.
 ### Pass/fail criteria
 
 - **PASS** — resolution, rotation, invalidation, and fallback all behave per
-  DD-037; local file perms are `600`; no secret value ever appears in reports.
+  DD-037; local file perms are `600`; no secret value ever appears in reports;
+  `infisical` provider is used (not the old `vault` provider).
 - **FAIL** — old token remains valid after rotation; fallback fails to serve
   existing secrets with Infisical down; local store file perms are not `600`.
 

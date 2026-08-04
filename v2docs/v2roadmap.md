@@ -4437,11 +4437,14 @@ This prevents a compromised SysAdmin from unilaterally moving an agent to live t
 **Date**: 2026-06-15
 **Status**: Decided
 
-> **Implementation status:** This section records the future Phase 1.5 design.
-> Infisical integration, API credential validation, machine identities,
-> scheduled rotation, deploy verification, and local API-secret fallback are
-> not implemented in Phase 1. Current profile-token storage is
-> `LocalTokenStore`/`tokens.json`.
+> **Implementation status:** Phase 1.5 implemented (commits leading to
+> 2.0.0a38). `SecretsStore` (Infisical primary + `LocalEncryptedStore`
+> fallback), `TokenStoreAdapter`, `SecretsResolver`, token rotation/scheduler,
+> the `openclaw-infisical-resolver` exec provider, plugin SecretRef migration
+> (vault → infisical), and the local-token migration script are all committed
+> and tested. Profile-token storage now defaults to Infisical-backed
+> `TokenStoreAdapter`; `LocalTokenStore`/`tokens.json` remains readable for
+> migration only.
 
 **Context**: DD-026 established 1Password as the primary secrets vault, but 1Password Connect requires a Business/Teams subscription ($7.99+/month), which is a significant barrier for TraderBot's target users. This decision replaces 1Password with Infisical, a free open-source (MIT) secrets management platform that provides the same capabilities — vaults, access control, secret rotation, audit logging, and a Python SDK — at no cost, with self-hosted deployment alongside TraderBot's existing Docker infrastructure.
 
@@ -4453,7 +4456,7 @@ All other aspects of DD-026 (architecture, token provisioning, division of secre
 |---|---|---|
 | Cost | Free (MIT license) | $7.99/user/month minimum |
 | Self-hosted | Yes, Docker Compose alongside TraderBot | Connect server is a cache; data in 1Password cloud |
-| Python SDK | `infisical-python` (v2.3.6, OS-independent) | Official API, but requires Business plan |
+| Python SDK | `infisicalsdk` (current official SDK, OS-independent) | Official API, but requires Business plan |
 | Secret versioning | Yes | Yes |
 | Token rotation | Yes (API-driven) | Yes (API-driven) |
 | Access control | Projects + environments | Vaults + items |
@@ -4535,15 +4538,15 @@ class SecretsStore:
 ```
 
 The `SecretsStore` interface is identical regardless of backend. The Infisical backend maps:
-- `namespace="global"` → Infisical project "TraderBot", environment "production"
+- `namespace="global"` → Infisical project "TraderBot", environment "prod"
 - `namespace="weather"` → Infisical project "TraderBot", environment "weather"
-- `namespace="tokens"` → Infisical project "TraderBot Agent Tokens", environment "production"
+- `namespace="tokens"` → Infisical project "TraderBot Agent Tokens", environment "prod"
 
 #### 4. Vault structure
 
 ```
 Infisical Project: "TraderBot"
-  Environment: "production" (global keys)
+  Environment: "prod" (global keys)
     ├── kalshi_api_key
     ├── kalshi_private_key_pem
     ├── voyage_api_key
@@ -4562,7 +4565,7 @@ Infisical Project: "TraderBot"
     └── coingecko_api_key
 
 Infisical Project: "TraderBot Agent Tokens"
-  Environment: "production"
+  Environment: "prod"
     ├── sysadmin_token (field: token, profile, agent, categories, permissions)
     ├── weather_token (field: token, profile, agent, categories, permissions)
     └── dev-liaison_token (field: token, profile, agent, categories, permissions)
@@ -4744,17 +4747,17 @@ OpenClaw SecretRef entries for each agent:
       traderbot_weather_token: {
         type: "exec",
         command: "infisical",
-        args: ["secrets", "get", "weather_token", "--project", "traderbot-agent-tokens", "--env", "production"]
+        args: ["secrets", "get", "weather_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
       },
       traderbot_sysadmin_token: {
         type: "exec",
         command: "infisical",
-        args: ["secrets", "get", "sysadmin_token", "--project", "traderbot-agent-tokens", "--env", "production"]
+        args: ["secrets", "get", "sysadmin_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
       },
       traderbot_dev-liaison_token: {
         type: "exec",
         command: "infisical",
-        args: ["secrets", "get", "dev-liaison_token", "--project", "traderbot-agent-tokens", "--env", "production"]
+        args: ["secrets", "get", "dev-liaison_token", "--project", "traderbot-agent-tokens", "--env", "prod"]
       }
     }
   }
@@ -4799,8 +4802,8 @@ Failed checks produce actionable guidance:
 ```
   ✗ Kalshi API key validation failed: 401 Unauthorized
     → Check your Kalshi API key in Infisical project "TraderBot"
-    → Environment: "production", Secret: "kalshi_api_key"
-    → Update with: infisical secrets update kalshi_api_key --project traderbot --env production
+    → Environment: "prod", Secret: "kalshi_api_key"
+    → Update with: infisical secrets update kalshi_api_key --project traderbot --env prod
 ```
 
 #### 12. Division of secrets responsibility (updated from DD-026)
@@ -4833,8 +4836,8 @@ Failed checks produce actionable guidance:
 |---|---|
 | `src/traderbot/secrets/__init__.py` | Package init |
 | `src/traderbot/secrets/store.py` | `SecretsStore` interface with Infisical and local backends |
-| `src/traderbot/secrets/infisical.py` | Infisical SDK integration (`infisical-python`) |
-| `src/traderbot/secrets/local.py` | Local fallback (encrypted `secrets.json`, machine-derived key, integrity monitoring) |
+| `src/traderbot/secrets/store.py` | `SecretsStore` facade — Infisical SDK integration and local fallback selection |
+| `src/traderbot/secrets/local_encrypted.py` | `LocalEncryptedStore` — Fernet-encrypted `secrets.json`, machine-derived key, integrity monitoring |
 | `src/traderbot/mcp/__init__.py` | Package init |
 | `src/traderbot/mcp/server.py` | MCP server entry point (`traderbot-mcp-server` command) |
 | `src/traderbot/mcp/tools.py` | MCP tool definitions |

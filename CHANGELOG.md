@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a38] — 2026-08-03
+
+### Added
+
+- feat: Phase 1.5 Infisical secrets store — `SecretsStore` unified facade (`src/traderbot/secrets/store.py`) selecting Infisical primary or `LocalEncryptedStore` fallback
+- feat: `LocalEncryptedStore` encrypted local fallback (`src/traderbot/secrets/local_encrypted.py`) — whole-payload Fernet encryption, machine-derived key, SHA-256 integrity monitoring
+- feat: `TokenStoreAdapter` (`src/traderbot/secrets/adapter.py`) — installs `SecretsStore` behind the existing `TokenStore` ABC seam
+- feat: `SecretsResolver` (`src/traderbot/secrets/resolver.py`) — lazy Infisical SDK init from `~/.traderbot/infisical-credentials.json` with local fallback
+- feat: `TokenRotationManager` + `RotationScheduler` (`src/traderbot/secrets/rotation.py`) — 4-hour asyncio rotation, per-agent failure tracking, 24-hour fleet suspension via `_SUSPENDED_PROFILES`
+- feat: `scripts/openclaw-infisical-resolver` exec provider — OpenClaw SecretRef bridge to Infisical
+- feat: migrate plugin SecretRef provider from `vault` to `infisical` in `configs/openclaw/with-plugin.json`
+- feat: local-to-Infisical token migration script (`src/traderbot/secrets/migrate.py`)
+- test: integration test suite (`tests/test_integration_secrets.py`) covering resolver → adapter → store → rotation → suspended profiles
+- feat: `TradingProfile.suspended: bool` field and `_SUSPENDED_PROFILES` module state in `mcp/resolver.py`
+
+### Changed
+
+- deps: replace `infisical-python` design references with `infisicalsdk` (current official SDK)
+- docs: update DD-037 in `v2roadmap.md` and `v2docs/v2roadmap.md` — `infisicalsdk`, `prod` environment slug, consolidated SDK integration in `store.py`, Phase 1.5 implemented
+- docs: rewrite `v2docs/04-security-and-auth.md` to reflect Phase 1.5 implemented status, `LocalEncryptedStore`, and Infisical exec provider
+- docs: update `docs/dev-liaison-testing-protocols.md` Phase 1.5 section with implemented commands and current test count
+- docs: comment GitHub issue #165 with Phase 1.5 completion status
+
+
 ## [2.0.0a25] — 2026-08-03
 
 ### Fixed
