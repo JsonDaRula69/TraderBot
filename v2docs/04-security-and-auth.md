@@ -3,16 +3,23 @@
 > This document covers the complete security architecture: Infisical secrets management, MCP authentication, per-agent isolation, token rotation, and the division of secrets responsibility. Grounded in DD-010, DD-011, DD-015, DD-025, DD-036, DD-037.
 
 > **Implementation status:** Phase 1.5 is code complete, locally tested
-> (233 Python tests + 11 TypeScript tests pass), and **deployment-tested on
-> macpro-linux** (2026-08-03): the wrapper resolves all 3 agent tokens from
+> (233 Python tests + 11 TypeScript tests pass), and **deployment-verified on
+> macpro-linux** (2026-08-04): the wrapper resolves all 3 agent tokens from
 > the real Infisical instance, migration converts tokens to the 5-field
 > format, `resolve_token` works via `TokenStoreAdapter`, token rotation is
 > verified against live Infisical, the MCP stdio E2E resolves the weather
 > profile through Infisical, and the gateway loads the token-injector plugin
-> with the Infisical exec provider (0 unresolved refs). Three
-> deployment-discovered fixes were required: wrapper `extra="ignore"`
-> (6419dc5), plugin JSON-document token extraction (6419dc5), and the
-> with-plugin.json `source` vs `type` schema fix (6b6772e).
+> with the Infisical exec provider (0 unresolved refs). The **live agent-driven
+> E2E is verified**: weather agent → plugin hook (priority 100) → Infisical
+> exec provider → wrapper resolves `weather_token` → plugin extracts raw token
+> from 5-field JSON doc → injects into params → MCP server resolves via
+> Infisical-backed SecretsStore → `{"status":"ok","auth":"resolved"}`.
+> Fail-closed: unknown agent (main) blocked. Token never enters model context
+> (agent confirmed "No"). Four deployment-discovered fixes: wrapper
+> `extra="ignore"` (6419dc5), plugin JSON-doc token extraction (6419dc5),
+> with-plugin.json `source` vs `type` schema fix (6b6772e), and exec provider
+> command ownership requirement (wrapper must be owned by gateway user, not
+> root).
 > Infisical is the default external secrets backend, with `SecretsStore`
 > selecting automatically between the Infisical SDK and the encrypted local
 > fallback. `TokenStoreAdapter` installs `SecretsStore` behind the existing
@@ -22,9 +29,6 @@
 > rotation, the scheduler, the `openclaw-infisical-resolver` exec provider,
 > and the migration script are all committed and tested. API credential
 > validation and the full deploy wizard integration remain future work.
-> The live agent-driven injection E2E (agent → plugin hook → Infisical exec
-> provider → inject → server resolve) is pending model availability on
-> macpro-linux.
 
 ---
 

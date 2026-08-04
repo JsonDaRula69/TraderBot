@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a43] — 2026-08-04
+
+### Docs
+
+- docs: Phase 1.5 Infisical deployment verified on macpro-linux — live agent E2E passes (weather agent → plugin → Infisical exec provider → token extracted → MCP server resolves via Infisical-backed SecretsStore); fail-closed unknown agent; token never in model context; four deployment-discovered fixes documented (wrapper extra=ignore, plugin JSON-doc extraction, with-plugin.json source vs type, exec provider command ownership)
+
 ## [2.0.0a42] — 2026-08-03
 
 ### Fixed
