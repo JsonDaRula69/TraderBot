@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a42] — 2026-08-03
+
+### Fixed
+
+- Deployment-discovered Phase 1.5 fixes: wrapper `InfisicalCredentials` allows extra fields (6419dc5), token-injector plugin extracts the raw token from the 5-field JSON document (6419dc5), with-plugin.json exec provider uses `source` not `type` per the OpenClaw schema (6b6772e)
+- Windows CI fix: `LocalEncryptedStore` writes in binary mode to avoid `\r\n` line-ending corruption of the integrity hash (d55cebd)
+
+### Added
+
+- Phase 1.5 deployment testing on macpro-linux: server-side Infisical integration verified (wrapper, migration, resolve_token, rotation, MCP stdio E2E, gateway exec provider)
+
 ## [2.0.0a38] — 2026-08-03
 
 ### Added

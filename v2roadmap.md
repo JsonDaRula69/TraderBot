@@ -76,6 +76,7 @@
 - [ ] ~~Workspace template source and category templates~~ (shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first)
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)
 - [x] Secrets management (Infisical) — DD-037
+- [~] Phase 1.5 deployment testing (2026-08-03, issue #165): code complete + locally tested (233 Python + 11 TS). Server-side Infisical integration verified on macpro-linux against the real instance — wrapper resolves all 3 agent tokens, migration converts to 5-field format, `resolve_token` works via TokenStoreAdapter, token rotation verified, MCP stdio E2E resolves weather via Infisical, gateway loads the plugin with the Infisical exec provider (0 unresolved refs). Three deployment-discovered fixes: wrapper `extra="ignore"` (6419dc5), plugin JSON-doc token extraction (6419dc5), with-plugin.json `source` vs `type` schema fix (6b6772e). Live agent-driven E2E pending — blocked by ollama-cloud 429 rate limit (resets midnight PT).
 - [x] Self-improvement framework — DD-038 (Round 5 defined, debate integration, sub-agent config, TEMPLATE.md mods)
 
 ### Dev-Liaison Testing Protocols
