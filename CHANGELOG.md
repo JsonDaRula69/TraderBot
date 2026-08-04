@@ -207,3 +207,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - docs: close #187 (Phase 1.1 complete), fix stale "pending"/"blocked" references across v2roadmap DD-025 and v2docs/09-mcp-tools.md
+
+## [2.0.0a42] — 2026-08-03
+
+### Fixed
+
+- fix(config): `with-plugin.json` Infisical exec provider used `type: "exec"` but the OpenClaw schema requires `source: "exec"` — discovered during macpro-linux deployment testing when the gateway rejected the config (`secrets.providers.infisical: Invalid input`). Updated the config and the two tests that asserted the wrong field (`test_with_plugin_config.py`, `test_integration_secrets.py`).
+- fix(plugin): token-injector plugin now extracts the raw `token` field from the 5-field Infisical JSON document (DD-037 §4) before injecting into MCP params, falling back to the raw string for env/file providers; fails closed on a JSON document lacking a string `token` field.

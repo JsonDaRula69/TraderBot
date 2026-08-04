@@ -39,7 +39,7 @@ class PluginsConfig(StrictConfigModel):
 
 
 class ExecProviderConfig(StrictConfigModel):
-    type: Literal["exec"]
+    source: Literal["exec"]
     command: str
     args: list[str]
     passEnv: list[str]
@@ -88,7 +88,7 @@ def test_with_plugin_uses_infisical_provider_not_vault() -> None:
 def test_infisical_provider_is_exec_with_absolute_resolver_command() -> None:
     provider = load_with_plugin_config().secrets.providers.infisical
 
-    assert provider.type == "exec"
+    assert provider.source == "exec"
     assert provider.command == INFISICAL_COMMAND
     assert provider.command.startswith("/usr/local/bin/")
     assert provider.jsonOnly is True

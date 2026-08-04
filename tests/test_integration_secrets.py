@@ -301,7 +301,7 @@ class TestWithPluginConfig:
 
         assert providers.model_fields_set == {"infisical"}
         provider = providers.infisical
-        assert provider.type == "exec"
+        assert provider.source == "exec"
         assert provider.command == "/usr/local/bin/openclaw-infisical-resolver"
         assert provider.jsonOnly is True
         assert set(provider.passEnv) == {"INFISICAL_TOKEN", "INFISICAL_DOMAIN"}

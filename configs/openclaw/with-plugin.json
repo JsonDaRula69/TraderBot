@@ -32,7 +32,7 @@
   "secrets": {
     "providers": {
       "infisical": {
-        "type": "exec",
+        "source": "exec",
         "command": "/usr/local/bin/openclaw-infisical-resolver",
         "args": [],
         "passEnv": [
