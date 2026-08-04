@@ -30,6 +30,7 @@ from mcp.types import (
 )
 
 from traderbot.mcp.tools import TOOL_DEFINITIONS, TOOL_HANDLER_MAP
+from traderbot.secrets.rotation import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,12 @@ app = Server(
 async def main() -> None:
     """Run the MCP server on stdio."""
     logger.info("TraderBot MCP server starting (pid=%s)", os.getpid())
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(read_stream, write_stream, app.create_initialization_options())
+    await start_scheduler()
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await app.run(read_stream, write_stream, app.create_initialization_options())
+    finally:
+        await stop_scheduler()
 
 
 def run_server() -> None:
