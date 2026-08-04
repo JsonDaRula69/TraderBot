@@ -212,7 +212,7 @@ def test_tokens_namespace_maps_to_agent_tokens_project() -> None:
     )
 
     create_call = next(c for c in client.secrets.calls if c[0] == "create")
-    assert create_call[1]["project_slug"] == "TraderBot Agent Tokens"
+    assert create_call[1]["project_slug"] == "traderbot-agent-tokens"
     assert create_call[1]["environment_slug"] == "prod"
 
 

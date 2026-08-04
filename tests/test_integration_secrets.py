@@ -135,7 +135,7 @@ class TestResolverWithInfisical:
             assert adapter.resolve_token("tok-1") == ("weather", "weather-agent")
             create_calls = [c for c in created[0].secrets.calls if c[0] == "create"]
             assert create_calls[0][1]["secret_name"] == "weather-agent_token"
-            assert create_calls[0][1]["project_slug"] == "TraderBot Agent Tokens"
+            assert create_calls[0][1]["project_slug"] == "traderbot-agent-tokens"
             assert create_calls[0][1]["environment_slug"] == "prod"
         finally:
             set_store(None)

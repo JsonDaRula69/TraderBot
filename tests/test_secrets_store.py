@@ -248,7 +248,7 @@ def test_infisical_global_namespace_maps_to_traderbot_prod() -> None:
 
     create_call = next(c for c in client.secrets.calls if c[0] == "create")
     kwargs = create_call[1]
-    assert kwargs["project_slug"] == "TraderBot"
+    assert kwargs["project_slug"] == "traderbot"
     assert kwargs["environment_slug"] == "prod"
 
 
@@ -260,7 +260,7 @@ def test_infisical_tokens_namespace_maps_to_tokens_project() -> None:
 
     create_call = next(c for c in client.secrets.calls if c[0] == "create")
     kwargs = create_call[1]
-    assert kwargs["project_slug"] == "TraderBot Agent Tokens"
+    assert kwargs["project_slug"] == "traderbot-agent-tokens"
     assert kwargs["environment_slug"] == "prod"
 
 

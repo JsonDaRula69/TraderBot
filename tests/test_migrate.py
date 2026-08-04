@@ -135,7 +135,7 @@ def test_migrate_uses_agent_id_token_names_in_tokens_namespace(tmp_path) -> None
 
     created = [c for c in client.secrets.calls if c[0] == "create"]
     assert {c[1]["secret_name"] for c in created} == {"weather_token", "sysadmin_token"}
-    assert all(c[1]["project_slug"] == "TraderBot Agent Tokens" for c in created)
+    assert all(c[1]["project_slug"] == "traderbot-agent-tokens" for c in created)
     assert all(c[1]["environment_slug"] == "prod" for c in created)
 
 

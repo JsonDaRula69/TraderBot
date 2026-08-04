@@ -43,8 +43,8 @@ _PROFILE_TOKEN_KEY = "token"
 # namespace -> (Infisical project, environment slug). The production
 # environment slug is "prod" (matches the deployed Infisical instance).
 _NAMESPACE_MAP: dict[str, tuple[str, str]] = {
-    "global": ("TraderBot", "prod"),
-    "tokens": ("TraderBot Agent Tokens", "prod"),
+    "global": ("traderbot", "prod"),
+    "tokens": ("traderbot-agent-tokens", "prod"),
 }
 
 
