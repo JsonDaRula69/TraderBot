@@ -194,7 +194,12 @@ class KalshiWebSocket:
         selected_channels = (
             frozenset(channels)
             if channels is not None
-            else {c for c in VALID_CHANNELS if c not in _PRIVATE_CHANNELS}
+            else {
+                c
+                for c in VALID_CHANNELS
+                if c not in _PRIVATE_CHANNELS
+                and not (c == "orderbook_delta" and not market_tickers)
+            }
         )
         invalid = selected_channels - VALID_CHANNELS
         if invalid:
