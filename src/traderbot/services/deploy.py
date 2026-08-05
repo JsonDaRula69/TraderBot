@@ -138,8 +138,8 @@ def disable_and_stop_service() -> bool:
     """
     if detect_service_manager() != "systemd":
         return False
-    _systemctl("stop", "traderbot.service")
-    _systemctl("disable", "traderbot.service")
+    _ = _systemctl("stop", "traderbot.service")
+    _ = _systemctl("disable", "traderbot.service")
     return _systemctl("is-active", "traderbot.service").returncode != 0
 
 
