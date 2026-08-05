@@ -13,19 +13,19 @@
 │  ┌─────────────────────┐    ┌──────────────────────────────────┐   │
 │  │    OpenClaw Gateway  │    │      TraderBot Service           │   │
 │  │                      │    │      (always-on daemon + MCP)     │   │
-│  │  - Agent sessions    │◄──►│                                  │   │
+│  │  - Agent sessions    │◄──►│      streamable-http (loopback)   │   │
 │  │  - Cron/heartbeat    │    │  ┌─────────────────────────┐    │   │
 │  │  - Session comms     │    │  │   Data Collection Workers│    │   │
 │  │  - SecretRef resolve │    │  │  ├─ Kalshi WebSocket     │    │   │
-│  │  - MCP tool routing  │    │  │  ├─ News ingest (30m)    │    │   │
+│  │  - MCP tool routing  │    │  │  ├─ News ingest (30m stub)│   │   │
 │  │                      │    │  │  ├─ Weather data (1h)    │    │   │
-│  └──────┬───────────────┘    │  │  ├─ FRED data (daily)   │    │   │
-│         │                    │  │  ├─ Settlement monitor   │    │   │
+│  └──────┬───────────────┘    │  │  ├─ Settlement monitor   │    │   │
 │         │                    │  │  └─ Token rotation (4h)  │    │   │
 │         │                    │  └─────────────────────────┘    │   │
 │         │                    │                                  │   │
 │         │                    │  ┌─────────────────────────┐    │   │
-│         │                    │  │   MCP Server (stdio)    │    │   │
+│         │                    │  │  MCP Server (streamable-  │    │   │
+│         │                    │  │  http, /mcp on 127.0.0.1) │    │   │
 │         │                    │  │  Resolves token → profile│    │   │
 │         │                    │  │  Enforces category ACLs  │    │   │
 │         │                    │  │  Routes by mode          │    │   │
@@ -70,7 +70,7 @@ The TraderBot service is a single process that combines the data pipeline, MCP s
 1. Read `INFISICAL_TOKEN` from environment (via OpenClaw SecretRef)
 2. Authenticate with Infisical
 3. Load all secrets from "TraderBot" and "TraderBot Agent Tokens" projects
-4. Start the MCP server (stdio, launched by OpenClaw gateway)
+4. Start the MCP server over streamable-http on loopback (`http://127.0.0.1:8765/mcp`), hosted in-process by the daemon via uvicorn
 5. Start the token rotation timer (4-hour cycle)
 6. Start data collection workers (WebSocket, news, weather, etc.)
 7. Run health checks and register as ready
@@ -80,11 +80,12 @@ The TraderBot service is a single process that combines the data pipeline, MCP s
 | Worker | Interval | Data |
 |---|---|---|
 | Kalshi WebSocket | Continuous | Real-time market prices, orderbooks, fills, market lifecycle |
-| News ingest | 30 min | NewsAPI, Reddit, Twitter articles, embedded via VoyageAI |
+| News ingest | 30 min | Phase 2 stub (fetch+embed placeholder; full NLP/sentiment deferred) |
 | Weather data | 1 hour | NWS forecasts + Open-Meteo historical |
-| Economic indicators | Daily | FRED data |
 | Settlement monitor | 1 hour | Checks recently settled markets |
 | Token rotation | 4 hours | Rotates all agent profile tokens via Infisical |
+
+> **Deferred workers** (Phase 3+): FRED economic indicators (daily), crypto/sports workers, full news NLP/sentiment.
 
 **MCP Server** — Responds to agent tool calls. Reads from local databases (not external APIs). Returns WebSocket-cached data for real-time requests. Validates agent identity and category permissions on every call.
 

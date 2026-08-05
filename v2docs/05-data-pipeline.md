@@ -21,17 +21,15 @@ TraderBot Service (always-on)
 │   └── Cached locally, sub-millisecond access for MCP queries
 │
 ├── Data Collection Workers (scheduled)
-│   ├── News ingest: fetches NewsAPI + Reddit + Twitter → embed → ChromaDB (30 min)
-│   ├── Weather data: fetches NWS forecasts + Open-Meteo historical → SQLite + ChromaDB (1h)
-│   ├── Economic indicators: fetches FRED → SQLite (daily)
-│   ├── Crypto prices: fetches CoinGecko → SQLite (15 min, if crypto enabled)
-│   ├── Sports data: fetches TheSportsDB → SQLite (daily, if sports enabled)
-│   └── Settlement monitor: checks recently settled markets → settlement_cache (1h)
+│   ├── News ingest: Phase 2 stub (fetch+embed placeholder) (30 min)
+│   ├── Weather data: fetches NWS forecasts + Open-Meteo historical → SQLite (1h)
+│   ├── Settlement monitor: checks recently settled markets → settlement_cache (1h)
+│   └── (Deferred: FRED daily, CoinGecko 15 min, TheSportsDB daily, full news NLP)
 │
-├── MCP Server (stdio, responds to agent tool calls)
+├── MCP Server (streamable-http on loopback, responds to agent tool calls)
 │   ├── Reads from local databases, NOT external APIs
 │   ├── Returns WebSocket-cached data for real-time requests
-│   ├── Returns SQLite/ChromaDB data for historical queries
+│   ├── Returns SQLite data for historical queries
 │   ├── Validates agent identity and category permissions
 │   └── Sub-millisecond response for cached data
 │
@@ -39,8 +37,8 @@ TraderBot Service (always-on)
 │   └── Rotates all agent profile tokens via Infisical
 │
 └── Local Databases
-    ├── SQLite: per-agent per-mode databases
-    ├── ChromaDB: shared collections with category metadata
+    ├── SQLite: global ~/.traderbot/traderbot.db (market_data, orderbook, weather_forecasts, nws_forecasts, settlement_cache)
+    ├── ChromaDB: shared collections with category metadata (Phase 3)
     └── WebSocket cache: real-time Kalshi prices, orderbooks, fills
 ```
 

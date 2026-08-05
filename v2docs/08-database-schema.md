@@ -110,6 +110,63 @@ CREATE TABLE config (
 );
 ```
 
+**Phase 2 additions (issue #166)** — the daemon's `MarketCache` write-behind
+persistence and the data-pipeline providers write to these tables in the same
+global `traderbot.db`:
+
+```sql
+-- Real-time market ticker snapshots (WebSocket write-behind, WS-first)
+CREATE TABLE market_data (
+    ticker TEXT PRIMARY KEY,
+    last_price_dollars TEXT,
+    yes_bid_dollars TEXT,
+    yes_ask_dollars TEXT,
+    volume_fp TEXT,
+    open_interest_fp TEXT,
+    updated_at TEXT
+);
+
+-- Orderbook snapshots (WebSocket write-behind)
+CREATE TABLE orderbook (
+    ticker TEXT,
+    side TEXT,
+    price_dollars TEXT,
+    count_fp TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (ticker, side, price_dollars)
+);
+
+-- Open-Meteo ensemble forecast snapshots (hourly)
+CREATE TABLE weather_forecasts (
+    city TEXT,
+    model TEXT,
+    forecast_date TEXT,
+    variable TEXT,
+    value REAL,
+    created_at TEXT,
+    PRIMARY KEY (city, model, forecast_date, variable, created_at)
+);
+
+-- NWS point-forecast snapshots (hourly)
+CREATE TABLE nws_forecasts (
+    city TEXT,
+    period_name TEXT,
+    temperature REAL,
+    wind_speed TEXT,
+    short_forecast TEXT,
+    created_at TEXT
+);
+
+-- Settled-market outcomes (hourly settlement monitor)
+CREATE TABLE settlement_cache (
+    ticker TEXT PRIMARY KEY,
+    close_time TEXT,
+    yes_submission_price REAL,
+    settlement_value TEXT,
+    resolved_at TEXT
+);
+```
+
 ### Per-Agent Database (`decisions.db`)
 
 ```sql
