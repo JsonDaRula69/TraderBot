@@ -17,7 +17,7 @@ import logging
 import os
 import signal
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Final
 
 import uvicorn
@@ -256,8 +256,13 @@ async def run_daemon(
         logger.info("daemon stopped")
 
 
-def main() -> None:
-    """Entry point for the ``traderbot-daemon`` console script."""
+def main(argv: Sequence[str] | None = None) -> None:
+    """Entry point for the ``traderbot-daemon`` console script.
+
+    ``argv`` is accepted so the ``traderbot daemon`` CLI subcommand can
+    forward its parsed flags without leaking the ``daemon`` token into
+    ``sys.argv`` (which would be rejected by this parser).
+    """
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the always-on TraderBot daemon")
@@ -269,7 +274,7 @@ def main() -> None:
         choices=["production", "demo"],
         help="Kalshi environment",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO,

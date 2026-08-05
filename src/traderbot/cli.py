@@ -27,8 +27,16 @@ _EXIT_OK = 0
 _EXIT_ERROR = 1
 
 
-def _cmd_daemon(_args: argparse.Namespace) -> int:
-    daemon_main()
+def _cmd_daemon(args: argparse.Namespace) -> int:
+    forwarded = [
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+        "--environment",
+        args.environment,
+    ]
+    daemon_main(forwarded)
     return _EXIT_OK
 
 
@@ -67,7 +75,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("daemon", help="Run the always-on TraderBot daemon")
+    daemon = subparsers.add_parser("daemon", help="Run the always-on TraderBot daemon")
+    daemon.add_argument("--host", default="127.0.0.1", help="bind host (loopback only)")
+    daemon.add_argument("--port", type=int, default=8765, help="bind port")
+    daemon.add_argument(
+        "--environment",
+        default="production",
+        choices=["production", "demo"],
+        help="Kalshi environment",
+    )
 
     service = subparsers.add_parser("service", help="Manage the daemon service")
     service_sub = service.add_subparsers(dest="action", required=True)

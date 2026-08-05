@@ -31,7 +31,9 @@ def test_cli_unknown_command_errors() -> None:
 def test_cli_daemon_subcommand_invokes_daemon_main() -> None:
     with mock.patch("traderbot.cli.daemon_main") as dm:
         code = main(["daemon"])
-        dm.assert_called_once_with()
+        dm.assert_called_once_with(
+            ["--host", "127.0.0.1", "--port", "8765", "--environment", "production"]
+        )
         assert code == 0
 
 
