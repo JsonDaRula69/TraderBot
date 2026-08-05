@@ -33,30 +33,42 @@ logger = logging.getLogger(__name__)
 _resolver: SecretsResolver | None = None
 
 
+def build_secrets_store() -> SecretsStore:
+    """Build a :class:`SecretsStore` from the Infisical credentials file.
+
+    When ``~/.traderbot/infisical-credentials.json`` exists and Infisical is
+    reachable, the store is Infisical-backed (primary); otherwise it falls back
+    to :class:`LocalEncryptedStore`. Shared by :class:`SecretsResolver` and the
+    daemon's component graph so both use the same construction.
+    """
+    creds_path = Path.home() / ".traderbot" / "infisical-credentials.json"
+    try:
+        creds = json.loads(creds_path.read_text())
+        from infisical_sdk import InfisicalSDKClient
+
+        # The SDK ships no type stubs; cast to the structural client protocol
+        # (established pattern: Any first, then cast).
+        client: Any = InfisicalSDKClient(host=creds["host"])
+        client.auth.universal_auth.login(
+            creds["machineIdentity"]["clientId"],
+            creds["machineIdentity"]["clientSecret"],
+        )
+        store = SecretsStore(
+            infisical_client=cast(InfisicalClient, client),
+            local_store=LocalEncryptedStore(),
+        )
+        logger.info("SecretsResolver: Infisical connected")
+        return store
+    except Exception as exc:
+        logger.warning("SecretsResolver: Infisical unreachable (%s), using local fallback", exc)
+        return SecretsStore(infisical_client=None, local_store=LocalEncryptedStore())
+
+
 class SecretsResolver:
     """Reads Infisical credentials, builds :class:`SecretsStore`, installs the adapter."""
 
     def __init__(self) -> None:
-        creds_path = Path.home() / ".traderbot" / "infisical-credentials.json"
-        try:
-            creds = json.loads(creds_path.read_text())
-            from infisical_sdk import InfisicalSDKClient
-
-            # The SDK ships no type stubs; cast to the structural client protocol
-            # (established pattern: Any first, then cast).
-            client: Any = InfisicalSDKClient(host=creds["host"])
-            client.auth.universal_auth.login(
-                creds["machineIdentity"]["clientId"],
-                creds["machineIdentity"]["clientSecret"],
-            )
-            store = SecretsStore(
-                infisical_client=cast(InfisicalClient, client),
-                local_store=LocalEncryptedStore(),
-            )
-            logger.info("SecretsResolver: Infisical connected")
-        except Exception as exc:
-            logger.warning("SecretsResolver: Infisical unreachable (%s), using local fallback", exc)
-            store = SecretsStore(infisical_client=None, local_store=LocalEncryptedStore())
+        store = build_secrets_store()
         self._store: SecretsStore = store
         # Install the adapter via the existing set_store() seam
         tokens.set_store(TokenStoreAdapter(store))

@@ -32,6 +32,7 @@ from traderbot.kalshi.websocket import KalshiWebSocketManager
 from traderbot.kalshi.ws_cache import MarketCache
 from traderbot.mcp.server import app, start_scheduler, stop_scheduler
 from traderbot.paths import get_db_path
+from traderbot.secrets.resolver import build_secrets_store
 from traderbot.secrets.store import SecretsStore
 from traderbot.state import (
     DATA_PIPELINE_RUNNING,
@@ -137,7 +138,7 @@ async def build_components(
     Returns a dict of components owned by the daemon lifecycle:
     ``cache``, ``client``, ``ws``, ``data``, ``mcp_app``, ``app``.
     """
-    store = secrets if secrets is not None else SecretsStore()
+    store = secrets if secrets is not None else build_secrets_store()
     api_key = store.get("kalshi", "api_key")
     private_key_pem = store.get("kalshi", "private_key_pem")
     if not api_key or not private_key_pem:
