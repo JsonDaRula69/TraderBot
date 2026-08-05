@@ -94,9 +94,10 @@ class AgentConfig(StrictConfigModel):
 
 
 class McpServerConfig(StrictConfigModel):
-    command: Literal["traderbot-mcp-server"]
-    transport: Literal["stdio"]
-    env: dict[str, str] | None = None
+    url: str
+    transport: Literal["streamable-http"]
+    requestTimeoutMs: int
+    connectionTimeoutMs: int
 
 
 class McpServersConfig(StrictConfigModel):
@@ -167,5 +168,5 @@ def test_gateway_registers_traderbot_mcp_server_once() -> None:
 
     assert gateway.model_fields_set == {"mcp"}
     assert gateway.mcp.servers.model_fields_set == {"traderbot"}
-    assert gateway.mcp.servers.traderbot.command == "traderbot-mcp-server"
-    assert gateway.mcp.servers.traderbot.transport == "stdio"
+    assert gateway.mcp.servers.traderbot.url == "http://127.0.0.1:8765/mcp"
+    assert gateway.mcp.servers.traderbot.transport == "streamable-http"

@@ -317,7 +317,8 @@ class TestWithPluginConfig:
             assert secret_ref.provider == "infisical"
             assert secret_ref.id == f"{agent_id}_token"
 
-    def test_mcp_server_env_enables_real_auth(self) -> None:
+    def test_mcp_server_uses_streamable_http_transport(self) -> None:
         server = load_with_plugin_config().mcp.servers.traderbot
 
-        assert server.env == {"TRADERBOT_USE_HARDCODED_AUTH": "0"}
+        assert server.transport == "streamable-http"
+        assert server.url == "http://127.0.0.1:8765/mcp"
