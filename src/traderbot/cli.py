@@ -1,0 +1,83 @@
+"""TraderBot command-line interface (Phase 2).
+
+Provides service lifecycle commands for the always-on daemon (DD-022):
+``traderbot service install|uninstall|status``. This is deliberately minimal —
+the full 8-step ``traderbot deploy`` wizard is a Phase 4 concern.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+
+from traderbot.services.deploy import (
+    deploy_service,
+    detect_service_manager,
+    remove_service,
+    service_status,
+)
+
+_EXIT_OK = 0
+_EXIT_ERROR = 1
+
+
+def _cmd_service_install(_args: argparse.Namespace) -> int:
+    try:
+        destination = deploy_service()
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return _EXIT_ERROR
+    print(f"Installed daemon service: {destination}")
+    return _EXIT_OK
+
+
+def _cmd_service_uninstall(_args: argparse.Namespace) -> int:
+    if not remove_service():
+        print("No daemon service file present; nothing to uninstall.", file=sys.stderr)
+        return _EXIT_ERROR
+    print("Uninstalled daemon service.")
+    return _EXIT_OK
+
+
+def _cmd_service_status(_args: argparse.Namespace) -> int:
+    manager = detect_service_manager()
+    print(f"Service manager: {manager}")
+    print(f"Service status: {service_status()}")
+    return _EXIT_OK
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="traderbot",
+        description="TraderBot daemon and service management.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    service = subparsers.add_parser("service", help="Manage the daemon service")
+    service_sub = service.add_subparsers(dest="action", required=True)
+    service_sub.add_parser("install", help="Install the daemon service")
+    service_sub.add_parser("uninstall", help="Uninstall the daemon service")
+    service_sub.add_parser("status", help="Report daemon service status")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the traderbot CLI, returning the process exit code."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "service":
+        if args.action == "install":
+            return _cmd_service_install(args)
+        if args.action == "uninstall":
+            return _cmd_service_uninstall(args)
+        if args.action == "status":
+            return _cmd_service_status(args)
+
+    parser.error(f"unknown command: {args.command}")
+    return _EXIT_ERROR
+
+
+if __name__ == "__main__":
+    sys.exit(main())
