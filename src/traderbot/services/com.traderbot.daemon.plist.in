@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Label: single always-on daemon (DD-016) -->
+	<key>Label</key>
+	<string>com.traderbot.daemon</string>
+
+	<!-- ProgramArguments: run traderbot daemon with resolved binary path -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>{traderbot_bin}</string>
+		<string>daemon</string>
+	</array>
+
+	<!-- EnvironmentVariables: placeholders substituted at install time -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>TRADERBOT_PROFILE_TOKEN</key>
+		<string>{profile_token}</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+
+	<!-- WorkingDirectory: daemon data directory -->
+	<key>WorkingDirectory</key>
+	<string>{home}/.traderbot</string>
+
+	<!-- UserName: runs as this user (boot-time LaunchDaemon) -->
+	<key>UserName</key>
+	<string>{user}</string>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<true/>
+
+	<!-- Log paths -->
+	<key>StandardOutPath</key>
+	<string>{home}/Library/Logs/traderbot-daemon.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>{home}/Library/Logs/traderbot-daemon-error.log</string>
+</dict>
+</plist>

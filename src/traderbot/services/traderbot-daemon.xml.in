@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+    TraderBot Windows Task Scheduler template (DD-022).
+
+    NOTE: This is a minimal stub. The placeholders are substituted by
+    deploy_service(), but the file is only written to ~/.traderbot/ — it is
+    not yet registered with the Task Scheduler (`schtasks.exe /create`). A
+    proper Task Scheduler registration path (or use of the existing
+    windows_service.py sc.exe flow) is TODO and belongs to a later phase.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>TraderBot always-on daemon</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+    </BootTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>5</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{traderbot_bin}</Command>
+      <Arguments>daemon</Arguments>
+      <WorkingDirectory>{home}\.traderbot</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
