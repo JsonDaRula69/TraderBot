@@ -23,6 +23,13 @@ def test_cli_unknown_command_errors() -> None:
     assert raised
 
 
+def test_cli_daemon_subcommand_invokes_daemon_main() -> None:
+    with mock.patch("traderbot.cli.daemon_main") as dm:
+        code = main(["daemon"])
+        dm.assert_called_once_with()
+        assert code == 0
+
+
 def test_service_status_no_manager() -> None:
     with mock.patch("traderbot.services.deploy.detect_service_manager", return_value="none"):
         assert service_status() == "not installed"

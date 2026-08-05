@@ -1,8 +1,10 @@
 """TraderBot command-line interface (Phase 2).
 
-Provides service lifecycle commands for the always-on daemon (DD-022):
-``traderbot service install|uninstall|status``. This is deliberately minimal —
-the full 8-step ``traderbot deploy`` wizard is a Phase 4 concern.
+Provides the always-on daemon entry point (DD-016) and service lifecycle
+commands (DD-022): ``traderbot daemon`` runs the daemon, and
+``traderbot service install|uninstall|status`` manages the platform
+service. This is deliberately minimal — the full 8-step ``traderbot deploy``
+wizard is a Phase 4 concern.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from traderbot.daemon import main as daemon_main
 from traderbot.services.deploy import (
     deploy_service,
     detect_service_manager,
@@ -20,6 +23,11 @@ from traderbot.services.deploy import (
 
 _EXIT_OK = 0
 _EXIT_ERROR = 1
+
+
+def _cmd_daemon(_args: argparse.Namespace) -> int:
+    daemon_main()
+    return _EXIT_OK
 
 
 def _cmd_service_install(_args: argparse.Namespace) -> int:
@@ -54,6 +62,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser("daemon", help="Run the always-on TraderBot daemon")
+
     service = subparsers.add_parser("service", help="Manage the daemon service")
     service_sub = service.add_subparsers(dest="action", required=True)
     service_sub.add_parser("install", help="Install the daemon service")
@@ -67,6 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "daemon":
+        return _cmd_daemon(args)
     if args.command == "service":
         if args.action == "install":
             return _cmd_service_install(args)
