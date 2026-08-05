@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 from traderbot.mcp.auth import check_category_access
 from traderbot.mcp.resolver import resolve_token_adapter
 from traderbot.profiles import ProfileRegistry
+from traderbot.state import get_market_cache, snapshot
 
 if TYPE_CHECKING:
     from traderbot.profiles.models import TradingProfile
@@ -59,6 +60,14 @@ class MarketEdgeInput(BaseModel):
     token: str | None = None
     category: str
     ticker: str
+
+
+class MarketPricesInput(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    token: str | None = None
+    ticker: str
+    resolution: str | None = None
 
 
 def _check_permissions(
@@ -110,6 +119,8 @@ async def traderbot__health(token: str, **kwargs: JsonValue) -> JsonObject:
     assert profile is not None
     use_hardcoded_auth = os.environ.get("TRADERBOT_USE_HARDCODED_AUTH", "1") != "0"
 
+    status = snapshot()
+
     return {
         "status": "ok",
         "mode": profile.mode,
@@ -119,8 +130,8 @@ async def traderbot__health(token: str, **kwargs: JsonValue) -> JsonObject:
         "components": {
             "mcp_server": "running",
             "auth": "hardcoded" if use_hardcoded_auth else "resolved",
-            "data_pipeline": "not_started",
-            "websocket": "not_connected",
+            "data_pipeline": status["data_pipeline"],
+            "websocket": status["websocket"],
         },
     }
 
@@ -201,6 +212,59 @@ async def traderbot__market_edge(token: str, **kwargs: JsonValue) -> JsonObject:
     }
 
 
+def _as_price(value: JsonValue | None) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+async def traderbot__market_prices(token: str, **kwargs: JsonValue) -> JsonObject:
+    """Return current market prices from the live WebSocket cache (no REST calls)."""
+    raw_ticker = kwargs.get("ticker")
+    ticker = raw_ticker if isinstance(raw_ticker, str) else None
+    _profile, _agent_id, err = _check_permissions(token, "market_prices", category=None)
+    if err is not None:
+        return err
+
+    try:
+        input_data = MarketPricesInput.model_validate({"token": token, **kwargs})
+    except ValidationError as exc:
+        return {"error": f"Invalid input: {exc}"}
+
+    cache = get_market_cache()
+    if cache is None:
+        return {
+            "status": "error",
+            "ticker": ticker,
+            "error": "market data cache not available (daemon not running)",
+        }
+
+    ticker_data = cache.get_ticker(ticker) if ticker is not None else None
+    if ticker_data is None:
+        return {"status": "error", "ticker": ticker, "error": "no data available for ticker"}
+
+    last_price = _as_price(ticker_data.get("last_price"))
+    bid = _as_price(ticker_data.get("bid"))
+    ask = _as_price(ticker_data.get("ask"))
+    volume = _as_price(ticker_data.get("volume"))
+
+    spread = None
+    if bid is not None and ask is not None:
+        spread = round(ask - bid, 6)
+
+    return {
+        "status": "ok",
+        "ticker": input_data.ticker,
+        "current_price": last_price,
+        "bid": bid,
+        "ask": ask,
+        "spread": spread,
+        "volume": volume,
+        "resolution": input_data.resolution,
+        "mode": _profile.mode if _profile is not None else "unknown",
+    }
+
+
 TOOL_DEFINITIONS: tuple[ToolDefinition, ...] = (
     {
         "name": "health",
@@ -222,6 +286,11 @@ TOOL_DEFINITIONS: tuple[ToolDefinition, ...] = (
         "description": "Compute the estimated edge for a market.",
         "inputSchema": _JSON_OBJECT_ADAPTER.validate_python(MarketEdgeInput.model_json_schema()),
     },
+    {
+        "name": "market_prices",
+        "description": "Return current market prices from the live WebSocket cache.",
+        "inputSchema": _JSON_OBJECT_ADAPTER.validate_python(MarketPricesInput.model_json_schema()),
+    },
 )
 
 TOOL_HANDLER_MAP = {
@@ -229,4 +298,5 @@ TOOL_HANDLER_MAP = {
     "auth_check": traderbot__auth_check,
     "profile_list": traderbot__profile_list,
     "market_edge": traderbot__market_edge,
+    "market_prices": traderbot__market_prices,
 }
