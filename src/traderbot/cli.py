@@ -17,6 +17,8 @@ from traderbot.daemon import main as daemon_main
 from traderbot.services.deploy import (
     deploy_service,
     detect_service_manager,
+    disable_and_stop_service,
+    enable_and_start_service,
     remove_service,
     service_status,
 )
@@ -33,14 +35,17 @@ def _cmd_daemon(_args: argparse.Namespace) -> int:
 def _cmd_service_install(_args: argparse.Namespace) -> int:
     try:
         destination = deploy_service()
+        started = enable_and_start_service()
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return _EXIT_ERROR
     print(f"Installed daemon service: {destination}")
+    print("Service started." if started else "Service enabled but not active yet.")
     return _EXIT_OK
 
 
 def _cmd_service_uninstall(_args: argparse.Namespace) -> int:
+    disable_and_stop_service()
     if not remove_service():
         print("No daemon service file present; nothing to uninstall.", file=sys.stderr)
         return _EXIT_ERROR

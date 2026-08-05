@@ -6,7 +6,12 @@ from pathlib import Path
 from unittest import mock
 
 from traderbot.cli import main
-from traderbot.services.deploy import deploy_service, service_status
+from traderbot.services.deploy import (
+    deploy_service,
+    disable_and_stop_service,
+    enable_and_start_service,
+    service_status,
+)
 
 
 def test_cli_status_reports_not_installed() -> None:
@@ -28,6 +33,34 @@ def test_cli_daemon_subcommand_invokes_daemon_main() -> None:
         code = main(["daemon"])
         dm.assert_called_once_with()
         assert code == 0
+
+
+def test_enable_and_start_service_systemd() -> None:
+    with (
+        mock.patch("traderbot.services.deploy.detect_service_manager", return_value="systemd"),
+        mock.patch("traderbot.services.deploy._systemctl") as systemctl,
+    ):
+        systemctl.return_value = mock.Mock(returncode=0)
+        assert enable_and_start_service() is True
+        systemctl.assert_any_call("daemon-reload")
+        systemctl.assert_any_call("enable", "traderbot.service")
+        systemctl.assert_any_call("start", "traderbot.service")
+
+
+def test_enable_and_start_service_non_systemd() -> None:
+    with mock.patch("traderbot.services.deploy.detect_service_manager", return_value="launchd"):
+        assert enable_and_start_service() is False
+
+
+def test_disable_and_stop_service_systemd() -> None:
+    with (
+        mock.patch("traderbot.services.deploy.detect_service_manager", return_value="systemd"),
+        mock.patch("traderbot.services.deploy._systemctl") as systemctl,
+    ):
+        systemctl.return_value = mock.Mock(returncode=1)
+        assert disable_and_stop_service() is True
+        systemctl.assert_any_call("stop", "traderbot.service")
+        systemctl.assert_any_call("disable", "traderbot.service")
 
 
 def test_service_status_no_manager() -> None:
