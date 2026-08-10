@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
 from traderbot.db.pool import (
     ConnectionPoolClosedError,
     ConnectionPoolTimeoutError,
