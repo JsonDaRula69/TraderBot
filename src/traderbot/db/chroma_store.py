@@ -7,30 +7,30 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import BinaryIO, Protocol, Self, override, runtime_checkable
+from typing import BinaryIO, ClassVar, Protocol, Self, override, runtime_checkable
 
 import chromadb
 from chromadb import Collection
 from chromadb.api import ClientAPI
-from chromadb.api.types import DeleteResult, GetResult, Metadata, PyEmbedding, QueryResult, Where
+from chromadb.api.types import GetResult, Metadata, PyEmbedding, QueryResult, Where
 from chromadb.config import Settings
 
 from traderbot.kalshi.models import MarketCategory
 
+from . import security as db_security
 from .models import (
-    ChromaCategoryError,
-    ChromaDeleteRequest,
-    ChromaGetRequest,
-    ChromaQueryRequest,
-    ChromaRecord,
+    EXPLICIT_EMBEDDING_MODEL,
+    SHARED_CHROMA_COLLECTIONS,
+    ChromaMetadataMismatchError,
+    MetadataValue,
+    scoped_ids,
+    scoped_metadatas,
+    scoped_where,
+    validate_collection_name,
 )
-from .security import (
-    ChromaBackendError,
-    InvalidChromaRootError,
-    assert_embedded_backend,
-    validate_chroma_lock_file,
-    validate_chroma_root,
-)
+
+type ChromaGetResult = GetResult
+type ChromaQueryResult = QueryResult
 
 
 @runtime_checkable
@@ -58,8 +58,8 @@ class ChromaOwnershipLock:
         self._file: BinaryIO | None = None
 
     def acquire(self) -> None:
-        validate_chroma_root(self._lock_path.parent)
-        validate_chroma_lock_file(self._lock_path)
+        db_security.validate_chroma_root(self._lock_path.parent)
+        db_security.validate_chroma_lock_file(self._lock_path)
         lock_file = self._lock_path.open("r+b", buffering=0)
         try:
             if sys.platform == "win32":
@@ -75,9 +75,9 @@ class ChromaOwnershipLock:
             lock_file.close()
             raise ChromaOwnershipError(self._lock_path, "already locked or unavailable") from exc
         try:
-            validate_chroma_root(self._lock_path.parent)
-            validate_chroma_lock_file(self._lock_path)
-        except InvalidChromaRootError:
+            db_security.validate_chroma_root(self._lock_path.parent)
+            db_security.validate_chroma_lock_file(self._lock_path)
+        except db_security.InvalidChromaRootError:
             lock_file.close()
             raise
         self._file = lock_file
@@ -113,8 +113,10 @@ class ChromaOwnershipLock:
 class ChromaStore:
     """Category-safe facade over one embedded persistent Chroma client."""
 
+    SHARED_COLLECTIONS: ClassVar[frozenset[str]] = SHARED_CHROMA_COLLECTIONS
+
     def __init__(self, data_root: Path) -> None:
-        validate_chroma_root(data_root)
+        db_security.validate_chroma_root(data_root)
         with ExitStack() as startup:
             lock = startup.enter_context(ChromaOwnershipLock(data_root))
             client = chromadb.PersistentClient(
@@ -126,13 +128,13 @@ class ChromaStore:
             )
             if not isinstance(client, _ClosableClient):
                 settings = client.get_settings()
-                raise ChromaBackendError(
+                raise db_security.ChromaBackendError(
                     settings.chroma_api_impl,
                     settings.anonymized_telemetry,
                     "client has no public close method",
                 )
             _ = startup.callback(client.close)
-            assert_embedded_backend(client)
+            db_security.assert_embedded_backend(client)
             _ = startup.pop_all()
         self._lock: ChromaOwnershipLock = lock
         self._client: ClientAPI = client
@@ -140,102 +142,123 @@ class ChromaStore:
         self._collections: dict[str, Collection] = {}
         self._closed: bool = False
 
-    def _collection(self, name: str) -> Collection:
+    @staticmethod
+    def _verify_metadata(collection: Collection, expected: Metadata) -> None:
+        if collection.metadata != expected:
+            raise ChromaMetadataMismatchError(collection.name, expected, collection.metadata)
+
+    def _get_or_create_collection(self, name: str, dimension: int) -> Collection:
+        validate_collection_name(name)
+        expected: Metadata = {"dimension": dimension, "model": EXPLICIT_EMBEDDING_MODEL}
         collection = self._collections.get(name)
         if collection is None:
-            collection = self._client.get_or_create_collection(name=name, embedding_function=None)
+            collection = self._client.get_or_create_collection(
+                name=name,
+                metadata=dict(expected),
+                embedding_function=None,
+            )
+        self._verify_metadata(collection, expected)
+        self._collections[name] = collection
+        return collection
+
+    def _existing_collection(self, name: str) -> Collection:
+        validate_collection_name(name)
+        collection = self._collections.get(name)
+        if collection is None:
+            collection = self._client.get_collection(name=name, embedding_function=None)
+            actual = collection.metadata
+            dimension = actual.get("dimension")
+            expected: Metadata = {"dimension": dimension, "model": EXPLICIT_EMBEDDING_MODEL}
+            self._verify_metadata(collection, expected)
             self._collections[name] = collection
         return collection
 
-    @staticmethod
-    def _internal_id(category: MarketCategory, caller_id: str) -> str:
-        return f"{category.value}:{caller_id}"
+    def get_or_create_collection(self, name: str, dimension: int) -> None:
+        _ = self._get_or_create_collection(name, dimension)
 
-    @staticmethod
-    def _metadata(record: ChromaRecord) -> Metadata:
-        supplied = record.metadata.get("category")
-        if supplied is not None and supplied != record.category.value:
-            raise ChromaCategoryError(record.category, supplied)
-        metadata = dict(record.metadata)
-        metadata["category"] = record.category.value
-        return metadata
+    def list_collections(self) -> list[str]:
+        return sorted(collection.name for collection in self._client.list_collections())
 
-    @classmethod
-    def _record_values(
-        cls, record: ChromaRecord
-    ) -> tuple[list[str], list[PyEmbedding], list[Metadata]]:
-        return (
-            [cls._internal_id(record.category, record.caller_id)],
-            [list(record.embedding)],
-            [cls._metadata(record)],
+    def add(
+        self,
+        category: MarketCategory,
+        collection_name: str,
+        ids: list[str],
+        embeddings: list[list[float]],
+        documents: list[str] | None,
+        metadatas: list[dict[str, MetadataValue]] | None,
+    ) -> None:
+        metadatas_with_scope = scoped_metadatas(category, collection_name, ids, metadatas)
+        collection = self._get_or_create_collection(collection_name, len(embeddings[0]))
+        embedding_values: list[PyEmbedding] = [list(embedding) for embedding in embeddings]
+        collection.add(
+            ids=scoped_ids(category, collection_name, ids),
+            embeddings=embedding_values,
+            documents=documents,
+            metadatas=metadatas_with_scope,
         )
 
-    @staticmethod
-    def _where(category: MarketCategory) -> Where:
-        return {"category": category.value}
-
-    def add(self, collection_name: str, record: ChromaRecord) -> None:
-        """Add one record under its canonical category-prefixed ID."""
-        collection = self._collection(collection_name)
-        ids, embeddings, metadatas = self._record_values(record)
-        if record.document is None:
-            collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-            )
-        else:
-            collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-                documents=[record.document],
-            )
-
-    def upsert(self, collection_name: str, record: ChromaRecord) -> None:
-        """Upsert one record without allowing cross-category ID collision."""
-        collection = self._collection(collection_name)
-        ids, embeddings, metadatas = self._record_values(record)
-        if record.document is None:
-            collection.upsert(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-            )
-        else:
-            collection.upsert(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-                documents=[record.document],
-            )
-
-    def get(self, collection_name: str, request: ChromaGetRequest) -> GetResult:
-        """Get only records in the authorized category."""
-        ids = (
-            [self._internal_id(request.category, caller_id) for caller_id in request.caller_ids]
-            if request.caller_ids is not None
-            else None
-        )
-        return self._collection(collection_name).get(ids=ids, where=self._where(request.category))
-
-    def query(self, collection_name: str, request: ChromaQueryRequest) -> QueryResult:
-        """Query only records in the authorized category."""
-        return self._collection(collection_name).query(
-            query_embeddings=[list(request.embedding)],
-            n_results=request.n_results,
-            where=self._where(request.category),
+    def upsert(
+        self,
+        category: MarketCategory,
+        collection_name: str,
+        ids: list[str],
+        embeddings: list[list[float]],
+        documents: list[str] | None,
+        metadatas: list[dict[str, MetadataValue]] | None,
+    ) -> None:
+        metadatas_with_scope = scoped_metadatas(category, collection_name, ids, metadatas)
+        collection = self._get_or_create_collection(collection_name, len(embeddings[0]))
+        embedding_values: list[PyEmbedding] = [list(embedding) for embedding in embeddings]
+        collection.upsert(
+            ids=scoped_ids(category, collection_name, ids),
+            embeddings=embedding_values,
+            documents=documents,
+            metadatas=metadatas_with_scope,
         )
 
-    def delete(self, collection_name: str, request: ChromaDeleteRequest) -> DeleteResult:
-        """Delete only records in the authorized category."""
-        ids = (
-            [self._internal_id(request.category, caller_id) for caller_id in request.caller_ids]
-            if request.caller_ids is not None
-            else None
+    def get(
+        self,
+        category: MarketCategory,
+        collection_name: str,
+        ids: list[str] | None,
+        where: Where | None,
+        limit: int | None,
+    ) -> ChromaGetResult:
+        internal_ids = None if ids is None else scoped_ids(category, collection_name, ids)
+        return self._existing_collection(collection_name).get(
+            ids=internal_ids,
+            where=scoped_where(category, collection_name, where),
+            limit=limit,
         )
-        return self._collection(collection_name).delete(
-            ids=ids, where=self._where(request.category)
+
+    def query(
+        self,
+        category: MarketCategory,
+        collection_name: str,
+        query_embeddings: list[list[float]],
+        n_results: int,
+        where: Where | None,
+    ) -> ChromaQueryResult:
+        collection = self._get_or_create_collection(collection_name, len(query_embeddings[0]))
+        embedding_values: list[PyEmbedding] = [list(embedding) for embedding in query_embeddings]
+        return collection.query(
+            query_embeddings=embedding_values,
+            n_results=n_results,
+            where=scoped_where(category, collection_name, where),
+        )
+
+    def delete(
+        self,
+        category: MarketCategory,
+        collection_name: str,
+        ids: list[str] | None,
+        where: Where | None,
+    ) -> None:
+        internal_ids = None if ids is None else scoped_ids(category, collection_name, ids)
+        _ = self._existing_collection(collection_name).delete(
+            ids=internal_ids,
+            where=scoped_where(category, collection_name, where),
         )
 
     def close(self) -> None:
@@ -259,12 +282,10 @@ class ChromaStore:
 
 
 __all__ = [
-    "ChromaCategoryError",
-    "ChromaDeleteRequest",
-    "ChromaGetRequest",
+    "ChromaGetResult",
+    "ChromaMetadataMismatchError",
     "ChromaOwnershipError",
     "ChromaOwnershipLock",
-    "ChromaQueryRequest",
-    "ChromaRecord",
+    "ChromaQueryResult",
     "ChromaStore",
 ]
