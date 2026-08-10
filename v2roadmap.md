@@ -43,7 +43,7 @@
 | DD-030 | CLI circular imports — extract DB code from helpers | Decided |
 | DD-031 | Module-by-module review findings | Decided |
 | DD-032 | Database restructuring for multi-agent multi-mode | Implemented (Phase 3 Tasks 0-9) |
-| DD-033 | GRIB2 processing pipeline for historical weather data | Decided; implementation deferred ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194)) |
+| DD-033 | GRIB2 processing pipeline for historical weather data | Decided; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194)) |
 | DD-034 | Dev-Liaison — TraderBot subject matter expert and AutoDev liaison | Decided |
 | DD-035 | Category-specific analysis toolkits — analysis, not trading signals | Decided |
 | DD-036 | SysAdmin sandbox — unsandboxed with principled restrictions | Decided |
@@ -71,7 +71,7 @@
 - [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification complete (see next line)
 - [x] Phase 1.1 deployment verification (2026-08-03): E2E injection verified on macpro-linux — plugin loads, hook fires at priority 100, token resolved from env provider, injected into MCP call params, server resolves weather profile. Three fixes required: manifest metadata + configSchema (f8b5065), token optional in schemas (f1aa518), and MCP server env must explicitly set TRADERBOT_USE_HARDCODED_AUTH=0 (0dbc981) — the subprocess does not inherit the gateway's systemd drop-in. Fail-closed verified for unmapped agents (main). Token never enters model context (agent confirms it passed no token). 113 Python + 11 TypeScript tests pass on-target.
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
-- [x] GRIB2 processing pipeline (DD-033) — design retained; implementation deferred to [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194)
+- [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
 - [ ] ~~Workspace template source and category templates~~ (shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first)
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)
@@ -80,8 +80,8 @@
 - [x] Self-improvement framework — DD-038 (Round 5 defined, debate integration, sub-agent config, TEMPLATE.md mods)
 - [x] Phase 2 always-on service (issue #166): `traderbot daemon` runs the Kalshi WebSocket stream, the data pipeline, and the MCP server over streamable-http on loopback (`127.0.0.1:8765/mcp`) in one process. Resurrected Kalshi REST + WS clients (v2-only, per-env TLS pins, token-bucket rate limiting, exponential-backoff reconnect), `MarketCache` with SQLite write-behind persistence, unified `data/` module (DD-028) with weather/news/settlement providers, `services/` package (DD-022) with systemd/launchd/Windows templates, `traderbot service install|uninstall|status` CLI, `traderbot__market_prices` MCP tool reading from the WS cache (zero REST), and OpenClaw config migrated from stdio to streamable-http. 315 tests pass locally; on-target macpro-linux QA in progress (311 tests green, service active, `/mcp` responding).
 - [x] Phase 3 implementation Tasks 0-9 (issue [#167](https://github.com/JsonDaRula69/TraderBot/issues/167)): central `db/` module; typed global and per-agent migration registries; seven-table per-agent `decisions.db`; bounded SQLite connection pool with fixed PRAGMAs; embedded ChromaDB with five shared and mode-qualified per-agent collections; `DatabaseAccess` identity/mode enforcement; daemon lifecycle and health integration; full component tests and isolated QA script.
-- [x] Phase 3 security review: `chromadb==1.5.9` is embedded-only with a pinned Rust backend, telemetry disabled, owner-only application-created storage, explicit vectors, no HTTP server/client imports, and an exact GHSA-f4j7-r4q5-qw2c scanner waiver. Review and accepted-risk tracking: [#195](https://github.com/JsonDaRula69/TraderBot/issues/195), [#196](https://github.com/JsonDaRula69/TraderBot/issues/196). Remove the waiver on the first official release containing upstream [#7237](https://github.com/chroma-core/chroma/pull/7237).
-- [ ] Phase 3 Task 10: on-target macpro-linux QA remains pending; issue #167 stays open until the migration, isolation, ChromaDB, performance, daemon E2E, restart, scanner, and production-safety matrix passes.
+- [x] Phase 3 security review: `chromadb==1.5.9` is embedded-only with a pinned Rust backend, telemetry disabled, owner-only application-created storage, explicit vectors, no HTTP server/client imports, and an exact GHSA-f4j7-r4q5-qw2c scanner waiver. Review tracker [#195](https://github.com/JsonDaRula69/TraderBot/issues/195) closed (findings preserved); permanent accepted-risk tracking in [#196](https://github.com/JsonDaRula69/TraderBot/issues/196). Remove the waiver on the first official release containing upstream [#7237](https://github.com/chroma-core/chroma/pull/7237).
+- [x] Phase 3 Task 10: on-target macpro-linux QA passed via dev-liaison agent (13/13 probes green); PR #197 merged to v2-main (merge commit 8cce1b9). All CI green (ubuntu, macOS, Windows, build, security audit, Snyk).
 - [x] Phase 3 Final Wave remediation: secure Chroma root creation preserves pre-existing targets; the QA runner is consolidated into the sole allowed script; MCP storage-health fields are retained as the Task 7 response surface; and basedpyright warnings remain reported while warnings-only runs exit successfully. The cleaned remote `/tmp/phase3-qa-evidence.json` is recorded in the plan as expected ephemeral cleanup, with a local replay retained under workspace `.omo/evidence/`.
 
 ### Dev-Liaison Testing Protocols
@@ -130,7 +130,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 - [x] **OpenClaw multi-model sub-agent spawning**: DD-038 — sessions_spawn with model overrides, ephemeral sub-agents per cycle
 - [x] **TEMPLATE.md review**: DD-038 — TraderBot-specific context, statistical rigor guardrails, Kalshi market specificity, success criteria
 - [x] **Weather signal engine redesign**: DD-035 — category-specific analysis toolkits replace directional signals with interpretive statistical outputs
-- [x] **GRIB2 processing pipeline**: DD-033 — design retained; implementation deferred to [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194)
+- [x] **GRIB2 processing pipeline**: DD-033 — design retained; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 
 
 ## Design Decisions Log
@@ -1202,7 +1202,7 @@ Verified structure:
 ### DD-021: Paper Trading and Live Trading Architecture
 
 **Date**: 2025-06-15
-**Status**: Decided
+**Status**: Decided; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up
 
 **Context**: Under the MCP architecture (DD-015), the agent calls the same tools regardless of mode. TraderBot routes on the backend based on the agent's profile. Paper trading and live trading use mostly the same data and sources — the only difference is when an agent decides to place an order, under paper trading the order is not submitted to Kalshi and instead recorded and simulated locally in the agent's paper trades database. This database also needs to correctly calculate balance, trade settlement, profit/loss, etc.
 
@@ -3131,7 +3131,7 @@ The `ws_daemon.py` pattern of a standalone daemon writing to a JSON cache file i
 ### DD-032: Database restructuring for v2 multi-agent, multi-mode architecture
 
 **Date**: 2025-06-15
-**Status**: Implemented in Phase 3 (Tasks 0-9); on-target QA pending
+**Status**: Implemented in Phase 3 (Tasks 0-9); on-target QA passed; merged to v2-main via PR #197
 
 > **Phase 3 implementation update:** The authoritative implemented schema, file layout, migration behavior, access rules, and embedded ChromaDB security contract are in `v2docs/08-database-schema.md`. Earlier design sketches below are historical rationale where they differ from that contract.
 

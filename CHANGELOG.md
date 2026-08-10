@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a81] — 2026-08-10
+
+### Changed
+
+- Updated DD-033 status: Stage 1 folded into Phase 4 backtesting, Stage 2 is post-Phase 4 follow-up
+- Closed ChromaDB security review tracker #195 (findings preserved in #196)
+- Closed Phase 3 parent issue #167 (PR #197 merged, all QA passed)
+- Updated roadmap and database schema docs to reflect Phase 3 completion and GRIB2 Phase 4 incorporation
+
+## [2.0.0a80] — 2026-08-10
+
+### Fixed
+
+- Resolved Windows CI failures: fsync O_RDWR, /tmp path via tempfile.gettempdir(), USERPROFILE env, ACL best-effort validation
+
 ## [2.0.0a76] — 2026-08-10
 
 ### Fixed
