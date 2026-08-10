@@ -34,8 +34,9 @@ def chroma_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_owned_private_directory_passes(chroma_root: Path) -> None:
     validate_chroma_root(chroma_root)
-    assert stat.S_IMODE(chroma_root.lstat().st_mode) == 0o700
-    assert stat.S_IMODE((chroma_root / "chromadb.lock").lstat().st_mode) == 0o600
+    if sys.platform != "win32":
+        assert stat.S_IMODE(chroma_root.lstat().st_mode) == 0o700
+        assert stat.S_IMODE((chroma_root / "chromadb.lock").lstat().st_mode) == 0o600
 
 
 def test_create_chroma_root_preserves_pre_existing_directory(

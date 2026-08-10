@@ -155,8 +155,9 @@ def _reserve_backup_path(db_path: Path) -> Path:
 
 
 def _fsync_path(path: Path, *, best_effort: bool) -> None:
+    flags = os.O_RDWR if sys.platform == "win32" else os.O_RDONLY
     try:
-        descriptor = os.open(path, os.O_RDONLY)
+        descriptor = os.open(path, flags)
     except OSError as exc:
         if not best_effort:
             raise
