@@ -7,6 +7,7 @@ import os
 import stat
 import subprocess
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Protocol, override
@@ -194,12 +195,18 @@ $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
 [void]$acl.AddAccessRule($rule)
 Set-Acl -LiteralPath $args[0] -AclObject $acl
 """
-    _ = subprocess.run(
+    result = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script, str(path)],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if result.returncode != 0:
+        warnings.warn(
+            f"Windows ACL hardening failed for {path}: {result.stderr.strip()}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
 
 def _remove_created_root(path: Path, lock_path: Path) -> None:

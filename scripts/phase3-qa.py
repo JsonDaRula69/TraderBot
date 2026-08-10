@@ -336,7 +336,7 @@ def _run(parent: Path, json_output: Path) -> Phase3Evidence:
             _ = os.environ.pop("USERPROFILE", None)
         else:
             os.environ["USERPROFILE"] = original_userprofile
-        shutil.rmtree(qa_root, ignore_errors=False)
+        shutil.rmtree(qa_root, ignore_errors=sys.platform == "win32")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
