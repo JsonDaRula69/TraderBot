@@ -39,7 +39,7 @@ Key design choices:
 
 ### Phase 3 implementation status
 
-Phase 3 Tasks 0-9 are implemented on `feat/v2-database`; on-target macpro-linux QA (Task 10) remains pending. The implementation now provides:
+Phase 3 Tasks 0-9 are implemented and merged to `v2-main` via PR #197 (merge commit `8cce1b9`); on-target macpro-linux QA passed (13/13 probes green via dev-liaison agent). The implementation now provides:
 
 - `src/traderbot/db/` as the central database module, including the typed migration runner, per-agent schema, bounded SQLite connection pool, embedded ChromaDB store, storage validation, and `DatabaseAccess` routing.
 - Global migration v1 for `traderbot.db` and decisions migration v1 for all seven per-agent tables: `decisions`, `positions`, `forecast_snapshots`, `bias_tracking`, `learnings`, `circuit_breaker`, and `portfolio_summary`.
@@ -64,7 +64,7 @@ uvx pip-audit --strict --aliases -r requirements-audit.txt \
   --ignore-vuln GHSA-f4j7-r4q5-qw2c
 ```
 
-Waiver owner: **TraderBot**. Removal condition: **upgrade ChromaDB and remove the waiver with the first official release containing merged upstream fix [chroma-core/chroma#7237](https://github.com/chroma-core/chroma/pull/7237)**. Until then, the accepted risk and independent review are tracked in [TraderBot #195](https://github.com/JsonDaRula69/TraderBot/issues/195) and [TraderBot #196](https://github.com/JsonDaRula69/TraderBot/issues/196); the vulnerable code remains present in the dependency even though TraderBot does not expose its HTTP path.
+Waiver owner: **TraderBot**. Removal condition: **upgrade ChromaDB and remove the waiver with the first official release containing merged upstream fix [chroma-core/chroma#7237](https://github.com/chroma-core/chroma/pull/7237)**. Until then, the accepted risk and independent review are tracked in [TraderBot #196](https://github.com/JsonDaRula69/TraderBot/issues/196) (review tracker [#195](https://github.com/JsonDaRula69/TraderBot/issues/195) closed with findings preserved in #196); the vulnerable code remains present in the dependency even though TraderBot does not expose its HTTP path.
 
 ### Isolation rules
 
@@ -1713,7 +1713,7 @@ Additional operational notes:
 
 ## GRIB2 processing pipeline (DD-033)
 
-Implementation is deferred from Phase 3 and tracked in [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194). Phase 3 implements the `forecast_snapshots` storage contract only; it does not add GRIB2 providers or `cfgrib`.
+Implementation is deferred from Phase 3; Stage 1 (Open-Meteo Archive + NWS + Kalshi historical) is folded into Phase 4 backtesting, and Stage 2 (GFS/ECMWF via cfgrib) is a post-Phase 4 follow-up. Tracked in [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194). Phase 3 implements the `forecast_snapshots` storage contract only; it does not add GRIB2 providers or `cfgrib`.
 
 ### Phase 1 (ships with v2 core)
 
