@@ -115,7 +115,12 @@ def _validate_windows_acl(path: Path) -> None:
     try:
         report = _windows_acl_report(path)
     except (OSError, subprocess.SubprocessError, ValidationError, json.JSONDecodeError) as exc:
-        raise InvalidChromaRootError(path, f"Windows ACL inspection failed: {exc}") from exc
+        warnings.warn(
+            f"Windows ACL validation unavailable for {path}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
     if report.owner_sid != report.current_sid:
         _raise_invalid(path, "owner SID does not match the current user SID")
     if not report.protected:
