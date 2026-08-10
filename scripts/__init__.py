@@ -1,1 +1,0 @@
-"""TraderBot operational scripts."""

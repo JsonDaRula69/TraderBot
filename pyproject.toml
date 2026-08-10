@@ -65,3 +65,4 @@ markers = [
 [tool.basedpyright]
 venvPath = "."
 venv = ".venv"
+failOnWarnings = false

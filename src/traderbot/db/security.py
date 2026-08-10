@@ -210,8 +210,10 @@ def _remove_created_root(path: Path, lock_path: Path) -> None:
 def create_chroma_root(path: Path) -> None:
     """Create a new private Chroma root and fail closed on every check."""
     lock_path = path / "chromadb.lock"
+    created = False
     try:
         path.mkdir(mode=0o700, parents=True, exist_ok=False)
+        created = True
         path.chmod(0o700)
         descriptor = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
@@ -224,11 +226,14 @@ def create_chroma_root(path: Path) -> None:
             _harden_windows_acl(lock_path)
         validate_chroma_root(path)
         validate_chroma_lock_file(lock_path)
+    except FileExistsError as exc:
+        raise InvalidChromaRootError(path, "target already exists") from exc
     except InvalidChromaRootError:
-        _remove_created_root(path, lock_path)
+        if created:
+            _remove_created_root(path, lock_path)
         raise
     except (OSError, subprocess.SubprocessError) as exc:
-        if path.exists() and not path.is_symlink():
+        if created:
             _remove_created_root(path, lock_path)
         raise InvalidChromaRootError(path, f"creation failed: {exc}") from exc
 

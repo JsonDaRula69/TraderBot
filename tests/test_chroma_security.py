@@ -38,6 +38,22 @@ def test_owned_private_directory_passes(chroma_root: Path) -> None:
     assert stat.S_IMODE((chroma_root / "chromadb.lock").lstat().st_mode) == 0o600
 
 
+def test_create_chroma_root_preserves_pre_existing_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    root = tmp_path / ".traderbot" / "chromadb"
+    root.mkdir(parents=True)
+    existing_lock = root / "chromadb.lock"
+    _ = existing_lock.write_text("pre-existing", encoding="utf-8")
+
+    with pytest.raises(InvalidChromaRootError, match="target already exists"):
+        create_chroma_root(root)
+
+    assert root.is_dir()
+    assert existing_lock.read_text(encoding="utf-8") == "pre-existing"
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ownership and modes")
 @pytest.mark.parametrize("mode", [0o755, 0o777])
 def test_permissive_mode_is_rejected(chroma_root: Path, mode: int) -> None:
