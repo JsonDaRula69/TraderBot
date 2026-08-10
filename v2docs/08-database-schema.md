@@ -1,69 +1,53 @@
 # TraderBot v2 — Database Schema
 
-> This document covers the per-agent per-mode database isolation architecture, unified schema, ChromaDB collections, forecast snapshots, and database efficiency improvements. Grounded in DD-021, DD-027, DD-032.
+> Authoritative database contract for Phase 3 (per-agent per-mode isolation). This document supersedes earlier prose in `v2roadmap.md` section 10 and any stale `v2docs` copies. When the running code disagrees with this doc, the code is the source of truth and this doc must be updated.
 
 ---
 
-## Directory Layout
+## File layout
 
 ```
 ~/.traderbot/
-├── traderbot.db                    # Global DB (schema version, config, profile registry)
-├── secrets/secrets.json            # Local encrypted fallback (if no Infisical)
-├── secrets/secrets.json.sha256     # Integrity hash
-├── secrets/secrets.json.meta       # Audit timestamps
-├── tokens.enc                      # Agent token registry (Fernet-encrypted)
-├── profiles.enc                    # Profile registry (Fernet-encrypted)
-├── chromadb/                       # SHARED: all agents read, category filtering via metadata
-│   ├── news/                       # News embeddings (category metadata on each doc)
-│   ├── data_points/                # Quantitative data (category metadata)
-│   ├── market_patterns/            # Pattern signatures (category metadata)
-│   ├── news_signals/               # Processed signals (category metadata)
-│   └── market_conditions/          # Market resolution conditions
-├── sysadmin/
-│   └── db/decisions.db             # SysAdmin decisions (oversight, not trading)
-├── paper-weather/
-│   └── db/decisions.db             # Weather agent paper trade history
-├── paper-economics/
-│   └── db/decisions.db             # Economics agent paper trade history
-├── paper-politics/
-│   └── db/decisions.db             # Politics agent paper trade history
-├── paper-crypto/
-│   └── db/decisions.db             # Crypto agent paper trade history
-├── live-weather/                   # Created only when agent switches to live mode
-│   └── db/decisions.db             # Live trade history
-└── ...
+├── traderbot.db                    # Global DB: schema version, profiles, config, market data,
+│                                   # weather forecasts, NWS forecasts, settlement cache
+├── secrets/                        # Encrypted secrets (outside DB scope)
+├── tokens.enc                      # Profile token registry (Fernet-encrypted)
+├── chromadb/                       # Embedded PersistentClient root (daemon-owned, owner-only).
+│                                   # Collections (news, data_points, market_patterns,
+│                                   # news_signals, market_conditions) are logical objects
+│                                   # inside this single ChromaDB directory, not guaranteed
+│                                   # filesystem subdirectories.
+├── backtest-{name}/                # Per-profile backtest mode
+│   └── db/decisions.db             # decisions, positions, forecast_snapshots, bias_tracking,
+│                                   # learnings, circuit_breaker, portfolio_summary
+├── paper-{name}/                   # Per-profile paper mode (separate directory, not shared with backtest)
+│   └── db/decisions.db             # Same seven-table schema as backtest
+└── live-{name}/                    # Created when a profile is promoted to live
+    └── db/decisions.db             # Same seven-table schema as backtest/paper
 ```
 
-**Key design choices**:
-- Directory name `paper-{category}` is used even for backtesting mode — the directory doesn't change when mode changes
-- Live databases (`live-{category}/`) are created only when an agent is promoted to live trading
-- An agent in live mode has read access to its own backtest and paper databases for reference, but the MCP tool logs data to the corresponding database based on mode
+Key design choices:
+
+- Directory names are explicit per-mode: `backtest-{name}`, `paper-{name}`, `live-{name}`. Backtest and paper never share a directory.
+- A profile in `live` mode can read its own backtest and paper databases for reference, but MCP tools log new trading data to the database matching the active mode.
+- Category agents cannot access other category agents' databases. SysAdmin reads across agents through MCP, not through direct filesystem access.
+- The ChromaDB root is an embedded `PersistentClient` path owned by the daemon process; no HTTP server is started.
 
 ---
 
-## Per-Agent Per-Mode Isolation (DD-032)
+## Per-agent per-mode isolation (DD-032)
 
-### Database Isolation Rules
+### Isolation rules
 
-1. Each agent has separate databases for each mode: `backtest`, `paper`, `live`
-2. An agent can only write to the database corresponding to its current mode
-3. An agent in live mode can read its own backtest and paper databases for reference
-4. Category agents CANNOT access other category agents' databases
-5. SysAdmin can read all databases (enabled_categories: [])
+1. Each profile has separate `decisions.db` files for `backtest`, `paper`, and `live` modes.
+2. A profile can only write to the database matching its current mode.
+3. A profile in `live` mode can read its own backtest and paper databases for reference.
+4. Category agents cannot access other category agents' databases.
+5. SysAdmin can read all databases through MCP.
 
-### Isolation Enforcement
+### Access matrix
 
-| Level | Mechanism | What It Enforces |
-|---|---|---|
-| Directory structure | Per-agent per-mode directories | Physical isolation of SQLite files |
-| Profile token | MCP server resolves token → profile → categories + mode | Logical isolation of data access |
-| OpenClaw tool filter | Per-agent `alsoAllow` lists | Tool-level isolation |
-| Docker bind mount | Only agent's own data dir mounted RW | Container-level isolation |
-
-### Access Matrix
-
-| Agent | Own backtest DB | Own paper DB | Own live DB | Other agent DBs | ChromaDB |
+| Profile | Own backtest DB | Own paper DB | Own live DB | Other profile DBs | ChromaDB |
 |---|---|---|---|---|---|
 | Weather (paper) | Read | Read/Write | N/A | No | Read (weather filter) |
 | Weather (live) | Read | Read | Read/Write | No | Read (weather filter) |
@@ -71,25 +55,29 @@
 
 ---
 
-## Unified Schema
+## Global database (`traderbot.db`)
 
-### Global Database (`traderbot.db`)
+### Schema version tracking
 
 ```sql
--- Schema version tracking (migration system)
 CREATE TABLE schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL DEFAULT (datetime('now')),
     description TEXT
 );
+```
 
--- Trading profiles
+### Profiles registry (Phase 4 compatibility, included in global migration v1)
+
+The `profiles` and `config` tables are included in the global migration v1 so that the schema is ready for Phase 4 persistence. Runtime persistence is not yet wired: current production code still manages profile state through `TradingProfile` models and the profile factory functions in `src/traderbot/profiles/`.
+
+```sql
 CREATE TABLE profiles (
     name TEXT PRIMARY KEY,
     mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
     description TEXT,
-    enabled_categories TEXT,  -- JSON array, empty array = all categories
-    permissions TEXT,  -- JSON array
+    enabled_categories TEXT,  -- JSON array; empty array means all categories
+    permissions TEXT,         -- JSON array
     risk_multiplier REAL NOT NULL CHECK (risk_multiplier > 0 AND risk_multiplier <= 1.0),
     max_position_per_market_pct REAL NOT NULL CHECK (max_position_per_market_pct > 0),
     max_daily_loss_pct REAL NOT NULL CHECK (max_daily_loss_pct > 0),
@@ -101,8 +89,11 @@ CREATE TABLE profiles (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+```
 
--- Configuration key-value store
+### Configuration key/value store (Phase 4 compatibility, included in global migration v1)
+
+```sql
 CREATE TABLE config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -110,168 +101,222 @@ CREATE TABLE config (
 );
 ```
 
-**Phase 2 additions (issue #166)** — the daemon's `MarketCache` write-behind
-persistence and the data-pipeline providers write to these tables in the same
-global `traderbot.db`:
+`config` is part of the global migration v1 schema for Phase 4 compatibility. Runtime persistence is not yet wired. The table is empty until a later phase populates it.
+
+### Phase 2 global data tables
+
+These tables are created by the running daemon and data pipeline. The signatures below are copied directly from the current production source files cited in the reconciliation checklist.
+
+#### `market_data`
+
+Source: `src/traderbot/kalshi/ws_cache.py`.
 
 ```sql
--- Real-time market ticker snapshots (WebSocket write-behind, WS-first)
-CREATE TABLE market_data (
+CREATE TABLE IF NOT EXISTS market_data (
     ticker TEXT PRIMARY KEY,
-    last_price_dollars TEXT,
-    yes_bid_dollars TEXT,
-    yes_ask_dollars TEXT,
-    volume_fp TEXT,
-    open_interest_fp TEXT,
-    updated_at TEXT
-);
-
--- Orderbook snapshots (WebSocket write-behind)
-CREATE TABLE orderbook (
-    ticker TEXT,
-    side TEXT,
-    price_dollars TEXT,
-    count_fp TEXT,
-    updated_at TEXT,
-    PRIMARY KEY (ticker, side, price_dollars)
-);
-
--- Open-Meteo ensemble forecast snapshots (hourly)
-CREATE TABLE weather_forecasts (
-    city TEXT,
-    model TEXT,
-    forecast_date TEXT,
-    variable TEXT,
-    value REAL,
-    created_at TEXT,
-    PRIMARY KEY (city, model, forecast_date, variable, created_at)
-);
-
--- NWS point-forecast snapshots (hourly)
-CREATE TABLE nws_forecasts (
-    city TEXT,
-    period_name TEXT,
-    temperature REAL,
-    wind_speed TEXT,
-    short_forecast TEXT,
-    created_at TEXT
-);
-
--- Settled-market outcomes (hourly settlement monitor)
-CREATE TABLE settlement_cache (
-    ticker TEXT PRIMARY KEY,
-    close_time TEXT,
-    yes_submission_price REAL,
-    settlement_value TEXT,
-    resolved_at TEXT
+    last_price REAL,
+    bid REAL,
+    ask REAL,
+    volume REAL,
+    open_interest REAL,
+    updated_at REAL NOT NULL
 );
 ```
 
-### Per-Agent Database (`decisions.db`)
+#### `orderbook`
+
+Source: `src/traderbot/kalshi/ws_cache.py`.
+
+The orderbook is stored as one row per ticker. `bids_json` and `asks_json` contain the full aggregated orderbook arrays as JSON text.
 
 ```sql
--- Trading decisions with full reasoning audit trail
-CREATE TABLE decisions (
-    id TEXT PRIMARY KEY,
-    ticker TEXT NOT NULL,
-    category TEXT NOT NULL,
-    direction TEXT NOT NULL CHECK (direction IN ('yes', 'no')),
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    estimated_prob REAL CHECK (estimated_prob IS NULL OR (estimated_prob >= 0 AND estimated_prob <= 1)),
-    confidence REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
-    reasoning TEXT,  -- Full reasoning audit trail
-    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
-    profile TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+CREATE TABLE IF NOT EXISTS orderbook (
+    ticker TEXT PRIMARY KEY,
+    bids_json TEXT NOT NULL,
+    asks_json TEXT NOT NULL,
+    updated_at REAL NOT NULL
+);
+```
 
-    -- Indexes
-    FOREIGN KEY (ticker) REFERENCES positions(ticker) ON DELETE CASCADE
+#### `weather_forecasts`
+
+Source: `src/traderbot/data/providers/open_meteo.py`.
+
+```sql
+CREATE TABLE IF NOT EXISTS weather_forecasts (
+    snapshot_ts TEXT NOT NULL,
+    city TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    model TEXT NOT NULL,
+    valid_date TEXT NOT NULL,
+    variable TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (snapshot_ts, city, model, valid_date, variable)
+);
+```
+
+#### `nws_forecasts`
+
+Source: `src/traderbot/data/providers/nws.py`.
+
+```sql
+CREATE TABLE IF NOT EXISTS nws_forecasts (
+    snapshot_ts TEXT NOT NULL,
+    city TEXT NOT NULL,
+    forecast_date TEXT NOT NULL,
+    high_temp_f REAL,
+    low_temp_f REAL,
+    precip_prob REAL,
+    wind_speed REAL,
+    detailed_forecast TEXT,
+    PRIMARY KEY (snapshot_ts, city, forecast_date)
+);
+```
+
+#### `settlement_cache`
+
+Source: `src/traderbot/data/providers/settlement.py`.
+
+Settlement outcomes are global and authoritative. They are not duplicated inside per-agent `decisions.db` files.
+
+```sql
+CREATE TABLE IF NOT EXISTS settlement_cache (
+    ticker TEXT PRIMARY KEY,
+    outcome INTEGER NOT NULL,
+    settled_at TEXT NOT NULL
+);
+```
+
+---
+
+## Per-agent database (`decisions.db`)
+
+Every per-agent `decisions.db` has the same seven tables. `init_decisions_db()` owns creation of all seven tables, including `learnings`. No table is created on demand.
+
+Column naming rule: use `profile`, never `agent`. Only `decisions`, `positions`, `circuit_breaker`, and `portfolio_summary` carry both `profile` and `mode` columns. Other tables carry `category` where category grouping is needed.
+
+### `decisions`
+
+Trading decisions with a full reasoning audit trail. Decision IDs are caller-generated canonical UUID4 strings (`str(uuid.uuid4())`). There is no foreign key to `positions(ticker)`. Per-agent isolation makes cross-agent contamination impossible at the filesystem level, and the trading engine handles position correlation in code.
+
+```sql
+CREATE TABLE decisions (
+    id TEXT PRIMARY KEY,               -- UUID4 canonical string, supplied by caller
+    timestamp TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('yes', 'no', 'neutral')),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    price INTEGER NOT NULL,            -- cents
+    signal_strength REAL NOT NULL,
+    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    edge_estimate REAL NOT NULL,
+    risk_checks TEXT NOT NULL,         -- JSON
+    outcome TEXT NOT NULL CHECK (outcome IN ('executed', 'rejected', 'held')),
+    rejection_reason TEXT,
+    actual_result INTEGER,             -- 1 = yes won, 0 = no won, NULL until settled
+    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
+    category TEXT NOT NULL,
+    profile TEXT NOT NULL
 );
 
 CREATE INDEX idx_decisions_ticker ON decisions(ticker);
+CREATE INDEX idx_decisions_timestamp ON decisions(timestamp);
+CREATE INDEX idx_decisions_ticker_timestamp ON decisions(ticker, timestamp);
 CREATE INDEX idx_decisions_category ON decisions(category);
 CREATE INDEX idx_decisions_mode ON decisions(mode);
-CREATE INDEX idx_decisions_created ON decisions(created_at);
+CREATE INDEX idx_decisions_profile ON decisions(profile);
+CREATE INDEX idx_decisions_profile_mode ON decisions(profile, mode);
+```
 
--- Positions (open and closed)
+### `positions`
+
+Open and closed positions, unified from the retired `paper_positions` and `db/positions.py` schemas.
+
+```sql
 CREATE TABLE positions (
-    ticker TEXT PRIMARY KEY,
-    category TEXT NOT NULL,
-    direction TEXT NOT NULL CHECK (direction IN ('yes', 'no')),
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    avg_entry_price_cents INTEGER NOT NULL CHECK (avg_entry_price_cents >= 0),
-    current_price_cents INTEGER,
-    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
-    profile TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT UNIQUE NOT NULL,
+    side TEXT NOT NULL DEFAULT 'yes' CHECK (side IN ('yes', 'no')),
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    avg_price_cents INTEGER NOT NULL DEFAULT 0 CHECK (avg_price_cents >= 0),
+    settlement_result INTEGER,         -- 1 = yes won, 0 = no won, NULL for open
+    pnl_cents INTEGER DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'settled')),
-    opened_at TEXT NOT NULL DEFAULT (datetime('now')),
-    closed_at TEXT,
-    settled_at TEXT,
-
-    -- P&L
-    pnl_cents INTEGER,
-    settlement_outcome INTEGER  -- 1 = yes won, 0 = no won
+    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
+    category TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE INDEX idx_positions_status ON positions(status);
 CREATE INDEX idx_positions_category ON positions(category);
 CREATE INDEX idx_positions_mode ON positions(mode);
+CREATE INDEX idx_positions_profile ON positions(profile);
+CREATE INDEX idx_positions_profile_mode ON positions(profile, mode);
+```
 
--- Forecast snapshots (for backtesting accuracy tracking)
+### `forecast_snapshots`
+
+Time-series forecast snapshots for backtesting. Records what the forecast was on day X-N for day X.
+
+```sql
 CREATE TABLE forecast_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker TEXT NOT NULL,
     category TEXT NOT NULL,
-    source TEXT NOT NULL,  -- 'nws', 'gfs', 'ecmwf', 'open-meteo', 'consensus'
-    metric TEXT NOT NULL,  -- 'temp_high', 'temp_low', 'precip', 'wind_speed', etc.
+    source TEXT NOT NULL,              -- 'nws', 'gfs', 'ecmwf', 'gem', 'open-meteo'
+    metric TEXT NOT NULL,              -- 'high_temp', 'low_temp', 'precip_prob', 'wind_speed'
     predicted_value REAL NOT NULL,
-    predicted_for_date TEXT NOT NULL,  -- The date being forecasted
-    snapshot_date TEXT NOT NULL,  -- When the forecast was made
-    lead_time_days INTEGER NOT NULL,  -- Days between snapshot and target
+    predicted_for_date TEXT NOT NULL,  -- the date being forecast
+    snapshot_date TEXT NOT NULL,       -- when this forecast was made
+    lead_time_days INTEGER NOT NULL,
     confidence REAL,
     model_consensus_score REAL,
-    metadata TEXT,  -- JSON for additional model-specific data
+    metadata TEXT,                     -- JSON for source-specific data
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
 
     UNIQUE(ticker, source, metric, snapshot_date, predicted_for_date)
 );
 
-CREATE INDEX idx_forecast_ticker ON forecast_snapshots(ticker);
-CREATE INDEX idx_forecast_snapshot ON forecast_snapshots(snapshot_date);
-CREATE INDEX idx_forecast_lead ON forecast_snapshots(lead_time_days);
-CREATE INDEX idx_forecast_source ON forecast_snapshots(source);
+CREATE INDEX idx_forecast_snapshots_lookup
+    ON forecast_snapshots(ticker, predicted_for_date, snapshot_date);
+CREATE INDEX idx_forecast_snapshots_source_lead
+    ON forecast_snapshots(source, lead_time_days);
+CREATE INDEX idx_forecast_snapshots_category
+    ON forecast_snapshots(category, predicted_for_date);
+```
 
--- Generalized bias tracking (replaces weather-specific forecast_bias)
+### `bias_tracking`
+
+Generalized forecast bias tracking across all categories.
+
+```sql
 CREATE TABLE bias_tracking (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     category TEXT NOT NULL,
     source TEXT NOT NULL,
     metric TEXT NOT NULL,
     predicted_value REAL NOT NULL,
-    actual_value REAL NOT NULL,
-    predicted_for_date TEXT NOT NULL,
-    snapshot_date TEXT NOT NULL,
-    lead_time_days INTEGER NOT NULL DEFAULT 0,
-    error REAL NOT NULL,  -- predicted - actual
-    abs_error REAL NOT NULL,  -- |predicted - actual|
-    pct_error REAL,  -- (predicted - actual) / actual * 100
+    actual_value REAL,
+    predicted_at TEXT NOT NULL,
+    actual_at TEXT,
+    lead_time_hours INTEGER,
+    error REAL,                        -- actual - predicted
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
 
-    UNIQUE(category, source, metric, snapshot_date, predicted_for_date)
+    UNIQUE(category, source, metric, predicted_at)
 );
 
-CREATE INDEX idx_bias_category ON bias_tracking(category);
-CREATE INDEX idx_bias_source ON bias_tracking(source);
-CREATE INDEX idx_bias_lead ON bias_tracking(lead_time_days);
+CREATE INDEX idx_bias_tracking_category_source ON bias_tracking(category, source);
+CREATE INDEX idx_bias_tracking_metric ON bias_tracking(category, metric, predicted_at);
+```
 
--- Settlement cache (consolidated from separate DB)
-CREATE TABLE settlement_cache (
-    ticker TEXT PRIMARY KEY,
-    outcome INTEGER NOT NULL,
-    settled_at TEXT NOT NULL
-);
+### `learnings`
 
--- Learnings
+Agent learning records. Created by `init_decisions_db()`, not on demand.
+
+```sql
 CREATE TABLE learnings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     category TEXT NOT NULL,
@@ -289,22 +334,32 @@ CREATE TABLE learnings (
 CREATE INDEX idx_learnings_category ON learnings(category);
 CREATE INDEX idx_learnings_status ON learnings(status);
 CREATE INDEX idx_learnings_priority ON learnings(priority);
+```
 
--- Circuit breaker state (per-agent per-mode)
+### `circuit_breaker`
+
+Per-profile per-mode risk state, moved from the retired `circuit_breaker_state.json`.
+
+```sql
 CREATE TABLE circuit_breaker (
     profile TEXT NOT NULL,
-    mode TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
     state TEXT NOT NULL DEFAULT 'green' CHECK (state IN ('green', 'yellow', 'red', 'full_stop')),
     trigger_reason TEXT,
     triggered_at TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (profile, mode)
 );
+```
 
--- Portfolio summary (for fast balance queries)
+### `portfolio_summary`
+
+Running balance summary for fast MCP balance queries without scanning all positions.
+
+```sql
 CREATE TABLE portfolio_summary (
     profile TEXT NOT NULL,
-    mode TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('backtest', 'paper', 'live')),
     initial_balance_cents INTEGER NOT NULL,
     current_balance_cents INTEGER NOT NULL,
     total_realized_pnl_cents INTEGER NOT NULL DEFAULT 0,
@@ -316,11 +371,1261 @@ CREATE TABLE portfolio_summary (
 
 ---
 
-## ChromaDB Collections (Shared)
+## Schema manifest
 
-ChromaDB collections use category metadata filtering instead of per-category collections:
+The block below is strict JSON that can be extracted and parsed by tooling. It contains the same table metadata in machine-readable form.
 
-| Collection | Documents | Category Filter |
+<!-- schema-manifest:start -->
+{
+  "version": "phase3-task0",
+  "scopes": {
+    "global": {
+      "db_file": "traderbot.db",
+      "created_by": "daemon and data pipeline",
+      "tables": [
+        "schema_version",
+        "profiles",
+        "config",
+        "market_data",
+        "orderbook",
+        "weather_forecasts",
+        "nws_forecasts",
+        "settlement_cache"
+      ]
+    },
+    "per_agent": {
+      "db_file": "{mode}-{profile}/db/decisions.db",
+      "created_by": "init_decisions_db()",
+      "tables": [
+        "decisions",
+        "positions",
+        "forecast_snapshots",
+        "bias_tracking",
+        "learnings",
+        "circuit_breaker",
+        "portfolio_summary"
+      ]
+    }
+  },
+  "tables": {
+    "schema_version": {
+      "scope": "global",
+      "columns": [
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "applied_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "version"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "profiles": {
+      "scope": "global",
+      "columns": [
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "nullable": false,
+          "check": "mode IN ('backtest', 'paper', 'live')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "enabled_categories",
+          "type": "TEXT",
+          "nullable": true,
+          "note": "JSON array",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "permissions",
+          "type": "TEXT",
+          "nullable": true,
+          "note": "JSON array",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "risk_multiplier",
+          "type": "REAL",
+          "nullable": false,
+          "check": "risk_multiplier > 0 AND risk_multiplier <= 1.0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "max_position_per_market_pct",
+          "type": "REAL",
+          "nullable": false,
+          "check": "max_position_per_market_pct > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "max_daily_loss_pct",
+          "type": "REAL",
+          "nullable": false,
+          "check": "max_daily_loss_pct > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "max_drawdown_pct",
+          "type": "REAL",
+          "nullable": false,
+          "check": "max_drawdown_pct > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "max_open_positions",
+          "type": "INTEGER",
+          "nullable": false,
+          "check": "max_open_positions > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "min_liquidity_threshold",
+          "type": "INTEGER",
+          "nullable": false,
+          "check": "min_liquidity_threshold > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "min_edge_pct",
+          "type": "REAL",
+          "nullable": false,
+          "check": "min_edge_pct > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "initial_balance_cents",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": 10000,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "name"
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "global_migration_v1": true,
+      "note": "Included in global migration v1 for Phase 4 compatibility; runtime persistence is not yet wired."
+    },
+    "config": {
+      "scope": "global",
+      "columns": [
+        {
+          "name": "key",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "value",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "key"
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "global_migration_v1": true,
+      "note": "Included in global migration v1 for Phase 4 compatibility; runtime persistence is not yet wired."
+    },
+    "market_data": {
+      "scope": "global",
+      "source": "src/traderbot/kalshi/ws_cache.py",
+      "columns": [
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "last_price",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "bid",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "ask",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "volume",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "open_interest",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "ticker"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "orderbook": {
+      "scope": "global",
+      "source": "src/traderbot/kalshi/ws_cache.py",
+      "note": "one JSON-encoded orderbook per ticker",
+      "columns": [
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "bids_json",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "asks_json",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "ticker"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "weather_forecasts": {
+      "scope": "global",
+      "source": "src/traderbot/data/providers/open_meteo.py",
+      "columns": [
+        {
+          "name": "snapshot_ts",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "city",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 2
+        },
+        {
+          "name": "latitude",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "longitude",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "model",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 3
+        },
+        {
+          "name": "valid_date",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 4
+        },
+        {
+          "name": "variable",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 5
+        },
+        {
+          "name": "value",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "snapshot_ts",
+        "city",
+        "model",
+        "valid_date",
+        "variable"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "nws_forecasts": {
+      "scope": "global",
+      "source": "src/traderbot/data/providers/nws.py",
+      "columns": [
+        {
+          "name": "snapshot_ts",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "city",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 2
+        },
+        {
+          "name": "forecast_date",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 3
+        },
+        {
+          "name": "high_temp_f",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "low_temp_f",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "precip_prob",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "wind_speed",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "detailed_forecast",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "snapshot_ts",
+        "city",
+        "forecast_date"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "settlement_cache": {
+      "scope": "global",
+      "source": "src/traderbot/data/providers/settlement.py",
+      "note": "global and authoritative; not duplicated per-agent",
+      "columns": [
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "outcome",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "settled_at",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "ticker"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "decisions": {
+      "scope": "per_agent",
+      "note": "caller-generated UUID4 id; no foreign key to positions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1,
+          "note": "UUID4 canonical string"
+        },
+        {
+          "name": "timestamp",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "direction",
+          "type": "TEXT",
+          "nullable": false,
+          "check": "direction IN ('yes', 'no', 'neutral')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": false,
+          "check": "quantity > 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "price",
+          "type": "INTEGER",
+          "nullable": false,
+          "note": "cents",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "signal_strength",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "confidence",
+          "type": "REAL",
+          "nullable": false,
+          "check": "confidence >= 0 AND confidence <= 1",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "edge_estimate",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "risk_checks",
+          "type": "TEXT",
+          "nullable": false,
+          "note": "JSON",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "outcome",
+          "type": "TEXT",
+          "nullable": false,
+          "check": "outcome IN ('executed', 'rejected', 'held')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "rejection_reason",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "actual_result",
+          "type": "INTEGER",
+          "nullable": true,
+          "note": "1 = yes won, 0 = no won",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "nullable": false,
+          "check": "mode IN ('backtest', 'paper', 'live')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "profile",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_decisions_ticker",
+          "columns": [
+            "ticker"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_timestamp",
+          "columns": [
+            "timestamp"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_ticker_timestamp",
+          "columns": [
+            "ticker",
+            "timestamp"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_category",
+          "columns": [
+            "category"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_mode",
+          "columns": [
+            "mode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_profile",
+          "columns": [
+            "profile"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_decisions_profile_mode",
+          "columns": [
+            "profile",
+            "mode"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "positions": {
+      "scope": "per_agent",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 1,
+          "autoincrement": true
+        },
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "unique": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "side",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'yes'",
+          "check": "side IN ('yes', 'no')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0,
+          "check": "quantity >= 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "avg_price_cents",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0,
+          "check": "avg_price_cents >= 0",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "settlement_result",
+          "type": "INTEGER",
+          "nullable": true,
+          "note": "1 = yes won, 0 = no won",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "pnl_cents",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": 0,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'open'",
+          "check": "status IN ('open', 'closed', 'settled')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "nullable": false,
+          "check": "mode IN ('backtest', 'paper', 'live')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "profile",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_positions_status",
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_positions_category",
+          "columns": [
+            "category"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_positions_mode",
+          "columns": [
+            "mode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_positions_profile",
+          "columns": [
+            "profile"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_positions_profile_mode",
+          "columns": [
+            "profile",
+            "mode"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "forecast_snapshots": {
+      "scope": "per_agent",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 1,
+          "autoincrement": true
+        },
+        {
+          "name": "ticker",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "source",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "metric",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "predicted_value",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "predicted_for_date",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "snapshot_date",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "lead_time_days",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "confidence",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "model_consensus_score",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "metadata",
+          "type": "TEXT",
+          "nullable": true,
+          "note": "JSON",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        {
+          "name": "uq_forecast_snapshots",
+          "columns": [
+            "ticker",
+            "source",
+            "metric",
+            "snapshot_date",
+            "predicted_for_date"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_forecast_snapshots_lookup",
+          "columns": [
+            "ticker",
+            "predicted_for_date",
+            "snapshot_date"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_forecast_snapshots_source_lead",
+          "columns": [
+            "source",
+            "lead_time_days"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_forecast_snapshots_category",
+          "columns": [
+            "category",
+            "predicted_for_date"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "bias_tracking": {
+      "scope": "per_agent",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 1,
+          "autoincrement": true
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "source",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "metric",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "predicted_value",
+          "type": "REAL",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "actual_value",
+          "type": "REAL",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "predicted_at",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "actual_at",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "lead_time_hours",
+          "type": "INTEGER",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "error",
+          "type": "REAL",
+          "nullable": true,
+          "note": "actual - predicted",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        {
+          "name": "uq_bias_tracking",
+          "columns": [
+            "category",
+            "source",
+            "metric",
+            "predicted_at"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_bias_tracking_category_source",
+          "columns": [
+            "category",
+            "source"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_bias_tracking_metric",
+          "columns": [
+            "category",
+            "metric",
+            "predicted_at"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "learnings": {
+      "scope": "per_agent",
+      "note": "created by init_decisions_db(), not on demand",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 1,
+          "autoincrement": true
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "pattern_key",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "recurrence_count",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": 1,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "justification",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "impact",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "priority",
+          "type": "TEXT",
+          "nullable": true,
+          "check": "priority IN ('low', 'medium', 'high')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "nullable": true,
+          "default": "'active'",
+          "check": "status IN ('active', 'promoted', 'resolved', 'dismissed')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "idx_learnings_category",
+          "columns": [
+            "category"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_learnings_status",
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_learnings_priority",
+          "columns": [
+            "priority"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    "circuit_breaker": {
+      "scope": "per_agent",
+      "columns": [
+        {
+          "name": "profile",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 2,
+          "check": "mode IN ('backtest', 'paper', 'live')"
+        },
+        {
+          "name": "state",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'green'",
+          "check": "state IN ('green', 'yellow', 'red', 'full_stop')",
+          "pk_ordinal": 0
+        },
+        {
+          "name": "trigger_reason",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "triggered_at",
+          "type": "TEXT",
+          "nullable": true,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "profile",
+        "mode"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "portfolio_summary": {
+      "scope": "per_agent",
+      "columns": [
+        {
+          "name": "profile",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 1
+        },
+        {
+          "name": "mode",
+          "type": "TEXT",
+          "nullable": false,
+          "pk_ordinal": 2,
+          "check": "mode IN ('backtest', 'paper', 'live')"
+        },
+        {
+          "name": "initial_balance_cents",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "current_balance_cents",
+          "type": "INTEGER",
+          "nullable": false,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "total_realized_pnl_cents",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "open_position_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0,
+          "pk_ordinal": 0
+        },
+        {
+          "name": "last_updated",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "datetime('now')",
+          "pk_ordinal": 0
+        }
+      ],
+      "primary_key": [
+        "profile",
+        "mode"
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    }
+  },
+  "semantics": {
+    "profile_not_agent": true,
+    "profile_and_mode_tables": [
+      "decisions",
+      "positions",
+      "circuit_breaker",
+      "portfolio_summary"
+    ],
+    "no_decisions_to_positions_fk": true,
+    "no_per_agent_settlement_cache": true,
+    "settlement_authoritative_scope": "global",
+    "init_decisions_db_creates_learnings": true,
+    "phase4_profiles_config_not_yet_wired": true,
+    "decision_id_uuid4": true
+  }
+}
+<!-- schema-manifest:end -->
+
+---
+
+## Reconciliation checklist
+
+Use this checklist when comparing this document to production code or when onboarding a new database module.
+
+- [ ] `market_data` columns match `src/traderbot/kalshi/ws_cache.py` exactly: `ticker TEXT PRIMARY KEY`, `last_price REAL`, `bid REAL`, `ask REAL`, `volume REAL`, `open_interest REAL`, `updated_at REAL NOT NULL`.
+- [ ] `orderbook` is one row per ticker: `bids_json TEXT NOT NULL`, `asks_json TEXT NOT NULL`, `updated_at REAL NOT NULL`. It is not a multi-row `(ticker, side, price_dollars)` table.
+- [ ] `weather_forecasts` includes `snapshot_ts`, `latitude`, `longitude`, `model`, `valid_date`, `variable`, `value`, with PK `(snapshot_ts, city, model, valid_date, variable)`.
+- [ ] `nws_forecasts` includes `snapshot_ts`, `forecast_date`, `high_temp_f`, `low_temp_f`, `precip_prob`, `wind_speed`, `detailed_forecast`, with PK `(snapshot_ts, city, forecast_date)`.
+- [ ] `settlement_cache` is global only. It has exactly `ticker TEXT PRIMARY KEY`, `outcome INTEGER NOT NULL`, `settled_at TEXT NOT NULL`.
+- [ ] `schema_version`, `profiles`, and `config` are present in the global schema. `profiles` and `config` are Phase 4 compatibility tables, not yet backed by runtime persistence code.
+- [ ] Per-agent `decisions.db` has exactly seven tables: `decisions`, `positions`, `forecast_snapshots`, `bias_tracking`, `learnings`, `circuit_breaker`, `portfolio_summary`.
+- [ ] `decisions.id` is `TEXT PRIMARY KEY` and stores a caller-generated canonical UUID4 string (`str(uuid.uuid4())`).
+- [ ] `decisions` has no foreign key to `positions(ticker)`.
+- [ ] `learnings` is created by `init_decisions_db()`, not on demand.
+- [ ] No per-agent table uses an `agent` column. Use `profile` instead.
+- [ ] Only `decisions`, `positions`, `circuit_breaker`, and `portfolio_summary` carry both `profile` and `mode` columns.
+- [ ] Settlement outcomes remain authoritative in the global `settlement_cache`; per-agent queries read from `~/.traderbot/traderbot.db`.
+- [ ] The JSON manifest between `<!-- schema-manifest:start -->` and `<!-- schema-manifest:end -->` parses with `json.loads`, lists every table, and includes `primary_key`, `foreign_keys`, and structured `indexes` entries.
+
+---
+
+## ChromaDB collections (embedded)
+
+ChromaDB uses an embedded `PersistentClient` at `~/.traderbot/chromadb/` owned by the daemon. No HTTP server or external embedding-function configuration is used. Callers supply explicit vectors.
+
+### Shared collections
+
+| Collection | Documents | Category filter |
 |---|---|---|
 | `news` | News articles with embeddings | `where={"category": "weather"}` |
 | `data_points` | Quantitative data points | `where={"category": "weather"}` |
@@ -328,64 +1633,130 @@ ChromaDB collections use category metadata filtering instead of per-category col
 | `news_signals` | Processed news signals | `where={"category": "weather"}` |
 | `market_conditions` | Market resolution conditions | Shared (no category filter) |
 
-**Note**: `decisions` collection in ChromaDB is per-agent (not shared) — each agent has its own ChromaDB collection for decision embeddings. The `learnings` collection is also per-agent.
+### Per-agent collection naming
+
+Profile names in storage are lowercase hyphenated `[a-z0-9]+(?:-[a-z0-9]+)*`, max 44 characters, with no underscores and no reserved names such as `sysadmin` for non-SysAdmin identities. Collection names are built by replacing `-` with `_` (underscores are forbidden in source names, so this is collision-free) and appending `_{mode}_{kind}`. The canonical SysAdmin collections are the mode-less exception.
+
+Examples:
+
+- Weather paper decisions: `weather_paper_decisions`
+- Weather paper learnings: `weather_paper_learnings`
+- SysAdmin decisions: `sysadmin_decisions`
+- SysAdmin learnings: `sysadmin_learnings`
+
+The MCP server enforces category filtering on shared collections and restricts per-agent collections to their owning profile.
 
 ---
 
-## Database Efficiency Improvements
+## SQLite tuning
 
-### SQLite PRAGMA Optimization
+Recommended PRAGMAs for the global and per-agent databases:
 
 ```sql
-PRAGMA journal_mode=WAL;          -- Already set
-PRAGMA synchronous=NORMAL;        -- Faster writes, safe with WAL
-PRAGMA busy_timeout=5000;          -- Wait up to 5s for locks
-PRAGMA cache_size=-64000;          -- 64MB cache
-PRAGMA temp_store=MEMORY;          -- In-memory temp tables
-PRAGMA mmap_size=268435456;        -- 256MB memory-mapped I/O
-PRAGMA foreign_keys=ON;            -- Already set
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA busy_timeout=5000;
+PRAGMA cache_size=-64000;
+PRAGMA temp_store=MEMORY;
+PRAGMA mmap_size=268435456;
+PRAGMA foreign_keys=ON;
 ```
 
-### Other Improvements
+Additional operational notes:
 
-1. **Migration system**: Track schema version in `schema_version` table. Apply migrations in order, skip already-applied ones. Support rollback for development.
-
-2. **Circuit breaker in DB**: Move from `circuit_breaker_state.json` to per-agent per-mode `circuit_breaker` table. Queryable via MCP for SysAdmin oversight.
-
-3. **ChromaDB embedding dimension**: Store as collection metadata. Provide migration utility for re-embedding when the model changes.
-
-4. **Data retention policy**:
-   - News articles: retain 6 months (matching backfill window), archive older
-   - Positions: retain all for active modes, archive after settlement + 90 days
-   - Decisions: retain all (audit trail)
-   - Forecast snapshots: retain 6 months for backtesting, archive older
-   - ChromaDB vectors: retain per collection policy
-
-5. **Settlement cache consolidation**: Move from separate `settlement_cache.db` per profile to a table in the main `decisions.db`.
-
-6. **Portfolio summary table**: Maintain running `portfolio_summary` for fast balance queries without loading all positions. Updated on each trade.
-
-7. **`learnings` in `init_schema()`**: Ensure the `learnings` table is created by `init_schema()`, not on-demand.
-
-8. **Connection pooling**: Use a connection pool for the MCP server to handle concurrent agent requests.
-
-9. **WAL checkpoint**: Run `PRAGMA wal_checkpoint(TRUNCATE)` periodically to keep WAL size bounded.
-
-10. **DB file size monitoring**: Alert when databases exceed size thresholds. VACUUM on promotion from backtesting to paper.
+- Run `PRAGMA wal_checkpoint(TRUNCATE)` periodically to keep WAL size bounded.
+- VACUUM per-agent databases when promoting from backtest to paper.
+- Monitor database file sizes and alert above thresholds.
 
 ---
 
-## GRIB2 Processing Pipeline (DD-033)
+## Data retention policy
 
-For true multi-day lead time forecasts, a GRIB2 processing pipeline will be built in two phases:
+| Data type | Retention |
+|---|---|
+| News articles | 6 months, then archive |
+| Positions | Retain all for active modes; archive after settlement + 90 days |
+| Decisions | Retain all (audit trail) |
+| Forecast snapshots | 6 months for backtesting, then archive |
+| ChromaDB vectors | Per collection policy |
 
-### Phase 1 (Ship with v2)
-- Use Open-Meteo Archive API + NWS forecasts + Kalshi historical data (day-0 only)
-- Document the approximation: initial backtests use day-0 forecasts which inflate certainty
+---
 
-### Phase 2 (After v2 Core)
-- Provider modules: `data/providers/gfs.py` and `data/providers/ecmwf.py`
-- Optional dependency: `cfgrib` via `pip install traderbot[weather-backtest]`
-- Process: Download grid points for 15 Kalshi cities → Extract temp/precip/wind → Store in `forecast_snapshots` with `lead_time_days`
-- Deploy integration: Offer optional 6-month backfill (5-10 GB compressed, skip by default)
-- Ongoing collection: GFS every 6 hours, ECMWF every 12 hours
+## GRIB2 processing pipeline (DD-033)
+
+### Phase 1 (ships with v2 core)
+
+Use Open-Meteo Archive API + NWS forecasts + Kalshi historical data (day-0 only). Backtests use same-day forecasts, which slightly inflates certainty. This is acceptable for initial development.
+
+### Phase 2 (after core is stable)
+
+Add `data/providers/gfs.py` and `data/providers/ecmwf.py` to process GRIB2 from AWS S3. Store true multi-day lead time forecasts in `forecast_snapshots` with `lead_time_days > 0`. Optional dependency: `pip install traderbot[weather-backtest]`.
+
+---
+
+## Appendix: Current deployed Phase 2 schema
+
+These are the exact `CREATE TABLE` statements found in the current production source as of the Task 0 pass. They are the source of truth until implementation changes them.
+
+### `src/traderbot/kalshi/ws_cache.py`
+
+```sql
+CREATE TABLE IF NOT EXISTS market_data (
+    ticker TEXT PRIMARY KEY,
+    last_price REAL,
+    bid REAL,
+    ask REAL,
+    volume REAL,
+    open_interest REAL,
+    updated_at REAL NOT NULL
+)
+
+CREATE TABLE IF NOT EXISTS orderbook (
+    ticker TEXT PRIMARY KEY,
+    bids_json TEXT NOT NULL,
+    asks_json TEXT NOT NULL,
+    updated_at REAL NOT NULL
+)
+```
+
+### `src/traderbot/data/providers/open_meteo.py`
+
+```sql
+CREATE TABLE IF NOT EXISTS weather_forecasts (
+    snapshot_ts TEXT NOT NULL,
+    city TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    model TEXT NOT NULL,
+    valid_date TEXT NOT NULL,
+    variable TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (snapshot_ts, city, model, valid_date, variable)
+)
+```
+
+### `src/traderbot/data/providers/nws.py`
+
+```sql
+CREATE TABLE IF NOT EXISTS nws_forecasts (
+    snapshot_ts TEXT NOT NULL,
+    city TEXT NOT NULL,
+    forecast_date TEXT NOT NULL,
+    high_temp_f REAL,
+    low_temp_f REAL,
+    precip_prob REAL,
+    wind_speed REAL,
+    detailed_forecast TEXT,
+    PRIMARY KEY (snapshot_ts, city, forecast_date)
+)
+```
+
+### `src/traderbot/data/providers/settlement.py`
+
+```sql
+CREATE TABLE IF NOT EXISTS settlement_cache (
+    ticker TEXT PRIMARY KEY,
+    outcome INTEGER NOT NULL,
+    settled_at TEXT NOT NULL
+)
+```
