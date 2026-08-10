@@ -1,0 +1,169 @@
+"""Typed first-party OpenClaw JSON response models."""
+
+from __future__ import annotations
+
+from typing import ClassVar, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+type CronJob = dict[str, JsonValue]
+
+
+class StrictModel(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+
+class JsonObject(RootModel[dict[str, JsonValue]]):
+    pass
+
+
+class SetupResult(StrictModel):
+    ok: Literal[True]
+    configPath: str = Field(min_length=1)
+    configStatus: str = Field(min_length=1)
+    workspaceDir: str = Field(min_length=1)
+    sessionsDir: str = Field(min_length=1)
+
+
+class DoctorFinding(StrictModel):
+    checkId: str = Field(min_length=1)
+    severity: Literal["info", "warning", "error"]
+    message: str = Field(min_length=1)
+
+
+class DoctorResult(StrictModel):
+    ok: Literal[True]
+    checksRun: int = Field(ge=0)
+    checksSkipped: int = Field(ge=0)
+    findings: list[DoctorFinding]
+
+
+class GatewayRpc(StrictModel):
+    ok: Literal[True]
+
+
+class GatewayResult(StrictModel):
+    rpc: GatewayRpc
+
+
+class ConfigChecks(StrictModel):
+    schema_valid: Literal[True] = Field(alias="schema")
+    resolvability: Literal[True]
+    resolvabilityComplete: Literal[True]
+
+
+class ConfigDryRun(StrictModel):
+    ok: Literal[True]
+    operations: int = Field(ge=1)
+    configPath: str = Field(min_length=1)
+    inputModes: list[Literal["value", "json", "builder", "unset"]] = Field(min_length=1)
+    checks: ConfigChecks
+    refsChecked: int = Field(ge=0)
+    skippedExecRefs: int = Field(ge=0)
+
+
+class AgentSummary(StrictModel):
+    id: str = Field(min_length=1)
+    workspace: str = Field(min_length=1)
+    agentDir: str = Field(min_length=1)
+    bindings: int = Field(ge=0)
+    isDefault: bool
+
+
+class AgentInventory(RootModel[list[AgentSummary]]):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, strict=True)
+
+
+class AgentCreated(StrictModel):
+    agentId: str = Field(min_length=1)
+    workspace: str = Field(min_length=1)
+    agentDir: str = Field(min_length=1)
+    bindings: AgentBindings
+
+
+class AgentBindings(StrictModel):
+    added: list[str]
+    updated: list[str]
+    skipped: list[str]
+    conflicts: list[str]
+
+
+class CronAtSchedule(StrictModel):
+    kind: Literal["at"]
+    at: str = Field(min_length=1)
+
+
+class CronEverySchedule(StrictModel):
+    kind: Literal["every"]
+    everyMs: int = Field(gt=0)
+
+
+class CronExpressionSchedule(StrictModel):
+    kind: Literal["cron"]
+    expr: str = Field(min_length=1)
+
+
+class CronOnExitSchedule(StrictModel):
+    kind: Literal["on-exit"]
+    command: str = Field(min_length=1)
+
+
+class CronStreamSchedule(StrictModel):
+    kind: Literal["stream"]
+    command: list[str] = Field(min_length=1)
+
+
+type CronSchedule = (
+    CronAtSchedule
+    | CronEverySchedule
+    | CronExpressionSchedule
+    | CronOnExitSchedule
+    | CronStreamSchedule
+)
+
+
+class CronSystemEventPayload(StrictModel):
+    kind: Literal["systemEvent"]
+    text: str = Field(min_length=1)
+
+
+class CronAgentTurnPayload(StrictModel):
+    kind: Literal["agentTurn"]
+    message: str = Field(min_length=1)
+
+
+class CronCommandPayload(StrictModel):
+    kind: Literal["command"]
+    argv: list[str] = Field(min_length=1)
+
+
+class CronScriptPayload(StrictModel):
+    kind: Literal["script"]
+    script: str = Field(min_length=1)
+
+
+class CronHeartbeatPayload(StrictModel):
+    kind: Literal["heartbeat"]
+
+
+type CronPayload = (
+    CronSystemEventPayload
+    | CronAgentTurnPayload
+    | CronCommandPayload
+    | CronScriptPayload
+    | CronHeartbeatPayload
+)
+
+
+class CronJobResult(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    enabled: bool
+    createdAtMs: int = Field(ge=0)
+    updatedAtMs: int = Field(ge=0)
+    schedule: CronSchedule
+    sessionTarget: str = Field(pattern=r"^(main|isolated|current|session:.+)$")
+    wakeMode: Literal["now", "next-heartbeat"]
+    payload: CronPayload
+    state: dict[str, JsonValue]
