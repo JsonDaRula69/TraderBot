@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a83] — 2026-08-10
+
+### Fixed
+
+- Resolved flaky `test_exclusive_checkout_waits_until_timeout` on Windows CI by increasing timeout from 20ms to 200ms (#200)
+
+## [2.0.0a82] — 2026-08-10
+
+### Fixed
+
+- Corrected GRIB2 (DD-033) phase assignment from Phase 4 to Phase 7a backtesting (#171, #194)
+
 ## [2.0.0a81] — 2026-08-10
 
 ### Changed

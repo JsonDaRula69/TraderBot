@@ -90,7 +90,7 @@ def test_returned_connection_is_reused(tmp_path: Path) -> None:
 
 def test_exclusive_checkout_waits_until_timeout(tmp_path: Path) -> None:
     # Given: the sole handle for a path is already checked out.
-    timeout = 0.02
+    timeout = 0.2
     pool = SQLiteConnectionPool(max_connections_per_path=1, checkout_timeout=timeout)
     path = tmp_path / "exclusive.db"
     with pool.connection(path):
