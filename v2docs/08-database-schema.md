@@ -1713,7 +1713,7 @@ Additional operational notes:
 
 ## GRIB2 processing pipeline (DD-033)
 
-Implementation is deferred from Phase 3; Stage 1 (Open-Meteo Archive + NWS + Kalshi historical) is folded into Phase 4 backtesting, and Stage 2 (GFS/ECMWF via cfgrib) is a post-Phase 4 follow-up. Tracked in [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194). Phase 3 implements the `forecast_snapshots` storage contract only; it does not add GRIB2 providers or `cfgrib`.
+Implementation is deferred from Phase 3; Stage 1 (Open-Meteo Archive + NWS + Kalshi historical) is folded into Phase 7a backtesting (#171), and Stage 2 (GFS/ECMWF via cfgrib) is a post-Phase 7a follow-up. Tracked in [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194). Phase 3 implements the `forecast_snapshots` storage contract only; it does not add GRIB2 providers or `cfgrib`.
 
 ### Phase 1 (ships with v2 core)
 
