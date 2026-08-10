@@ -33,10 +33,23 @@ jobs:
       - run: uv sync --all-extras --dev
       - run: uv run pytest tests/ -v --tb=short
 
+  security:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    env:
+      CHROMADB_WAIVER_OWNER: TraderBot
+      CHROMADB_WAIVER_REMOVAL: "first official patched release containing upstream fix #7237"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --all-extras --dev
+      - run: uv export --frozen --no-hashes --no-emit-project -o requirements-audit.txt
+      - run: uvx pip-audit --strict --aliases -r requirements-audit.txt --ignore-vuln GHSA-f4j7-r4q5-qw2c
+
   build:
     name: Build wheel
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, security]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
