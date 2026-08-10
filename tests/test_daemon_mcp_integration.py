@@ -39,6 +39,9 @@ async def test_daemon_serves_mcp_over_streamable_http(
     fake_components: dict[str, Any] = {
         "cache": cache,
         "client": AsyncMock(),
+        "chroma": MagicMock(),
+        "pool": MagicMock(),
+        "access": MagicMock(),
         "ws": MagicMock(),
         "data": MagicMock(),
         "mcp_app": app.streamable_http_app(),

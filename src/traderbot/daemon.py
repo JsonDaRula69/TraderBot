@@ -1,13 +1,4 @@
-"""Always-on TraderBot daemon (DD-016).
-
-Single process that combines the Kalshi WebSocket stream, the scheduled data
-pipeline, and the MCP server over ``streamable-http`` on loopback. Agents call
-its MCP tools; the WebSocket is the sole source of real-time Kalshi data with
-REST used only for startup seeding, recovery, and historical data (memory
-#277). Graceful shutdown stops components in reverse order.
-
-Entry point: ``traderbot-daemon`` console script → :func:`run_daemon`.
-"""
+"""Always-on TraderBot daemon for WS, data workers, storage, and MCP (DD-016)."""
 
 from __future__ import annotations
 
@@ -18,7 +9,9 @@ import os
 import signal
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from contextlib import ExitStack
 from pathlib import Path
+from types import FrameType
 from typing import Any, Final
 
 import uvicorn
@@ -28,13 +21,18 @@ from traderbot.data.providers.news import NewsProvider
 from traderbot.data.providers.nws import NwsProvider
 from traderbot.data.providers.open_meteo import OpenMeteoProvider
 from traderbot.data.providers.settlement import SettlementMonitor
+from traderbot.db.access import DatabaseAccess
+from traderbot.db.chroma_store import ChromaStore
+from traderbot.db.migrations import init_schema
 from traderbot.db.pool import SQLiteConnectionPool
+from traderbot.db.security import create_chroma_root
 from traderbot.kalshi.client import Environment, KalshiClient
 from traderbot.kalshi.websocket import KalshiWebSocketManager
 from traderbot.kalshi.ws_cache import MarketCache
-from traderbot.mcp.server import app, start_scheduler, stop_scheduler
-from traderbot.paths import get_db_path
+from traderbot.mcp.server import app
+from traderbot.paths import get_data_dir, get_db_path
 from traderbot.secrets.resolver import build_secrets_store
+from traderbot.secrets.rotation import start_scheduler, stop_scheduler
 from traderbot.secrets.store import SecretsStore
 from traderbot.state import (
     DATA_PIPELINE_RUNNING,
@@ -44,6 +42,7 @@ from traderbot.state import (
     WEBSOCKET_FAIL_OPEN,
     set_data_pipeline,
     set_market_cache,
+    set_storage_health,
     set_websocket,
 )
 
@@ -67,13 +66,7 @@ _WS_CHANNEL_ACTIONS: Final = {
 
 
 async def apply_ws_message(message: dict[str, Any], cache: MarketCache) -> None:
-    """Route one inbound WebSocket message into the in-memory market cache.
-
-    Args:
-        message: A parsed JSON message from
-            :meth:`traderbot.kalshi.websocket.KalshiWebSocket.receive`.
-        cache: The :class:`MarketCache` to update in place.
-    """
+    """Route one inbound WebSocket message into the in-memory market cache."""
     msg_type = message.get("type") if isinstance(message.get("type"), str) else None
     if msg_type is None:
         return
@@ -132,33 +125,12 @@ async def build_components(
     *,
     environment: Environment = "production",
     db_path: Path | None = None,
-    port: int = DEFAULT_PORT,
-    host: str = _DEFAULT_HOST,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Construct the daemon's component graph.
-
-    Returns a dict of components owned by the daemon lifecycle:
-    ``pool``, ``cache``, ``client``, ``ws``, ``data``, ``mcp_app``, ``app``.
-    """
-    store = secrets if secrets is not None else build_secrets_store()
-    api_key = store.get("kalshi", "api_key")
-    private_key_pem = store.get("kalshi", "private_key_pem")
-    if not api_key or not private_key_pem:
-        logger.warning(
-            "kalshi credentials missing; websocket/client will fail open "
-            "(daemon still serves from SQLite cache)"
-        )
-
-    client = KalshiClient(
-        api_key=api_key,
-        private_key_pem=private_key_pem,
-        environment=environment,
-    )
+    """Construct the daemon-owned component graph."""
     database_path = db_path if db_path is not None else get_db_path()
-    pool = SQLiteConnectionPool()
-    cache = MarketCache(pool, database_path)
-    cache.load_from_db()
-    set_market_cache(cache)
+    data_directory = data_root if data_root is not None else get_data_dir()
+    chroma_root = data_directory / "chromadb"
 
     async def _mark_ws_connected() -> None:
         set_websocket(WEBSOCKET_CONNECTED)
@@ -166,31 +138,65 @@ async def build_components(
     async def _mark_ws_fail_open() -> None:
         set_websocket(WEBSOCKET_FAIL_OPEN)
 
-    ws = KalshiWebSocketManager(
-        api_key=api_key or "",
-        private_key_pem=private_key_pem or "",
-        environment=environment,
-        on_message=_message_callback(cache),
-        on_reconnect=_mark_ws_connected,
-        on_fail_open=_mark_ws_fail_open,
-    )
+    with ExitStack() as startup:
+        _ = startup.callback(set_storage_health, False, False, False)
+        init_schema(database_path)
+        set_storage_health(True, False, False)
+        pool = SQLiteConnectionPool()
+        _ = startup.callback(pool.shutdown)
+        if not chroma_root.exists():
+            create_chroma_root(chroma_root)
+        chroma = ChromaStore(chroma_root)
+        _ = startup.callback(chroma.close)
+        set_storage_health(True, True, True)
+        access = DatabaseAccess(pool, data_directory)
 
-    data = DataCollectionService()
-    data.register(SettlementMonitor(client, pool, database_path))
-    data.register(OpenMeteoProvider(pool, database_path))
-    data.register(NwsProvider(pool, database_path))
-    data.register(NewsProvider())
+        store = secrets if secrets is not None else build_secrets_store()
+        api_key = store.get("kalshi", "api_key")
+        private_key_pem = store.get("kalshi", "private_key_pem")
+        if not api_key or not private_key_pem:
+            logger.warning(
+                "kalshi credentials missing; websocket/client will fail open "
+                "(daemon still serves from SQLite cache)"
+            )
 
-    mcp_app = app.streamable_http_app()
-    return {
-        "pool": pool,
-        "cache": cache,
-        "client": client,
-        "ws": ws,
-        "data": data,
-        "mcp_app": mcp_app,
-        "app": app,
-    }
+        client = KalshiClient(
+            api_key=api_key,
+            private_key_pem=private_key_pem,
+            environment=environment,
+        )
+        cache = MarketCache(pool, database_path)
+        cache.load_from_db()
+        set_market_cache(cache)
+
+        ws = KalshiWebSocketManager(
+            api_key=api_key or "",
+            private_key_pem=private_key_pem or "",
+            environment=environment,
+            on_message=_message_callback(cache),
+            on_reconnect=_mark_ws_connected,
+            on_fail_open=_mark_ws_fail_open,
+        )
+
+        data = DataCollectionService()
+        data.register(SettlementMonitor(client, pool, database_path))
+        data.register(OpenMeteoProvider(pool, database_path))
+        data.register(NwsProvider(pool, database_path))
+        data.register(NewsProvider())
+
+        components = {
+            "pool": pool,
+            "chroma": chroma,
+            "access": access,
+            "cache": cache,
+            "client": client,
+            "ws": ws,
+            "data": data,
+            "mcp_app": app.streamable_http_app(),
+            "app": app,
+        }
+        _ = startup.pop_all()
+        return components
 
 
 def _message_callback(cache: MarketCache) -> Callable[[dict[str, Any]], Awaitable[None]]:
@@ -210,7 +216,7 @@ async def run_daemon(
     environment: Environment = "production",
 ) -> None:
     """Run the always-on daemon until SIGTERM/SIGINT, then shut down cleanly."""
-    components = await build_components(environment=environment, port=port, host=host)
+    components = await build_components(environment=environment)
     cache: MarketCache = components["cache"]
     ws: KalshiWebSocketManager = components["ws"]
     data: DataCollectionService = components["data"]
@@ -218,7 +224,7 @@ async def run_daemon(
     # Shutdown bookkeeping.
     stop = asyncio.Event()
 
-    def _request_stop(signum: int, _frame: object) -> None:
+    def _request_stop(signum: int, _frame: FrameType | None) -> None:
         logger.info("received signal %s; shutting down", signum)
         stop.set()
 
@@ -226,49 +232,45 @@ async def run_daemon(
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, _request_stop, sig, None)
 
-    # Component startup (cache already loaded).
-    await cache.start_persist_task()
-    await start_scheduler()
-    await ws.start()
-    await data.start()
-    set_data_pipeline(DATA_PIPELINE_RUNNING)
-
-    # Host the MCP app on loopback.
-    config = uvicorn.Config(
-        components["mcp_app"],
-        host=host,
-        port=port,
-        log_level="warning",
-        access_log=False,
-    )
-    server = uvicorn.Server(config)
-    mcp_task = asyncio.create_task(server.serve(), name="traderbot-mcp-http")
-    logger.info("daemon ready on http://%s:%s/mcp (pid=%s)", host, port, os.getpid())
-
+    mcp_task: asyncio.Task[None] | None = None
     try:
+        await cache.start_persist_task()
+        await start_scheduler()
+        await ws.start()
+        await data.start()
+        set_data_pipeline(DATA_PIPELINE_RUNNING)
+
+        config = uvicorn.Config(
+            components["mcp_app"],
+            host=host,
+            port=port,
+            log_level="warning",
+            access_log=False,
+        )
+        server = uvicorn.Server(config)
+        mcp_task = asyncio.create_task(server.serve(), name="traderbot-mcp-http")
+        logger.info("daemon ready on http://%s:%s/mcp (pid=%s)", host, port, os.getpid())
         await stop.wait()
     finally:
         logger.info("stopping daemon components (reverse order)")
-        mcp_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await mcp_task
+        if mcp_task is not None:
+            _ = mcp_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await mcp_task
         await data.stop()
         await ws.stop()
         await stop_scheduler()
         await cache.stop_persist_task()
         await components["client"].close()
+        components["chroma"].close()
+        components["pool"].shutdown()
+        set_storage_health(False, False, False)
         set_websocket(WEBSOCKET_DISCONNECTED)
         set_data_pipeline(DATA_PIPELINE_STOPPED)
         logger.info("daemon stopped")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Entry point for the ``traderbot-daemon`` console script.
-
-    ``argv`` is accepted so the ``traderbot daemon`` CLI subcommand can
-    forward its parsed flags without leaking the ``daemon`` token into
-    ``sys.argv`` (which would be rejected by this parser).
-    """
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the always-on TraderBot daemon")

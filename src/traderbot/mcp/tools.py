@@ -132,6 +132,9 @@ async def traderbot__health(token: str, **kwargs: JsonValue) -> JsonObject:
             "auth": "hardcoded" if use_hardcoded_auth else "resolved",
             "data_pipeline": status["data_pipeline"],
             "websocket": status["websocket"],
+            "database": status["database"],
+            "chromadb": status["chromadb"],
+            "chromadb_lock": status["chromadb_lock"],
         },
     }
 
