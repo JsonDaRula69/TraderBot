@@ -11,20 +11,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from chromadb.errors import InvalidArgumentError
 
 from traderbot.db import (
     ChromaBackendError,
-    ChromaDeleteRequest,
-    ChromaGetRequest,
-    ChromaQueryRequest,
-    ChromaRecord,
     ChromaStore,
     InvalidChromaRootError,
     assert_embedded_backend,
     create_chroma_root,
     validate_chroma_root,
 )
+from traderbot.db.models import ChromaMetadataMismatchError
 from traderbot.kalshi.models import MarketCategory
 
 
@@ -118,12 +114,12 @@ def test_hostile_environment_cannot_force_network_backend(chroma_root: Path) -> 
     code = """
 from pathlib import Path
 from unittest.mock import patch
-from traderbot.db import ChromaRecord, ChromaStore
+from traderbot.db import ChromaStore
 from traderbot.kalshi.models import MarketCategory
 root = Path(__import__('os').environ['TRADERBOT_TEST_CHROMA_ROOT'])
 with patch('socket.socket.connect', side_effect=AssertionError('socket connect attempted')):
     store = ChromaStore(root)
-    store.add('security_vectors', ChromaRecord(MarketCategory.WEATHER, 'one', (1.0, 0.0, 0.0)))
+    store.add(MarketCategory.WEATHER, 'security_vectors', ['one'], [[1.0, 0.0, 0.0]], None, None)
     store.close()
 """
     env = os.environ.copy()
@@ -186,28 +182,44 @@ raise SystemExit(1)
 def test_dimension_mismatch_raises_chroma_error(chroma_root: Path) -> None:
     with ChromaStore(chroma_root) as store:
         store.add(
+            MarketCategory.WEATHER,
             "dimension_vectors",
-            ChromaRecord(MarketCategory.WEATHER, "three", (1.0, 0.0, 0.0)),
+            ["three"],
+            [[1.0, 0.0, 0.0]],
+            None,
+            None,
         )
-        with pytest.raises(InvalidArgumentError):
+        with pytest.raises(ChromaMetadataMismatchError):
             store.add(
+                MarketCategory.WEATHER,
                 "dimension_vectors",
-                ChromaRecord(MarketCategory.WEATHER, "four", (1.0, 0.0, 0.0, 0.0)),
+                ["four"],
+                [[1.0, 0.0, 0.0, 0.0]],
+                None,
+                None,
             )
 
 
 def test_category_prefix_prevents_cross_category_upsert(chroma_root: Path) -> None:
     with ChromaStore(chroma_root) as store:
         store.upsert(
+            MarketCategory.WEATHER,
             "shared_vectors",
-            ChromaRecord(MarketCategory.WEATHER, "same", (1.0, 0.0, 0.0), "weather"),
+            ["same"],
+            [[1.0, 0.0, 0.0]],
+            ["weather"],
+            None,
         )
         store.upsert(
+            MarketCategory.SPORTS,
             "shared_vectors",
-            ChromaRecord(MarketCategory.SPORTS, "same", (0.0, 1.0, 0.0), "sports"),
+            ["same"],
+            [[0.0, 1.0, 0.0]],
+            ["sports"],
+            None,
         )
-        weather = store.get("shared_vectors", ChromaGetRequest(MarketCategory.WEATHER, ("same",)))
-        sports = store.get("shared_vectors", ChromaGetRequest(MarketCategory.SPORTS, ("same",)))
+        weather = store.get(MarketCategory.WEATHER, "shared_vectors", ["same"], None, None)
+        sports = store.get(MarketCategory.SPORTS, "shared_vectors", ["same"], None, None)
     assert weather["ids"] == ["weather:same"]
     assert sports["ids"] == ["sports:same"]
     assert weather["documents"] == ["weather"]
@@ -220,13 +232,13 @@ def test_all_operations_enforce_category_scope(chroma_root: Path) -> None:
             (MarketCategory.WEATHER, "w", (1.0, 0.0, 0.0)),
             (MarketCategory.SPORTS, "s", (0.0, 1.0, 0.0)),
         ):
-            store.add("scoped_vectors", ChromaRecord(category, caller_id, embedding))
-        got = store.get("scoped_vectors", ChromaGetRequest(MarketCategory.WEATHER))
+            store.add(category, "scoped_vectors", [caller_id], [list(embedding)], None, None)
+        got = store.get(MarketCategory.WEATHER, "scoped_vectors", None, None, None)
         queried = store.query(
-            "scoped_vectors", ChromaQueryRequest(MarketCategory.WEATHER, (1.0, 0.0, 0.0))
+            MarketCategory.WEATHER, "scoped_vectors", [[1.0, 0.0, 0.0]], 10, None
         )
-        _ = store.delete("scoped_vectors", ChromaDeleteRequest(MarketCategory.WEATHER))
-        remaining = store.get("scoped_vectors", ChromaGetRequest(MarketCategory.SPORTS))
+        _ = store.delete(MarketCategory.WEATHER, "scoped_vectors", None, None)
+        remaining = store.get(MarketCategory.SPORTS, "scoped_vectors", None, None, None)
         assert not hasattr(store, "collection")
         assert not hasattr(store, "update")
     assert got["ids"] == ["weather:w"]
