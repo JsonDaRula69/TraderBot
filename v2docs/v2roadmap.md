@@ -43,7 +43,7 @@
 | DD-030 | CLI circular imports — extract DB code from helpers | Decided |
 | DD-031 | Module-by-module review findings | Decided |
 | DD-032 | Database restructuring for multi-agent multi-mode | Implemented (Phase 3 Tasks 0-9) |
-| DD-033 | GRIB2 processing pipeline for historical weather data | Decided; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194)) |
+| DD-033 | GRIB2 processing pipeline for historical weather data | Decided; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194)) |
 | DD-034 | Dev-Liaison — TraderBot subject matter expert and AutoDev liaison | Decided |
 | DD-035 | Category-specific analysis toolkits — analysis, not trading signals | Decided |
 | DD-036 | SysAdmin sandbox — unsandboxed with principled restrictions | Decided |
@@ -71,7 +71,7 @@
 - [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification complete (see next line)
 - [x] Phase 1.1 deployment verification (2026-08-03): E2E injection verified on macpro-linux — plugin loads, hook fires at priority 100, token resolved from env provider, injected into MCP call params, server resolves weather profile. Three fixes required: manifest metadata + configSchema (f8b5065), token optional in schemas (f1aa518), and MCP server env must explicitly set TRADERBOT_USE_HARDCODED_AUTH=0 (0dbc981) — the subprocess does not inherit the gateway's systemd drop-in. Fail-closed verified for unmapped agents (main). Token never enters model context (agent confirms it passed no token). 113 Python + 11 TypeScript tests pass on-target.
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
-- [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
+- [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
 - [ ] ~~Workspace template source and category templates~~ (shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first)
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)
@@ -130,7 +130,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 - [x] **OpenClaw multi-model sub-agent spawning**: DD-038 — sessions_spawn with model overrides, ephemeral sub-agents per cycle
 - [x] **TEMPLATE.md review**: DD-038 — TraderBot-specific context, statistical rigor guardrails, Kalshi market specificity, success criteria
 - [x] **Weather signal engine redesign**: DD-035 — category-specific analysis toolkits replace directional signals with interpretive statistical outputs
-- [x] **GRIB2 processing pipeline**: DD-033 — design retained; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
+- [x] **GRIB2 processing pipeline**: DD-033 — design retained; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 
 
 ## Design Decisions Log
@@ -1202,7 +1202,7 @@ Verified structure:
 ### DD-021: Paper Trading and Live Trading Architecture
 
 **Date**: 2025-06-15
-**Status**: Decided; Stage 1 folded into Phase 4 backtesting, Stage 2 post-Phase 4 follow-up
+**Status**: Decided; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up
 
 **Context**: Under the MCP architecture (DD-015), the agent calls the same tools regardless of mode. TraderBot routes on the backend based on the agent's profile. Paper trading and live trading use mostly the same data and sources — the only difference is when an agent decides to place an order, under paper trading the order is not submitted to Kalshi and instead recorded and simulated locally in the agent's paper trades database. This database also needs to correctly calculate balance, trade settlement, profit/loss, etc.
 
