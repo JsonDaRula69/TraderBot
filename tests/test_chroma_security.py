@@ -141,6 +141,7 @@ def test_product_code_has_no_server_or_http_client_imports() -> None:
     db_root = Path(__file__).parents[1] / "src" / "traderbot" / "db"
     banned_modules = {"chromadb.server", "chromadb.api.fastapi", "fastapi", "uvicorn"}
     banned_names = {"FastAPI", "HttpClient", "AsyncHttpClient", "CloudClient"}
+    persistent_client_modules: set[str] = set()
     for source_path in db_root.glob("*.py"):
         tree = ast.parse(source_path.read_text())
         imports = {
@@ -153,8 +154,12 @@ def test_product_code_has_no_server_or_http_client_imports() -> None:
             node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
         )
         names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        attributes = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+        if "PersistentClient" in attributes:
+            persistent_client_modules.add(source_path.name)
         assert not (imports & banned_modules)
-        assert not (names & banned_names)
+        assert not ((names | attributes) & banned_names)
+    assert persistent_client_modules == {"chroma_store.py"}
 
 
 def test_second_process_cannot_acquire_owned_root(chroma_root: Path) -> None:
@@ -234,9 +239,7 @@ def test_all_operations_enforce_category_scope(chroma_root: Path) -> None:
         ):
             store.add(category, "scoped_vectors", [caller_id], [list(embedding)], None, None)
         got = store.get(MarketCategory.WEATHER, "scoped_vectors", None, None, None)
-        queried = store.query(
-            MarketCategory.WEATHER, "scoped_vectors", [[1.0, 0.0, 0.0]], 10, None
-        )
+        queried = store.query(MarketCategory.WEATHER, "scoped_vectors", [[1.0, 0.0, 0.0]], 10, None)
         _ = store.delete(MarketCategory.WEATHER, "scoped_vectors", None, None)
         remaining = store.get(MarketCategory.SPORTS, "scoped_vectors", None, None, None)
         assert not hasattr(store, "collection")

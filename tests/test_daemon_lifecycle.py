@@ -139,6 +139,26 @@ async def test_migration_failure_aborts_before_component_construction(
 
 
 @pytest.mark.asyncio
+async def test_chroma_failure_releases_pool_and_resets_storage_health(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pool = MagicMock()
+    monkeypatch.setattr(daemon_mod, "init_schema", MagicMock())
+    monkeypatch.setattr(daemon_mod, "SQLiteConnectionPool", MagicMock(return_value=pool))
+    monkeypatch.setattr(daemon_mod, "create_chroma_root", MagicMock())
+    monkeypatch.setattr(daemon_mod, "ChromaStore", MagicMock(side_effect=RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await build_components(MagicMock(), db_path=tmp_path / "traderbot.db", data_root=tmp_path)
+
+    pool.shutdown.assert_called_once_with()
+    assert snapshot()["database"] == "not_initialized"
+    assert snapshot()["chromadb"] == "not_initialized"
+    assert snapshot()["chromadb_lock"] == "not_held"
+
+
+@pytest.mark.asyncio
 async def test_daemon_starts_and_shuts_down_gracefully(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
