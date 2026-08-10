@@ -37,6 +37,35 @@ Key design choices:
 
 ## Per-agent per-mode isolation (DD-032)
 
+### Phase 3 implementation status
+
+Phase 3 Tasks 0-9 are implemented on `feat/v2-database`; on-target macpro-linux QA (Task 10) remains pending. The implementation now provides:
+
+- `src/traderbot/db/` as the central database module, including the typed migration runner, per-agent schema, bounded SQLite connection pool, embedded ChromaDB store, storage validation, and `DatabaseAccess` routing.
+- Global migration v1 for `traderbot.db` and decisions migration v1 for all seven per-agent tables: `decisions`, `positions`, `forecast_snapshots`, `bias_tracking`, `learnings`, `circuit_breaker`, and `portfolio_summary`.
+- Ordered, skip-applied migrations recorded in `schema_version`, atomic `BEGIN IMMEDIATE` application, fail-closed legacy signature validation with adjacent backups, and highest-applied-version rollback guards.
+- A daemon-owned `SQLiteConnectionPool` with WAL and the PRAGMAs documented below. `DatabaseAccess` enforces resolved profile identity, active-mode writes, read-only access to authorized earlier modes, path containment, and SysAdmin-only enumeration.
+- One embedded `chromadb.PersistentClient` with the Rust bindings backend pinned, telemetry disabled, explicit caller-supplied vectors, five shared logical collections, mode-qualified per-agent collections, category-prefixed IDs, and mandatory category filters.
+- Daemon startup and shutdown integration with database, ChromaDB, and Chroma ownership-lock health reporting. Reads never create a per-agent database; explicit deployment/promotion or the first authorized write initializes it.
+
+### ChromaDB accepted risk: GHSA-f4j7-r4q5-qw2c
+
+TraderBot pins `chromadb==1.5.9`, which is affected by [GHSA-f4j7-r4q5-qw2c](https://github.com/advisories/GHSA-f4j7-r4q5-qw2c) / CVE-2026-45829. The advisory is a pre-authentication code-injection path in ChromaDB's Python HTTP collection endpoint: attacker-controlled embedding configuration could be deserialized before authentication. TraderBot accepts the package-level risk because that HTTP exploit path is unreachable under the enforced embedded-only design:
+
+- TraderBot creates only an in-process `PersistentClient` configured with `chromadb.api.rust.RustBindingsAPI`, asserts that effective backend at runtime, and never imports or starts ChromaDB's HTTP server, FastAPI adapter, Uvicorn, `HttpClient`, `AsyncHttpClient`, or `CloudClient`.
+- The application creates the Chroma root itself and rejects external, prebuilt, symlinked, wrong-owner, or permissive storage. On POSIX the root is owner-only mode `0700` and the ownership lock is mode `0600`; Windows requires the current user SID as owner, a protected DACL, and no broad or foreign allow ACEs.
+- Collections use `embedding_function=None`; callers provide explicit vectors. TraderBot accepts no serialized remote embedding-function configuration and performs no default model download.
+
+The CI waiver is deliberately exact and fails on every other advisory:
+
+```bash
+uv export --frozen --no-hashes --no-emit-project -o requirements-audit.txt
+uvx pip-audit --strict --aliases -r requirements-audit.txt \
+  --ignore-vuln GHSA-f4j7-r4q5-qw2c
+```
+
+Waiver owner: **TraderBot**. Removal condition: **upgrade ChromaDB and remove the waiver with the first official release containing merged upstream fix [chroma-core/chroma#7237](https://github.com/chroma-core/chroma/pull/7237)**. Until then, the accepted risk and independent review are tracked in [TraderBot #195](https://github.com/JsonDaRula69/TraderBot/issues/195) and [TraderBot #196](https://github.com/JsonDaRula69/TraderBot/issues/196); the vulnerable code remains present in the dependency even though TraderBot does not expose its HTTP path.
+
 ### Isolation rules
 
 1. Each profile has separate `decisions.db` files for `backtest`, `paper`, and `live` modes.
@@ -1683,6 +1712,8 @@ Additional operational notes:
 ---
 
 ## GRIB2 processing pipeline (DD-033)
+
+Implementation is deferred from Phase 3 and tracked in [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194). Phase 3 implements the `forecast_snapshots` storage contract only; it does not add GRIB2 providers or `cfgrib`.
 
 ### Phase 1 (ships with v2 core)
 

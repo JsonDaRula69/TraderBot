@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a74] — 2026-08-10
+
+### Added
+
+- Added `chromadb==1.5.9` with embedded-only security guards, explicit vectors, owner-only storage, and an exact GHSA-f4j7-r4q5-qw2c scanner waiver
+- Added the central `db/` module with a typed migration runner, bounded SQLite connection pool, `ChromaStore`, and identity-aware `DatabaseAccess`
+- Added isolated per-profile, per-mode `decisions.db` databases with seven tables for decisions, positions, forecast snapshots, bias tracking, learnings, circuit-breaker state, and portfolio summaries
+- Integrated global migrations, pooled storage, and embedded ChromaDB into the daemon lifecycle with database, ChromaDB, and ownership-lock health reporting
+- Added the full Phase 3 component test suite and isolated `scripts/phase3-qa.py` runner for migration, rollback, access isolation, ChromaDB filtering, and performance checks
+
+### Changed
+
+- Deferred the GRIB2 processing pipeline from Phase 3 to [issue #194](https://github.com/JsonDaRula69/TraderBot/issues/194)
+- Documented the completed ChromaDB security review and accepted-risk tracking in [issue #195](https://github.com/JsonDaRula69/TraderBot/issues/195) and [issue #196](https://github.com/JsonDaRula69/TraderBot/issues/196)
+
 ## [2.0.0a61] — 2026-08-04
 
 ### Added
