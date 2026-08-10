@@ -1,19 +1,22 @@
-"""TraderBot command-line interface (Phase 2).
+"""TraderBot command-line interface.
 
 Provides the always-on daemon entry point (DD-016) and service lifecycle
 commands (DD-022): ``traderbot daemon`` runs the daemon, and
 ``traderbot service install|uninstall|status`` manages the platform
-service. This is deliberately minimal — the full 8-step ``traderbot deploy``
-wizard is a Phase 4 concern.
+service. Phase 4 foundation commands reserve the deploy-facing CLI surface;
+wizard, backfill, and verification orchestration land in later plan items.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 
 from traderbot.daemon import main as daemon_main
+from traderbot.kalshi.models import MarketCategory
+from traderbot.profiles.generic import create_category_profile
 from traderbot.services.deploy import (
     deploy_service,
     detect_service_manager,
@@ -25,6 +28,14 @@ from traderbot.services.deploy import (
 
 _EXIT_OK = 0
 _EXIT_ERROR = 1
+
+
+def _parse_market_category(value: str) -> MarketCategory:
+    try:
+        return MarketCategory(value)
+    except ValueError as exc:
+        msg = f"invalid category: {value!r}"
+        raise argparse.ArgumentTypeError(msg) from exc
 
 
 def _cmd_daemon(args: argparse.Namespace) -> int:
@@ -68,6 +79,32 @@ def _cmd_service_status(_args: argparse.Namespace) -> int:
     return _EXIT_OK
 
 
+def _cmd_profile_create(args: argparse.Namespace) -> int:
+    profile = create_category_profile(args.name, args.mode, args.categories)
+    print(profile.model_dump_json())
+    return _EXIT_OK
+
+
+def _cmd_auth_check(_args: argparse.Namespace) -> int:
+    print('{"status":"error","error":"no token"}')
+    return _EXIT_ERROR
+
+
+def _cmd_deploy(_args: argparse.Namespace) -> int:
+    print("deploy: not yet implemented")
+    return _EXIT_OK
+
+
+def _cmd_backfill(_args: argparse.Namespace) -> int:
+    print("backfill: not yet implemented")
+    return _EXIT_OK
+
+
+def _cmd_verify(_args: argparse.Namespace) -> int:
+    print("verify: not yet implemented")
+    return _EXIT_OK
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="traderbot",
@@ -90,6 +127,32 @@ def _build_parser() -> argparse.ArgumentParser:
     service_sub.add_parser("install", help="Install the daemon service")
     service_sub.add_parser("uninstall", help="Uninstall the daemon service")
     service_sub.add_parser("status", help="Report daemon service status")
+
+    profile = subparsers.add_parser("profile", help="Manage trading profiles")
+    profile_sub = profile.add_subparsers(dest="action", required=True)
+    profile_create = profile_sub.add_parser("create", help="Create a category profile")
+    profile_create.add_argument("name")
+    profile_create.add_argument(
+        "--mode",
+        default="backtest",
+        choices=["backtest", "paper", "live"],
+    )
+    profile_create.add_argument(
+        "--categories",
+        nargs="+",
+        required=True,
+        type=_parse_market_category,
+        metavar="CATEGORY",
+    )
+
+    auth = subparsers.add_parser("auth", help="Check profile authentication")
+    auth_sub = auth.add_subparsers(dest="action", required=True)
+    auth_check = auth_sub.add_parser("check", help="Check the active profile token")
+    auth_check.add_argument("--json", action="store_true", dest="json_output")
+
+    subparsers.add_parser("deploy", help="Deploy TraderBot (not yet implemented)")
+    subparsers.add_parser("backfill", help="Backfill data (not yet implemented)")
+    subparsers.add_parser("verify", help="Verify deployment (not yet implemented)")
     return parser
 
 
@@ -107,6 +170,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_service_uninstall(args)
         if args.action == "status":
             return _cmd_service_status(args)
+    if args.command == "profile" and args.action == "create":
+        return _cmd_profile_create(args)
+    if args.command == "auth" and args.action == "check":
+        return _cmd_auth_check(args)
+    if args.command in {"deploy", "backfill", "verify"}:
+        os.environ["TRADERBOT_USE_HARDCODED_AUTH"] = "0"
+        if args.command == "deploy":
+            return _cmd_deploy(args)
+        if args.command == "backfill":
+            return _cmd_backfill(args)
+        if args.command == "verify":
+            return _cmd_verify(args)
 
     parser.error(f"unknown command: {args.command}")
     return _EXIT_ERROR

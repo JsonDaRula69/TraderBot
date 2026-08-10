@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Any, cast
 
+from traderbot.paths import get_data_dir
 from traderbot.profiles import tokens
 from traderbot.secrets.adapter import TokenStoreAdapter
 from traderbot.secrets.local_encrypted import LocalEncryptedStore
@@ -41,7 +41,7 @@ def build_secrets_store() -> SecretsStore:
     to :class:`LocalEncryptedStore`. Shared by :class:`SecretsResolver` and the
     daemon's component graph so both use the same construction.
     """
-    creds_path = Path.home() / ".traderbot" / "infisical-credentials.json"
+    creds_path = get_data_dir() / "infisical-credentials.json"
     try:
         creds = json.loads(creds_path.read_text())
         from infisical_sdk import InfisicalSDKClient
