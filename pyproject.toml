@@ -18,7 +18,7 @@ dependencies = [
     "onnxruntime==1.23.2",
     "pydantic>=2.13.4",
     "uvicorn>=0.34.0",
-    "websockets>=13.0",
+    "websockets>=17.0.1",
 ]
 
 [project.scripts]
