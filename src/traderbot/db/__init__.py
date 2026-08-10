@@ -12,6 +12,13 @@ from .models import (
     ChromaQueryRequest,
     ChromaRecord,
 )
+from .pool import (
+    ConnectionPoolClosedError,
+    ConnectionPoolTimeoutError,
+    CrossThreadAccessError,
+    InvalidPoolConfigurationError,
+    SQLiteConnectionPool,
+)
 from .security import (
     ChromaBackendError,
     InvalidChromaRootError,
@@ -30,7 +37,12 @@ __all__ = [
     "ChromaQueryRequest",
     "ChromaRecord",
     "ChromaStore",
+    "ConnectionPoolClosedError",
+    "ConnectionPoolTimeoutError",
+    "CrossThreadAccessError",
     "InvalidChromaRootError",
+    "InvalidPoolConfigurationError",
+    "SQLiteConnectionPool",
     "assert_embedded_backend",
     "create_chroma_root",
     "validate_chroma_root",

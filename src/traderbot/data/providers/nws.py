@@ -18,6 +18,7 @@ import httpx
 
 from traderbot.data.base_provider import BaseDataProvider
 from traderbot.data.providers.weather_cities import CITIES, REQUEST_TIMEOUT
+from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.paths import get_db_path
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,8 @@ class NwsProvider(BaseDataProvider):
     """Hourly NWS point-forecast snapshot provider.
 
     Args:
+        pool: Shared SQLite connection pool. A private compatibility pool is
+            created when omitted.
         db_path: SQLite database file. Defaults to
             ``~/.traderbot/traderbot.db`` (see :func:`traderbot.paths.get_db_path`).
         http_client: Optional pre-built ``httpx.AsyncClient`` (tests inject a
@@ -40,10 +43,12 @@ class NwsProvider(BaseDataProvider):
 
     def __init__(
         self,
+        pool: SQLiteConnectionPool | None = None,
         db_path: Path | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         super().__init__()
+        self._pool: SQLiteConnectionPool = pool if pool is not None else SQLiteConnectionPool()
         self._db_path: Path = db_path or get_db_path()
         self._client: httpx.AsyncClient | None = http_client
         self._owns_client: bool = http_client is None
@@ -145,9 +150,7 @@ class NwsProvider(BaseDataProvider):
     async def insert(self, data: dict[str, list[dict[str, Any]]]) -> int:
         """Persist the per-city NWS forecast snapshots into the SQLite database."""
         snapshot_ts = datetime.now(UTC).isoformat()
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with self._pool.connection(self._db_path) as conn:
             self._create_tables(conn)
             inserted = 0
             for city, periods in data.items():
@@ -188,11 +191,8 @@ class NwsProvider(BaseDataProvider):
                         ),
                     )
                     inserted += 1
-            conn.commit()
             logger.info("nws persisted %d forecast rows (snapshot %s)", inserted, snapshot_ts)
             return inserted
-        finally:
-            conn.close()
 
     @staticmethod
     def _create_tables(conn: sqlite3.Connection) -> None:
@@ -209,7 +209,6 @@ class NwsProvider(BaseDataProvider):
                    PRIMARY KEY (snapshot_ts, city, forecast_date)
                )"""
         )
-        conn.commit()
 
 
 __all__ = ["NwsProvider"]

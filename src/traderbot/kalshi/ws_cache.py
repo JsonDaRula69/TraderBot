@@ -35,16 +35,14 @@ import time
 from pathlib import Path
 from typing import Final
 
-from traderbot.paths import get_data_dir
+from traderbot.db.pool import ConnectionPoolTimeoutError, SQLiteConnectionPool
+from traderbot.paths import get_db_path
 
 logger = logging.getLogger(__name__)
 
 # Recursive JSON value types — matches the kalshi package.
 type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
-
-#: Default SQLite database file inside the data dir.
-_DEFAULT_DB_NAME: Final = "traderbot.db"
 
 #: Default write-behind persistence interval in seconds.
 _DEFAULT_PERSIST_INTERVAL_S: Final = 5.0
@@ -108,6 +106,8 @@ class MarketCache:
     """In-memory market data cache with write-behind SQLite persistence.
 
     Args:
+        pool: Shared SQLite connection pool. A private compatibility pool is
+            created when omitted.
         db_path: SQLite database file. Defaults to ``~/.traderbot/traderbot.db``.
         persist_interval_s: Write-behind interval. ``0`` disables automatic
             persistence (call :meth:`persist_to_db` manually).
@@ -115,11 +115,13 @@ class MarketCache:
 
     def __init__(
         self,
-        *,
+        pool: SQLiteConnectionPool | None = None,
         db_path: Path | None = None,
+        *,
         persist_interval_s: float = _DEFAULT_PERSIST_INTERVAL_S,
     ) -> None:
-        self._db_path: Path = db_path or (get_data_dir() / _DEFAULT_DB_NAME)
+        self._pool: SQLiteConnectionPool = pool if pool is not None else SQLiteConnectionPool()
+        self._db_path: Path = db_path or get_db_path()
         self._persist_interval_s: float = persist_interval_s
 
         # In-memory state. All dicts are keyed by market ticker.
@@ -143,27 +145,13 @@ class MarketCache:
         self._last_persist: float = 0.0
         self._persist_errors: int = 0
 
-        self._init_db()
-
     # -- lifecycle -----------------------------------------------------------
-
-    def _init_db(self) -> None:
-        """Create the database file and tables if they do not exist."""
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
-        try:
-            conn.execute(_MARKET_DATA_SCHEMA)
-            conn.execute(_ORDERBOOK_SCHEMA)
-            conn.commit()
-        finally:
-            conn.close()
 
     def load_from_db(self) -> None:
         """Load the last persisted state into memory (stale-then-fresh)."""
         if not self._db_path.exists():
             return
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with self._pool.connection(self._db_path, readonly=True) as conn:
             rows = conn.execute(
                 "SELECT ticker, last_price, bid, ask, volume, open_interest, "
                 "updated_at FROM market_data"
@@ -187,8 +175,6 @@ class MarketCache:
                     "asks": _decode(asks_json) or [],
                     "updated_at": float(updated_at),
                 }
-        finally:
-            conn.close()
         if self._tickers or self._orderbooks:
             logger.info(
                 "MarketCache loaded %d tickers, %d orderbooks from %s",
@@ -207,13 +193,9 @@ class MarketCache:
             self._dirty = False
             return
         try:
-            conn = sqlite3.connect(self._db_path)
-        except sqlite3.Error as exc:
-            self._persist_errors += 1
-            logger.error("MarketCache persist failed: %s", exc)
-            return
-        try:
-            with conn:
+            with self._pool.connection(self._db_path) as conn:
+                _ = conn.execute(_MARKET_DATA_SCHEMA)
+                _ = conn.execute(_ORDERBOOK_SCHEMA)
                 for ticker, t in self._tickers.items():
                     conn.execute(
                         "INSERT OR REPLACE INTO market_data "
@@ -240,13 +222,12 @@ class MarketCache:
                             ob.get("updated_at", 0.0),
                         ),
                     )
-            self._dirty = False
-            self._last_persist = time.time()
-        except sqlite3.Error as exc:
+        except (sqlite3.Error, ConnectionPoolTimeoutError) as exc:
             self._persist_errors += 1
             logger.error("MarketCache persist failed: %s", exc)
-        finally:
-            conn.close()
+        else:
+            self._dirty = False
+            self._last_persist = time.time()
 
     # -- write-behind timer --------------------------------------------------
 

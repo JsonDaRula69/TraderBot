@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, override
 
 from traderbot.data.base_provider import BaseDataProvider
+from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.kalshi.client import KalshiClient
 from traderbot.paths import get_db_path
 
@@ -37,13 +38,21 @@ class SettlementMonitor(BaseDataProvider):
         client: A :class:`~traderbot.kalshi.client.KalshiClient` used to query
             settled markets (historical data; allowed under the WS-first
             policy). Injected so tests can mock it.
+        pool: Shared SQLite connection pool. A private compatibility pool is
+            created when omitted.
         db_path: SQLite database file. Defaults to
             ``~/.traderbot/traderbot.db`` (see :func:`traderbot.paths.get_db_path`).
     """
 
-    def __init__(self, client: KalshiClient, db_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        client: KalshiClient,
+        pool: SQLiteConnectionPool | None = None,
+        db_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self._client: KalshiClient = client
+        self._pool: SQLiteConnectionPool = pool if pool is not None else SQLiteConnectionPool()
         self._db_path: Path = db_path or get_db_path()
 
     @property
@@ -110,9 +119,7 @@ class SettlementMonitor(BaseDataProvider):
     @override
     async def insert(self, data: list[dict[str, Any]]) -> int:
         """Persist settlement outcomes into the ``settlement_cache`` table."""
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with self._pool.connection(self._db_path) as conn:
             self._create_tables(conn)
             inserted = 0
             for row in data:
@@ -122,11 +129,8 @@ class SettlementMonitor(BaseDataProvider):
                     (row["ticker"], int(row["outcome"]), str(row["settled_at"])),
                 )
                 inserted += cur.rowcount
-            conn.commit()
             logger.info("settlement monitor recorded %d settled markets", inserted)
             return inserted
-        finally:
-            conn.close()
 
     @staticmethod
     def _create_tables(conn: sqlite3.Connection) -> None:
@@ -137,7 +141,6 @@ class SettlementMonitor(BaseDataProvider):
                    settled_at TEXT NOT NULL
                )"""
         )
-        conn.commit()
 
 
 def _iso_to_epoch(value: str) -> float | None:

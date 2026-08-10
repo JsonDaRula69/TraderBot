@@ -18,6 +18,7 @@ import os
 import signal
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 from typing import Any, Final
 
 import uvicorn
@@ -27,6 +28,7 @@ from traderbot.data.providers.news import NewsProvider
 from traderbot.data.providers.nws import NwsProvider
 from traderbot.data.providers.open_meteo import OpenMeteoProvider
 from traderbot.data.providers.settlement import SettlementMonitor
+from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.kalshi.client import Environment, KalshiClient
 from traderbot.kalshi.websocket import KalshiWebSocketManager
 from traderbot.kalshi.ws_cache import MarketCache
@@ -129,14 +131,14 @@ async def build_components(
     secrets: SecretsStore | None = None,
     *,
     environment: Environment = "production",
-    db_path: Any = None,
+    db_path: Path | None = None,
     port: int = DEFAULT_PORT,
     host: str = _DEFAULT_HOST,
 ) -> dict[str, Any]:
     """Construct the daemon's component graph.
 
     Returns a dict of components owned by the daemon lifecycle:
-    ``cache``, ``client``, ``ws``, ``data``, ``mcp_app``, ``app``.
+    ``pool``, ``cache``, ``client``, ``ws``, ``data``, ``mcp_app``, ``app``.
     """
     store = secrets if secrets is not None else build_secrets_store()
     api_key = store.get("kalshi", "api_key")
@@ -152,7 +154,9 @@ async def build_components(
         private_key_pem=private_key_pem,
         environment=environment,
     )
-    cache = MarketCache(db_path=db_path if db_path is not None else get_db_path())
+    database_path = db_path if db_path is not None else get_db_path()
+    pool = SQLiteConnectionPool()
+    cache = MarketCache(pool, database_path)
     cache.load_from_db()
     set_market_cache(cache)
 
@@ -172,13 +176,14 @@ async def build_components(
     )
 
     data = DataCollectionService()
-    data.register(SettlementMonitor(client=client))
-    data.register(OpenMeteoProvider())
-    data.register(NwsProvider())
+    data.register(SettlementMonitor(client, pool, database_path))
+    data.register(OpenMeteoProvider(pool, database_path))
+    data.register(NwsProvider(pool, database_path))
     data.register(NewsProvider())
 
     mcp_app = app.streamable_http_app()
     return {
+        "pool": pool,
         "cache": cache,
         "client": client,
         "ws": ws,
