@@ -2,27 +2,28 @@
 
 > This document provides a complete reference for all MCP tools exposed by TraderBot's MCP server, including category-specific toolkits, SysAdmin tools, and the token-based authentication mechanism. Grounded in DD-015, DD-025, DD-035, DD-036.
 
-> **Implementation status:** the current Phase 1 development server exposes
-> only `health`, `auth_check`, `profile_list`, and `market_edge`. Later sections
-> describe the planned tool surface and are not claims of implementation,
-> deployment, CI, or on-target verification. Per-agent token injection is
-> architecturally resolved in issue #187 and **deployment-verified on macpro-linux**
-> (2026-08-03, commits `5b5088e`/`f8b5065`/`f1aa518`/`0dbc981`). Issue #187 tracks
-> the remaining Vault provider integration (Phase 1.5).
+> **Implementation status:** the current Phase 2 development server exposes
+> `health`, `auth_check`, `profile_list`, `market_edge`, and `market_prices`.
+> Later sections describe the planned tool surface and are not claims of
+> implementation, deployment, CI, or on-target verification. Per-agent token
+> injection is architecturally resolved in issue #187 and **deployment-verified
+> on macpro-linux** (2026-08-03, commits `5b5088e`/`f8b5065`/`f1aa518`/`0dbc981`).
+> Issue #187 tracks the remaining Vault provider integration (Phase 1.5).
 
 ---
 
 ## MCP Server Architecture
 
-A Phase 1 configuration remediation registers TraderBot once at root scope:
+Since Phase 2 (issue #166), the MCP server is hosted **in-process by the daemon**
+over streamable-http on loopback, not launched by the OpenClaw gateway over stdio:
 
 ```json
 {
   "mcp": {
     "servers": {
       "traderbot": {
-        "command": "traderbot-mcp-server",
-        "transport": "stdio"
+        "url": "http://127.0.0.1:8765/mcp",
+        "transport": "streamable-http"
       }
     }
   }
@@ -93,14 +94,15 @@ Return result
 The enforced order is **token → tool permission → category**. Tools without a
 category skip the final check.
 
-## Current Phase 1 Tools
+## Current Phase 2 Tools
 
 | Tool | Actual current behavior |
 |---|---|
-| `traderbot__health` | Authenticates the caller and reports profile context plus placeholder component states. |
+| `traderbot__health` | Authenticates the caller and reports profile context plus **live component states** (WebSocket connection, data pipeline, market cache) read from `traderbot.state.snapshot()`. |
 | `traderbot__auth_check` | Validates the profile token and `auth_check` permission, then reports profile, agent, mode, enabled categories, and permissions. It does **not** validate external provider credentials. |
 | `traderbot__profile_list` | Authenticates and authorizes the caller, then lists the in-process profile registry. |
 | `traderbot__market_edge` | Authenticates, checks `market_edge` permission, enforces DD-011 category access, validates strict input, and returns a stub response. |
+| `traderbot__market_prices` | Authenticates, checks `market_prices` permission, and returns current price data (last/bid/ask/spread/volume) for a ticker read from the daemon's in-memory `MarketCache` — **zero REST calls** (WS-first). |
 
 External API credential validation is deferred to the secrets, provider, and
 deploy phases. Infisical and automatic rotation remain Phase 1.5 plans.
@@ -154,9 +156,10 @@ liquidity, and edge assessment for a ticker.
 
 ---
 
-### `traderbot__market_prices`
+### `traderbot__market_prices` (implemented, Phase 2)
 
-Returns current and historical price data from Kalshi WebSocket/cache.
+Returns current price data for a ticker from the daemon's in-memory `MarketCache`
+(WS-first, zero REST calls). Implemented in Phase 2 (issue #166).
 
 **Parameters**: `token` (str), `ticker` (str), `resolution` (str, optional: "1min", "1hr", "1day")
 
@@ -464,7 +467,7 @@ The Dev-Liaison sends wake signals to AutoDev via a shared Discord channel: `aut
 
 ## OpenClaw Tool Configuration Status
 
-The separate configuration remediation is split into one gateway artifact and strict agent fragments. The `configs/openclaw/gateway.json` registers the stdio MCP server once at root `mcp.servers`; its agent entries contain only `id`, `sandbox`, and `tools`. The pinned OpenClaw schema rejects per-agent `env`, nested `mcp`, and annotation fields.
+The separate configuration remediation is split into one gateway artifact and strict agent fragments. Since Phase 2, `configs/openclaw/gateway.json` registers the TraderBot MCP server over **streamable-http** at `http://127.0.0.1:8765/mcp` (daemon-hosted) once at root `mcp.servers`; its agent entries contain only `id`, `sandbox`, and `tools`. The pinned OpenClaw schema rejects per-agent `env`, nested `mcp`, and annotation fields.
 
 Remediation weather policy excerpt:
 

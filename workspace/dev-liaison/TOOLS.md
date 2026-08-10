@@ -28,6 +28,12 @@ Compute the estimated edge for a market.
 
 **Parameters**: `token` (str), `category` (str), `ticker` (str)
 
+### `traderbot__market_prices`
+
+Return current market prices from the live WebSocket cache.
+
+**Parameters**: `token` (str), `ticker` (str), `resolution` (str, optional: `1min`/`1hr`/`1day`)
+
 ## Planned Tools (not yet available)
 
 The following tools are planned for future phases and are not yet implemented:

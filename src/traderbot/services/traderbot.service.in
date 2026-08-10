@@ -1,0 +1,25 @@
+[Unit]
+Description=TraderBot Daemon
+Documentation=https://github.com/JsonDaRula69/TraderBot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={user}
+WorkingDirectory={home}/.traderbot
+Environment=TRADERBOT_PROFILE_TOKEN={profile_token}
+Environment=TRADERBOT_USE_HARDCODED_AUTH=0
+Environment=PYTHONUNBUFFERED=1
+ExecStart={traderbot_bin} daemon
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=traderbot-daemon
+
+[Install]
+WantedBy=multi-user.target

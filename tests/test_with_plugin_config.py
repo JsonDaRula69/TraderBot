@@ -55,9 +55,10 @@ class SecretsConfig(StrictConfigModel):
 
 
 class McpServerConfig(StrictConfigModel):
-    command: Literal["traderbot-mcp-server"]
-    transport: Literal["stdio"]
-    env: dict[str, str] | None = None
+    url: str
+    transport: Literal["streamable-http"]
+    requestTimeoutMs: int
+    connectionTimeoutMs: int
 
 
 class McpServersConfig(StrictConfigModel):
@@ -106,9 +107,10 @@ def test_agent_token_map_uses_exec_source_with_infisical_provider() -> None:
         assert secret_ref.id == f"{agent_id}_token"
 
 
-def test_traderbot_mcp_server_env_enables_real_auth() -> None:
+def test_traderbot_mcp_server_uses_streamable_http() -> None:
     server = load_with_plugin_config().mcp.servers.traderbot
 
-    assert server.command == "traderbot-mcp-server"
-    assert server.transport == "stdio"
-    assert server.env == {"TRADERBOT_USE_HARDCODED_AUTH": "0"}
+    assert server.url == "http://127.0.0.1:8765/mcp"
+    assert server.transport == "streamable-http"
+    assert server.requestTimeoutMs == 30000
+    assert server.connectionTimeoutMs == 5000

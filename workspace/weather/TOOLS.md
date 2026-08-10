@@ -28,6 +28,12 @@ Compute the estimated edge for a market.
 
 **Parameters**: `token` (str), `category` (str), `ticker` (str)
 
+### `traderbot__market_prices`
+
+Return current market prices from the live WebSocket cache.
+
+**Parameters**: `token` (str), `ticker` (str), `resolution` (str, optional: `1min`/`1hr`/`1day`)
+
 ## Planned Tools (not yet available)
 
 The following tools are planned for future phases and are not yet implemented:
@@ -36,7 +42,6 @@ The following tools are planned for future phases and are not yet implemented:
 - `traderbot__weather_accuracy` — Historical forecast accuracy by source, city, and lead time
 - `traderbot__weather_seasonal_context` — Historical temperature distributions and recent anomalies
 - `traderbot__weather_decision_brief` — Assembled analytical brief combining forecast probability, accuracy, market edge, and seasonal context
-- `traderbot__market_prices` — Current and historical price data from Kalshi WebSocket/cache
 - `traderbot__trade` — Execute a trade (mode-aware routing)
 - `traderbot__positions` — Get current positions for the agent's profile and mode
 - `traderbot__heartbeat` — Get heartbeat data — health, status, and recent activity summary

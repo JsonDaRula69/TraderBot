@@ -5,13 +5,16 @@ MCP-based (DD-015): TraderBot registers as an MCP server with OpenClaw, and
 agents drive it through typed MCP tools (`traderbot__*`). The CLI is retired
 from containers.
 
-> **Status**: v2 Phase 1 is in development. Profile-token resolution,
-> tool-permission checks, DD-011 category enforcement, hardened local token
-> persistence, strict MCP input validation, and real-auth MCP transport tests
-> are implemented and locally verified. This is not a deployable release:
-> external provider credentials are not validated, secure per-agent token
-> injection through OpenClaw is blocked, and macpro-linux testing is still
-> pending. Issue #164 remains open.
+> **Status**: v2 Phase 2 (issue #166) is implemented. TraderBot now runs as an
+> always-on daemon: the Kalshi WebSocket stream, the scheduled data pipeline
+> (weather 1h, news stub 30m, settlement 1h), and the MCP server all run in one
+> process, serving MCP over streamable-http on loopback (`127.0.0.1:8765/mcp`).
+> The MCP layer exposes 5 tools (`health`, `auth_check`, `profile_list`,
+> `market_edge`, `market_prices`) with WS-first market data, profile-token
+> resolution, tool-permission checks, and DD-011 category enforcement. On-target
+> macpro-linux QA (24h uptime, WS reconnect, live E2E) was in progress; Phase 3
+> items (ChromaDB, GRIB2 multi-day forecasts, crypto/sports workers, three-mode
+> trading engine) remain on the roadmap.
 
 ## Quick start
 
@@ -21,12 +24,20 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/) (or pipx).
 git clone git@github.com:JsonDaRula69/TraderBot.git
 cd TraderBot
 uv sync                      # install deps + project (editable)
-uv run traderbot-mcp-server  # start the MCP server (stdio)
+uv run traderbot daemon      # start the always-on daemon (WS + workers + MCP)
 ```
 
-The server exposes 4 tools in the current Phase 1 development build: `health`,
-`auth_check`, `profile_list`, and `market_edge`. OpenClaw namespaces them as
-`traderbot__health`, `traderbot__auth_check`, etc.
+The daemon serves MCP over streamable-http at `http://127.0.0.1:8765/mcp`
+(loopback only). OpenClaw connects with `transport: "streamable-http"`; the
+legacy stdio entry point (`uv run traderbot-mcp-server`) remains available as a
+development fallback. For an installed background service on Linux/macOS/Windows
+use the `traderbot` CLI:
+
+```bash
+traderbot service install   # write the unit + enable + start (sudo on systemd)
+traderbot service status
+traderbot service uninstall
+```
 
 `auth_check` validates the supplied profile token and reports the resolved
 profile, agent, mode, enabled categories, and permissions. It does not inspect
@@ -39,10 +50,13 @@ is `LocalTokenStore`, which can store generated 256-bit profile tokens in
 Phase 0 hardcoded development mapping unless the environment variable is
 exactly `0`.
 
-The Phase 1 configuration remediation under `configs/openclaw/` registers TraderBot at root scope and applies restrictive per-agent `allow`/`deny` policies. The remediation fragments remove the legacy unsupported per-agent `env` and nested `mcp` fields but still cannot provide distinct per-agent profile tokens because root and MCP-server environment values are shared.
-Secure token delivery therefore requires either an OpenClaw proxy/plugin that
-injects caller identity or tokens, or isolated gateway/MCP instances per agent.
-Do not treat the config state as deployable until that architecture is selected and tested on macpro-linux.
+Per-agent configuration lives under `configs/openclaw/` with restrictive
+per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is
+handled by the `traderbot-token-injector` plugin (a `before_tool_call` hook,
+transport-agnostic) resolving Infisical-stored tokens; the MCP server fails
+closed when a call has no valid token. With Phase 2, OpenClaw connects to the
+daemon over streamable-http at `http://127.0.0.1:8765/mcp` (see
+`main/configs/openclaw/with-plugin.json`).
 
 ## Architecture
 

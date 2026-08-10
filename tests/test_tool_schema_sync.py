@@ -5,6 +5,7 @@ from traderbot.mcp.tools import (
     AuthCheckInput,
     HealthInput,
     MarketEdgeInput,
+    MarketPricesInput,
     ProfileListInput,
 )
 
@@ -15,6 +16,7 @@ def test_pydantic_matches_input_schema() -> None:
         "auth_check": AuthCheckInput,
         "profile_list": ProfileListInput,
         "market_edge": MarketEdgeInput,
+        "market_prices": MarketPricesInput,
     }
 
     names = {str(definition["name"]) for definition in TOOL_DEFINITIONS}

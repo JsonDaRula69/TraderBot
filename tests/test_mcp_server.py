@@ -5,8 +5,8 @@ from traderbot.mcp.tools import TOOL_DEFINITIONS, TOOL_HANDLER_MAP
 
 
 class TestMCPToolDefinitions:
-    def test_four_tools_defined(self):
-        assert len(TOOL_DEFINITIONS) == 4
+    def test_five_tools_defined(self):
+        assert len(TOOL_DEFINITIONS) == 5
 
     def test_tool_names_are_short(self):
         """Tool names are short — OpenClaw prefixes them with the server name."""

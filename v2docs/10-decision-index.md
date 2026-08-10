@@ -83,3 +83,27 @@
 | GRIB2 Phase 2 implementation | Pending | Tier 2 data pipeline for true multi-day lead time forecasts |
 | Layer 3 autonomous dev team | In development | Future: isolated dev agents for GitHub issue pickup |
 | TEMPLATE.md modifications | Pending | Review and update for TraderBot-specific agent-debate use |
+
+## Phase 2 Implementation Status (issue #166)
+
+Implemented in Phase 2 (PR on `feat/v2-data-pipeline` → `v2-main`):
+
+- **DD-016 (Always-on service)**: `traderbot daemon` runs the Kalshi WebSocket
+  stream, the data pipeline, and the MCP server over streamable-http on loopback
+  (`127.0.0.1:8765/mcp`) in one process. `traderbot service install|uninstall|status`
+  drives the platform service lifecycle (systemd / launchd / Windows Task Scheduler).
+- **DD-022 (Service template path resolution)**: `services/paths.py` `BinPaths` +
+  `resolve_bin_paths()` resolve `{placeholder}` templates at install time.
+- **DD-028 (news/ and data/ module restructure)**: unified `data/` module with
+  `BaseDataProvider`, `DataScheduler`, `ProviderRegistry`, `DataCollectionService`,
+  and providers (`OpenMeteoProvider`, `NwsProvider`, `NewsProvider` stub,
+  `SettlementMonitor`).
+- **WS-first real-time data**: the Kalshi WebSocket is the sole source of
+  real-time market data; REST is used only for startup seeding, disconnect
+  recovery, and historical data. `traderbot__market_prices` reads from the
+  in-memory `MarketCache` with zero REST calls.
+
+Deferred to later phases: ChromaDB (Phase 3), GRIB2 multi-day forecasts (DD-033),
+crypto/sports workers, full news NLP/sentiment, Docker sandbox (Phase 5),
+per-agent DB isolation (Phase 3), three-mode trading engine (Phase 6/7),
+category toolkits (Phase 6), full `traderbot deploy` wizard (Phase 4).

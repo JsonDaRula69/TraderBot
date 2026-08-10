@@ -34,6 +34,8 @@ Thumbs.db
 credentials.json
 infisical-credentials.json
 *.infisical-token
+tb-test.txt
+tb-live.txt
 
 # TraderBot runtime data (preserved across updates)
 .traderbot/

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a61] — 2026-08-04
+
+### Added
+
+- Phase 2 always-on service (issue #166): `traderbot daemon` runs the Kalshi WebSocket stream, the data pipeline, and the MCP server over streamable-http on loopback (`127.0.0.1:8765/mcp`) in one process
+- Resurrected Kalshi REST + WebSocket clients (v2-only, per-environment TLS pins, token-bucket rate limiting, exponential-backoff reconnect)
+- `MarketCache` with SQLite write-behind persistence — the read source for `traderbot__market_prices` (zero REST calls)
+- Unified `data/` module (DD-028): `BaseDataProvider`, `DataScheduler`, `ProviderRegistry`, `DataCollectionService`, and providers (OpenMeteo, NWS, news stub, settlement monitor)
+- `services/` package (DD-022): systemd / launchd / Windows Task Scheduler templates with `BinPaths` resolution
+- `traderbot service install|uninstall|status` CLI (sudo-elevated unit writes, enable/start on install)
+- `traderbot__market_prices` MCP tool reading from the WS cache
+- OpenClaw config migrated from stdio to streamable-http; `TRADERBOT_USE_HARDCODED_AUTH=0` moved to the daemon service unit
+
+### Fixed
+
+- Kalshi TLS SPKI pins made environment-aware (stale prod pin rejected all connections)
+- `orderbook_delta` WS channel excluded from the default subscription set (it requires `market_tickers`)
+- `traderbot daemon` CLI subcommand forwards host/port/environment to the daemon entry point
+- Daemon `build_components` wires the Infisical-backed `SecretsStore` (was falling back to an unconfigured local store)
+
 ## [2.0.0a44] — 2026-08-04
 
 ### Docs

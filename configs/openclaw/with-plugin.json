@@ -46,11 +46,10 @@
   "mcp": {
     "servers": {
       "traderbot": {
-        "command": "traderbot-mcp-server",
-        "transport": "stdio",
-        "env": {
-          "TRADERBOT_USE_HARDCODED_AUTH": "0"
-        }
+        "url": "http://127.0.0.1:8765/mcp",
+        "transport": "streamable-http",
+        "requestTimeoutMs": 30000,
+        "connectionTimeoutMs": 5000
       }
     }
   }

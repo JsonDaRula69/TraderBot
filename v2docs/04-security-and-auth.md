@@ -271,6 +271,23 @@ and local transport tests, but deployment still needs secure per-agent token
 delivery. If OpenClaw adds trusted agent context, TraderBot can check both the
 token and `_meta.agent_id`.
 
+### Transport: stdio → streamable-http (Phase 2)
+
+Since Phase 2 (issue #166), the MCP server is hosted **in-process by the daemon**
+over streamable-http on loopback (`http://127.0.0.1:8765/mcp`), not launched by
+the OpenClaw gateway over stdio. The `before_tool_call` token-injector plugin is
+transport-agnostic — it runs host-side in the gateway before any tool call is
+dispatched, so the migration required **no plugin changes**.
+
+Security posture is unchanged: the daemon binds `127.0.0.1` only, there is no
+separate endpoint auth, and every call still fails closed through per-call
+`token` validation (`_check_permissions`). `TRADERBOT_USE_HARDCODED_AUTH=0` now
+lives in the daemon's service unit (the daemon owns the MCP server, not OpenClaw).
+
+> **Known limitation (deferred):** `INFISICAL_TOKEN` is read by the daemon at
+> startup; a token rotation still requires a gateway restart to refresh. Inherited
+> from Phase 1.5, not fixed by the transport migration.
+
 ---
 
 ## Per-agent token injection via OpenClaw plugin hook + Infisical exec provider

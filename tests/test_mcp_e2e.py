@@ -54,7 +54,7 @@ class TestMCPEndToEnd:
         async def scenario(session):
             result = await session.list_tools()
             names = {t.name for t in result.tools}
-            assert names == {"health", "auth_check", "profile_list", "market_edge"}
+            assert names == {"health", "auth_check", "profile_list", "market_edge", "market_prices"}
 
         self._round_trip(scenario)
 
