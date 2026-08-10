@@ -17,7 +17,6 @@ from chromadb.config import Settings
 
 from traderbot.kalshi.models import MarketCategory
 
-from . import security as db_security
 from .models import (
     EXPLICIT_EMBEDDING_MODEL,
     SHARED_CHROMA_COLLECTIONS,
@@ -27,6 +26,13 @@ from .models import (
     scoped_metadatas,
     scoped_where,
     validate_collection_name,
+)
+from .security import (
+    ChromaBackendError,
+    InvalidChromaRootError,
+    assert_embedded_backend,
+    validate_chroma_lock_file,
+    validate_chroma_root,
 )
 
 type ChromaGetResult = GetResult
@@ -58,8 +64,8 @@ class ChromaOwnershipLock:
         self._file: BinaryIO | None = None
 
     def acquire(self) -> None:
-        db_security.validate_chroma_root(self._lock_path.parent)
-        db_security.validate_chroma_lock_file(self._lock_path)
+        validate_chroma_root(self._lock_path.parent)
+        validate_chroma_lock_file(self._lock_path)
         lock_file = self._lock_path.open("r+b", buffering=0)
         try:
             if sys.platform == "win32":
@@ -75,9 +81,9 @@ class ChromaOwnershipLock:
             lock_file.close()
             raise ChromaOwnershipError(self._lock_path, "already locked or unavailable") from exc
         try:
-            db_security.validate_chroma_root(self._lock_path.parent)
-            db_security.validate_chroma_lock_file(self._lock_path)
-        except db_security.InvalidChromaRootError:
+            validate_chroma_root(self._lock_path.parent)
+            validate_chroma_lock_file(self._lock_path)
+        except InvalidChromaRootError:
             lock_file.close()
             raise
         self._file = lock_file
@@ -116,7 +122,7 @@ class ChromaStore:
     SHARED_COLLECTIONS: ClassVar[frozenset[str]] = SHARED_CHROMA_COLLECTIONS
 
     def __init__(self, data_root: Path) -> None:
-        db_security.validate_chroma_root(data_root)
+        validate_chroma_root(data_root)
         with ExitStack() as startup:
             lock = startup.enter_context(ChromaOwnershipLock(data_root))
             client = chromadb.PersistentClient(
@@ -128,13 +134,13 @@ class ChromaStore:
             )
             if not isinstance(client, _ClosableClient):
                 settings = client.get_settings()
-                raise db_security.ChromaBackendError(
+                raise ChromaBackendError(
                     settings.chroma_api_impl,
                     settings.anonymized_telemetry,
                     "client has no public close method",
                 )
             _ = startup.callback(client.close)
-            db_security.assert_embedded_backend(client)
+            assert_embedded_backend(client)
             _ = startup.pop_all()
         self._lock: ChromaOwnershipLock = lock
         self._client: ClientAPI = client
