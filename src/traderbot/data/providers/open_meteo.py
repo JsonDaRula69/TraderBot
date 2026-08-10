@@ -22,6 +22,7 @@ from traderbot.data.providers.weather_cities import (
     OM_MODELS,
     REQUEST_TIMEOUT,
 )
+from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.paths import get_db_path
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ class OpenMeteoProvider(BaseDataProvider):
     """Hourly ensemble forecast snapshot provider.
 
     Args:
+        pool: Shared SQLite connection pool. A private compatibility pool is
+            created when omitted.
         db_path: SQLite database file. Defaults to
             ``~/.traderbot/traderbot.db`` (see :func:`traderbot.paths.get_db_path`).
         http_client: Optional pre-built ``httpx.AsyncClient`` (tests inject a
@@ -43,10 +46,12 @@ class OpenMeteoProvider(BaseDataProvider):
 
     def __init__(
         self,
+        pool: SQLiteConnectionPool | None = None,
         db_path: Path | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         super().__init__()
+        self._pool: SQLiteConnectionPool = pool if pool is not None else SQLiteConnectionPool()
         self._db_path: Path = db_path or get_db_path()
         self._client: httpx.AsyncClient | None = http_client
         self._owns_client: bool = http_client is None
@@ -103,9 +108,7 @@ class OpenMeteoProvider(BaseDataProvider):
     async def insert(self, data: dict[str, Any]) -> int:
         """Persist the per-city ensemble snapshots into the SQLite database."""
         snapshot_ts = datetime.now(UTC).isoformat()
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with self._pool.connection(self._db_path) as conn:
             self._create_tables(conn)
             inserted = 0
             for city, payload in data.items():
@@ -138,13 +141,10 @@ class OpenMeteoProvider(BaseDataProvider):
                                 inserted += 1
                             except (ValueError, TypeError):
                                 continue
-            conn.commit()
             logger.info(
                 "open-meteo persisted %d forecast rows (snapshot %s)", inserted, snapshot_ts
             )
             return inserted
-        finally:
-            conn.close()
 
     @staticmethod
     def _create_tables(conn: sqlite3.Connection) -> None:
@@ -161,7 +161,6 @@ class OpenMeteoProvider(BaseDataProvider):
                    PRIMARY KEY (snapshot_ts, city, model, valid_date, variable)
                )"""
         )
-        conn.commit()
 
 
 __all__ = ["OpenMeteoProvider"]

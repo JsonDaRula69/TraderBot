@@ -9,7 +9,7 @@ between the daemon orchestrator and the MCP tool layer.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,13 +27,16 @@ DATA_PIPELINE_STOPPED = "stopped"
 DATA_PIPELINE_RUNNING = "running"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ServiceStatus:
     """Live status snapshot of the daemon's WebSocket and data workers."""
 
     websocket: str = WEBSOCKET_NOT_STARTED
     data_pipeline: str = DATA_PIPELINE_STOPPED
-    upstream: list[str] = field(default_factory=list)
+    upstream: tuple[str, ...] = ()
+    database_initialized: bool = False
+    chromadb_initialized: bool = False
+    chromadb_lock_held: bool = False
 
 
 service_status: ServiceStatus = ServiceStatus()
@@ -54,12 +57,28 @@ def get_market_cache() -> MarketCache | None:
 
 def set_websocket(status: str) -> None:
     """Record the WebSocket manager's connection status."""
-    service_status.websocket = status
+    global service_status
+    service_status = replace(service_status, websocket=status)
 
 
 def set_data_pipeline(status: str) -> None:
     """Record the data-collection workers' running state."""
-    service_status.data_pipeline = status
+    global service_status
+    service_status = replace(service_status, data_pipeline=status)
+
+
+def set_storage_health(
+    database_initialized: bool,
+    chromadb_initialized: bool,
+    chromadb_lock_held: bool,
+) -> None:
+    global service_status
+    service_status = replace(
+        service_status,
+        database_initialized=database_initialized,
+        chromadb_initialized=chromadb_initialized,
+        chromadb_lock_held=chromadb_lock_held,
+    )
 
 
 def snapshot() -> JsonObject:
@@ -68,11 +87,13 @@ def snapshot() -> JsonObject:
         "websocket": service_status.websocket,
         "data_pipeline": service_status.data_pipeline,
         "upstream": list(service_status.upstream),
+        "database": "initialized" if service_status.database_initialized else "not_initialized",
+        "chromadb": "initialized" if service_status.chromadb_initialized else "not_initialized",
+        "chromadb_lock": "held" if service_status.chromadb_lock_held else "not_held",
     }
 
 
 def reset() -> None:
     """Reset status to defaults (used in tests and before daemon start)."""
-    service_status.websocket = WEBSOCKET_NOT_STARTED
-    service_status.data_pipeline = DATA_PIPELINE_STOPPED
-    service_status.upstream.clear()
+    global service_status
+    service_status = ServiceStatus()
