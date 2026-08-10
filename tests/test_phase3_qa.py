@@ -31,7 +31,8 @@ class _Evidence(BaseModel):
 
 def test_phase3_qa_emits_passing_evidence_and_removes_uuid_root() -> None:
     script = Path(__file__).parents[1] / "scripts" / "phase3-qa.py"
-    with tempfile.TemporaryDirectory(prefix="traderbot-phase3-test-", dir="/tmp") as parent:
+    parent_dir = tempfile.gettempdir()
+    with tempfile.TemporaryDirectory(prefix="traderbot-phase3-test-", dir=parent_dir) as parent:
         data_root = Path(parent)
         evidence_path = data_root / "evidence.json"
 
@@ -71,7 +72,7 @@ def test_phase3_qa_rejects_data_root_outside_tmp() -> None:
             "--data-root",
             str(Path(__file__).parents[1]),
             "--json-output",
-            "/tmp/traderbot-phase3-rejected.json",
+            str(Path(tempfile.gettempdir()) / "traderbot-phase3-rejected.json"),
         ],
         capture_output=True,
         text=True,
@@ -80,4 +81,4 @@ def test_phase3_qa_rejects_data_root_outside_tmp() -> None:
     )
 
     assert result.returncode != 0
-    assert "must resolve under /tmp" in result.stderr
+    assert "must resolve under" in result.stderr

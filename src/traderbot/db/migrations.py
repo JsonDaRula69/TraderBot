@@ -175,7 +175,15 @@ def _fsync_path(path: Path, *, best_effort: bool) -> None:
             extra={"directory": str(path), "error": str(exc)},
         )
     finally:
-        os.close(descriptor)
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            if not best_effort:
+                raise
+            logger.warning(
+                "migration.backup_directory_fsync_best_effort",
+                extra={"directory": str(path), "error": str(exc)},
+            )
 
 
 def _backup_legacy_database(db_path: Path) -> Path:

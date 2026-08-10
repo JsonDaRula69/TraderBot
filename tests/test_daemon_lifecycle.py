@@ -256,7 +256,7 @@ def test_chroma_lock_is_released_when_owner_process_exits(tmp_path: Path) -> Non
         "from traderbot.db.chroma_store import ChromaStore; "
         f"store = ChromaStore(Path({str(chroma_root)!r}))"
     )
-    environment = os.environ | {"HOME": str(home)}
+    environment = os.environ | {"HOME": str(home), "USERPROFILE": str(home)}
 
     first = subprocess.run(
         [sys.executable, "-c", script],

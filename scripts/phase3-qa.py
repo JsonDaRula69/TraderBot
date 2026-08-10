@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import statistics
 import sys
+import tempfile
 import time
 import uuid
 from collections.abc import Sequence
@@ -31,7 +32,7 @@ from traderbot.db.security import create_chroma_root
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.models import TradingProfile
 
-_TMP_ROOT: Final = Path("/tmp").resolve()
+_TMP_ROOT: Final = Path(tempfile.gettempdir()).resolve()
 _QA_PREFIX: Final = "traderbot-phase3-qa-"
 type Mode = Literal["backtest", "paper", "live"]
 type JsonValue = str | int | float | bool | None | Sequence["JsonValue"] | dict[str, "JsonValue"]
@@ -267,7 +268,7 @@ class InvalidDataRootError(ValueError):
 
     @override
     def __str__(self) -> str:
-        return f"--data-root must resolve under /tmp: {self.path}"
+        return f"--data-root must resolve under {os.fspath(_TMP_ROOT)}: {self.path}"
 
 
 def _arguments(argv: Sequence[str] | None) -> Arguments:
