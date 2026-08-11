@@ -1,6 +1,6 @@
-# Deploy Wizard Steps 1-3
+# Deploy Wizard Steps 1-5
 
-`traderbot deploy` currently implements the first three deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, and explicit category-agent selection. Steps 4-8 remain out of scope.
+`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. Steps 6-8 remain out of scope.
 
 ## Interactive Mode
 
@@ -14,6 +14,11 @@ Run `traderbot deploy`. A Rich table lists the nine `MarketCategory` values. Aft
 {
   "categories": ["weather", "crypto"],
   "mode": "backtest",
+  "infisical_url": "http://127.0.0.1:8080",
+  "tokens": {
+    "kalshi_api_key_env": "TRADERBOT_DEPLOY_KALSHI_KEY",
+    "kalshi_private_key_pem_env": "TRADERBOT_DEPLOY_KALSHI_PEM"
+  },
   "category_workspaces": {
     "crypto": "/srv/openclaw/agents/crypto"
   },
@@ -27,9 +32,27 @@ Run `traderbot deploy`. A Rich table lists the nine `MarketCategory` values. Aft
 }
 ```
 
-In this example, `weather` already exists and therefore needs no path assertion; `crypto` may be missing and has an approved creation path. `sysadmin_workspace` and paths for existing selected agents are optional equality assertions, never rebind requests. Assertions must be absolute and non-linked. Empty, duplicate, extra, invalid, unapproved, or missing-agent-without-path input fails before mutation.
+In this example, `weather` already exists and therefore needs no path assertion; `crypto` may be missing and has an approved creation path. `sysadmin_workspace` and paths for existing selected agents are optional equality assertions, never rebind requests. Assertions must be absolute and non-linked. The token fields are environment variable names, not secret values. Raw token fields, incomplete reference pairs, invalid variable names, remote Infisical URLs, empty/duplicate categories, extra fields, and missing-agent-without-path input fail before steps 1-3 mutation.
 
-JSON output includes deterministic `categories`, `required_new_agent_paths`, `approvals`, `heartbeat_every`, three ordered step records, `completed_steps`, `deployment_complete`, and `remaining_steps`. A successful current run reports `completed_steps: [1, 2, 3]`, `deployment_complete: false`, and `remaining_steps: [4, 5, 6, 7, 8]`. Steps 4-8 remain incomplete. Raw profile-token values are never included.
+JSON output includes deterministic `categories`, `required_new_agent_paths`, `approvals`, `heartbeat_every`, five ordered step records, `completed_steps`, `deployment_complete`, and `remaining_steps`. A successful current run reports `completed_steps: [1, 2, 3, 4, 5]`, `deployment_complete: false`, and `remaining_steps: [6, 7, 8]`. Secret values are never included.
+
+## Kalshi Secrets
+
+Step 4 probes the configured loopback HTTP Infisical origin at `GET /api/status` with a one-second timeout and environment proxies disabled. In production, `http://localhost:8080` is target-local: Infisical runs on macpro-linux beside TraderBot, so `localhost` is resolved by that target host. Development verification uses isolated fake clients and loopback servers and does not prove target integration; actual Infisical integration is deferred to Final-Wave QA on macpro-linux. Because the supported SDK exposes no public proxy-free transport, any nonempty HTTP/HTTPS/ALL proxy environment variable refuses SDK use. After universal-auth login, deploy checks non-value list access to both required project roots with caching disabled. A denied or unusable setup is closed, selects `LocalEncryptedStore` through the same `SecretsStore` facade, and reports `backend=local-encrypted`; deploy never starts Docker or creates a machine identity.
+
+Only `kalshi_api_key` and `kalshi_private_key_pem`, the two secrets consumed by the daemon, are eligible. Secret-bearing values use redacted typed objects. A valid existing complete pair is parsed and reused without writes. An incomplete pair requires explicit `reconcile_incomplete`; a malformed or differing durable field requires separate `replace_existing`, and both approvals require a complete environment-reference pair. Otherwise config mode resolves the named environment variables, while interactive mode uses hidden password prompts. The API key must be nonempty and the PEM must parse locally as an RSA private key before the first write. No live Kalshi request is made. News, weather, embedding, social, economics, crypto, and sports service credentials are not prompted or stored by deploy.
+
+The pair is prevalidated as one decision. Every set is post-read verified. First-write, second-write, and no-op backend failures re-read durable state and report only exact canonical written/pending names. A matching durable field is never rewritten on a forward rerun. If Infisical becomes unavailable mid-operation, remote partial state is preserved and reported while the same validated pair reconciles through encrypted local fallback; no backend state is deleted.
+
+The local encrypted root rejects relative, escaping, linked, wrong-type, and foreign-owned components. Accepted existing POSIX storage is hardened to directory mode `0700` and file mode `0600` before use and revalidated immediately before atomic publication; Windows ACL hardening fails closed when owner-only access cannot be proven.
+
+## Database Creation
+
+Step 5 mirrors daemon ownership order under `TRADERBOT_DATA_DIR`: apply every currently registered global migration, construct one `SQLiteConnectionPool`, create or validate the hardened embedded Chroma root, acquire and health-check `ChromaStore`, then initialize selected category decisions databases through `DatabaseAccess.writable_decisions`. Chroma close and pool shutdown are attempted in order on every path; dual cleanup failures retain both diagnostic identities, and a client-close fault still releases Chroma ownership.
+
+Each selected category receives `{mode}-{profile}/db/decisions.db` with the current seven domain tables plus `schema_version`, and an actual writable transaction is committed. Canonical `(sysadmin, sysadmin)` uses `DatabaseAccess.all_agent_decisions` for read-only enumeration; deploy never creates a SysAdmin decisions database. The exact shared manifest is `news`, `data_points`, `market_patterns`, `news_signals`, and `market_conditions`, but deploy creates no collection because no production embedding dimension exists. Collection creation remains lazy until a real embedding write supplies an explicit dimension.
+
+An existing Chroma ownership lock is a non-destructive blocker. Deploy does not kill the owner, remove the lock, retry blindly, or delete state. Matching reruns reuse migrations, schemas, encrypted secrets, and the empty-or-existing Chroma root without duplicate mutation.
 
 ## Resumability And Identity
 

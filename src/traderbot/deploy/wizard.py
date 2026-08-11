@@ -6,6 +6,8 @@ from traderbot.deploy.wizard_contracts import (
     AgentDeployResult,
     DeployResult,
     OpenClawPort,
+    Phase45Port,
+    Phase45Result,
     ProvisionStatus,
     StepStatus,
     TokenProvisioner,
@@ -34,6 +36,8 @@ __all__ = (
     "DeployResult",
     "DeployWizard",
     "OpenClawPort",
+    "Phase45Port",
+    "Phase45Result",
     "ProvisionStatus",
     "StepStatus",
     "TokenProvisioner",
@@ -43,6 +47,7 @@ __all__ = (
     "WizardStepResult",
     "WorkspaceInjector",
 )
+
 
 class DeployWizard:
     """Run deploy steps in order without rolling back user-owned state."""
@@ -117,6 +122,25 @@ class DeployWizard:
                 agents=tuple(agent_results),
             ),
         ]
+        phase45 = self._ports.phase45
+        if phase45 is None or status is StepStatus.FAILED:
+            return self._result(request, steps, plan)
+        secret_result = phase45.provision_secrets(request)
+        steps.append(
+            self._step(
+                4,
+                "Infisical and API tokens",
+                secret_result.status,
+                secret_result.message,
+            )
+        )
+        if secret_result.status is StepStatus.FAILED:
+            steps.append(self._step(5, "Database creation", StepStatus.SKIPPED, "blocked"))
+            return self._result(request, steps, plan)
+        database_result = phase45.provision_databases(request)
+        steps.append(
+            self._step(5, "Database creation", database_result.status, database_result.message)
+        )
         return self._result(request, steps, plan)
 
     def _preflight(self, request: WizardRequest) -> DeploymentPreflight:
@@ -171,7 +195,7 @@ class DeployWizard:
 
     @staticmethod
     def _step(
-        step: Literal[1, 2, 3],
+        step: Literal[1, 2, 3, 4, 5],
         name: str,
         status: StepStatus,
         message: str,
@@ -191,6 +215,7 @@ class DeployWizard:
             completed_steps=tuple(
                 step.step for step in steps if step.status is StepStatus.COMPLETED
             ),
+            remaining_steps=(6, 7, 8) if len(steps) == 5 else (4, 5, 6, 7, 8),
             required_new_agent_paths=(
                 {
                     agent.category: agent.workspace

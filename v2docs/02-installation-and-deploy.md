@@ -34,7 +34,7 @@ This command:
 |---|---|---|---|---|
 | Keyring | Available | Available | Not available — skip keyring questions | Available |
 | Docker | Offered | Offered | Offered (required for agents) | Offered |
-| Infisical | Offered | Offered | Offered (Docker required) | Offered |
+| Infisical | Existing loopback instance or encrypted fallback | Same | Same | Same |
 | Service manager | launchd | systemd | systemd | Task Scheduler |
 | Service template resolution | `shutil.which('traderbot')` + `.resolve()` | Same | Same | Same |
 
@@ -79,36 +79,32 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category>`
   - Preserve an exact profile-token SecretRef, atomically create an absent mapping, and fail closed on any mismatch
 - Do not invoke doctor implicitly; repair or migration of user-owned OpenClaw state requires a separate explicit operator action
-- Successful step-3 output still reports `deployment_complete: false` and remaining steps 4-8
+- Steps 1-3 complete before secret or database mutation; failures stop later steps
 
 ### Step 4: Infisical and API Tokens
 
-**Step 4a: Infisical health check**
-- Check Infisical server at `http://localhost:8080`
-- If not running: offer to start (Docker), connect to existing, or fall back to local encrypted storage
-- Verify machine identity is authenticated
-
-**Step 4b: API token entry** (per category, validated immediately)
-- Global tokens (all agents): Kalshi API key + PEM, VoyageAI, NewsAPI, Twitter, Reddit
-- Category-specific tokens (only if category enabled):
-  - Weather: OpenWeatherMap
-  - Economics: FRED
-  - Crypto: CoinGecko (with tier detection)
-  - Sports: TheSportsDB
-- Each token validated against its service before storing
-
-**Step 4c: Machine identity configuration**
-- Create Infisical machine identity "traderbot-service" with read/write access
-- Store service token in OpenClaw SecretRef (`INFISICAL_TOKEN`)
-- Verify TraderBot can authenticate with Infisical
+- Probe a configurable loopback HTTP Infisical origin at `GET /api/status` with an explicit one-second timeout and `trust_env=False`; lower-level requests reject remote origins before network access. Production `http://localhost:8080` is local to macpro-linux, where Infisical runs beside TraderBot. Isolated development fakes do not prove that integration; Final-Wave QA validates it on the target host.
+- Refuse SDK use when any HTTP/HTTPS/ALL proxy environment variable is nonempty, because the supported SDK has no public proxy-free transport
+- After universal-auth login with `cache_ttl=None`, check both required project roots with non-value `list_secrets`; denial closes the SDK client and reports machine-bound `LocalEncryptedStore` through `SecretsStore`
+- Reuse a complete valid stored Kalshi pair without rewriting it
+- Otherwise obtain only `kalshi_api_key` and `kalshi_private_key_pem`: hidden prompts in interactive mode or environment-variable-name references in config mode
+- Keep secret-bearing values redacted on repr, string, serialization, exception, and logging surfaces
+- Reject raw secret fields, incomplete references, empty API keys, and non-RSA/malformed PEM before the first secret write; incomplete state requires `reconcile_incomplete`, while malformed or differing state separately requires `replace_existing`
+- Validate locally only; do not sign or send a live Kalshi request
+- Post-read every set; preserve first/second/no-op partial state, report only verified canonical written/pending names, and skip durable matching fields on rerun
+- Reject linked, escaping, wrong-type, or foreign-owned encrypted-local paths; harden accepted POSIX directories/files to `0700`/`0600` and revalidate before atomic publication
+- Do not start Docker, create a machine identity, or prompt/store inactive and keyless provider credentials
 
 ### Step 5: Database Creation
 
-- Create `~/.traderbot/traderbot.db` (global, schema init)
-- Create `~/.traderbot/sysadmin/db/decisions.db`
-- For each category: create `~/.traderbot/paper-{category}/db/decisions.db` (note: directory is `paper-{category}` even though mode is `backtest` — the directory name doesn't change when mode changes)
-- Initialize ChromaDB collections (news, data_points, market_patterns, news_signals, market_conditions)
-- Verify: all DB paths writable, ChromaDB accessible
+- Run `init_schema()` with every currently registered global migration, then construct one `SQLiteConnectionPool`
+- Provision only selected category databases through `DatabaseAccess.writable_decisions` at `{mode}-{profile}/db/decisions.db`; initial deploy mode is `backtest`
+- Verify each selected database has the current seven-table domain schema and accepts a committed writable transaction
+- Use canonical SysAdmin only with `all_agent_decisions` for read-only enumeration; never create a SysAdmin decisions database
+- Create or validate the owner-only embedded Chroma root, acquire the ownership lock, and verify the pinned Rust client/backend
+- Validate and report the exact five-name shared manifest, but create no collection until a real embedding write supplies an explicit dimension
+- Attempt Chroma close before pool shutdown on every path, retain both cleanup identities if both fail, and release the ownership lock even if client close fails
+- Successful output reports `deployment_complete: false` and remaining steps 6-8
 
 ### Step 6: Backfill
 
@@ -141,7 +137,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Kalshi credentials valid (`traderbot auth check --json`)
 - All cron jobs visible via `openclaw cron list`
 - All DB paths writable
-- ChromaDB accessible and collections initialized
+- ChromaDB accessible; collection creation remains lazy until explicit embeddings exist
 - Docker sandbox running
 - Infisical integration verified (all projects accessible, tokens valid, rotation timer started)
 - Print summary with agent names, profiles, tokens, and status

@@ -12,7 +12,8 @@ import httpx
 import pytest
 
 import traderbot.deploy.capabilities as capabilities
-from traderbot.deploy.capabilities import Capabilities, detect_capabilities
+from traderbot.deploy.capabilities import Capabilities, detect_capabilities, infisical_is_running
+from traderbot.deploy.validation import DeployBoundaryError
 from traderbot.services.deploy import detect_service_manager
 
 
@@ -171,6 +172,38 @@ def test_infisical_probe_uses_status_endpoint(monkeypatch: pytest.MonkeyPatch) -
         timeout=1.0,
         trust_env=False,
     )
+
+
+def test_infisical_probe_accepts_configured_local_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: deployment selected a distinct loopback Infisical origin.
+    get = mock.Mock(return_value=httpx.Response(200))
+    monkeypatch.setattr(httpx, "get", get)
+
+    # When: the shared capability seam probes that origin.
+    healthy = infisical_is_running("http://127.0.0.1:9080")
+
+    # Then: it uses the canonical status path with the same proxy-safe timeout contract.
+    assert healthy is True
+    get.assert_called_once_with(
+        "http://127.0.0.1:9080/api/status",
+        timeout=1.0,
+        trust_env=False,
+    )
+
+
+def test_infisical_probe_rejects_remote_origin_before_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a direct lower-level caller supplies a remote origin.
+    get = mock.Mock()
+    monkeypatch.setattr(httpx, "get", get)
+
+    # When/Then: parsing fails before any network observation.
+    with pytest.raises(DeployBoundaryError):
+        _ = infisical_is_running("http://remote.example:8080")
+    get.assert_not_called()
 
 
 def test_infisical_probe_ignores_hostile_proxy_environment(

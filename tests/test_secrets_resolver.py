@@ -9,9 +9,12 @@ circuiting, and preservation of the existing set_store() test seam.
 
 from __future__ import annotations
 
+import json
+import secrets
 from pathlib import Path
 
 import pytest
+from infisical_sdk import InfisicalSDKClient
 
 from traderbot.mcp.resolver import _SUSPENDED_PROFILES, resolve_token_adapter
 from traderbot.profiles.tokens import LocalTokenStore, TokenStore, get_store, set_store
@@ -61,18 +64,46 @@ class _FakeInfisicalClient:
 
     def __init__(self) -> None:
         self.auth: _FakeAuth = _FakeAuth()
+        self.secrets = self
+
+    def list_secrets(
+        self,
+        *,
+        environment_slug: str,
+        secret_path: str,
+        project_slug: str,
+        view_secret_value: bool,
+    ) -> _SecretList:
+        del environment_slug, secret_path, project_slug, view_secret_value
+        return _SecretList()
+
+    def close(self) -> None:
+        pass
 
 
-def _credentials_at(home: Path) -> Path:
+class _SecretList:
+    secrets: tuple[()] = ()
+
+
+def _credentials_at(home: Path) -> tuple[Path, str, str]:
     """Write an infisical-credentials.json under ``home`` and return its path."""
     creds_dir = home / ".traderbot"
     creds_dir.mkdir(parents=True)
     creds_path = creds_dir / "infisical-credentials.json"
+    client_id = secrets.token_urlsafe()
+    client_secret = secrets.token_urlsafe()
     _ = creds_path.write_text(
-        '{"host": "http://localhost:8080", '
-        + '"machineIdentity": {"clientId": "cid-1", "clientSecret": "cs-1"}}'
+        json.dumps(
+            {
+                "host": "http://localhost:8080",
+                "machineIdentity": {
+                    "clientId": client_id,
+                    "clientSecret": client_secret,
+                },
+            }
+        )
     )
-    return creds_path
+    return creds_path, client_id, client_secret
 
 
 class TestTokenStoreAdapter:
@@ -138,27 +169,29 @@ class TestSecretsResolver:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
-        _ = _credentials_at(tmp_path)
-
-        from infisical_sdk import InfisicalSDKClient
+        _, client_id, client_secret = _credentials_at(tmp_path)
 
         created: list[_FakeInfisicalClient] = []
 
         def fake_init(
-            self: object, host: str, token: str | None = None, cache_ttl: int = 60
+            self: InfisicalSDKClient,
+            host: str,
+            token: str | None = None,
+            cache_ttl: int | None = 60,
         ) -> None:
             del token, cache_ttl
             assert host == "http://localhost:8080"
             fake = _FakeInfisicalClient()
             created.append(fake)
             setattr(self, "auth", fake.auth)
+            setattr(self, "secrets", fake.secrets)
 
         monkeypatch.setattr(InfisicalSDKClient, "__init__", fake_init)
         try:
             _ = SecretsResolver()
 
             assert len(created) == 1
-            assert created[0].auth.universal_auth.login_calls == [("cid-1", "cs-1")]
+            assert created[0].auth.universal_auth.login_calls == [(client_id, client_secret)]
             assert isinstance(get_store(), TokenStoreAdapter)
         finally:
             set_store(None)

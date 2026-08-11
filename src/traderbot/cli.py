@@ -162,7 +162,7 @@ def _build_parser() -> argparse.ArgumentParser:
     auth_check = auth_sub.add_parser("check", help="Check the active profile token")
     auth_check.add_argument("--json", action="store_true", dest="json_output")
 
-    deploy = subparsers.add_parser("deploy", help="Deploy TraderBot steps 1-3")
+    deploy = subparsers.add_parser("deploy", help="Deploy TraderBot steps 1-5")
     deploy.add_argument("--config", type=Path, help="prompt-free deploy JSON path")
     deploy.add_argument("--json", action="store_true", dest="json_output")
     subparsers.add_parser("backfill", help="Backfill data (not yet implemented)")

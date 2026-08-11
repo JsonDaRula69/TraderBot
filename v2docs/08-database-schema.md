@@ -32,6 +32,7 @@ Key design choices:
 - A profile in `live` mode can read its own backtest and paper databases for reference, but MCP tools log new trading data to the database matching the active mode.
 - Category agents cannot access other category agents' databases. SysAdmin reads across agents through MCP, not through direct filesystem access.
 - The ChromaDB root is an embedded `PersistentClient` path owned by the daemon process; no HTTP server is started.
+- Deploy creates decisions databases only for selected category profiles through `DatabaseAccess`; canonical SysAdmin enumerates them read-only and has no per-profile `decisions.db`.
 
 ---
 
@@ -1651,6 +1652,8 @@ Use this checklist when comparing this document to production code or when onboa
 ## ChromaDB collections (embedded)
 
 ChromaDB uses an embedded `PersistentClient` at `~/.traderbot/chromadb/` owned by the daemon. No HTTP server or external embedding-function configuration is used. Callers supply explicit vectors.
+
+Deploy step 5 provisions and health-checks the root and ownership lock but does not create collections. The five names below are a validated manifest, not an eager creation list. Collection creation remains lazy because metadata requires a real caller-supplied embedding dimension and the production system defines no default dimension or model.
 
 ### Shared collections
 

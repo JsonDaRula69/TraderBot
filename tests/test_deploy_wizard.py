@@ -11,6 +11,7 @@ from rich.console import Console
 from tests.deploy_wizard_fakes import (
     FakeEnvironment,
     FakeOpenClaw,
+    FakePhase45,
     FakeTokens,
     fake_workspace,
 )
@@ -61,6 +62,37 @@ def test_steps_1_3_create_agents(tmp_path: Path) -> None:
     assert environment.tokens.created_count == {"main": 1, "weather": 1, "crypto": 1}
     assert set(environment.tokens.profiles) == {"main", "weather", "crypto"}
     assert "token" not in first.model_dump_json().lower()
+
+
+def test_steps_4_5_advance_result_and_leave_steps_6_8(tmp_path: Path) -> None:
+    # Given: steps 1-3 and both new deployment adapters succeed.
+    phase45 = FakePhase45()
+    environment = FakeEnvironment(phase45=phase45)
+
+    # When: the complete implemented wizard prefix runs.
+    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+
+    # Then: the result advances through step 5 without claiming full deployment.
+    assert result.success is True
+    assert result.completed_steps == (1, 2, 3, 4, 5)
+    assert result.remaining_steps == (6, 7, 8)
+    assert result.deployment_complete is False
+    assert phase45.calls == [4, 5]
+
+
+def test_step_4_failure_skips_step_5(tmp_path: Path) -> None:
+    # Given: steps 1-3 succeed but secure secret provisioning fails.
+    phase45 = FakePhase45(fail_step=4)
+    environment = FakeEnvironment(phase45=phase45)
+
+    # When: deployment reaches step 4.
+    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+
+    # Then: step 5 is explicitly skipped and no database adapter call occurs.
+    assert result.success is False
+    assert result.steps[3].status is StepStatus.FAILED
+    assert result.steps[4].status is StepStatus.SKIPPED
+    assert phase45.calls == [4]
 
 
 def test_openclaw_not_installed(tmp_path: Path) -> None:
@@ -268,7 +300,10 @@ def test_interactive_selection_is_explicit_and_ordered(tmp_path: Path) -> None:
     environment = FakeEnvironment()
     with (
         mock.patch("traderbot.deploy.wizard_command.Prompt.ask", side_effect=answers),
-        mock.patch("traderbot.deploy.wizard_command.Confirm.ask", side_effect=[True, False]),
+        mock.patch(
+            "traderbot.deploy.wizard_command.Confirm.ask",
+            side_effect=[True, False, False, False],
+        ),
     ):
         request = collect_interactive_request(console, environment.ports())
 

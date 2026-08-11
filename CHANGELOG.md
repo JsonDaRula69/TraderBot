@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a91] — 2026-08-11
+
+### Added
+
+- Added deploy wizard steps 4-5 with secret-safe Kalshi credential provisioning, encrypted Infisical fallback, selected-category database initialization, read-only SysAdmin enumeration, and lazy embedded Chroma validation.
+
 ## [2.0.0a90] — 2026-08-11
 
 ### Fixed

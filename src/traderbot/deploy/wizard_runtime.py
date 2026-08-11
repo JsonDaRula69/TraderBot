@@ -18,6 +18,7 @@ from traderbot.deploy.openclaw_models import (
     JsonValue,
 )
 from traderbot.deploy.wizard_contracts import (
+    Phase45Port,
     ProvisionStatus,
     TokenProvisionResult,
     WizardPorts,
@@ -48,6 +49,8 @@ _BOOTSTRAP_PROMPT: Final = (
     "TraderBot service and data freshness, register essential jobs, enable the SysAdmin "
     "heartbeat, then activate selected categories one at a time."
 )
+
+
 class SysAdminBootstrapCron(BaseModel):
     """Canonical persisted contract for TraderBot's managed SysAdmin activation job."""
 
@@ -170,6 +173,7 @@ class OpenClawAdapter:
             return False
         return added and self.inspect_bootstrap_cron() is BootstrapCronState.EXACT
 
+
 class SecretsTokenProvisioner:
     """Persist opaque profile identities through the SecretsStore facade."""
 
@@ -245,9 +249,13 @@ class WorkspaceInjectionAdapter:
         return inject_workspace(workspace, template).manifest_hash
 
 
-def build_wizard_ports(store: SecretsStore) -> WizardPorts:
+def build_wizard_ports(
+    store: SecretsStore,
+    phase45: Phase45Port | None = None,
+) -> WizardPorts:
     return WizardPorts(
         openclaw=OpenClawAdapter(),
         tokens=SecretsTokenProvisioner(store),
         injector=WorkspaceInjectionAdapter(),
+        phase45=phase45,
     )

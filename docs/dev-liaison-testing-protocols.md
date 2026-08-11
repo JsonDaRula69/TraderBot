@@ -283,9 +283,19 @@ server-side half. Drive `traderbot-mcp-server` as a subprocess with
 
 ```python
 import json, subprocess
-proc = subprocess.Popen([".venv/bin/traderbot-mcp-server"],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    text=True, env={"TRADERBOT_USE_HARDCODED_AUTH": "0", "HOME": "/home/jsondarula", "PATH": "/usr/bin:/usr/local/bin"})
+
+proc = subprocess.Popen(
+    [".venv/bin/traderbot-mcp-server"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    env={
+        "TRADERBOT_USE_HARDCODED_AUTH": "0",
+        "HOME": "/home/jsondarula",
+        "PATH": "/usr/bin:/usr/local/bin",
+    },
+)
 # initialize -> notifications/initialized (NO readline — notifications get no response)
 # then tools/call for: auth_check with valid token (resolves profile),
 # auth_check with unknown token (fail-closed), profile_list (sysadmin tool),
@@ -348,7 +358,10 @@ the network is unavailable — scope it out of the local-only path.
 
 ### Pre-conditions
 
-- Infisical server reachable (dev: `http://localhost:8080`) with two projects:
+- Development uses an isolated fake at a loopback origin. Production
+  `http://localhost:8080` means Infisical running beside TraderBot on
+  macpro-linux; Final-Wave target-host QA, not this development protocol,
+  verifies the actual integration with two projects:
   `TraderBot` (API keys) and `TraderBot Agent Tokens` (per-agent profile tokens).
 - `traderbot-service` machine identity provisioned (read/write both projects);
   its bootstrap secret installed in OpenClaw as `INFISICAL_TOKEN` SecretRef.
@@ -588,8 +601,9 @@ the network is unavailable — scope it out of the local-only path.
    ```bash
    find ~/.traderbot -maxdepth 3 -name "*.db" | sort
    ```
-   Observe: `traderbot.db` (global), `sysadmin/db/decisions.db`, and
-   `paper-{category}/db/decisions.db` per enabled category. Record the full list.
+   Observe: `traderbot.db` (global) and
+   `backtest-{category}/db/decisions.db` per selected category. Confirm no
+   SysAdmin decisions database exists, then record the full list.
 
 2. **Migration system**: check schema version:
    ```bash
@@ -744,18 +758,20 @@ the network is unavailable — scope it out of the local-only path.
    Observe: `weather` agent present with AGENTS.md, SOUL.md, and IDENTITY.md;
    AGENTS contains the canonical exact-five-tool section.
 
-6. **Step 4 (Infisical + API tokens)** — observe: step 4a health-checks
-   Infisical (or falls back); 4b validates each entered token against its
-   service before storing (a deliberately wrong OpenWeatherMap key must be
-   **rejected**); 4c creates the `traderbot-service` machine identity and stores
-   `INFISICAL_TOKEN` SecretRef.
+6. **Step 4 (Infisical + API tokens)** — observe: the configured loopback
+   `/api/status` is probed with a fixed timeout and proxy routing disabled;
+   unusable Infisical reports the encrypted local fallback. Supply only the
+   Kalshi API key and RSA PEM through hidden input or environment-name
+   references. A malformed/non-RSA PEM must fail before any secret or database
+   mutation. No live provider request or machine-identity creation occurs.
 
 7. **Step 5 (Database creation)** — observe DB creation per
-   [Phase 3 procedure 1](#test-procedures); verify writability:
-   ```bash
-   touch ~/.traderbot/sysadmin/db/decisions.db
-   ```
-   Observe: writable; remove the test file afterwards.
+   [Phase 3 procedure 1](#test-procedures). Verify selected category databases
+   contain the seven domain tables, no SysAdmin decisions path exists,
+   canonical SysAdmin enumerates selected databases read-only, and the embedded
+   Chroma root has no collection until a real embedding dimension is supplied.
+   Hold the Chroma lock once to verify non-destructive blocking and pool cleanup,
+   then close the owner and verify rerun success.
 
 8. **Step 6 (Backfill)**:
    ```bash

@@ -11,12 +11,14 @@ from rich.table import Table
 
 from traderbot.deploy.config import DeployConfig
 from traderbot.deploy.openclaw_models import AgentInventory
+from traderbot.deploy.phase45_runtime import Phase45Adapter
+from traderbot.deploy.secret_step import HiddenSecretInput, SecretsSelection, select_deploy_secrets
+from traderbot.deploy.validation import SecretReconciliationApprovals
 from traderbot.deploy.wizard import DeployWizard
 from traderbot.deploy.wizard_contracts import DeployResult, WizardPorts, WizardRequest
 from traderbot.deploy.wizard_runtime import build_wizard_ports
 from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.models import MarketCategory
-from traderbot.secrets.resolver import build_secrets_store
 
 
 def _request_from_config(config: DeployConfig) -> WizardRequest:
@@ -28,6 +30,10 @@ def _request_from_config(config: DeployConfig) -> WizardRequest:
             "category_workspaces": config.category_workspaces,
             "approvals": config.approvals,
             "heartbeat_every": config.heartbeat_every,
+            "infisical_url": config.infisical_url or "http://localhost:8080",
+            "kalshi_api_key_env": config.tokens.kalshi_api_key_env,
+            "kalshi_private_key_pem_env": config.tokens.kalshi_private_key_pem_env,
+            "secret_approvals": config.secret_approvals,
         }
     )
 
@@ -46,9 +52,7 @@ def collect_interactive_request(console: Console, ports: WizardPorts) -> WizardR
         console=console,
     )
     parsed_values = tuple(
-        MarketCategory(value.strip().lower())
-        for value in raw_selection.split(",")
-        if value.strip()
+        MarketCategory(value.strip().lower()) for value in raw_selection.split(",") if value.strip()
     )
     if not parsed_values or len(set(parsed_values)) != len(parsed_values):
         raise PydanticCustomError(
@@ -101,6 +105,16 @@ def collect_interactive_request(console: Console, ports: WizardPorts) -> WizardR
         default=False,
         console=console,
     )
+    reconcile_incomplete = Confirm.ask(
+        "Approve filling a missing Kalshi field only when the durable field matches?",
+        default=False,
+        console=console,
+    )
+    replace_existing = Confirm.ask(
+        "Approve replacing malformed or differing Kalshi fields?",
+        default=False,
+        console=console,
+    )
     return WizardRequest(
         categories=selected,
         mode="backtest",
@@ -113,11 +127,16 @@ def collect_interactive_request(console: Console, ports: WizardPorts) -> WizardR
             heartbeat_change=heartbeat_approved,
         ),
         heartbeat_every="0m" if heartbeat_approved else "preserve",
+        secret_approvals=SecretReconciliationApprovals(
+            reconcile_incomplete=reconcile_incomplete,
+            replace_existing=replace_existing,
+        ),
     )
 
 
 def _render_result(result: DeployResult, console: Console) -> None:
-    table = Table(title="TraderBot Deploy Steps 1-3")
+    implemented_through = max(step.step for step in result.steps)
+    table = Table(title=f"TraderBot Deploy Steps 1-{implemented_through}")
     table.add_column("Step")
     table.add_column("Status")
     table.add_column("Detail")
@@ -127,9 +146,12 @@ def _render_result(result: DeployResult, console: Console) -> None:
             table.add_row(f"  {agent.agent_id}", agent.status.value, agent.message)
     console.print(table)
     if result.success:
-        console.print("Steps 1-3 completed; full deployment remains incomplete. Steps 4-8 remain.")
+        remaining = f"{result.remaining_steps[0]}-{result.remaining_steps[-1]}"
+        message = f"Steps 1-{implemented_through} completed; full deployment remains incomplete. "
+        message += f"Steps {remaining} remain."
+        console.print(message)
     else:
-        console.print("Full deployment remains incomplete; steps 1-3 did not complete.")
+        console.print("Full deployment remains incomplete; the implemented step prefix failed.")
 
 
 def execute_deploy(
@@ -137,22 +159,49 @@ def execute_deploy(
     json_output: bool,
     ports: WizardPorts | None = None,
 ) -> int:
-    """Run wizard steps 1-3 from config or explicit Rich prompts."""
+    """Run wizard steps 1-5 from config or explicit Rich prompts."""
     console = Console()
-    runtime_ports = ports or build_wizard_ports(build_secrets_store())
+    owned_selection: SecretsSelection | None = None
     try:
         if config_path is None:
+            if ports is None:
+                selection = select_deploy_secrets("http://localhost:8080")
+                owned_selection = selection
+                hidden = HiddenSecretInput(
+                    lambda label: Prompt.ask(label, password=True, console=console)
+                )
+                runtime_ports = build_wizard_ports(
+                    selection.store,
+                    Phase45Adapter(selection, hidden.read),
+                )
+            else:
+                runtime_ports = ports
             request = collect_interactive_request(console, runtime_ports)
         else:
             config = DeployConfig.model_validate_json(config_path.read_text(encoding="utf-8"))
             request = _request_from_config(config)
+            if ports is None:
+                selection = select_deploy_secrets(request.infisical_url)
+                owned_selection = selection
+                runtime_ports = build_wizard_ports(
+                    selection.store,
+                    Phase45Adapter(selection, None),
+                )
+            else:
+                runtime_ports = ports
     except (OSError, ValidationError, ValueError):
-        message = "invalid deploy config or category selection; steps 1-3 require backtest, "
+        if owned_selection is not None:
+            owned_selection.close()
+        message = "invalid deploy config or category selection; deploy steps 1-5 require backtest, "
         message += "while paper/live require Phase 7 lifecycle setup\n"
         _ = sys.stderr.write(message)
         return 2
 
-    result = DeployWizard(runtime_ports).run(request)
+    try:
+        result = DeployWizard(runtime_ports).run(request)
+    finally:
+        if owned_selection is not None:
+            owned_selection.close()
     if json_output:
         _ = sys.stdout.write(result.model_dump_json(indent=2) + "\n")
     else:

@@ -83,6 +83,7 @@
 - [x] Phase 3 security review: `chromadb==1.5.9` is embedded-only with a pinned Rust backend, telemetry disabled, owner-only application-created storage, explicit vectors, no HTTP server/client imports, and an exact GHSA-f4j7-r4q5-qw2c scanner waiver. Review tracker [#195](https://github.com/JsonDaRula69/TraderBot/issues/195) closed (findings preserved); permanent accepted-risk tracking in [#196](https://github.com/JsonDaRula69/TraderBot/issues/196). Remove the waiver on the first official release containing upstream [#7237](https://github.com/chroma-core/chroma/pull/7237).
 - [x] Phase 3 Task 10: on-target macpro-linux QA passed via dev-liaison agent (13/13 probes green); PR #197 merged to v2-main (merge commit 8cce1b9). All CI green (ubuntu, macOS, Windows, build, security audit, Snyk).
 - [x] Phase 3 Final Wave remediation: secure Chroma root creation preserves pre-existing targets; the QA runner is consolidated into the sole allowed script; MCP storage-health fields are retained as the Task 7 response surface; and basedpyright warnings remain reported while warnings-only runs exit successfully. The cleaned remote `/tmp/phase3-qa-evidence.json` is recorded in the plan as expected ephemeral cleanup, with a local replay retained under workspace `.omo/evidence/`.
+- [x] Phase 4 deploy wizard steps 4-5: secret-safe environment references or hidden Kalshi input, strict local RSA validation, explicit Infisical status probing with encrypted fallback, current global/schema initialization, selected-category decisions databases through `DatabaseAccess`, canonical read-only SysAdmin enumeration, and lazy locked embedded Chroma provisioning.
 
 ### Dev-Liaison Testing Protocols
 
@@ -226,7 +227,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 1. **OpenClaw config** — Configure LLM model/provider, web search, gateway, daemon, comms channels. Create the `main` agent with all config choices.
 2. **SysAdmin setup** — Use the pre-existing `main` agent as SysAdmin, inject workspace files, request one self-deleting bootstrap prompt through OpenClaw Gateway, and authenticate SysAdmin with TraderBot. No recurring agent schedules are registered at deploy time.
 3. **Category selection** — For each selected category: create the OpenClaw agent (`openclaw agents add <category>`), inject category workspace files, and authenticate the agent with TraderBot. Recurring cron/heartbeat schedules remain dormant until approved activation through Gateway; deploy never invokes doctor implicitly.
-4. **API tokens** — Prompt for tokens relevant to selected categories. Kalshi, VoyageAI, NewsAPI, Twitter, Reddit are common to all. Category-specific keys only prompted if the category is enabled.
+4. **API tokens** — Reuse or securely collect only the canonical Kalshi API key and RSA private key consumed by the daemon. Inactive and keyless providers have no deploy prompt or storage path.
 5. **Database creation** — Create per-agent databases with isolation. Shared ChromaDB with category-scoped queries. Sysadmin gets cross-agent access.
 6. **Backfill** — Populate enabled datasource databases with 6 months of historical data, filtered by enabled categories.
 7. **Simulation start** — All agents begin by backtesting on already-settled markets using historical data (DD-017, DD-019). Mechanism to promote to paper trading and live trading exists (DD-017).
@@ -337,7 +338,7 @@ openclaw config set secrets.providers.vaultfile \
 - Any credential that OpenClaw needs to route messages or run agents
 
 **What OpenClaw SecretRef does NOT solve:**
-- **TraderBot-specific API keys** (Kalshi, VoyageAI, NewsAPI, category-specific keys) — OpenClaw doesn't know about these
+- **TraderBot-specific API keys** (the canonical Kalshi pair) — OpenClaw doesn't know about these
 - **Per-agent access control** — SecretRef has no concept of "this token is only for the weather agent." Any agent that can read the OpenClaw config can read any SecretRef value
 - **TraderBot profile tokens** — these are TraderBot's mechanism for identifying which agent is calling
 - **Docker container access** — an exec provider needs the binary inside the container; a file provider needs the file bind-mounted; an env provider needs the var injected
@@ -355,13 +356,6 @@ TraderBot Encrypted Vault (manages):
   +-- Global namespace:
   |   +-- kalshi.api_key
   |   +-- kalshi.private_key_pem
-  |   +-- voyage.api_key
-  |   +-- newsapi.api_key (shared across all agents)
-  +-- Per-agent namespaces:
-  |   +-- weather.openweathermap_api_key
-  |   +-- economics.fred_api_key
-  |   +-- crypto.coingecko_api_key
-  |   +-- (common keys fall back to global namespace)
   +-- Agent tokens:
       +-- (existing tokens.enc, already Fernet-encrypted, with per-agent scoping)
 ```
@@ -1328,11 +1322,13 @@ from pathlib import Path
 import shutil
 import sys
 
+
 @dataclass(frozen=True)
 class BinPaths:
-    traderbot: Path      # Resolved absolute path to traderbot binary
-    python: Path         # Resolved absolute path to python in the same venv
-    home: Path           # User's home directory
+    traderbot: Path  # Resolved absolute path to traderbot binary
+    python: Path  # Resolved absolute path to python in the same venv
+    home: Path  # User's home directory
+
 
 def resolve_bin_paths() -> BinPaths:
     """Resolve binary paths for service template substitution.
@@ -1754,21 +1750,20 @@ This section describes the v2 architecture that emerges from the design decision
 - Do not invoke doctor implicitly; user-state repair or migration requires a separate explicit operator action
 
 #### Step 4: API Tokens
-- Global tokens (all agents): Kalshi API key + PEM, VoyageAI
-- Common optional tokens (all agents): NewsAPI, Twitter, Reddit
-- Category-specific tokens (only if category is enabled):
-  - Weather: OpenWeatherMap (Open-Meteo and NWS are free, no key needed)
-  - Economics: FRED
-  - Crypto: CoinGecko (with tier detection)
-  - Sports: TheSportsDB
-- Store in encrypted vault (DD-012)
+- Probe the configured loopback Infisical origin at `GET /api/status` with a one-second timeout and `trust_env=False`; production `localhost` is local to macpro-linux beside TraderBot, isolated development fakes do not prove integration, and Final-Wave QA validates the target host
+- Reuse a usable existing Infisical setup; otherwise report and select machine-bound encrypted local storage through `SecretsStore`
+- Reuse a valid complete stored pair, or obtain only `kalshi_api_key` and `kalshi_private_key_pem` through hidden input/environment-variable-name references
+- Require a nonempty key and locally parse the PEM as RSA before the first write; do not make a live Kalshi request
+- Preserve partial durable writes and reconcile forward by canonical secret name; never delete user secrets as rollback
+- Do not prompt or store credentials for inactive, planned, or keyless providers
 
 #### Step 5: Database Creation
-- Create `~/.traderbot/traderbot.db` (global, schema init)
-- Create `~/.traderbot/sysadmin/db/decisions.db` (sysadmin)
-- For each category agent: create `~/.traderbot/paper-{category}/db/decisions.db`
-- Initialize ChromaDB collections (news, data_points, market_patterns, news_signals, market_conditions)
-- Verify: all DB paths writable, ChromaDB accessible
+- Apply all current global migrations to `~/.traderbot/traderbot.db` and create one connection pool
+- Acquire and health-check the hardened embedded Chroma root before category database mutation
+- Create only selected category databases through `DatabaseAccess` at `{mode}-{profile}/db/decisions.db`
+- Enumerate through canonical SysAdmin read-only access; do not create a SysAdmin decisions database
+- Validate the exact five-name shared Chroma manifest but leave collection creation lazy until a real embedding supplies its dimension
+- Close Chroma before the pool on every path; treat lock contention as a non-destructive blocker
 
 #### Step 6: Backfill
 - Run `traderbot backfill --months 6 --categories <enabled_categories> --json`
@@ -1789,7 +1784,7 @@ This section describes the v2 architecture that emerges from the design decision
 - Kalshi credentials valid (`traderbot auth check --json`)
 - All cron jobs registered (`openclaw cron list`)
 - All DB paths writable
-- ChromaDB accessible and collections initialized
+- ChromaDB ownership accessible; exact shared manifest validated with collections remaining lazy until an explicit embedding dimension exists
 - Docker sandbox running (if Docker available)
 - Print summary with agent names, profiles, tokens, and status
 
@@ -2046,9 +2041,9 @@ Single JSON file with 0600 permissions, structured by namespace:
 ```
 
 Namespace rules:
-- `global`: credentials shared across all agents (Kalshi, VoyageAI, NewsAPI, Twitter, Reddit)
-- `<category>`: credentials specific to that category (only loaded if that category is enabled)
-- The MCP server reads the `global` namespace plus the calling agent's category namespace
+- `global`: the canonical Kalshi API key and RSA private key shared by the daemon
+- Deploy does not create category API-secret namespaces for inactive or keyless providers
+- The MCP server reads the `global` namespace for current API credentials
 - SysAdmin profile can read all namespaces (oversight role)
 
 No encryption at rest — the threat model is honest: TraderBot is always-on and needs these credentials continuously. Fernet encryption for an always-unlocked vault is security theater. POSIX file permissions (0600, owner-only) provide the actual access control on the host. Inside Docker containers, the file is not mounted at all (agents never see it).
@@ -2219,10 +2214,19 @@ class TradingProfile(BaseModel):
     mode: Literal["backtest", "paper", "live"]  # Added "backtest"
     description: str
     enabled_categories: list[MarketCategory] = Field(default_factory=list)
-    permissions: list[str] = Field(default_factory=lambda: [
-        "scan", "analyze", "trade", "data-points", "news-context",
-        "heartbeat", "performance", "audit", "learnings",
-    ])
+    permissions: list[str] = Field(
+        default_factory=lambda: [
+            "scan",
+            "analyze",
+            "trade",
+            "data-points",
+            "news-context",
+            "heartbeat",
+            "performance",
+            "audit",
+            "learnings",
+        ]
+    )
     risk_multiplier: Annotated[float, Field(gt=0, le=1.0)]
     max_position_per_market_pct: Annotated[float, Field(gt=0)]
     max_daily_loss_pct: Annotated[float, Field(gt=0)]
@@ -2497,15 +2501,6 @@ All TraderBot secrets are stored in 1Password vaults, accessed via 1Password Con
   ├── TraderBot API keys vault
   │   ├── kalshi.api_key
   │   ├── kalshi.private_key_pem
-  │   ├── voyage.api_key
-  │   ├── newsapi.api_key
-  │   ├── twitter.api_key / api_secret / bearer_token
-  │   └── reddit.client_id / client_secret
-  ├── Category-specific API keys vault
-  │   ├── weather.openweathermap_api_key
-  │   ├── economics.fred_api_key
-  │   ├── crypto.coingecko_api_key / tier
-  │   └── sports.thesportsdb_api_key
   └── Agent profile tokens vault
       ├── weather.profile_token
       ├── economics.profile_token
@@ -2516,7 +2511,7 @@ All TraderBot secrets are stored in 1Password vaults, accessed via 1Password Con
 
 ```
 1Password Connect (Docker, runs alongside TraderBot)
-  ├── Provides REST API at http://localhost:8080
+  ├── Provides target-local REST API at http://localhost:8080 on macpro-linux
   ├── Authenticated via 1Password Connect token
   └── Accessible only from localhost (no external exposure)
 
@@ -2635,7 +2630,7 @@ services:
       - OP_SESSION=  # 1Password Connect token
 ```
 
-The TraderBot service connects to `http://localhost:8080` to retrieve secrets. The Connect token is stored in OpenClaw SecretRef (env provider) and injected into the TraderBot service's environment.
+When co-located on macpro-linux, the TraderBot service connects to target-local `http://localhost:8080` to retrieve secrets. The Connect token is stored in OpenClaw SecretRef (env provider) and injected into the TraderBot service's environment.
 
 **10. Container exploit surface mitigation**
 
@@ -4468,7 +4463,7 @@ Infisical's architecture maps naturally to our vault structure:
 - **Infisical projects** = our vaults ("TraderBot" for API keys, "TraderBot Agent Tokens" for profile tokens)
 - **Infisical environments** = our namespaces ("global", "weather", "economics", etc.)
 - **Infisical machine identities** = our service tokens (TraderBot service, each agent)
-- **`site_url` SDK parameter** = self-hosted instance URL (default `http://localhost:8080`)
+- **`site_url` SDK parameter** = self-hosted instance URL (target-local `http://localhost:8080` on macpro-linux)
 
 **Decision:**
 
@@ -4503,7 +4498,7 @@ services:
     restart: unless-stopped
 ```
 
-The TraderBot service connects to `http://localhost:8080` to retrieve secrets. No external cloud dependency.
+The TraderBot service connects to target-local `http://localhost:8080` on macpro-linux to retrieve secrets. No external cloud dependency.
 
 **Platform compatibility:**
 - **Linux (including headless):** Infisical Docker image supports linux/amd64 and linux/arm64. The Python SDK is OS-independent. The CLI is available via pip, npm, or binary download. Headless Linux is fully supported — all interaction is via API/SDK/CLI, no GUI required.
@@ -4532,9 +4527,8 @@ class SecretsStore:
     def _local_delete(self, service: str, key: str, namespace: str) -> None: ...
 ```
 
-The `SecretsStore` interface is identical regardless of backend. The Infisical backend maps:
+The `SecretsStore` interface is identical regardless of backend. The implemented Infisical backend maps:
 - `namespace="global"` → Infisical project "TraderBot", environment "prod"
-- `namespace="weather"` → Infisical project "TraderBot", environment "weather"
 - `namespace="tokens"` → Infisical project "TraderBot Agent Tokens", environment "prod"
 
 #### 4. Vault structure
@@ -4543,21 +4537,7 @@ The `SecretsStore` interface is identical regardless of backend. The Infisical b
 Infisical Project: "TraderBot"
   Environment: "prod" (global keys)
     ├── kalshi_api_key
-    ├── kalshi_private_key_pem
-    ├── voyage_api_key
-    ├── newsapi_key
-    ├── twitter_api_key
-    ├── twitter_api_secret
-    ├── twitter_bearer_token
-    ├── reddit_client_id
-    └── reddit_client_secret
-  Environment: "weather"
-    ├── openweathermap_api_key
-    └── (Open-Meteo: free, no key)
-  Environment: "economics"
-    └── fred_api_key
-  Environment: "crypto"
-    └── coingecko_api_key
+    └── kalshi_private_key_pem
 
 Infisical Project: "TraderBot Agent Tokens"
   Environment: "prod"
@@ -4566,73 +4546,21 @@ Infisical Project: "TraderBot Agent Tokens"
     └── dev-liaison_token (field: token, profile, agent, categories, permissions)
 ```
 
-The two-project structure separates API keys from agent tokens, enabling granular access control. The TraderBot service authenticates with a machine identity that has read/write access to both projects. Each agent's machine identity has read access only to its own token.
+The two-project structure separates API keys from agent tokens, enabling granular access control. Deploy currently provisions only the canonical Kalshi pair consumed by production. Previously planned provider keys have no deploy prompt or storage path. The TraderBot service authenticates with an existing machine identity that has read/write access to both projects. Each agent's machine identity has read access only to its own token.
 
 #### 5. Deploy flow — Infisical setup
 
 **Step 4a: Infisical health check**
-```
-traderbot deploy Step 4a: Checking Infisical...
 
-  ✓ Infisical server is running at http://localhost:8080
-  ✓ Machine identity authenticated
-  ✓ Project access confirmed
-```
-
-If Infisical isn't running:
-```
-traderbot deploy Step 4a: Checking Infisical...
-  ✗ Infisical server not found at http://localhost:8080
-
-  Would you like to:
-    1) Start Infisical (requires Docker) — recommended
-    2) Configure an existing Infisical server
-    3) Use local encrypted storage (no Infisical, no audit logging, no automatic rotation)
-```
-
-Option 1 starts the Infisical Docker container using `docker compose -f docker-compose.infisical.yml up -d`, creates the projects and machine identity, and configures the TraderBot service to connect.
-
-Option 2 connects to an existing Infisical instance (for users who already run Infisical).
-
-Option 3 falls back to local encrypted storage (see §9).
+Deploy accepts a loopback HTTP(S) origin and probes its canonical `/api/status` endpoint with a one-second timeout and `trust_env=False`. HTTP 200 plus usable existing credentials selects Infisical. Any unavailable or unusable result automatically selects the machine-bound encrypted `LocalEncryptedStore` through `SecretsStore`. Deploy reports the selected backend and never starts Docker or creates an Infisical identity.
 
 **Step 4b: API token entry**
 
-API tokens are prompted per category and stored directly in Infisical:
-```
-traderbot deploy Step 4b: API tokens
+Only `kalshi_api_key` and `kalshi_private_key_pem` are eligible. Config mode contains environment variable names rather than values; interactive mode uses hidden prompts. A complete valid stored pair is reused without mutation. A replacement pair is validated before the first write: the key is nonempty and the PEM parses locally as an RSA private key. No live provider request is made, and output contains no values.
 
-  Common tokens (required for all agents):
-    Kalshi API key: ************************************
-    Kalshi private key: (paste PEM or path) ************************************
-    VoyageAI API key: ************************************
-    NewsAPI key: ************************************
-    Twitter bearer token: ************************************
-    Reddit client ID: ************************************
-    Reddit client secret: ************************************
+**Step 4c: Forward reconciliation**
 
-  Weather-specific tokens (weather category enabled):
-    Open-Meteo: (free, no key required) — skipping
-    OpenWeatherMap API key: ************************************
-
-  Each token is validated against the service before storing.
-  ✓ All tokens stored in Infisical project "TraderBot"
-```
-
-Validation happens immediately — if a Kalshi key doesn't authenticate, deploy pauses and asks for a corrected key.
-
-**Step 4c: Machine identity configuration**
-
-The TraderBot service authenticates with Infisical using a machine identity (service token):
-```
-traderbot deploy Step 4c: Configuring Infisical machine identity...
-
-  ✓ Created machine identity "traderbot-service" with read/write access
-  ✓ Service token stored in OpenClaw SecretRef (env: INFISICAL_TOKEN)
-  ✓ TraderBot service will authenticate with Infisical on startup
-```
-
-This is the single bootstrap secret: `INFISICAL_TOKEN` → TraderBot authenticates with Infisical → retrieves all other secrets.
+The pair is prevalidated as one decision. If a backend unexpectedly fails after writing `kalshi_api_key`, deploy reports that exact written boundary and `kalshi_private_key_pem` as pending. It leaves the verified forward state intact and retries safely on rerun; it never deletes user secrets.
 
 #### 6. Agent profile token provisioning (unchanged from DD-026/037)
 
@@ -4687,7 +4615,7 @@ traderbot token rotate --force             # Force immediate rotation
 When the TraderBot service (MCP server + always-on daemon) starts:
 
 1. Read `INFISICAL_TOKEN` from environment (provided by OpenClaw SecretRef)
-2. Authenticate with Infisical at `http://localhost:8080` (or configured URL)
+2. Authenticate with Infisical at target-local `http://localhost:8080` on macpro-linux (or configured loopback URL)
 3. Load all secrets from the "TraderBot" project into memory
 4. Load all profile tokens from the "TraderBot Agent Tokens" project into memory
 5. Start the MCP server
@@ -4772,7 +4700,7 @@ After deploy completes:
 ```
 traderbot deploy: Verifying Infisical integration...
 
-  ✓ Infisical server is healthy (http://localhost:8080)
+  ✓ Infisical server is healthy (target-local http://localhost:8080 on macpro-linux; verified during Final-Wave target-host QA)
   ✓ TraderBot project is accessible (9 items)
   ✓ TraderBot Agent Tokens project is accessible (3 items)
   ✓ All API keys validated against their services

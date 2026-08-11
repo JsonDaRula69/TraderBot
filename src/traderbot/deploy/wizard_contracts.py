@@ -9,6 +9,11 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from traderbot.deploy.openclaw_models import AgentInventory
+from traderbot.deploy.validation import (
+    SecretReconciliationApprovals,
+    validate_infisical_origin,
+    validate_secret_references,
+)
 from traderbot.deploy.wizard_state import (
     AgentConfigState,
     BootstrapCronState,
@@ -61,7 +66,7 @@ class AgentDeployResult(FrozenModel):
 
 
 class WizardStepResult(FrozenModel):
-    step: Literal[1, 2, 3]
+    step: Literal[1, 2, 3, 4, 5]
     name: str
     status: StepStatus
     message: str
@@ -72,7 +77,7 @@ class DeployResult(FrozenModel):
     success: bool
     categories: tuple[MarketCategory, ...]
     steps: tuple[WizardStepResult, ...]
-    completed_steps: tuple[Literal[1, 2, 3], ...]
+    completed_steps: tuple[Literal[1, 2, 3, 4, 5], ...]
     deployment_complete: Literal[False] = False
     remaining_steps: tuple[Literal[4, 5, 6, 7, 8], ...] = (4, 5, 6, 7, 8)
     required_new_agent_paths: dict[MarketCategory, Path]
@@ -89,6 +94,12 @@ class WizardRequest(WizardRequestState):
     category_workspaces: dict[MarketCategory, Path] = Field(default_factory=dict)
     approvals: DeployApprovals = Field(default_factory=DeployApprovals)
     heartbeat_every: Literal["preserve", "0m"] = "preserve"
+    infisical_url: str = "http://localhost:8080"
+    kalshi_api_key_env: str | None = None
+    kalshi_private_key_pem_env: str | None = None
+    secret_approvals: SecretReconciliationApprovals = Field(
+        default_factory=SecretReconciliationApprovals
+    )
 
     @field_validator("categories")
     @classmethod
@@ -115,6 +126,11 @@ class WizardRequest(WizardRequestState):
 
     @model_validator(mode="after")
     def safe_category_workspaces(self) -> WizardRequest:
+        _ = validate_infisical_origin(self.infisical_url)
+        _ = validate_secret_references(
+            self.kalshi_api_key_env,
+            self.kalshi_private_key_pem_env,
+        )
         if not set(self.category_workspaces).issubset(self.categories):
             raise PydanticCustomError(
                 "workspace_mapping",
@@ -157,8 +173,28 @@ class WorkspaceInjector(Protocol):
     def inject(self, workspace: Path, template: WorkspaceTemplate) -> str: ...
 
 
+class Phase45Result(FrozenModel):
+    status: StepStatus
+    message: str
+
+    @classmethod
+    def completed(cls, message: str) -> Phase45Result:
+        return cls(status=StepStatus.COMPLETED, message=message)
+
+    @classmethod
+    def failed(cls, message: str) -> Phase45Result:
+        return cls(status=StepStatus.FAILED, message=message)
+
+
+class Phase45Port(Protocol):
+    def provision_secrets(self, request: WizardRequest) -> Phase45Result: ...
+
+    def provision_databases(self, request: WizardRequest) -> Phase45Result: ...
+
+
 @dataclass(frozen=True, slots=True)
 class WizardPorts:
     openclaw: OpenClawPort
     tokens: TokenProvisioner
     injector: WorkspaceInjector
+    phase45: Phase45Port | None = None

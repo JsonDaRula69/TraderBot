@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
+import sqlite3
+import stat
 import subprocess
 import sys
 from pathlib import Path
 from typing import ClassVar, Literal
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import BaseModel, ConfigDict, Field
 
 from tests.deploy_fake_openclaw import write_fake_openclaw
+from traderbot.db.chroma_store import ChromaStore
 from traderbot.deploy.openclaw_models import CronJob
 from traderbot.deploy.wizard import DeployResult
 from traderbot.deploy.wizard_state import SecretRefConfig
@@ -48,6 +54,12 @@ def build_fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     data = tmp_path / "data"
     state = tmp_path / "openclaw-state.json"
     env = os.environ.copy()
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_key_pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
     env.update(
         {
             "HOME": str(home),
@@ -56,6 +68,8 @@ def build_fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "FAKE_OC_STATE": str(state),
             "TRADERBOT_USE_HARDCODED_AUTH": "1",
             "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
+            "TRADERBOT_TEST_KALSHI_KEY": secrets.token_urlsafe(),
+            "TRADERBOT_TEST_KALSHI_PEM": private_key_pem,
         }
     )
     return state, env
@@ -117,10 +131,18 @@ def _write_happy_state(
     _ = state_path.write_text(state.model_dump_json(), encoding="utf-8")
 
 
-def _write_config(path: Path, crypto_workspace: Path) -> None:
+def _write_config(
+    path: Path,
+    crypto_workspace: Path,
+    secret_approvals: dict[str, bool] | None = None,
+) -> None:
     payload = {
         "categories": ["weather", "crypto"],
         "mode": "backtest",
+        "tokens": {
+            "kalshi_api_key_env": "TRADERBOT_TEST_KALSHI_KEY",
+            "kalshi_private_key_pem_env": "TRADERBOT_TEST_KALSHI_PEM",
+        },
         "category_workspaces": {"crypto": str(crypto_workspace)},
         "approvals": {
             "install_openclaw": False,
@@ -130,6 +152,8 @@ def _write_config(path: Path, crypto_workspace: Path) -> None:
         },
         "heartbeat_every": "0m",
     }
+    if secret_approvals is not None:
+        payload["secret_approvals"] = secret_approvals
     _ = path.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -147,6 +171,8 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     # When: the real console script runs twice against the fake Gateway CLI
     first = run_fake_cli(config, env)
     first_state = FakeLedger.model_validate_json(state_path.read_text(encoding="utf-8"))
+    encrypted_path = Path(env["TRADERBOT_DATA_DIR"]) / "secrets" / "secrets.json"
+    encrypted_after_first = encrypted_path.read_bytes()
     second = run_fake_cli(config, env)
     second_state_text = state_path.read_text(encoding="utf-8")
     second_state = FakeLedger.model_validate_json(second_state_text)
@@ -165,10 +191,10 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     assert first_result.required_new_agent_paths == {"crypto": crypto}
     assert second_result.required_new_agent_paths == {}
     assert first_result.deployment_complete is False
+    assert first_result.completed_steps == (1, 2, 3, 4, 5)
+    assert first_result.remaining_steps == (6, 7, 8)
     assert second_state.agents["main"].workspace == str(tmp_path / "existing-main")
-    assert second_state.agents["weather"].workspace == str(
-        tmp_path / "nested" / "team" / "weather"
-    )
+    assert second_state.agents["weather"].workspace == str(tmp_path / "nested" / "team" / "weather")
 
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -191,6 +217,31 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
         if identity is not None
     )
     exposed = first.stdout + first.stderr + second.stdout + second.stderr + second_state_text
+    assert env["TRADERBOT_TEST_KALSHI_KEY"] not in exposed
+    assert env["TRADERBOT_TEST_KALSHI_PEM"] not in exposed
+    assert env["TRADERBOT_TEST_KALSHI_KEY"].encode() not in encrypted_after_first
+    assert env["TRADERBOT_TEST_KALSHI_PEM"].encode() not in encrypted_after_first
+    assert encrypted_path.read_bytes() == encrypted_after_first
+
+    data_root = Path(env["TRADERBOT_DATA_DIR"])
+    expected_databases = {
+        data_root / "backtest-weather" / "db" / "decisions.db",
+        data_root / "backtest-crypto" / "db" / "decisions.db",
+    }
+    assert all(path.is_file() for path in expected_databases)
+    assert not tuple(data_root.glob("*-sysadmin/db/decisions.db"))
+    assert stat.S_IMODE((data_root / "chromadb").stat().st_mode) == 0o700
+    with ChromaStore(data_root / "chromadb") as chroma:
+        assert chroma.list_collections() == []
+    for path in expected_databases:
+        with sqlite3.connect(path) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            }
+        assert len(tables - {"schema_version"}) == 7
     assert all(
         identity["token"] not in exposed
         for identity in (main_identity, weather_identity, crypto_identity)

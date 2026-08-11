@@ -116,6 +116,7 @@ Phase transitions (backtest → paper → live → suspended) are driven by SysA
 - The installer shows relevant messages for the detected OS. No keyring questions on headless Linux (DD-006).
 - Data collection begins for all sources at install time (for backtesting availability), but only enabled categories have active trading agents (DD-027).
 - Kalshi WebSocket minimizes REST API calls and respects rate limits (DD-016).
+- Deploy collects only credentials consumed by current production code. Keyless and inactive providers do not gain prompts or storage paths.
 
 ---
 
@@ -127,7 +128,7 @@ OpenClaw is the agent runtime, not a security boundary. Authentication and acces
 
 ## 13. Idempotency and Safety
 
-All setup, deploy, and registration operations must be idempotent (AGENTS.md). Before creating a resource, check if it exists. Use `--replace` semantics for cron job registration. Every resource must have a corresponding cleanup path in uninstall.
+All setup, deploy, and registration operations must be idempotent (AGENTS.md). Inventory and validate complete resource contracts before mutation, reuse exact state, and fail closed on ownership conflicts. Partial durable state reconciles forward rather than being deleted. Resource shutdown follows reverse ownership order; an existing Chroma lock is never removed or bypassed.
 
 ---
 

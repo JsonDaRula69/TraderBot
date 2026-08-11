@@ -22,8 +22,8 @@ def test_deploy_config_parses_documented_shape() -> None:
         "infisical_url": "http://localhost:8080",
         "kalshi_environment": "production",
         "tokens": {
-            "kalshi_api_key": "example-key",
-            "kalshi_private_key_pem": "example-pem",
+            "kalshi_api_key_env": "TEST_KALSHI_KEY",
+            "kalshi_private_key_pem_env": "TEST_KALSHI_PEM",
         },
         "months_backfill": 6,
         "category_workspaces": {"weather": "/srv/openclaw/weather"},
@@ -42,7 +42,7 @@ def test_deploy_config_parses_documented_shape() -> None:
     # Then: category and mode values are parsed into the supported domain
     assert config.categories == ["weather"]
     assert config.mode == "backtest"
-    assert config.tokens.get("kalshi_api_key") == "example-key"
+    assert config.tokens.kalshi_api_key_env == "TEST_KALSHI_KEY"
 
 
 def test_deploy_config_requires_explicit_approval_and_heartbeat_fields() -> None:
@@ -109,9 +109,7 @@ def test_profile_create_rejects_invalid_category_without_writes(
 
     # When: argparse validates the command boundary
     with pytest.raises(SystemExit) as raised:
-        _ = cli.main(
-            ["profile", "create", "test", "--mode", "backtest", "--categories", "invalid"]
-        )
+        _ = cli.main(["profile", "create", "test", "--mode", "backtest", "--categories", "invalid"])
     output = capsys.readouterr()
 
     # Then: the error is actionable and no state was created

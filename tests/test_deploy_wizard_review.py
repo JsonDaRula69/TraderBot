@@ -29,8 +29,8 @@ def _documented_payload(
         "infisical_url": "http://localhost:8080",
         "kalshi_environment": "production",
         "tokens": {
-            "kalshi_api_key": "example-key",
-            "kalshi_private_key_pem": "example-pem",
+            "kalshi_api_key_env": "TEST_KALSHI_KEY",
+            "kalshi_private_key_pem_env": "TEST_KALSHI_PEM",
         },
         "months_backfill": 6,
         "category_workspaces": {"weather": str(workspace)},
@@ -135,9 +135,7 @@ def test_deploy_config_schema_is_backtest_only() -> None:
 
 def test_success_result_reports_partial_eight_step_deployment(tmp_path: Path) -> None:
     # Given: valid isolated workspaces and successful step adapters
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.make_exact("main", "weather")
     request = WizardRequest(
         categories=(MarketCategory.WEATHER,),
@@ -157,9 +155,7 @@ def test_success_result_reports_partial_eight_step_deployment(tmp_path: Path) ->
 
 def test_bootstrap_contract_conflict_is_actionable_in_step_result(tmp_path: Path) -> None:
     # Given: cron reconciliation reports a managed contract conflict
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.openclaw.bootstrap_state = BootstrapCronState.CONFLICT
     request = WizardRequest(
         categories=(MarketCategory.WEATHER,),
@@ -234,4 +230,4 @@ def test_deploy_docs_publish_machine_readable_incomplete_state() -> None:
     # When/Then: its output contract cannot imply the full eight-step deploy completed
     assert "deployment_complete" in docs
     assert "false" in docs
-    assert "Steps 4-8 remain" in docs
+    assert "Steps 6-8 remain" in docs

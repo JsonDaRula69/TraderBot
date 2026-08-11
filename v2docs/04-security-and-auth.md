@@ -27,8 +27,9 @@
 > by default. `LocalEncryptedStore` provides the offline fallback;
 > `LocalTokenStore` is preserved as a read-only migration source. Token
 > rotation, the scheduler, the `openclaw-infisical-resolver` exec provider,
-> and the migration script are all committed and tested. API credential
-> validation and the full deploy wizard integration remain future work.
+> and the migration script are all committed and tested. Deploy step 4 now
+> validates and provisions the canonical Kalshi pair locally without exposing
+> values or making a live Kalshi request; later deploy steps remain incomplete.
 
 ---
 
@@ -109,22 +110,11 @@ Infisical environment slug `prod`, matching the deployed instance):
 global/
   kalshi.api_key
   kalshi.private_key_pem
-  voyage.api_key
-  newsapi.api_key
-  twitter.bearer_token
-  reddit.client_id
-  reddit.client_secret
-weather/
-  openweathermap.api_key
-economics/
-  fred.api_key
-crypto/
-  coingecko.api_key
-sports/
-  thesportsdb.api_key
 ```
 
-Common keys (NewsAPI, Twitter, Reddit) are in the `global` namespace. Category-specific keys are in their own namespace. The MCP server selects the correct key based on the calling agent's profile, but initially all profiles point to the same global Kalshi key.
+Deploy currently collects only the canonical Kalshi pair consumed by the daemon. NewsProvider is a stub, OpenMeteo and NWS are keyless, and no production consumer exists for the previously planned provider credentials, so deploy exposes no prompt or storage path for them.
+
+Config documents contain environment variable names only (`kalshi_api_key_env` and `kalshi_private_key_pem_env`). Interactive collection uses hidden prompts. A complete existing pair is reused without writes; replacement values are validated together before mutation, including strict local RSA PEM parsing. Output and reconciliation errors contain secret names and backend state only, never values.
 
 **Project 2: "TraderBot Agent Tokens"** — Profile tokens (one per agent)
 
@@ -433,7 +423,7 @@ tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the 
 | Secret Type | Manager | Storage | Access |
 |---|---|---|---|
 | OpenClaw LLM keys, gateway auth, channel tokens | OpenClaw SecretRef | Infisical project "OpenClaw" (or OpenClaw's own provider) | OpenClaw gateway on host only |
-| TraderBot API keys (Kalshi, Voyage, NewsAPI, etc.) | Infisical | Infisical project "TraderBot" | TraderBot service on host only |
+| TraderBot API keys (canonical Kalshi API key + RSA private key only) | Infisical or machine-bound encrypted local fallback | Infisical project "TraderBot" or owner-only local ciphertext | TraderBot service on host only |
 | Agent profile tokens | Infisical | Infisical project "TraderBot Agent Tokens" | TraderBot service (resolution) + OpenClaw SecretRef (injection) |
 | Infisical machine identity token | OpenClaw SecretRef | OpenClaw config (env provider) | TraderBot service only |
 | TraderBot service auth token | Infisical | Infisical project "TraderBot" | TraderBot service only |

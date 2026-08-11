@@ -5,7 +5,12 @@ from typing import Never
 
 from traderbot.deploy.openclaw_models import AgentInventory, AgentSummary
 from traderbot.deploy.wizard import DeployWizard
-from traderbot.deploy.wizard_contracts import TokenProvisionResult, WizardPorts
+from traderbot.deploy.wizard_contracts import (
+    Phase45Result,
+    TokenProvisionResult,
+    WizardPorts,
+    WizardRequest,
+)
 from traderbot.deploy.wizard_state import (
     AgentConfigState,
     BootstrapCronState,
@@ -174,19 +179,41 @@ class FakeInjector:
         return f"manifest:{workspace}:{template.value}"
 
 
+class FakePhase45:
+    def __init__(self, fail_step: int | None = None) -> None:
+        self.fail_step = fail_step
+        self.calls: list[int] = []
+
+    def provision_secrets(self, request: WizardRequest) -> Phase45Result:
+        del request
+        self.calls.append(4)
+        if self.fail_step == 4:
+            return Phase45Result.failed("secret provisioning failed")
+        return Phase45Result.completed("Kalshi secrets ready in local-encrypted backend")
+
+    def provision_databases(self, request: WizardRequest) -> Phase45Result:
+        del request
+        self.calls.append(5)
+        if self.fail_step == 5:
+            return Phase45Result.failed("database provisioning failed")
+        return Phase45Result.completed("selected category databases ready")
+
+
 class FakeEnvironment:
     def __init__(
         self,
         openclaw: FakeOpenClaw | None = None,
         tokens: FakeTokens | None = None,
         injector: FakeInjector | None = None,
+        phase45: FakePhase45 | None = None,
     ) -> None:
         self.openclaw: FakeOpenClaw = openclaw or FakeOpenClaw()
         self.tokens: FakeTokens = tokens or FakeTokens()
         self.injector: FakeInjector = injector or FakeInjector()
+        self.phase45: FakePhase45 | None = phase45
 
     def ports(self) -> WizardPorts:
-        return WizardPorts(self.openclaw, self.tokens, self.injector)
+        return WizardPorts(self.openclaw, self.tokens, self.injector, self.phase45)
 
     def wizard(self) -> DeployWizard:
         return DeployWizard(self.ports())

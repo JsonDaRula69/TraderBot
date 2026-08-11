@@ -12,11 +12,12 @@ from typing import Final, Literal
 
 import httpx
 
+from traderbot.deploy.validation import validate_infisical_origin
 from traderbot.services.deploy import detect_service_manager
 
 type ServiceManager = Literal["systemd", "launchd", "windows", "none"]
 
-_INFISICAL_URL: Final = "http://localhost:8080/api/status"
+_INFISICAL_ORIGIN: Final = "http://localhost:8080"
 _INFISICAL_TIMEOUT_SECONDS: Final = 1.0
 _SERVICE_MANAGERS: Final[Mapping[str, ServiceManager]] = MappingProxyType(
     {
@@ -46,15 +47,7 @@ def detect_capabilities() -> Capabilities:
     openclaw_path = shutil.which("openclaw")
     service_manager = _SERVICE_MANAGERS.get(detect_service_manager(), "none")
 
-    try:
-        infisical_response = httpx.get(
-            _INFISICAL_URL,
-            timeout=_INFISICAL_TIMEOUT_SECONDS,
-            trust_env=False,
-        )
-        infisical_running = infisical_response.status_code == 200
-    except httpx.RequestError:
-        infisical_running = False
+    infisical_running = infisical_is_running(_INFISICAL_ORIGIN)
 
     return Capabilities(
         openclaw_installed=openclaw_path is not None,
@@ -65,3 +58,18 @@ def detect_capabilities() -> Capabilities:
         infisical_running=infisical_running,
         python_version=platform.python_version(),
     )
+
+
+def infisical_is_running(origin: str) -> bool:
+    """Probe the canonical Infisical status endpoint without environment proxies."""
+    safe_origin = validate_infisical_origin(origin)
+    status_url = f"{safe_origin}/api/status"
+    try:
+        response = httpx.get(
+            status_url,
+            timeout=_INFISICAL_TIMEOUT_SECONDS,
+            trust_env=False,
+        )
+    except httpx.RequestError:
+        return False
+    return response.status_code == 200
