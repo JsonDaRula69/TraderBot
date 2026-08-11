@@ -24,7 +24,7 @@ List all profiles and their modes.
 
 ### `traderbot__market_edge`
 
-Compute the estimated edge for a market.
+Current stub: returns `status: stub` and does not compute market edge yet.
 
 **Parameters**: `token` (str), `category` (str), `ticker` (str)
 
@@ -34,19 +34,6 @@ Return current market prices from the live WebSocket cache.
 
 **Parameters**: `token` (str), `ticker` (str), `resolution` (str, optional: `1min`/`1hr`/`1day`)
 
-## Planned Tools (not yet available)
+## Planned Tools
 
-The following tools are planned for future phases and are not yet implemented:
-
-- `traderbot__weather_forecast_prob` — Calibrated probability estimate with confidence interval
-- `traderbot__weather_accuracy` — Historical forecast accuracy by source, city, and lead time
-- `traderbot__weather_seasonal_context` — Historical temperature distributions and recent anomalies
-- `traderbot__weather_decision_brief` — Assembled analytical brief combining forecast probability, accuracy, market edge, and seasonal context
-- `traderbot__trade` — Execute a trade (mode-aware routing)
-- `traderbot__positions` — Get current positions for the agent's profile and mode
-- `traderbot__heartbeat` — Get heartbeat data — health, status, and recent activity summary
-- `traderbot__performance` — Get performance metrics (P&L, Sharpe, win rate, drawdown, etc.)
-- `traderbot__audit` — Get audit trail — all decisions with full reasoning for a time range
-- `traderbot__learnings` — Get or update learnings for this agent's category
-- `traderbot__news_context` — Get relevant news context for a category
-- `traderbot__data_points` — Get quantitative data points for a category
+No planned tools are available through this workspace.

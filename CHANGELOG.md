@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a87] — 2026-08-10
+
+### Added
+
+- Added safe, idempotent workspace template restoration and restrictive OpenClaw configuration for all nine market categories.
+
+### Fixed
+
+- Rejected symlinked workspace ancestors, preserved existing permission bits through update and rollback, closed failed descriptor handoffs, and documented `market_edge` as a current stub.
+
 ## [2.0.0a86] — 2026-08-10
 
 ### Added

@@ -24,7 +24,7 @@ List all profiles and their modes.
 
 ### `traderbot__market_edge`
 
-Compute the estimated edge for a market.
+Current stub: returns `status: stub` and does not compute market edge yet.
 
 **Parameters**: `token` (str), `category` (str), `ticker` (str)
 

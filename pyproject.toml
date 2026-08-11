@@ -30,6 +30,9 @@ traderbot = "traderbot.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/traderbot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"workspace" = "traderbot/workspace"
+
 [tool.hatch.version]
 path = "VERSION"
 # Bare-version file (no `__version__ = "..."` assignment): capture the whole line.
