@@ -104,6 +104,85 @@ def test_rollback_preserves_original_bytes_and_modes(
         assert stat.S_IMODE(target.stat().st_mode) == 0o640
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not portable to Windows")
+def test_rollback_preserves_fenced_non_utf8_bytes_and_modes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given
+    templates = tmp_path / "templates"
+    workspace = tmp_path / "workspace"
+    _write_weather_templates(templates, b"replacement\n")
+    workspace.mkdir()
+    originals = {
+        "AGENTS.md": b"owner-prefix\x80\n" + START_MARKER + b"\nstale\n" + END_MARKER + b"\n",
+        "SOUL.md": b"owner-soul\xff\n",
+    }
+    for name, content in originals.items():
+        target = workspace / name
+        _ = target.write_bytes(content)
+        target.chmod(0o640)
+    real_replace = os.replace
+    failed = False
+
+    def fail_second_replace(source: str | Path, target: str | Path) -> None:
+        nonlocal failed
+        if Path(target).name == "SOUL.md" and not failed:
+            failed = True
+            raise OSError("characterization interrupted replace")
+        real_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", fail_second_replace)
+
+    # When
+    with pytest.raises(OSError, match="characterization interrupted replace"):
+        _ = injection.inject_workspace(
+            workspace,
+            WorkspaceTemplate.WEATHER,
+            templates_root=templates,
+        )
+
+    # Then
+    for name, content in originals.items():
+        target = workspace / name
+        assert target.read_bytes() == content
+        assert stat.S_IMODE(target.stat().st_mode) == 0o640
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not portable to Windows")
+def test_fsync_failure_preserves_targets_and_removes_temporary_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given
+    templates = tmp_path / "templates"
+    workspace = tmp_path / "workspace"
+    _write_weather_templates(templates, b"replacement\n")
+    workspace.mkdir()
+    target = workspace / "AGENTS.md"
+    original = b"owner-prefix\x80\n" + START_MARKER + b"\nstale\n" + END_MARKER + b"\n"
+    _ = target.write_bytes(original)
+    target.chmod(0o640)
+    failure = OSError("fsync failed")
+
+    def fail_fsync(_descriptor: int) -> Never:
+        raise failure
+
+    monkeypatch.setattr(os, "fsync", fail_fsync)
+
+    # When
+    with pytest.raises(OSError) as caught:
+        _ = injection.inject_workspace(
+            workspace,
+            WorkspaceTemplate.WEATHER,
+            templates_root=templates,
+        )
+
+    # Then
+    assert caught.value is failure
+    assert target.read_bytes() == original
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    assert not tuple(workspace.glob(".*.tmp"))
+
+
 def test_fdopen_failure_closes_descriptor_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

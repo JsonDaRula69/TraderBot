@@ -125,6 +125,37 @@ def test_init_if_missing_preserves_existing_user_files(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not portable to Windows")
+def test_injection_preserves_legacy_openclaw_files_byte_and_mode_exactly(tmp_path: Path) -> None:
+    # Given
+    templates = tmp_path / "templates"
+    workspace = tmp_path / "workspace"
+    _write_weather_templates(templates, b"managed replacement\n")
+    workspace.mkdir()
+    legacy = {
+        "TOOLS.md": (b"operator tools\x80\n", 0o640),
+        "HEARTBEAT.md": (b"operator heartbeat\xff\n", 0o604),
+    }
+    for name, (content, mode) in legacy.items():
+        target = workspace / name
+        _ = target.write_bytes(content)
+        target.chmod(mode)
+
+    # When
+    report = inject_workspace(
+        workspace,
+        WorkspaceTemplate.WEATHER,
+        templates_root=templates,
+    )
+
+    # Then
+    for name, (content, mode) in legacy.items():
+        target = workspace / name
+        assert target.read_bytes() == content
+        assert stat.S_IMODE(target.stat().st_mode) == mode
+    assert {record.path for record in report.records}.isdisjoint(legacy)
+
+
 @pytest.mark.parametrize(
     "content",
     [
@@ -265,7 +296,7 @@ def test_manifest_hash_matches_result_bytes(tmp_path: Path) -> None:
         templates_root=templates,
     )
 
-    record = next(record for record in report.records if record.path == "HEARTBEAT.md")
+    record = next(record for record in report.records if record.path == "AGENTS.md")
     assert record.sha256 == hashlib.sha256((workspace / record.path).read_bytes()).hexdigest()
 
 

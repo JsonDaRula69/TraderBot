@@ -4,6 +4,7 @@ from typing import ClassVar, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from traderbot.kalshi.models import MarketCategory
+from traderbot.mcp.tools import TOOL_DEFINITIONS
 
 CONFIG_DIR: Final = Path(__file__).parents[1] / "configs" / "openclaw"
 CATEGORY_NAMES: Final = tuple(category.value for category in MarketCategory)
@@ -16,7 +17,6 @@ STRICT_AGENT_FIELDS: Final = frozenset({"id", "sandbox", "tools"})
 ROLE_TRADERBOT_TOOLS: Final[dict[str, frozenset[str]]] = {
     "dev-liaison": frozenset(
         {
-            "traderbot__reference",
             "traderbot__health",
             "traderbot__auth_check",
             "traderbot__profile_list",
@@ -152,6 +152,18 @@ def test_agent_policies_use_restrictive_allow_instead_of_additive_also_allow() -
         assert "*" not in allowed
         assert "group:plugins" not in allowed
         assert "bundle-mcp" not in allowed
+
+
+def test_live_traderbot_allowlists_are_subsets_of_implemented_tools() -> None:
+    # Given
+    implemented = {
+        f"traderbot__{definition['name']}" for definition in TOOL_DEFINITIONS
+    }
+
+    # When / Then
+    for config_path in AGENT_CONFIG_PATHS.values():
+        allowed = set(load_agent(config_path).tools.allow)
+        assert {name for name in allowed if name.startswith("traderbot__")} <= implemented
 
 
 def test_agent_allowlists_match_role_permissions() -> None:

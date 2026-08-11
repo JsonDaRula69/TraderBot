@@ -23,9 +23,9 @@ JSON output has deterministic `success`, `categories`, three ordered step record
 
 ## Resumability And Identity
 
-OpenClaw is installed only when PATH detection fails. Setup uses `openclaw setup --baseline --json`, gateway verification requires RPC, and doctor uses the read-only `--lint --json` path.
+OpenClaw is installed only when PATH detection fails. Setup uses `openclaw setup --baseline --json` and gateway verification requires RPC. Deploy never invokes doctor implicitly because doctor may repair or migrate user-owned OpenClaw state.
 
-SysAdmin workspace files are injected only into the validated explicit or derived path. SysAdmin duties remain on OpenClaw agent `main`; no separate SysAdmin agent is created.
+SysAdmin workspace files are injected only into the validated explicit or derived path. Managed MCP guidance lives in the canonical `AGENTS.md ## Tools` section; TraderBot never creates or updates `TOOLS.md` or `HEARTBEAT.md`, and pre-existing legacy files remain byte- and mode-identical. SysAdmin duties remain on OpenClaw agent `main`; no separate SysAdmin agent is created.
 
 The canonical OpenClaw 2026.8.1 bootstrap inventory contract is: name `traderbot-main-at-5m`, `agentId: main`, `enabled: true`, an `at` one-shot schedule representing five minutes after `createdAtMs` (OpenClaw may store the submitted relative `5m` as an absolute timestamp), `sessionTarget: isolated`, `wakeMode: now`, an `agentTurn` payload with the exact SysAdmin activation intent, and `deleteAfterRun: true`. A matching job is reused. Any same-name mismatch fails closed without add/edit/delete. A newly added job is re-read and must satisfy the same contract before step 2 succeeds.
 

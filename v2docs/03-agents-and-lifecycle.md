@@ -19,19 +19,16 @@
 
 **Principled restrictions** (DD-036):
 - **No trading tools**: `traderbot__trade`, `traderbot__scan`, `traderbot__analyze`, and all category-specific tools (`traderbot__weather_*`, etc.) are in its `deny` list
-- **Workspace file immutability**: Core workspace files (AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md) are marked as not allowed to edit
+- **Workspace file immutability**: TraderBot-managed blocks in AGENTS.md, SOUL.md, and IDENTITY.md are marked as not allowed to edit; user/OpenClaw-created legacy TOOLS.md and HEARTBEAT.md remain unmanaged and preserved
 - **Lifecycle confirmation required**: Promoting an agent from paper to live requires explicit confirmation. Suspending an agent can be done immediately but must log the reason and trigger investigation
 - **Read access to everything**: `enabled_categories: []` gives access to all categories and all data sources
 
-**MCP tool allowlist** (DD-036):
+**Shipped MCP tool allowlist** (DD-036):
 ```
-traderbot__health, traderbot__auth_check, traderbot__profile_list,
-traderbot__profile_update, traderbot__performance, traderbot__audit,
-traderbot__learnings, traderbot__cron_setup, traderbot__session_send,
-traderbot__experiment, traderbot__data_status, traderbot__ws_status,
-traderbot__backfill, traderbot__reference,
-sessions_spawn, sessions_send, sessions_yield, sessions_list, sessions_history, subagents
+traderbot__health, traderbot__auth_check, traderbot__profile_list
 ```
+
+Planned management tools remain design-only until added to `TOOL_DEFINITIONS`; they are not present in a shipped live allowlist.
 
 **Denied tools**: `traderbot__trade`, `traderbot__scan`, `traderbot__analyze`, `traderbot__weather_*`, `traderbot__market_edge`, `traderbot__market_prices`
 
@@ -62,11 +59,12 @@ The Dev-Liaison communicates with the AutoDev team via a low-latency webhook lay
 
 **Agent configuration**:
 - Agent ID: `dev-liaison`
-- Sandbox mode: `off` (runs on host, like SysAdmin — needs access to source and logs)
-- OpenClaw tool allowlist: `read`, `write`, `exec`, `github`, `traderbot__reference`, `traderbot__experiment`, `traderbot__auth_check`, `traderbot__health`, `sessions_spawn`, `sessions_send`, `sessions_yield`, `sessions_list`, `sessions_history`, `subagents`
-- Denied: `traderbot__trade`, `traderbot__scan`, `traderbot__analyze`, `traderbot__weather_*`, `traderbot__market_edge`, `traderbot__market_prices`
+- Sandbox mode: `all`; host runtime and filesystem groups are denied
+- Shipped TraderBot inspection-tool allowlist: `traderbot__health`, `traderbot__auth_check`, `traderbot__profile_list`
+- OpenClaw session tools (`sessions_spawn`, `sessions_send`, `sessions_yield`, `sessions_list`, `sessions_history`, `subagents`) are separate host capabilities
+- Allow-only omission is authoritative: any TraderBot tool absent from `tools.allow` is unavailable; the deny list blocks host runtime and filesystem groups
 
-**Workspace files**: Four bootstrap files — AGENTS.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md — providing enough context to know what to search for, without exhaustive detail in context.
+**Workspace files**: TraderBot ships Dev-Liaison guidance in `AGENTS.md`, including the canonical `## Tools` section. Existing legacy `TOOLS.md` or `HEARTBEAT.md` files remain untouched and are not packaged as TraderBot templates.
 
 **This agent is not an autonomous developer.** It is a specialist consultant and communication bridge that participates in debate cycles, provides architecture guidance, and coordinates engineering work with the AutoDev team. It does not write or deploy production code autonomously.
 
@@ -83,7 +81,7 @@ The Dev-Liaison communicates with the AutoDev team via a low-latency webhook lay
 - Only interact with TraderBot through MCP tools (CLI interface)
 - Cannot access API tokens directly
 - Cannot modify their own profile, risk limits, or workspace files
-- Report to SysAdmin via heartbeat and SESSION-STATE.md
+- Use SESSION-STATE.md or `.learnings/` only when the shipped AGENTS.md explicitly instructs it; these are TraderBot conventions, not automatic OpenClaw inputs
 
 ---
 
@@ -139,26 +137,24 @@ BACKTESTING → PAPER TRADING → LIVE TRADING → (SUSPENDED)
 
 ## SysAdmin Activation Protocol
 
-SysAdmin is deployed with exactly one cron job: a one-shot activation prompt that fires 5 minutes after deploy (DD-023). This triggers SysAdmin's startup protocol:
+Deploy requests exactly one OpenClaw Gateway job: a self-deleting activation prompt that fires 5 minutes after deploy (DD-023). Gateway owns this automation and triggers SysAdmin's startup protocol:
 
-1. Remove the bootstrap job (confirms removal)
-2. Verify TraderBot service is running: `traderbot health --json`
-3. Verify data streams are fresh: `traderbot data-points weather --count --json`
-4. Register essential self-jobs: `traderbot cron activate --role sysadmin --phase essential`
-5. Enable own heartbeat
-6. For each enabled category (one at a time):
+1. Confirm Gateway deleted the one-shot bootstrap job after execution
+2. Inspect TraderBot service, authentication, and profile state with the implemented TraderBot inspection tools
+3. Keep every recurring agent cron/heartbeat schedule dormant
+4. For each enabled category (one at a time):
    a. Verify category data is available
-   b. Activate category agent: `traderbot profile update <agent> --mode backtest`
-   c. Register backtesting jobs: `traderbot cron activate --agent <agent> --role trader --phase backtest`
-   d. Register self oversight jobs: `traderbot cron activate --role sysadmin --phase oversight-backtest`
-   e. Monitor backtesting progress via heartbeat
-   f. When backtesting passes deployment bar:
-      - Deactivate backtest cron jobs
-      - Activate paper trading jobs
+   b. Propose the minimum Gateway-owned backtesting and oversight schedules
+   c. Wait for explicit activation approval
+   d. Request the approved schedules through OpenClaw Gateway
+   e. Monitor backtesting progress through the approved Gateway schedule/session channels
+   f. When backtesting passes the deployment bar:
+      - Request deactivation of backtest schedules through Gateway
+      - Request approved paper schedules through Gateway
       - Update profile: `traderbot profile update <agent> --mode paper`
    g. When paper trading meets breakeven threshold for 2+ days:
-      - Deactivate paper cron jobs
-      - Activate live trading jobs (requires explicit confirmation)
+      - Request deactivation of paper schedules through Gateway
+      - Request live schedules through Gateway only after explicit confirmation
       - Update profile: `traderbot profile update <agent> --mode live`
    h. Proceed to next category
 
@@ -166,7 +162,7 @@ SysAdmin is deployed with exactly one cron job: a one-shot activation prompt tha
 
 ## Cron/Heartbeat Architecture
 
-Cron and heartbeat jobs are **not registered at deploy time**. They are designed as templates and deployed along with SysAdmin, but remain dormant until SysAdmin activates them (DD-023).
+The self-deleting bootstrap prompt is the only agent schedule requested at deploy time. All recurring cron/heartbeat definitions remain dormant until explicit approval, and OpenClaw Gateway owns their registration, execution, and removal. TraderBot's daemon-internal workers are separate and never own OpenClaw agent schedules (DD-023).
 
 ### SysAdmin Job Definitions
 

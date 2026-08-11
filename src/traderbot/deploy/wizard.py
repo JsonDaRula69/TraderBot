@@ -138,7 +138,6 @@ class OpenClawPort(Protocol):
     def create_agent(self, agent_id: str, workspace: Path) -> bool: ...
     def configure_secret_ref(self, agent_id: str, secret_id: str) -> bool: ...
     def ensure_bootstrap_cron(self) -> bool: ...
-    def doctor(self) -> bool: ...
 
 
 class TokenProvisioner(Protocol):
@@ -216,8 +215,7 @@ class DeployWizard:
 
     def _step_categories(self, request: WizardRequest) -> WizardStepResult:
         agents = tuple(self._deploy_category(category, request) for category in request.categories)
-        doctor_ok = self._ports.openclaw.doctor()
-        complete = all(agent.status is StepStatus.COMPLETED for agent in agents) and doctor_ok
+        complete = all(agent.status is StepStatus.COMPLETED for agent in agents)
         return WizardStepResult(
             step=3,
             name="Category selection",

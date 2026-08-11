@@ -55,10 +55,10 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 2: SysAdmin Setup
 
-- Inject sysadmin workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, USER.md, SESSION-STATE.md, .learnings/) into the chosen agent's workspace
+- Inject the SysAdmin `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, and `.learnings/` conventions into the chosen agent's workspace. AGENTS explicitly instructs use of SESSION-STATE and `.learnings/`; neither is an automatic OpenClaw input. The canonical five-tool guidance is in `AGENTS.md ## Tools`; TraderBot does not create or update `TOOLS.md` or `HEARTBEAT.md`, and preserves any existing legacy files exactly.
 - Register one-shot bootstrap job using current CLI payload spelling: `openclaw cron add --name traderbot-main-at-5m --at "5m" --session isolated --agent main --message "<SysAdmin activation intent>" --delete-after-run --json` (DD-023)
 - Current OpenClaw inventory stores `agentId`, `enabled`, typed `schedule`, `sessionTarget`, `wakeMode`, typed `payload`, and `deleteAfterRun`. The submitted relative `5m` may be normalized to an absolute `at` timestamp; deploy validates that it semantically represents the managed five-minute one-shot delay. Exact managed contracts are reused, conflicts fail closed, and new jobs are re-read before success.
-- No other cron or heartbeat jobs registered at deploy time — SysAdmin activates them during its startup protocol
+- This is the only agent scheduling automation requested at deploy time. OpenClaw Gateway owns it; all recurring cron/heartbeat schedules remain dormant until explicitly approved for activation.
 - Create sysadmin profile: `traderbot profile create sysadmin --mode paper --risk-multiplier 0.001 --all-categories`
 - Assign the `main_token` profile-token document to agent `main` via OpenClaw SecretRef
 - Verify: `traderbot auth check --json`
@@ -70,12 +70,11 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Config mode supports only `mode: "backtest"` until Phase 7 lifecycle transitions; paper/live are rejected before mutation
 - For each selected category:
   - `openclaw agents add <category> --workspace <absolute-path> --non-interactive --json` (creates OpenClaw agent)
-  - Inject category workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, etc.)
-  - Configure agent heartbeat: `heartbeat.every: "0m"` (dormant — SysAdmin activates during startup)
-  - No cron jobs registered at deploy time
+  - Inject category workspace files (`AGENTS.md`, `SOUL.md`, and `IDENTITY.md`); exact-five-tool guidance is in `AGENTS.md ## Tools`
+  - Leave agent cron/heartbeat schedules dormant; deploy neither registers nor enables recurring jobs
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category>`
   - Assign profile token to category agent via OpenClaw SecretRef
-- After all agents: `openclaw doctor --lint --json` (read-only)
+- Do not invoke doctor implicitly; repair or migration of user-owned OpenClaw state requires a separate explicit operator action
 - Successful step-3 output still reports `deployment_complete: false` and remaining steps 4-8
 
 ### Step 4: Infisical and API Tokens

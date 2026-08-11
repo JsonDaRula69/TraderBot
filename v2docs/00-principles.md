@@ -40,7 +40,7 @@ The agent *decides* what to do with this information. TraderBot's job is to ensu
 
 TraderBot is designed to be fully autonomous in operation, development, and self-learning:
 
-- **Operational autonomy**: TraderBot runs as an always-on service (DD-016). Data collection, WebSocket streams, health checks, and cron management run without human intervention.
+- **Operational autonomy**: TraderBot runs as an always-on service (DD-016). Data collection, WebSocket streams, and daemon-internal health and rotation workers run without human intervention. OpenClaw Gateway exclusively owns agent cron/heartbeat scheduling; TraderBot may only request approved bootstrap automation through Gateway.
 - **Development autonomy**: SysAdmin can file GitHub issues for code-level improvements. The autonomous dev team (Layer 3, DD-018) picks up issues, investigates, and deploys fixes.
 - **Self-learning autonomy**: The three-layer self-improvement architecture (DD-018) enables continuous improvement without human approval for each cycle.
 
@@ -94,7 +94,7 @@ Any REST call for data that the WebSocket already provides is a bug (DD-016).
 
 ## 8. Prebuilt Agents, No Customization
 
-Agents are shipped prebuilt with immutable workspace files (DD-008). Users cannot modify core agent files (AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md). This minimizes variability and user error, and enables us to fine-tune agent behavior across the fleet.
+Agents are shipped with TraderBot-managed blocks in AGENTS.md, SOUL.md, and IDENTITY.md (DD-008). Users retain all bytes outside those blocks, including legacy OpenClaw/user TOOLS.md and HEARTBEAT.md files that TraderBot never manages. This minimizes behavioral variability without claiming ownership of the whole workspace.
 
 ---
 
@@ -106,7 +106,7 @@ MCP tools are profile-aware and mode-aware. The same tool call returns different
 
 ## 10. SysAdmin Manages Lifecycle Transitions
 
-Phase transitions (backtest → paper → live → suspended) are driven by SysAdmin, not automated. SysAdmin follows a predefined activation protocol but can deviate when circumstances require. Cron/heartbeat jobs are not registered at deploy time — SysAdmin activates them phase by phase (DD-023).
+Phase transitions (backtest → paper → live → suspended) are driven by SysAdmin, not automated. Deploy requests exactly one Gateway-owned, self-deleting bootstrap prompt; all recurring agent cron/heartbeat schedules remain dormant until approved activation through OpenClaw Gateway (DD-023).
 
 ---
 

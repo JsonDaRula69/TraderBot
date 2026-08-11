@@ -140,10 +140,6 @@ class OpenClawAdapter:
         confirmed = openclaw.inspect_crons()
         return confirmed is not None and SysAdminBootstrapCron.is_unique_match(confirmed)
 
-    def doctor(self) -> bool:
-        return openclaw.openclaw_doctor()
-
-
 class SecretsTokenProvisioner:
     """Persist opaque profile identities through the SecretsStore facade."""
 

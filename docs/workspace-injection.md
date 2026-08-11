@@ -4,13 +4,13 @@ TraderBot restores allowlisted OpenClaw workspace templates through `traderbot.p
 
 ## Template Inventories
 
-Weather and SysAdmin contain `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, `HEARTBEAT.md`, `USER.md`, `SESSION-STATE.md`, and `.learnings/`. Economics, crypto, sports, politics, entertainment, financial, world, and other contain only `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `TOOLS.md`, and `HEARTBEAT.md`.
+Weather and SysAdmin contain `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, and `.learnings/`. Economics, crypto, sports, politics, entertainment, financial, world, and other contain only `AGENTS.md`, `SOUL.md`, and `IDENTITY.md`. Dev-Liaison contains `AGENTS.md` only.
 
-Every category `TOOLS.md` documents the five registered MCP tools: `health`, `auth_check`, `profile_list`, `market_edge`, and `market_prices` under their `traderbot__` names. `market_edge` remains a registered stub that returns `status: stub` and does not compute edge yet. No category-specific tools are installed by these templates.
+Every managed `AGENTS.md` has one canonical `## Tools` section documenting the five registered MCP tools: `health`, `auth_check`, `profile_list`, `market_edge`, and `market_prices` under their `traderbot__` names. It explains that the host-side token injector resolves a SecretRef and injects the profile token immediately before dispatch, so an agent never requests, reads, stores, or supplies raw token material. `market_edge` remains a registered stub that returns `status: stub` and does not compute edge yet. No category-specific tools are installed by these templates.
 
 ## Ownership Strategies
 
-`FENCED_MERGE` manages `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, and `TOOLS.md` between this canonical pair:
+`FENCED_MERGE` manages `AGENTS.md`, `SOUL.md`, and `IDENTITY.md` between this canonical pair:
 
 ```text
 <!-- BEGIN TRADERBOT MANAGED -->
@@ -19,7 +19,9 @@ Every category `TOOLS.md` documents the five registered MCP tools: `health`, `au
 
 Bytes outside that block are retained exactly. A regular file with no markers receives one appended block. Duplicate, nested, reversed, incomplete, or incompatible TraderBot markers reject the entire operation before target writes begin.
 
-`INIT_IF_MISSING` governs `HEARTBEAT.md`, `USER.md`, `SESSION-STATE.md`, and `.learnings/` where present in an inventory. It creates absent paths and never changes existing regular files or directories.
+`INIT_IF_MISSING` governs `USER.md`, `SESSION-STATE.md`, and `.learnings/` for the full Weather and SysAdmin inventories. It creates absent paths and never changes existing regular files or directories. `SESSION-STATE.md` and `.learnings/` are TraderBot conventions used only because those AGENTS files explicitly instruct their use; they are not automatic OpenClaw inputs.
+
+TraderBot does not create, package, inject, update, migrate, or delete `TOOLS.md` or `HEARTBEAT.md`. Stable OpenClaw may seed and load those files, while current OpenClaw retires them. Existing files at either path remain outside TraderBot's managed manifest and retain their bytes and permission modes exactly. Repository copies retired by this contract are preserved under `.trash/retired-workspace-templates-phase4/`.
 
 ## Safety Contract
 

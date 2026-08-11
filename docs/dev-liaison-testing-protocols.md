@@ -1,14 +1,15 @@
 # TraderBot Dev-Liaison Testing Protocols
 
 Testing protocols executed in partnership with the **dev-liaison** agent for each
-TraderBot v2 development phase. The dev-liaison runs on **macpro-linux** and has
-exec access for testing. These protocols verify **deployed functionality**, not
-just code correctness — each phase must be exercised through its real surface
+TraderBot v2 development phase. The dev-liaison runs with sandbox mode `all` and
+no host runtime or filesystem access; an external test operator drives host-side
+commands on **macpro-linux**. These protocols verify **deployed functionality**,
+not just code correctness — each phase must be exercised through its real surface
 (systemd service, MCP transport, Docker containers, live CLI commands).
 
 - **Repository**: `github.com/JsonDaRula69/TraderBot` (worktree at `~/worktrees/TraderBot/main`)
 - **Target host**: `macpro-linux` (reachable via `ssh macpro-linux`)
-- **Dev-liaison agent ID**: `dev-liaison` (sandbox mode `off`, runs on host)
+- **Dev-liaison agent ID**: `dev-liaison` (sandbox mode `all`)
 - **Test runner**: `uv run pytest tests/ -v` inside the worktree
 
 > **Reporting channel**: dev-liaison sends every report to Sisyphus via
@@ -75,9 +76,10 @@ Each report must open with the environment state table:
 
 - SSH access to macpro-linux is available from the orchestration host.
 - The OpenClaw gateway and its systemd unit are installed (Phase 0/1 deployed).
-- The `dev-liaison` agent exists and its tool allowlist includes
-  `read`, `write`, `exec`, `github`, `traderbot__health`, `traderbot__auth_check`,
-  `traderbot__reference`, `traderbot__experiment`, `sessions_*`, and `subagents`.
+- The `dev-liaison` agent exists and its TraderBot allowlist contains exactly the
+  three implemented inspection tools: `traderbot__health`,
+  `traderbot__auth_check`, and `traderbot__profile_list`. OpenClaw session tools
+  remain separate host capabilities; runtime and filesystem groups are denied.
 - Real external-service credentials (Kalshi, Infisical, NWS, Open-Meteo) are
   provisioned and noted as pre-conditions per phase — they are **never** created
   by the testing protocol itself.
@@ -717,13 +719,16 @@ the network is unavailable — scope it out of the local-only path.
    `openclaw gateway status` reports running.
 
 4. **Step 2 (SysAdmin setup)** — observe: sysadmin workspace files injected
-   (`~/.openclaw/workspace/sysadmin/` contains AGENTS.md, SOUL.md, TOOLS.md,
-   IDENTITY.md, HEARTBEAT.md, USER.md, SESSION-STATE.md, `.learnings/`); exactly
+   (`~/.openclaw/workspace/sysadmin/` contains AGENTS.md, SOUL.md,
+   IDENTITY.md, USER.md, SESSION-STATE.md, `.learnings/`), AGENTS has one
+   canonical exact-five-tool section, and any pre-existing TOOLS.md or
+   HEARTBEAT.md remains byte- and mode-identical; exactly
    one cron job registered:
    ```bash
    openclaw cron list
    ```
-   Observe: `sysadmin-bootstrap` with `--at 5m`, `--delete-after-run`.
+   Observe: `traderbot-main-at-5m` with a five-minute one-shot schedule and
+   `deleteAfterRun: true`.
    Then verify profile created and auth works:
    ```bash
    traderbot auth check --json
@@ -734,10 +739,10 @@ the network is unavailable — scope it out of the local-only path.
    ```bash
    openclaw agents list
    ls ~/.openclaw/workspace/weather/
-   openclaw doctor
+   # Inspect only; do not run OpenClaw doctor because repair can migrate user files.
    ```
-   Observe: `weather` agent present with workspace files; `openclaw doctor`
-   reports no blocking issues.
+   Observe: `weather` agent present with AGENTS.md, SOUL.md, and IDENTITY.md;
+   AGENTS contains the canonical exact-five-tool section.
 
 6. **Step 4 (Infisical + API tokens)** — observe: step 4a health-checks
    Infisical (or falls back); 4b validates each entered token against its
@@ -791,7 +796,8 @@ the network is unavailable — scope it out of the local-only path.
 ### Deliverables
 
 - Deploy wizard transcript (step-by-step output).
-- `openclaw cron list`, `openclaw agents list`, `openclaw doctor` outputs.
+- `openclaw cron list` and `openclaw agents list` outputs. Doctor output is not
+  required because deploy does not invoke user-state migration or repair commands.
 - Service unit content + resolved paths.
 - Backfill JSON summary.
 - Idempotent re-run output.

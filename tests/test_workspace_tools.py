@@ -5,58 +5,33 @@ from typing import Final
 from traderbot.kalshi.models import MarketCategory
 from traderbot.mcp.tools import TOOL_DEFINITIONS
 
-WORKSPACE_DIR: Final = Path(__file__).parents[1] / "workspace"
+PROJECT_ROOT: Final = Path(__file__).parents[1]
+WORKSPACE_DIR: Final = PROJECT_ROOT / "workspace"
 CATEGORY_NAMES: Final = tuple(category.value for category in MarketCategory)
-TOOLS_PATHS: Final = [
-    WORKSPACE_DIR / agent / "TOOLS.md"
+AGENTS_PATHS: Final = [
+    WORKSPACE_DIR / agent / "AGENTS.md"
     for agent in ("sysadmin", "dev-liaison", *CATEGORY_NAMES)
 ]
 
 
-def test_tools_md_matches_definitions() -> None:
+def _tools_section(content: str) -> str:
+    return content.split("## Tools\n", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+
+
+def test_agents_tools_sections_are_canonical_and_match_definitions() -> None:
+    # Given
     expected = {str(definition["name"]) for definition in TOOL_DEFINITIONS}
 
-    for tools_path in TOOLS_PATHS:
-        content = tools_path.read_text(encoding="utf-8")
-        available_section = content.split("## Currently Available Tools", maxsplit=1)[1].split(
-            "## Planned Tools", maxsplit=1
-        )[0]
-        documented = set(re.findall(r"^### `traderbot__(\w+)`$", available_section, re.MULTILINE))
+    # When
+    sections = [_tools_section(path.read_text(encoding="utf-8")) for path in AGENTS_PATHS]
+
+    # Then
+    assert len(set(sections)) == 1
+    for agents_path, section in zip(AGENTS_PATHS, sections, strict=True):
+        content = agents_path.read_text(encoding="utf-8")
+        documented = set(re.findall(r"^### `traderbot__(\w+)`$", section, re.MULTILINE))
+        assert content.count("## Tools\n") == 1
         assert documented == expected
-
-
-def test_token_instruction_present() -> None:
-    for tools_path in TOOLS_PATHS:
-        content = tools_path.read_text(encoding="utf-8")
-        assert "Token Injector" in content
-        assert "host-side" in content
-
-
-def test_market_edge_is_documented_as_current_stub() -> None:
-    for tools_path in TOOLS_PATHS:
-        content = tools_path.read_text(encoding="utf-8")
-        section = content.split("### `traderbot__market_edge`", maxsplit=1)[1].split(
-            "### `traderbot__market_prices`", maxsplit=1
-        )[0]
-
-        assert "status: stub" in section
-        assert "does not compute" in section
-        assert "Compute the estimated edge" not in section
-
-
-def test_existing_weather_tools_characterization() -> None:
-    content = (WORKSPACE_DIR / "weather" / "TOOLS.md").read_text(encoding="utf-8")
-    available_section = content.split("## Currently Available Tools", maxsplit=1)[1].split(
-        "## Planned Tools", maxsplit=1
-    )[0]
-
-    assert set(re.findall(r"^### `traderbot__(\w+)`$", available_section, re.MULTILINE)) == {
-        "health",
-        "auth_check",
-        "profile_list",
-        "market_edge",
-        "market_prices",
-    }
 
 
 def test_full_workspace_template_inventories() -> None:
@@ -64,8 +39,6 @@ def test_full_workspace_template_inventories() -> None:
         "AGENTS.md",
         "SOUL.md",
         "IDENTITY.md",
-        "TOOLS.md",
-        "HEARTBEAT.md",
         "USER.md",
         "SESSION-STATE.md",
         ".learnings",
@@ -77,7 +50,17 @@ def test_full_workspace_template_inventories() -> None:
 
 
 def test_minimal_category_template_inventories() -> None:
-    expected = {"AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md", "HEARTBEAT.md"}
+    expected = {"AGENTS.md", "SOUL.md", "IDENTITY.md"}
 
     for category in CATEGORY_NAMES[1:]:
         assert {path.name for path in (WORKSPACE_DIR / category).iterdir()} == expected
+
+
+def test_dev_liaison_template_contains_only_agents_guidance() -> None:
+    assert {path.name for path in (WORKSPACE_DIR / "dev-liaison").iterdir()} == {"AGENTS.md"}
+
+
+def test_packaged_workspace_source_excludes_legacy_openclaw_files() -> None:
+    legacy_names = {"TOOLS.md", "HEARTBEAT.md"}
+
+    assert not [path for path in WORKSPACE_DIR.rglob("*") if path.name in legacy_names]

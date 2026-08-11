@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Never
 from unittest import mock
 
 import pytest
@@ -29,7 +30,6 @@ class FakeOpenClaw:
     install_succeeds: bool = True
     setup_succeeds: bool = True
     gateway_succeeds: bool = True
-    doctor_succeeds: bool = True
     fail_secret_ref_for: set[str] = field(default_factory=set)
     created_agents: set[str] = field(default_factory=set)
     secret_refs: dict[str, str] = field(default_factory=dict)
@@ -68,8 +68,8 @@ class FakeOpenClaw:
         self.cron_identities.add(("traderbot-main-at-5m", "main"))
         return True
 
-    def doctor(self) -> bool:
-        return self.doctor_succeeds
+    def doctor(self) -> Never:
+        raise AssertionError("deploy must not invoke OpenClaw doctor")
 
 
 @dataclass(slots=True)
@@ -214,16 +214,16 @@ def test_partial_category_rerun_reuses_tokens_and_heals_mapping(tmp_path: Path) 
     assert environment.openclaw.secret_refs["crypto"] == "crypto_token"
 
 
-def test_doctor_failure_does_not_claim_success(tmp_path: Path) -> None:
-    # Given: provisioning works but read-only doctor rejects the final state
-    environment = FakeEnvironment(openclaw=FakeOpenClaw(doctor_succeeds=False))
+def test_deploy_never_invokes_doctor(tmp_path: Path) -> None:
+    # Given: provisioning works and the adapter raises if doctor is invoked
+    environment = FakeEnvironment()
 
     # When: deployment runs
     result = environment.wizard().run(_request(tmp_path, MarketCategory.SPORTS))
 
-    # Then: provisioned agent status is retained but step 3 is failed
-    assert result.success is False
-    assert result.steps[2].status is StepStatus.FAILED
+    # Then: step 3 succeeds without crossing the forbidden doctor boundary
+    assert result.success is True
+    assert result.steps[2].status is StepStatus.COMPLETED
     assert result.steps[2].agents[0].agent_id == "sports"
     assert environment.openclaw.created_agents == {"sports"}
 

@@ -66,14 +66,14 @@
 - [x] Database efficiency: indexes, PRAGMA optimization, connection pooling, settlement cache consolidation, circuit breaker to DB, retention policy, ChromaDB model migration
 - [x] ROADMAP_PROGRESS.md removed from tracking
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
-- [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
+- [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and host-side token injection guidance
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
 - [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification complete (see next line)
 - [x] Phase 1.1 deployment verification (2026-08-03): E2E injection verified on macpro-linux — plugin loads, hook fires at priority 100, token resolved from env provider, injected into MCP call params, server resolves weather profile. Three fixes required: manifest metadata + configSchema (f8b5065), token optional in schemas (f1aa518), and MCP server env must explicitly set TRADERBOT_USE_HARDCODED_AUTH=0 (0dbc981) — the subprocess does not inherit the gateway's systemd drop-in. Fail-closed verified for unmapped agents (main). Token never enters model context (agent confirms it passed no token). 113 Python + 11 TypeScript tests pass on-target.
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
-- [ ] ~~Workspace template source and category templates~~ (shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first)
+- [x] Workspace template source and all category templates — canonical exact-five-tool guidance in `AGENTS.md`; legacy `TOOLS.md`/`HEARTBEAT.md` excluded and preserved
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)
 - [x] Secrets management (Infisical) — DD-037
 - [x] Phase 1.5 deployment verified (2026-08-04, issue #165): 233 Python + 11 TS pass on macpro-linux. Server-side Infisical integration verified — wrapper resolves all 3 agent tokens, migration converts to 5-field format, `resolve_token` works via TokenStoreAdapter, token rotation verified, MCP stdio E2E resolves weather via Infisical. Live agent-driven E2E verified: weather agent → plugin hook (priority 100) → Infisical exec provider → wrapper resolves `weather_token` → plugin extracts raw token from 5-field JSON doc → injects into params → MCP server resolves via Infisical-backed SecretsStore → `{"status":"ok","auth":"resolved"}`. Fail-closed: unknown agent (main) blocked. Token never enters model context (agent confirmed "No"). Four deployment-discovered fixes: wrapper `extra="ignore"` (6419dc5), plugin JSON-doc token extraction (6419dc5), with-plugin.json `source` vs `type` schema fix (6b6772e), exec provider command ownership requirement (wrapper must be owned by gateway user, not root).
@@ -119,7 +119,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 - [x] **CLI circular imports**: DD-030 — extract DB code from helpers.py
 - [ ] ~~**Docs/code drift**~~: Deferred until roadmap is complete
 - [ ] ~~**Workspace template source**~~: Shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first
-- [ ] **Category workspace templates**: Only weather exists currently; need to create templates for all 9 categories
+- [x] **Category workspace templates**: all 9 categories retain AGENTS/SOUL/IDENTITY templates with canonical AGENTS-only tool guidance
 - [x] **ChromaDB category metadata**: DD-032 — shared collections use category metadata filtering; per-agent collections for decisions and learnings
 - [ ] ~~**Backfill command category filtering**~~: Less critical per DD-027 (all categories backfilled)
 - [x] **SysAdmin sandbox decision**: DD-036 — unsandboxed with principled restrictions (MCP tool allowlist, workspace file immutability, lifecycle confirmation)
@@ -175,7 +175,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Decision**: `traderbot setup` includes service/cron registration as a setup step.
 **Consequences**:
 - Service templates (systemd units, launchd plists, Task Scheduler tasks) remain as package data files but are deployed by Python code inside `traderbot setup`
-- `traderbot cron setup` is called internally by setup; user doesn't need to run it separately
+- TraderBot setup registers its daemon service only; OpenClaw Gateway owns all agent cron/heartbeat scheduling
 - Data pipeline timer installation is part of setup
 
 ### DD-005: Retire `traderbot bootstrap` without `--full`
@@ -209,12 +209,12 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 ### DD-008: Prebuilt agent workspaces — no user customization
 **Date**: 2025-06-08
 **Status**: Decided
-**Context**: TraderBot previously allowed users to customize agent behavior. The shift is toward shipping prebuilt workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, etc.) that define agent behavior. This minimizes variability and user error, and enables fine-tuning of agent behavior by the TraderBot team.
-**Decision**: Agent workspace files are immutable templates shipped with the package. Users do not customize them. `traderbot setup` injects them into the correct OpenClaw workspace directories during deploy.
+**Context**: TraderBot needs consistent agent behavior without overwriting OpenClaw- or user-owned workspace content. Stable/current executable proof establishes `AGENTS.md` as the cross-version tool-guidance surface; legacy `TOOLS.md` and `HEARTBEAT.md` have version-specific behavior.
+**Decision**: TraderBot ships managed blocks for AGENTS/SOUL/IDENTITY and optional full-workspace conventions. Tool guidance lives once in `AGENTS.md ## Tools`; deploy preserves all bytes outside managed blocks and never creates, updates, or deletes legacy `TOOLS.md`/`HEARTBEAT.md`.
 **Consequences**:
-- Workspace templates live in `src/traderbot/workspace/` (or similar) as package data
-- The existing `.openclaw/workspace/` directory is the development source for these templates
-- Injection logic (`profiles/injection.py`) is simplified — no user customization, just template deployment
+- Workspace templates live in `workspace/` and are force-included as package data
+- Existing selected workspace paths remain user-owned; no real workspace is a template source
+- Injection logic (`profiles/injection.py`) uses fenced byte-preserving merge, preflight, atomic replace, and rollback
 - Category-specific variants (weather/AGENTS.md, etc.) are selected based on the agent's assigned categories
 
 ### DD-009: Deploy flow definition
@@ -224,8 +224,8 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Decision**: Deploy follows this exact order:
 
 1. **OpenClaw config** — Configure LLM model/provider, web search, gateway, daemon, comms channels. Create the `main` agent with all config choices.
-2. **SysAdmin setup** — Choose whether to use the pre-existing `main` agent as sysadmin or create a new one. Then: inject workspace files, register sysadmin cron/heartbeat jobs via OpenClaw gateway, authenticate sysAdmin with TraderBot.
-3. **Category selection** — For each selected category: create OpenClaw agent (`openclaw agents add <category>`), inject category workspace files, register heartbeat/cron jobs, authenticate agent with TraderBot. After all agents: run `openclaw doctor`.
+2. **SysAdmin setup** — Use the pre-existing `main` agent as SysAdmin, inject workspace files, request one self-deleting bootstrap prompt through OpenClaw Gateway, and authenticate SysAdmin with TraderBot. No recurring agent schedules are registered at deploy time.
+3. **Category selection** — For each selected category: create the OpenClaw agent (`openclaw agents add <category>`), inject category workspace files, and authenticate the agent with TraderBot. Recurring cron/heartbeat schedules remain dormant until approved activation through Gateway; deploy never invokes doctor implicitly.
 4. **API tokens** — Prompt for tokens relevant to selected categories. Kalshi, VoyageAI, NewsAPI, Twitter, Reddit are common to all. Category-specific keys only prompted if the category is enabled.
 5. **Database creation** — Create per-agent databases with isolation. Shared ChromaDB with category-scoped queries. Sysadmin gets cross-agent access.
 6. **Backfill** — Populate enabled datasource databases with 6 months of historical data, filtered by enabled categories.
@@ -619,7 +619,7 @@ The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this 
 - **New**: MCP tool definitions for all current CLI commands
 - **New**: Per-agent OpenClaw configuration with tool allowlists
 - **Changed**: Docker bind mounts become minimal (only agent data + workspace, no secrets)
-- **Changed**: Agent workspace TOOLS.md describes MCP tool calls, not CLI commands
+- **Changed**: Agent workspace `AGENTS.md ## Tools` describes implemented MCP calls once across stable/current OpenClaw
 - **Changed**: `~/.traderbot/secrets/secrets.json` replaces `.env` + keyring (DD-014 Phase 1)
 - **Changed**: Agent profile tokens injected via OpenClaw SecretRef env provider, not bind-mounted files
 - **Removed**: TraderBot CLI bind mount from Docker container (`/traderbot/.venv/bin`)
@@ -657,7 +657,7 @@ The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this 
 - Removes the need for API tokens inside containers
 - Removes the need for keyring (MCP server reads from `secrets.json` on host)
 - Requires building `traderbot-mcp-server` as a new CLI entry point
-- Requires updating workspace templates from CLI commands to MCP tool descriptions
+- Requires keeping canonical `AGENTS.md ## Tools` sections synchronized with `TOOL_DEFINITIONS`
 - Requires updating `traderbot setup` to configure OpenClaw MCP and per-agent tool policies
 - TraderBot CLI inside containers is no longer needed (but still exists for host-side use)
 
@@ -1496,29 +1496,29 @@ Note: this is a single `traderbot.service` unit (not a template unit `@.service`
 > (Phase 1.1, issue #187 closed); external provider credentials are deferred
 > to Phase 1.5 (issue #165).
 
-**Context**: The current `traderbot cron setup` registers all cron jobs for an agent immediately during deploy, regardless of the agent's lifecycle phase. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and the cron jobs they need differ by phase. Additionally, SysAdmin orchestrates when each category agent is activated — the first agent doesn't start until SysAdmin has verified data streams and its own health checks pass.
+**Context**: An earlier design assigned agent schedule registration to TraderBot during deploy. Verified stable/current OpenClaw contracts instead make Gateway the sole owner of agent cron/heartbeat scheduling. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and any approved schedules differ by phase.
 
 Under DD-016, TraderBot's always-on service handles data collection proactively. Several current cron jobs (`forecast-check`, `news-scan`, `pipeline-health`) exist because agents had to trigger data fetching themselves. These are no longer needed.
 
-**Decision**: Cron and heartbeat registration does NOT happen at deploy time. Job definitions are designed and shipped as templates within the TraderBot package, but they remain dormant until SysAdmin activates them. SysAdmin follows a predefined protocol for phase transitions but can also create custom jobs when circumstances require it.
+**Decision**: Deploy requests exactly one self-deleting bootstrap prompt through OpenClaw Gateway. No recurring agent cron or heartbeat schedule is registered or enabled at deploy time. Definitions remain dormant until explicit approval; Gateway owns registration, execution, and removal. TraderBot owns only daemon-internal workers.
 
 **Bootstrap job:**
 
-SysAdmin is deployed with exactly one cron job: a one-shot activation prompt that fires after deploy. This job triggers SysAdmin's startup protocol, after which SysAdmin removes the bootstrap job and registers its own essential jobs as it progresses through the activation sequence.
+Deploy requests exactly one Gateway-owned cron job: a one-shot activation prompt that fires after deploy. It triggers SysAdmin's startup protocol and deletes itself after execution. Any recurring schedules require separate explicit approval.
 
 The bootstrap job is registered during deploy (Step 2) as an isolated cron job with `--at "5m"` (fires 5 minutes after deploy, giving services time to initialize):
 
 ```bash
 openclaw cron add \
-  --name "sysadmin-bootstrap" \
+  --name "traderbot-main-at-5m" \
   --at "5m" \
   --session isolated \
   --agent main \
   --delete-after-run \
-  --message "You have been deployed. Follow your activation protocol in AGENTS.md: verify TraderBot service health, register your essential cron jobs, then activate the first category agent for backtesting."
+  --message "TraderBot deployment bootstrap: inspect service, authentication, and profile state; keep recurring schedules dormant until explicitly approved."
 ```
 
-The `--delete-after-run` flag ensures this job removes itself after the first execution. No other cron or heartbeat jobs exist at deploy time — SysAdmin activates everything from this single starting point.
+The `--delete-after-run` flag ensures Gateway removes this job after the first execution. No other agent schedule is requested at deploy time.
 
 **Phase-aware job lifecycle:**
 
@@ -1526,8 +1526,8 @@ SysAdmin activates agents one at a time, verifying each step before proceeding. 
 
 1. Deploy completes (OpenClaw configured, agents created, databases created, backfill running)
 2. SysAdmin verifies data streams are functioning (checks TraderBot service health, WebSocket connection, data freshness)
-3. SysAdmin registers its own essential cron jobs: `health-check` (1h) and `error-logger` (15m)
-4. SysAdmin enables its own heartbeat (`heartbeat.every: "30m"`)
+3. SysAdmin proposes essential schedules such as `health-check` and `error-logger`; they remain dormant until approved
+4. After approval, SysAdmin requests the schedules through OpenClaw Gateway
 5. SysAdmin activates the first category agent for backtesting:
    - Registers backtesting-specific jobs for itself and the category agent
    - Enables the category agent's heartbeat
@@ -1583,25 +1583,15 @@ message: |
 
 **SysAdmin's activation protocol (in AGENTS.md):**
 
-SysAdmin's workspace files (AGENTS.md, HEARTBEAT.md) include the activation protocol. This protocol is triggered by the bootstrap job registered at deploy time. The predefined sequence SysAdmin follows:
+SysAdmin's `AGENTS.md` includes the activation protocol. This protocol is triggered by the Gateway-owned bootstrap job requested at deploy time. The predefined sequence SysAdmin follows:
 
-1. Remove the bootstrap job that triggered this session (it has `--delete-after-run` but confirm removal)
-2. Verify TraderBot service is running: `traderbot health --json`
-2. Verify data streams are fresh: `traderbot data-points weather --count --json`
-3. Register essential self-jobs: `traderbot cron activate --role sysadmin --phase essential`
-4. Enable own heartbeat
-5. For each enabled category (one at a time):
-   a. Verify category data is available: `traderbot data-points <category> --count --json`
-   b. Activate category agent: `traderbot profile update <agent> --mode backtest`
-   c. Register backtesting jobs: `traderbot cron activate --agent <agent> --role trader --phase backtest`
-   d. Register self oversight jobs: `traderbot cron activate --role sysadmin --phase oversight-backtest`
-   e. Monitor backtesting progress via heartbeat
-   f. When backtesting passes deployment bar:
-      - `traderbot cron deactivate --agent <agent> --phase backtest`
-      - `traderbot cron activate --agent <agent> --role trader --phase paper`
-      - `traderbot cron activate --role sysadmin --phase oversight-paper`
-      - `traderbot profile update <agent> --mode paper`
-   g. When paper trading meets breakeven threshold for 2+ days, proceed to next category
+1. Confirm Gateway deleted the one-shot bootstrap after execution
+2. Inspect service, authentication, and profile state with implemented TraderBot tools
+3. Keep all recurring schedules dormant
+4. For each enabled category, propose the minimum phase-specific schedules
+5. Wait for explicit activation approval
+6. Request approved registration or removal through OpenClaw Gateway
+7. Update profile mode only after its promotion criteria are met
 
 **Custom job creation:**
 
@@ -1656,34 +1646,24 @@ Note: Backtesting phase has no category agent cron jobs — the backtesting engi
 
 SysAdmin's heartbeat is NOT isolated — it runs in the main session so SysAdmin maintains awareness of ongoing conversations, agent status, and context from previous oversight cycles.
 
-**`traderbot cron activate` / `traderbot cron deactivate` commands:**
+**Gateway scheduling interface:**
 
-New CLI commands that read phase-specific job templates and register/remove them:
+Approved agent schedules are registered, listed, and removed through OpenClaw Gateway:
 
 ```bash
-# Register all jobs for a phase
-traderbot cron activate --agent weather --role trader --phase paper
-# Reads src/traderbot/cron/weather/paper.yaml templates and calls openclaw cron add for each
-
-# Remove all jobs for a phase
-traderbot cron deactivate --agent weather --phase backtest
-# Reads job names from template, finds matching cron jobs, calls openclaw cron remove
-
-# Register SysAdmin phase jobs
-traderbot cron activate --role sysadmin --phase oversight-paper
-
-# List active jobs for an agent
-traderbot cron list --agent weather --json
+openclaw cron add --agent weather --name weather-paper-decision-loop ...
+openclaw cron list --json
+openclaw cron remove <jobId>
 ```
 
-The `--replace` flag on `cron activate` removes existing jobs with matching names before adding (idempotent).
+Registration must inventory existing Gateway jobs and fail closed on conflicting names; no destructive replace is implicit.
 
 **Consequences:**
-- Deploy flow no longer registers cron jobs — SysAdmin activates them as part of its startup protocol
+- Deploy requests only the one-shot Gateway bootstrap; recurring schedules remain dormant until explicit approval
 - Job definitions are data-driven (YAML templates), not hardcoded in Python
 - SysAdmin follows a predefined activation sequence but can deviate when circumstances require
 - Phase transitions (backtest → paper → live) are driven by SysAdmin, not automated
-- `traderbot cron setup` is renamed to `traderbot cron activate` with phase-aware templates
+- OpenClaw Gateway owns all agent schedule registration and removal; TraderBot owns only daemon-internal workers
 - Several current cron jobs are retired (data fetching jobs moved to TraderBot service)
 - SysAdmin heartbeat uses main session (not isolated) for continuity of oversight
 - Category agent heartbeat is disabled during backtesting (agent managed by simulation engine)
@@ -1751,9 +1731,9 @@ This section describes the v2 architecture that emerges from the design decision
 
 #### Step 2: SysAdmin Setup
 - User chooses: use `main` as sysadmin (recommended) or create a new agent
-- Inject sysadmin workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, USER.md, SESSION-STATE.md, .learnings/)
+- Inject SysAdmin workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, `.learnings/`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly
 - Register bootstrap job: one-shot `openclaw cron add --at "5m" --session isolated --agent main --delete-after-run` that prompts SysAdmin to begin its activation protocol (DD-023)
-- No other cron or heartbeat jobs registered at deploy time — SysAdmin activates them during its startup protocol (DD-023)
+- No other agent schedules are registered at deploy time; recurring cron/heartbeat definitions remain dormant until explicitly approved and requested through Gateway (DD-023)
 - Create sysadmin profile: `traderbot profile create sysadmin --mode paper --risk-multiplier 0.001 --all-categories`
 - Assign profile token to sysadmin agent via OpenClaw SecretRef
 - Verify: `traderbot auth check --json`
@@ -1763,12 +1743,11 @@ This section describes the v2 architecture that emerges from the design decision
 - User selects one or more
 - For each selected category:
   - `openclaw agents add <category>` (creates OpenClaw agent)
-  - Inject category workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, etc.)
-  - Configure agent heartbeat: `heartbeat.every: "0m"` (dormant — SysAdmin activates during startup protocol, DD-023)
-  - No cron jobs registered at deploy time — SysAdmin activates them phase by phase (DD-023)
+  - Inject category workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly
+  - Leave recurring cron/heartbeat schedules dormant until explicit activation approval through OpenClaw Gateway (DD-023)
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category> --risk-multiplier <default>`
   - Assign profile token to category agent via OpenClaw SecretRef
-- After all agents: `openclaw doctor`
+- Do not invoke doctor implicitly; user-state repair or migration requires a separate explicit operator action
 
 #### Step 4: API Tokens
 - Global tokens (all agents): Kalshi API key + PEM, VoyageAI
@@ -3636,33 +3615,32 @@ The Dev-Liaison runs as an OpenClaw agent with the following configuration:
 
 ```
 Agent ID: dev-liaison
-Sandbox mode: off (runs on host, like SysAdmin — needs access to source and logs)
-Skills: github, traderbot-reference (custom skill for knowledge retrieval)
-Heartbeat: 30m, isolated session, light context
+Sandbox mode: all (host runtime and filesystem groups denied)
+TraderBot tools: health, auth_check, profile_list
+Recurring heartbeat: dormant until explicitly approved through OpenClaw Gateway
 ```
 
-The Dev-Liaison runs unsandboxed (like SysAdmin) because it needs access to the TraderBot source tree for test module authoring, system logs for error diagnosis, and the experiment database for validation. It does NOT need access to trading credentials or the Kalshi API.
+The shipped Dev-Liaison is sandboxed and has no host runtime or filesystem access. External operators and the AutoDev team perform source edits and host-side validation; the agent coordinates through implemented inspection tools and OpenClaw session capabilities.
 
 **OpenClaw tool allowlist:**
 
-The Dev-Liaison is unsandboxed in this target design, so the sandbox
-`bundle-mcp` gate does not apply. Its normal policy uses one explicit
-restrictive `allow` list; planned TraderBot tools remain names in the target
-policy, not claims that they are currently implemented.
+The shipped policy uses one explicit restrictive `allow` list plus the sandbox
+`bundle-mcp` gate. Allow-only omission is authoritative: TraderBot tools not
+listed are unavailable, while `group:runtime` and `group:fs` are explicitly denied.
 
 ```json5
 {
   tools: {
     allow: [
-      "read", "write", "exec", "github",
-      "traderbot__reference",     // Knowledge retrieval (DD-034 §4)
-      "traderbot__experiment",    // Experiment harness tools
-      "traderbot__auth_check",    // Profile-token validation and access context
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
+      "sessions_spawn", "sessions_send", "sessions_yield",
+      "sessions_list", "sessions_history", "subagents",
     ],
     deny: [
-      "traderbot__trade",         // No trading
-      "traderbot__scan",          // No market scanning
-      "traderbot__analyze",       // No analysis
+      "group:runtime",
+      "group:fs",
     ],
   },
 }

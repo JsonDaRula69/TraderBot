@@ -31,9 +31,8 @@ __all__ = (
 
 START_MARKER: Final = b"<!-- BEGIN TRADERBOT MANAGED -->"
 END_MARKER: Final = b"<!-- END TRADERBOT MANAGED -->"
-_FENCED_FILES: Final = ("AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md")
-_FULL_INIT_FILES: Final = ("HEARTBEAT.md", "USER.md", "SESSION-STATE.md")
-_MINIMAL_INIT_FILES: Final = ("HEARTBEAT.md",)
+_FENCED_FILES: Final = ("AGENTS.md", "SOUL.md", "IDENTITY.md")
+_FULL_INIT_FILES: Final = ("USER.md", "SESSION-STATE.md")
 _LEARNINGS_DIRECTORY: Final = ".learnings"
 _FULL_WORKSPACES: Final = frozenset({"weather", "sysadmin"})
 
@@ -102,7 +101,7 @@ def _parse_template(value: WorkspaceTemplate | str) -> WorkspaceTemplate:
 def _file_names(template: WorkspaceTemplate) -> tuple[str, ...]:
     if template.value in _FULL_WORKSPACES:
         return (*_FENCED_FILES, *_FULL_INIT_FILES, _LEARNINGS_DIRECTORY)
-    return (*_FENCED_FILES, *_MINIMAL_INIT_FILES)
+    return _FENCED_FILES
 
 
 def _strategy(name: str) -> InjectionStrategy:
