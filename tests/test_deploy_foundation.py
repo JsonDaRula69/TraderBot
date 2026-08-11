@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from pydantic import ValidationError
@@ -143,7 +144,7 @@ def test_foundation_stub_sets_real_auth_before_handler(
     assert observed == ["0"]
 
 
-@pytest.mark.parametrize("command", ["deploy", "backfill", "verify"])
+@pytest.mark.parametrize("command", ["backfill", "verify"])
 def test_foundation_commands_are_explicit_stubs(
     command: str,
     capsys: pytest.CaptureFixture[str],
@@ -158,3 +159,21 @@ def test_foundation_commands_are_explicit_stubs(
     assert exit_code == 0
     assert output.out == f"{command}: not yet implemented\n"
     assert output.err == ""
+
+
+def test_deploy_cli_forwards_config_and_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: an observable deploy command boundary
+    config_path = tmp_path / "deploy.json"
+    execute = mock.Mock(return_value=0)
+    monkeypatch.setenv("TRADERBOT_USE_HARDCODED_AUTH", "1")
+    monkeypatch.setattr(cli, "execute_deploy", execute, raising=False)
+
+    # When: config and JSON mode are selected through the real parser
+    code = cli.main(["deploy", "--config", str(config_path), "--json"])
+
+    # Then: the typed path and machine-output flag reach the command layer
+    assert code == 0
+    execute.assert_called_once_with(config_path, True)

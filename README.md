@@ -44,11 +44,18 @@ profile, agent, mode, enabled categories, and permissions. It does not inspect
 Kalshi or other external provider credentials; those checks are deferred to
 the secrets/provider/deploy phases.
 
-For real auth, set `TRADERBOT_USE_HARDCODED_AUTH=0`. The current local backend
-is `LocalTokenStore`, which can store generated 256-bit profile tokens in
-`~/.traderbot/tokens.json` with mode `0600` on POSIX. The default remains the
-Phase 0 hardcoded development mapping unless the environment variable is
-exactly `0`.
+For real auth, set `TRADERBOT_USE_HARDCODED_AUTH=0`. The deploy wizard and
+daemon use the unified `SecretsStore` facade: Infisical is primary and the
+machine-bound encrypted local store is the fallback. `LocalTokenStore` remains
+a compatibility/test seam, not the deploy persistence path. The Phase 0
+hardcoded development mapping remains active unless the environment variable
+is exactly `0`.
+
+`traderbot deploy` currently runs only wizard steps 1-3. Config mode accepts
+the documented `categories` and `mode: "backtest"` keys and derives standard
+OpenClaw workspaces from the invocation's active HOME; absolute non-linked
+workspace overrides remain optional. Successful output explicitly reports
+`deployment_complete: false` because steps 4-8 are not implemented here.
 
 Per-agent configuration lives under `configs/openclaw/` with restrictive
 per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is

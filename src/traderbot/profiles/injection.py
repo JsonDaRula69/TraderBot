@@ -18,6 +18,17 @@ from traderbot.profiles._injection_io import (
 )
 from traderbot.profiles._injection_io import validate_root as _validate_root
 
+__all__ = (
+    "InjectionAction",
+    "InjectionRecord",
+    "InjectionReport",
+    "InjectionStrategy",
+    "WorkspaceInjectionError",
+    "WorkspaceTemplate",
+    "inject_workspace",
+    "validate_workspace_path",
+)
+
 START_MARKER: Final = b"<!-- BEGIN TRADERBOT MANAGED -->"
 END_MARKER: Final = b"<!-- END TRADERBOT MANAGED -->"
 _FENCED_FILES: Final = ("AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md")
@@ -25,6 +36,11 @@ _FULL_INIT_FILES: Final = ("HEARTBEAT.md", "USER.md", "SESSION-STATE.md")
 _MINIMAL_INIT_FILES: Final = ("HEARTBEAT.md",)
 _LEARNINGS_DIRECTORY: Final = ".learnings"
 _FULL_WORKSPACES: Final = frozenset({"weather", "sysadmin"})
+
+
+def validate_workspace_path(root: Path) -> Path:
+    """Return an absolute workspace path only when every existing component is safe."""
+    return _validate_root(root)
 
 
 class InjectionStrategy(StrEnum):

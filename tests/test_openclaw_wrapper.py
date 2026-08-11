@@ -285,6 +285,30 @@ def test_list_crons_validates_current_object_shape(
     _assert_run(run, ["openclaw", "cron", "list", "--json"], 30.0)
 
 
+def test_inspect_crons_distinguishes_empty_inventory_from_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: one valid empty inventory followed by mixed and malformed output
+    run = mock.Mock(
+        side_effect=[
+            _completed(["openclaw"], stdout='{"jobs":[]}'),
+            _completed(["openclaw"], stdout='{"jobs":[{"id":"one"},"hidden"]}'),
+            _completed(["openclaw"], stdout="not-json"),
+        ]
+    )
+    monkeypatch.setattr(openclaw, "_run", run)
+
+    # When: the checked inventory boundary reads both responses
+    empty = openclaw.inspect_crons()
+    mixed = openclaw.inspect_crons()
+    failed = openclaw.inspect_crons()
+
+    # Then: callers can avoid mutating after an unreadable inventory
+    assert empty == []
+    assert mixed is None
+    assert failed is None
+
+
 @pytest.mark.parametrize(
     ("function", "argv", "payload"),
     [

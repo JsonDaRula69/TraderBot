@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a88] — 2026-08-10
+
+### Added
+
+- Added resumable deploy wizard steps 1-3 for prompt-free OpenClaw baseline setup, SysAdmin identity/bootstrap, and explicitly selected category agents with encrypted profile-token persistence.
+
+### Fixed
+
+- Validate the complete managed SysAdmin cron contract and re-inspect newly added jobs instead of reusing same-name mismatches.
+- Accept the documented Todo-1 deploy JSON by deriving invocation-scoped OpenClaw workspaces, narrow deploy mode to backtest, and report that steps 4-8 remain incomplete.
+
 ## [2.0.0a87] — 2026-08-10
 
 ### Added

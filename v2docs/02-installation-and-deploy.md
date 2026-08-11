@@ -49,31 +49,34 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 ### Step 1: OpenClaw Config
 
 - Detect `openclaw` on PATH
-- If missing: install via `npm install -g @openclaw/cli` (requires Node.js)
-- Run `openclaw setup` — creates the `main` agent and configures gateway, model provider, web search, comms channels
-- Verify: `openclaw gateway status`
+- If missing: install via `npm install -g openclaw@latest --allow-scripts openclaw` (requires Node.js)
+- Run `openclaw setup --baseline --json` — prompt-free baseline creation or observation of established configuration
+- Verify: `openclaw gateway status --json --require-rpc`
 
 ### Step 2: SysAdmin Setup
 
 - Inject sysadmin workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, USER.md, SESSION-STATE.md, .learnings/) into the chosen agent's workspace
-- Register one-shot bootstrap job: `openclaw cron add --at "5m" --session isolated --agent main --delete-after-run` (DD-023)
+- Register one-shot bootstrap job using current CLI payload spelling: `openclaw cron add --name traderbot-main-at-5m --at "5m" --session isolated --agent main --message "<SysAdmin activation intent>" --delete-after-run --json` (DD-023)
+- Current OpenClaw inventory stores `agentId`, `enabled`, typed `schedule`, `sessionTarget`, `wakeMode`, typed `payload`, and `deleteAfterRun`. The submitted relative `5m` may be normalized to an absolute `at` timestamp; deploy validates that it semantically represents the managed five-minute one-shot delay. Exact managed contracts are reused, conflicts fail closed, and new jobs are re-read before success.
 - No other cron or heartbeat jobs registered at deploy time — SysAdmin activates them during its startup protocol
 - Create sysadmin profile: `traderbot profile create sysadmin --mode paper --risk-multiplier 0.001 --all-categories`
-- Assign profile token to sysadmin agent via OpenClaw SecretRef
+- Assign the `main_token` profile-token document to agent `main` via OpenClaw SecretRef
 - Verify: `traderbot auth check --json`
 
 ### Step 3: Category Selection
 
-- Present available categories: Weather, Economics, Politics, Sports, Crypto, Entertainment, Science & Technology, Health, Social
+- Present available categories: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, Other
 - User selects one or more
+- Config mode supports only `mode: "backtest"` until Phase 7 lifecycle transitions; paper/live are rejected before mutation
 - For each selected category:
-  - `openclaw agents add <category>` (creates OpenClaw agent)
+  - `openclaw agents add <category> --workspace <absolute-path> --non-interactive --json` (creates OpenClaw agent)
   - Inject category workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, etc.)
   - Configure agent heartbeat: `heartbeat.every: "0m"` (dormant — SysAdmin activates during startup)
   - No cron jobs registered at deploy time
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category>`
   - Assign profile token to category agent via OpenClaw SecretRef
-- After all agents: `openclaw doctor`
+- After all agents: `openclaw doctor --lint --json` (read-only)
+- Successful step-3 output still reports `deployment_complete: false` and remaining steps 4-8
 
 ### Step 4: Infisical and API Tokens
 
@@ -160,4 +163,4 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ## Idempotency
 
-All deploy operations are idempotent — safe to run twice without side effects (per AGENTS.md). Before creating a resource (cron job, service, agent, profile), remove or replace any existing one with the same name. Use `--replace` semantics for cron job registration.
+All deploy operations are idempotent and resumable. Inventory resources before mutation, reuse matching agents, profiles, tokens, and cron identities, and heal only missing selected-agent state. A conflicting user-owned resource fails closed; deploy never deletes agents, workspaces, tokens, cron jobs, or user content as rollback.

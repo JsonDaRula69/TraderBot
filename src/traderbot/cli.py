@@ -3,8 +3,8 @@
 Provides the always-on daemon entry point (DD-016) and service lifecycle
 commands (DD-022): ``traderbot daemon`` runs the daemon, and
 ``traderbot service install|uninstall|status`` manages the platform
-service. Phase 4 foundation commands reserve the deploy-facing CLI surface;
-wizard, backfill, and verification orchestration land in later plan items.
+service. The deploy command runs Phase 4 wizard steps 1 through 3; backfill
+and verification remain reserved for later plan items.
 """
 
 from __future__ import annotations
@@ -13,8 +13,13 @@ import argparse
 import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict
 
 from traderbot.daemon import main as daemon_main
+from traderbot.deploy.wizard_command import execute_deploy
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.generic import create_category_profile
 from traderbot.services.deploy import (
@@ -28,6 +33,13 @@ from traderbot.services.deploy import (
 
 _EXIT_OK = 0
 _EXIT_ERROR = 1
+
+
+class _DeployArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    config: Path | None = None
+    json_output: bool = False
 
 
 def _parse_market_category(value: str) -> MarketCategory:
@@ -90,9 +102,9 @@ def _cmd_auth_check(_args: argparse.Namespace) -> int:
     return _EXIT_ERROR
 
 
-def _cmd_deploy(_args: argparse.Namespace) -> int:
-    print("deploy: not yet implemented")
-    return _EXIT_OK
+def _cmd_deploy(args: argparse.Namespace) -> int:
+    parsed = _DeployArguments.model_validate(vars(args))
+    return execute_deploy(parsed.config, parsed.json_output)
 
 
 def _cmd_backfill(_args: argparse.Namespace) -> int:
@@ -150,7 +162,9 @@ def _build_parser() -> argparse.ArgumentParser:
     auth_check = auth_sub.add_parser("check", help="Check the active profile token")
     auth_check.add_argument("--json", action="store_true", dest="json_output")
 
-    subparsers.add_parser("deploy", help="Deploy TraderBot (not yet implemented)")
+    deploy = subparsers.add_parser("deploy", help="Deploy TraderBot steps 1-3")
+    deploy.add_argument("--config", type=Path, help="prompt-free deploy JSON path")
+    deploy.add_argument("--json", action="store_true", dest="json_output")
     subparsers.add_parser("backfill", help="Backfill data (not yet implemented)")
     subparsers.add_parser("verify", help="Verify deployment (not yet implemented)")
     return parser

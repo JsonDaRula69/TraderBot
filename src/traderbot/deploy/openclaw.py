@@ -211,19 +211,30 @@ def register_cron(
     return _cron_add_succeeded(argv)
 
 
-def list_crons() -> list[CronJob]:
-    """Return cron job dictionaries from the current top-level JSON object."""
+def _read_crons(*, strict_members: bool) -> list[CronJob] | None:
     result = _run(["openclaw", "cron", "list", "--json"], timeout=30.0)
     if result is None or result.returncode != 0:
-        return []
+        return None
     try:
         payload = JsonObject.model_validate_json(result.stdout).root
     except ValidationError:
-        return []
+        return None
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
-        return []
+        return None
+    if strict_members and any(not isinstance(job, dict) for job in jobs):
+        return None
     return [job for job in jobs if isinstance(job, dict)]
+
+
+def inspect_crons() -> list[CronJob] | None:
+    """Return a checked cron inventory, or None when it cannot be read."""
+    return _read_crons(strict_members=True)
+
+
+def list_crons() -> list[CronJob]:
+    """Return cron jobs while preserving the original empty-on-failure API."""
+    return _read_crons(strict_members=False) or []
 
 
 def openclaw_doctor() -> bool:
