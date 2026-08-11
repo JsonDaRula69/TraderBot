@@ -3,10 +3,11 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, override
 
 import httpx
 
+from traderbot.kalshi.archive import KalshiArchiveMethods
 from traderbot.kalshi.models import MarketCategory
 from traderbot.kalshi.rest_models import (
     CandlePeriod,
@@ -85,7 +86,8 @@ def _ordered_optional_bounds(minimum: int | None, maximum: int | None, parameter
         raise KalshiParameterError(parameter, "minimum must not exceed maximum")
 
 
-class KalshiHistoricalMethods(ABC):
+class KalshiHistoricalMethods(KalshiArchiveMethods, ABC):
+    @override
     @abstractmethod
     async def get(
         self,

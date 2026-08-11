@@ -1,6 +1,6 @@
 # Deploy Wizard Steps 1-5
 
-`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. Steps 6-8 remain out of scope.
+`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. The standalone Step 6 backfill command is implemented. Steps 6-8 remain unwired in the wizard until Todo 9.
 
 ## Interactive Mode
 
@@ -53,6 +53,12 @@ Step 5 mirrors daemon ownership order under `TRADERBOT_DATA_DIR`: apply every cu
 Each selected category receives `{mode}-{profile}/db/decisions.db` with the current seven domain tables plus `schema_version`, and an actual writable transaction is committed. Canonical `(sysadmin, sysadmin)` uses `DatabaseAccess.all_agent_decisions` for read-only enumeration; deploy never creates a SysAdmin decisions database. The exact shared manifest is `news`, `data_points`, `market_patterns`, `news_signals`, and `market_conditions`, but deploy creates no collection because no production embedding dimension exists. Collection creation remains lazy until a real embedding write supplies an explicit dimension.
 
 An existing Chroma ownership lock is a non-destructive blocker. Deploy does not kill the owner, remove the lock, retry blindly, or delete state. Matching reruns reuse migrations, schemas, encrypted secrets, and the empty-or-existing Chroma root without duplicate mutation.
+
+## Standalone Backfill
+
+Run `traderbot backfill --months 6 [--collector-db PATH] [--json]`. The command resolves the existing canonical Kalshi credential pair without prompting, opens one target `SQLiteConnectionPool`, optionally imports the legacy collector read-only, and fetches both current and archived Kalshi weather history around one cutoff. It never initializes Chroma.
+
+The default collector path is optional; an absent default produces a warning while an invalid explicitly supplied path exits 2 before target or API writes. Complete runs exit 0. Isolated item failures or systemic Kalshi failures after committed work return a redacted typed partial result and exit 1; total runtime failures also exit 1. JSON mode reserves stdout for one result line and sends no Rich output there.
 
 ## Resumability And Identity
 

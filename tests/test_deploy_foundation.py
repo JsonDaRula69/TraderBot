@@ -157,8 +157,8 @@ def test_foundation_stub_sets_real_auth_before_handler(
     assert observed == ["0"]
 
 
-@pytest.mark.parametrize("command", ["backfill", "verify"])
-def test_foundation_commands_are_explicit_stubs(
+@pytest.mark.parametrize("command", ["verify"])
+def test_remaining_foundation_command_is_explicit_stub(
     command: str,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,

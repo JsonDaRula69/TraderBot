@@ -85,6 +85,7 @@
 - [x] Phase 3 Final Wave remediation: secure Chroma root creation preserves pre-existing targets; the QA runner is consolidated into the sole allowed script; MCP storage-health fields are retained as the Task 7 response surface; and basedpyright warnings remain reported while warnings-only runs exit successfully. The cleaned remote `/tmp/phase3-qa-evidence.json` is recorded in the plan as expected ephemeral cleanup, with a local replay retained under workspace `.omo/evidence/`.
 - [x] Phase 4 deploy wizard steps 4-5: secret-safe environment references or hidden Kalshi input, strict local RSA validation, explicit Infisical status probing with encrypted fallback, current global/schema initialization, selected-category decisions databases through `DatabaseAccess`, canonical read-only SysAdmin enumeration, and lazy locked embedded Chroma provisioning.
 - [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
+- [x] Phase 4 standalone backfill command: read-only snapshot collector import, current/archive Kalshi weather discovery around one cutoff, idempotent lossless persistence, redacted typed partial results, and strict human/JSON exit surfaces.
 
 ### Dev-Liaison Testing Protocols
 

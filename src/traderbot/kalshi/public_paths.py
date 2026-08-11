@@ -18,6 +18,8 @@ PUBLIC_ENDPOINTS: Final = frozenset(
         "/series",
         "/series/{ticker}",
         "/series/{series_ticker}/markets/{ticker}/candlesticks",
+        "/historical/cutoff",
+        "/historical/markets",
         "/historical/markets/{ticker}/candlesticks",
         "/multivariate/event-collections",
         "/multivariate/event-collections/{ticker}",

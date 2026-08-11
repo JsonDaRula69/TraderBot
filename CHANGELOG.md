@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a93] — 2026-08-11
+
+### Added
+
+- Added the idempotent `traderbot backfill` command with read-only collector import, current/archive Kalshi weather history, typed partial results, and strict JSON output.
+
 ## [2.0.0a92] — 2026-08-11
 
 ### Added

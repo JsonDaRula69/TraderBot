@@ -19,6 +19,7 @@ from typing import ClassVar
 from pydantic import BaseModel, ConfigDict
 
 from traderbot.daemon import main as daemon_main
+from traderbot.deploy.backfill_command import BackfillCommandOptions, execute_backfill
 from traderbot.deploy.wizard_command import execute_deploy
 from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.generic import create_category_profile
@@ -39,6 +40,14 @@ class _DeployArguments(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
 
     config: Path | None = None
+    json_output: bool = False
+
+
+class _BackfillArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    months: int
+    collector_db: Path | None = None
     json_output: bool = False
 
 
@@ -107,9 +116,16 @@ def _cmd_deploy(args: argparse.Namespace) -> int:
     return execute_deploy(parsed.config, parsed.json_output)
 
 
-def _cmd_backfill(_args: argparse.Namespace) -> int:
-    print("backfill: not yet implemented")
-    return _EXIT_OK
+def _cmd_backfill(args: argparse.Namespace) -> int:
+    parsed = _BackfillArguments.model_validate(vars(args))
+    options = BackfillCommandOptions.model_validate(
+        {
+            "months": parsed.months,
+            "collector_db": parsed.collector_db,
+            "json_output": parsed.json_output,
+        }
+    )
+    return execute_backfill(options)
 
 
 def _cmd_verify(_args: argparse.Namespace) -> int:
@@ -165,7 +181,10 @@ def _build_parser() -> argparse.ArgumentParser:
     deploy = subparsers.add_parser("deploy", help="Deploy TraderBot steps 1-5")
     deploy.add_argument("--config", type=Path, help="prompt-free deploy JSON path")
     deploy.add_argument("--json", action="store_true", dest="json_output")
-    subparsers.add_parser("backfill", help="Backfill data (not yet implemented)")
+    backfill = subparsers.add_parser("backfill", help="Import weather and fetch Kalshi history")
+    backfill.add_argument("--months", type=int, default=6, help="calendar months to backfill")
+    backfill.add_argument("--collector-db", type=Path, help="legacy collector SQLite path")
+    backfill.add_argument("--json", action="store_true", dest="json_output")
     subparsers.add_parser("verify", help="Verify deployment (not yet implemented)")
     return parser
 

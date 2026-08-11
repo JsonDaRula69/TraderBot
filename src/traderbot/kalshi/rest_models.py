@@ -27,6 +27,18 @@ type MarketStatus = Literal[
 type MarketQueryStatus = Literal["unopened", "open", "paused", "closed", "settled"]
 type CandlePeriod = Literal[1, 60, 1440]
 type ForecastPeriod = Literal[0, 1, 60, 1440]
+type StrikeType = Literal[
+    "greater",
+    "greater_or_equal",
+    "less",
+    "less_or_equal",
+    "between",
+    "functional",
+    "custom",
+    "structured",
+]
+type JsonScalar = str | int | float | bool | None
+type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
 
 class _ResponseModel(BaseModel):
@@ -63,6 +75,13 @@ class PriceRange(_ResponseModel):
     start: FixedPointDollars
     end: FixedPointDollars
     step: FixedPointDollars
+
+
+class MveSelectedLeg(_ResponseModel):
+    event_ticker: str | None = None
+    market_ticker: str | None = None
+    side: str | None = None
+    yes_settlement_value_dollars: FixedPointDollars | None = None
 
 
 class KalshiMarket(_ResponseModel):
@@ -103,6 +122,24 @@ class KalshiMarket(_ResponseModel):
     price_ranges: list[PriceRange]
     settlement_value_dollars: FixedPointDollars | None = None
     settlement_ts: datetime | None = None
+    occurrence_datetime: datetime | None = None
+    expected_expiration_time: datetime | None = None
+    expiration_time: datetime | None = None
+    strike_type: StrikeType | None = None
+    floor_strike: float | None = None
+    cap_strike: float | None = None
+    functional_strike: str | None = None
+    custom_strike: dict[str, JsonValue] | None = None
+    mve_collection_ticker: str | None = None
+    mve_selected_legs: list[MveSelectedLeg] | None = None
+    is_provisional: bool | None = None
+    exchange_index: int | None = None
+    response_price_units: str | None = None
+    early_close_condition: str | None = None
+    fee_waiver_expiration_time: datetime | None = None
+    primary_participant_key: str | None = None
+    liquidity_dollars: FixedPointDollars | None = None
+    fractional_trading_enabled: bool | None = None
 
 
 class MarketListResponse(_ResponseModel):

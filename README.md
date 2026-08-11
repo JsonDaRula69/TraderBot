@@ -62,6 +62,12 @@ unusable, and provisions selected category databases plus a lazy embedded
 Chroma root in daemon ownership order. Successful output reports
 `deployment_complete: false` because steps 6-8 are not implemented here.
 
+Historical data can be populated independently with `traderbot backfill --months 6`.
+Use `--collector-db PATH` to import an explicit legacy collector and `--json` for
+one machine-readable result line. The command imports weather data read-only and
+fetches both current and archived Kalshi weather history; deploy-wizard Step 6
+integration remains part of the next plan item.
+
 Per-agent configuration lives under `configs/openclaw/` with restrictive
 per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is
 handled by the `traderbot-token-injector` plugin (a `before_tool_call` hook,

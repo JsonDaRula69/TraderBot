@@ -111,7 +111,11 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Run `traderbot backfill --months 6 --json`
 - **All data sources begin collection at install time** (DD-027), not just enabled categories
 - This ensures backtesting data is available for any category the user might enable later
-- Progress reporting during backfill
+- The optional legacy collector source is opened read-only and copied in idempotent 1,000-row transactions; a missing default source is a warning
+- Kalshi weather data spans current and archive tiers around one runtime cutoff, with tier-correct candles and one forecast call per unique event
+- JSON stdout is one typed result line; progress and Rich output use stderr
+- Exit codes are 0 complete, 1 partial/runtime failure, and 2 invalid input
+- The standalone command is implemented; deploy-wizard invocation remains Step 6 work for Todo 9
 
 ### Step 7: Simulation Start
 

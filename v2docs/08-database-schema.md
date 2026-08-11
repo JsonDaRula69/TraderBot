@@ -229,6 +229,8 @@ Migration v2 appends four global tables without changing migration v1:
 
 Only migration v2 is reversible. Rolling it back drops these four tables and their indexes while migration v1 tables and data remain intact.
 
+The standalone backfill command applies the current migration registry before writing and reuses one owner-thread `SQLiteConnectionPool`. Collector rows use their natural keys with `INSERT OR IGNORE` in independent 1,000-row commits. Each Kalshi market/candle/forecast write also uses fixed statements and natural keys, so reruns report duplicates without replacing prior data. Fixed-point strings and forecast decimal text never pass through binary float conversion.
+
 ---
 
 ## Per-agent database (`decisions.db`)

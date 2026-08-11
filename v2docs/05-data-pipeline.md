@@ -54,7 +54,7 @@ The Kalshi WebSocket is the **sole source for all real-time Kalshi data**. REST 
 
 No REST polling for current market data — the WebSocket provides a continuous stream, and any REST call for data that the WebSocket already provides is a bug.
 
-The current typed historical REST surface follows the official v2 contracts: lowercase category discovery uses public `GET /series`; paginated metadata uses public `GET /markets`; live-window candles use public `GET /series/{series_ticker}/markets/{ticker}/candlesticks`; archived candles use public `GET /historical/markets/{ticker}/candlesticks`; and forecast percentiles use signed `GET /series/{series_ticker}/events/{event_ticker}/forecast_percentile_history`. Dollar and contract-count fixed points remain validated strings, and live/historical candle wire fields are modeled separately.
+The current typed historical REST surface follows the official v2 contracts: lowercase category discovery uses public `GET /series`; one public `GET /historical/cutoff` partitions settled markets; current metadata uses public filtered `GET /markets`; archive metadata uses public selector-only `GET /historical/markets` and client-side bounds; live-window candles use public `GET /series/{series_ticker}/markets/{ticker}/candlesticks`; archived candles use public `GET /historical/markets/{ticker}/candlesticks`; and forecast percentiles use signed `GET /series/{series_ticker}/events/{event_ticker}/forecast_percentile_history`. Dollar and contract-count fixed points remain validated strings, and live/historical candle wire fields are modeled separately.
 
 **Channels subscribed**:
 - `market_lifecycle_v2`: detects new markets as they appear — no REST scan needed
@@ -112,7 +112,7 @@ All data sources begin collection at install, not just enabled categories. This 
 - The 6-month backfill populates data for all categories
 - The user doesn't need to wait for data collection before enabling a new category
 
-The `--categories` flag for backfill becomes less critical since all categories are always backfilled, but may still be useful for re-backfilling a single category.
+The backfill command has no category filter. Its Kalshi phase currently discovers all weather series, while the collector import copies all three available weather tables.
 
 ---
 
