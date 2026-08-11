@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,13 +11,30 @@ from pydantic_core import PydanticCustomError
 
 from traderbot.deploy import openclaw
 from traderbot.deploy.openclaw_models import (
+    AgentInventory,
     CronAgentTurnPayload,
     CronAtSchedule,
     CronJob,
     JsonValue,
 )
-from traderbot.deploy.wizard import TokenProvisionResult, WizardPorts
-from traderbot.profiles.injection import WorkspaceTemplate, inject_workspace
+from traderbot.deploy.wizard_contracts import (
+    ProvisionStatus,
+    TokenProvisionResult,
+    WizardPorts,
+)
+from traderbot.deploy.wizard_state import (
+    AgentConfigState,
+    BootstrapCronState,
+    OpenClawConfigSnapshot,
+    SecretRefConfig,
+    TokenMetadataState,
+)
+from traderbot.profiles.injection import (
+    WorkspaceInjectionError,
+    WorkspaceTemplate,
+    inject_workspace,
+    preflight_workspace,
+)
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.tokens import generate_token
 from traderbot.secrets.local_encrypted import SecretIntegrityError
@@ -32,11 +48,6 @@ _BOOTSTRAP_PROMPT: Final = (
     "TraderBot service and data freshness, register essential jobs, enable the SysAdmin "
     "heartbeat, then activate selected categories one at a time."
 )
-_SECRET_REF_BASE: Final = (
-    "plugins.entries.traderbot-token-injector.config.agentTokenMap"
-)
-
-
 class SysAdminBootstrapCron(BaseModel):
     """Canonical persisted contract for TraderBot's managed SysAdmin activation job."""
 
@@ -110,24 +121,44 @@ class OpenClawAdapter:
     def gateway_status(self) -> bool:
         return openclaw.gateway_status()
 
-    def create_agent(self, agent_id: str, workspace: Path) -> bool:
-        expected = Path.home() / ".openclaw" / f"workspace-{agent_id}"
-        supplied_key = os.path.normcase(os.path.abspath(os.path.expanduser(workspace)))
-        expected_key = os.path.normcase(os.path.abspath(os.path.expanduser(expected)))
-        return supplied_key == expected_key and openclaw.create_agent(agent_id, "all")
+    def inventory_agents(self) -> AgentInventory | None:
+        return openclaw.inspect_agents()
 
-    def configure_secret_ref(self, agent_id: str, secret_id: str) -> bool:
-        base = f"{_SECRET_REF_BASE}.{agent_id}"
-        fields = (("source", "exec"), ("provider", "infisical"), ("id", secret_id))
-        return all(openclaw.set_config(f"{base}.{field}", value) for field, value in fields)
+    def inspect_config(self, agent_ids: tuple[str, ...]) -> OpenClawConfigSnapshot | None:
+        inventory = openclaw.inspect_agents()
+        return None if inventory is None else openclaw.inspect_config(agent_ids, inventory)
 
-    def ensure_bootstrap_cron(self) -> bool:
+    def inspect_bootstrap_cron(self) -> BootstrapCronState:
         jobs = openclaw.inspect_crons()
         if jobs is None:
-            return False
+            return BootstrapCronState.FAILED
         matches = [job for job in jobs if job.get("name") == _BOOTSTRAP_NAME]
-        if matches:
-            return SysAdminBootstrapCron.is_unique_match(jobs)
+        if not matches:
+            return BootstrapCronState.MISSING
+        return (
+            BootstrapCronState.EXACT
+            if SysAdminBootstrapCron.is_unique_match(matches)
+            else BootstrapCronState.CONFLICT
+        )
+
+    def create_agent(self, agent_id: str, workspace: Path) -> bool:
+        return openclaw.create_agent(agent_id, workspace)
+
+    def set_secret_ref(self, agent_id: str, secret_ref: SecretRefConfig) -> bool:
+        return openclaw.set_secret_ref(agent_id, secret_ref)
+
+    def set_heartbeat(self, agent: AgentConfigState, value: str) -> bool:
+        return openclaw.set_config(f"{agent.path_prefix}.heartbeat.every", value)
+
+    def set_sandbox(self, agent: AgentConfigState, value: str) -> bool:
+        return openclaw.set_config(f"{agent.path_prefix}.sandbox.mode", value)
+
+    def ensure_bootstrap_cron(self) -> bool:
+        state = self.inspect_bootstrap_cron()
+        if state is BootstrapCronState.EXACT:
+            return True
+        if state is not BootstrapCronState.MISSING:
+            return False
         added = openclaw.register_cron(
             agent="main",
             prompt=_BOOTSTRAP_PROMPT,
@@ -137,8 +168,7 @@ class OpenClawAdapter:
         )
         if not added:
             return False
-        confirmed = openclaw.inspect_crons()
-        return confirmed is not None and SysAdminBootstrapCron.is_unique_match(confirmed)
+        return added and self.inspect_bootstrap_cron() is BootstrapCronState.EXACT
 
 class SecretsTokenProvisioner:
     """Persist opaque profile identities through the SecretsStore facade."""
@@ -150,6 +180,21 @@ class SecretsTokenProvisioner:
     ) -> None:
         self._store: SecretsStore = store
         self._token_factory: Callable[[], str] = token_factory
+
+    def inspect(self, profile: TradingProfile, agent_id: str) -> TokenMetadataState:
+        try:
+            existing = self._store.get_profile_token(agent_id)
+            raw = self._store.get(agent_id, "token", namespace="tokens")
+        except (APIError, OSError, SecretIntegrityError, ValidationError):
+            return TokenMetadataState.FAILED
+        if existing is None:
+            return TokenMetadataState.MISSING if raw is None else TokenMetadataState.CONFLICT
+        result = self._existing_result(profile, agent_id, existing)
+        return (
+            TokenMetadataState.EXACT
+            if result.status is not ProvisionStatus.FAILED
+            else TokenMetadataState.CONFLICT
+        )
 
     def ensure(self, profile: TradingProfile, agent_id: str) -> TokenProvisionResult:
         try:
@@ -189,6 +234,12 @@ class SecretsTokenProvisioner:
 
 class WorkspaceInjectionAdapter:
     """Apply Todo-4 workspace templates and return their deterministic digest."""
+
+    def preflight(self, workspace: Path, template: WorkspaceTemplate) -> str | None:
+        try:
+            return preflight_workspace(workspace, template).manifest_hash
+        except (OSError, WorkspaceInjectionError):
+            return None
 
     def inject(self, workspace: Path, template: WorkspaceTemplate) -> str:
         return inject_workspace(workspace, template).manifest_hash

@@ -4,39 +4,35 @@ import sys
 from pathlib import Path
 
 from pydantic import ValidationError
+from pydantic_core import PydanticCustomError
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from traderbot.deploy.config import DeployConfig
-from traderbot.deploy.wizard import DeployResult, DeployWizard, WizardPorts, WizardRequest
+from traderbot.deploy.openclaw_models import AgentInventory
+from traderbot.deploy.wizard import DeployWizard
+from traderbot.deploy.wizard_contracts import DeployResult, WizardPorts, WizardRequest
 from traderbot.deploy.wizard_runtime import build_wizard_ports
+from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.models import MarketCategory
 from traderbot.secrets.resolver import build_secrets_store
 
 
 def _request_from_config(config: DeployConfig) -> WizardRequest:
-    home = Path.home()
-    sysadmin_workspace = config.sysadmin_workspace or home / ".openclaw" / "workspace"
-    derived_workspaces = {
-        category: config.category_workspaces.get(
-            category,
-            home / ".openclaw" / f"workspace-{category.value}",
-        )
-        for category in config.categories
-    }
-    category_workspaces = derived_workspaces | config.category_workspaces
     return WizardRequest.model_validate(
         {
             "categories": tuple(config.categories),
             "mode": config.mode,
-            "sysadmin_workspace": sysadmin_workspace,
-            "category_workspaces": category_workspaces,
+            "sysadmin_workspace": config.sysadmin_workspace,
+            "category_workspaces": config.category_workspaces,
+            "approvals": config.approvals,
+            "heartbeat_every": config.heartbeat_every,
         }
     )
 
 
-def collect_interactive_request(console: Console) -> WizardRequest:
+def collect_interactive_request(console: Console, ports: WizardPorts) -> WizardRequest:
     """Collect explicit category and workspace choices through Rich."""
     table = Table(title="TraderBot Market Categories")
     table.add_column("Category")
@@ -49,34 +45,74 @@ def collect_interactive_request(console: Console) -> WizardRequest:
         "Select one or more agent IDs (comma-separated)",
         console=console,
     )
-    selected = tuple(
+    parsed_values = tuple(
         MarketCategory(value.strip().lower())
         for value in raw_selection.split(",")
         if value.strip()
     )
-    sysadmin_workspace = Path(
-        Prompt.ask(
-            "SysAdmin main-agent workspace",
-            default=str(Path.home() / ".openclaw" / "workspace"),
-            console=console,
+    if not parsed_values or len(set(parsed_values)) != len(parsed_values):
+        raise PydanticCustomError(
+            "category_selection",
+            "select one or more distinct market categories",
         )
+    selected = tuple(category for category in MarketCategory if category in parsed_values)
+    installed = ports.openclaw.detect() is not None
+    install_approved = not installed and Confirm.ask(
+        "OpenClaw is absent. Approve installation?",
+        default=False,
+        console=console,
     )
-    category_workspaces = {
-        category: Path(
+    inventory = ports.openclaw.inventory_agents() if installed else AgentInventory([])
+    if inventory is None:
+        raise PydanticCustomError("agent_inventory", "OpenClaw agent inventory is unreadable")
+    indexed = {agent.id: agent for agent in inventory.root}
+    main = indexed.get("main")
+    if main is not None:
+        console.print(f"Existing main workspace: {main.workspace}")
+    setup_approved = main is None and Confirm.ask(
+        "OpenClaw main is absent. Approve baseline setup?",
+        default=False,
+        console=console,
+    )
+    category_workspaces: dict[MarketCategory, Path] = {}
+    missing: list[MarketCategory] = []
+    for category in selected:
+        agent = indexed.get(category.value)
+        if agent is not None:
+            console.print(f"Existing {category.value} workspace: {agent.workspace}")
+            continue
+        proposed = Path.home() / ".openclaw" / f"workspace-{category.value}"
+        workspace = Path(
             Prompt.ask(
-                f"Workspace for {category.value}",
-                default=str(Path.home() / ".openclaw" / f"workspace-{category.value}"),
+                f"New {category.value} absolute workspace",
+                default=str(proposed),
                 console=console,
             )
         )
-        for category in MarketCategory
-        if category in selected
-    }
+        category_workspaces[category] = workspace
+        missing.append(category)
+    create_approved = not missing or Confirm.ask(
+        "Approve creation of only the listed missing agents at these paths?",
+        default=False,
+        console=console,
+    )
+    heartbeat_approved = Confirm.ask(
+        "Approve dormant Gateway heartbeat state (0m) for main and selected agents?",
+        default=False,
+        console=console,
+    )
     return WizardRequest(
         categories=selected,
         mode="backtest",
-        sysadmin_workspace=sysadmin_workspace,
+        sysadmin_workspace=None,
         category_workspaces=category_workspaces,
+        approvals=DeployApprovals(
+            install_openclaw=install_approved,
+            setup_openclaw=setup_approved,
+            create_agents=create_approved,
+            heartbeat_change=heartbeat_approved,
+        ),
+        heartbeat_every="0m" if heartbeat_approved else "preserve",
     )
 
 
@@ -103,9 +139,10 @@ def execute_deploy(
 ) -> int:
     """Run wizard steps 1-3 from config or explicit Rich prompts."""
     console = Console()
+    runtime_ports = ports or build_wizard_ports(build_secrets_store())
     try:
         if config_path is None:
-            request = collect_interactive_request(console)
+            request = collect_interactive_request(console, runtime_ports)
         else:
             config = DeployConfig.model_validate_json(config_path.read_text(encoding="utf-8"))
             request = _request_from_config(config)
@@ -115,7 +152,6 @@ def execute_deploy(
         _ = sys.stderr.write(message)
         return 2
 
-    runtime_ports = ports or build_wizard_ports(build_secrets_store())
     result = DeployWizard(runtime_ports).run(request)
     if json_output:
         _ = sys.stdout.write(result.model_dump_json(indent=2) + "\n")

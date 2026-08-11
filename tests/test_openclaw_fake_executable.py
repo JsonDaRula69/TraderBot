@@ -12,7 +12,7 @@ import traderbot.deploy.openclaw as openclaw
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable shim")
-def test_current_agent_add_response_reaches_sandbox_write(
+def test_current_agent_add_response_accepts_explicit_workspace(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -30,9 +30,7 @@ def test_current_agent_add_response_reaches_sandbox_write(
             args = sys.argv[1:]
             with Path({str(log)!r}).open("a", encoding="utf-8") as stream:
                 stream.write("\\0".join(args) + "\\n")
-            if args == ["agents", "list", "--json"]:
-                print("[]")
-            elif args[:2] == ["agents", "add"]:
+            if args[:2] == ["agents", "add"]:
                 workspace = args[args.index("--workspace") + 1]
                 print(json.dumps({{
                     "agentId": "weather", "workspace": workspace,
@@ -40,14 +38,7 @@ def test_current_agent_add_response_reaches_sandbox_write(
                     "bindings": {{"added": ["telegram"], "updated": [],
                                  "skipped": [], "conflicts": []}},
                 }}))
-            elif args[:2] == ["config", "set"] and "--dry-run" in args:
-                print(json.dumps({{
-                    "ok": True, "operations": 1, "configPath": "/state/openclaw.json",
-                    "inputModes": ["value"], "checks": {{"schema": True,
-                    "resolvability": True, "resolvabilityComplete": True}},
-                    "refsChecked": 0, "skippedExecRefs": 0,
-                }}))
-            elif args[:2] != ["config", "set"]:
+            else:
                 raise SystemExit(2)
             """
         ),
@@ -60,11 +51,12 @@ def test_current_agent_add_response_reaches_sandbox_write(
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
 
     # When: production create_agent launches the executable
-    result = openclaw.create_agent("weather", sandbox_mode="all")
+    workspace = tmp_path / "nested" / "weather"
+    result = openclaw.create_agent("weather", workspace)
 
-    # Then: the current add response is accepted and sandbox validation/write both run
+    # Then: the current add response is accepted without unrelated config writes
     calls = log.read_text(encoding="utf-8")
     assert result is True
     assert calls.count("agents\0add") == 1
-    assert calls.count("config\0set") == 2
-    assert calls.count("--dry-run") == 1
+    assert str(workspace) in calls
+    assert "config\0set" not in calls

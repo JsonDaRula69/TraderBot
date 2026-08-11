@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
+from pydantic_core import PydanticCustomError
 
 type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 type CronJob = dict[str, JsonValue]
@@ -63,12 +66,46 @@ class ConfigDryRun(StrictModel):
     skippedExecRefs: int = Field(ge=0)
 
 
+class ConfigGetError(StrictModel):
+    error: str = Field(min_length=1)
+
+
+class HeartbeatConfig(StrictModel):
+    every: str | None = None
+
+
+class SandboxConfig(StrictModel):
+    mode: str | None = None
+
+
+class AgentRuntimeConfig(StrictModel):
+    id: str | None = None
+    heartbeat: HeartbeatConfig | None = None
+    sandbox: SandboxConfig | None = None
+
+
 class AgentSummary(StrictModel):
     id: str = Field(min_length=1)
     workspace: str = Field(min_length=1)
     agentDir: str = Field(min_length=1)
     bindings: int = Field(ge=0)
     isDefault: bool
+
+    @field_validator("workspace")
+    @classmethod
+    def absolute_lexical_workspace(cls, workspace: str) -> str:
+        separators_normalized = (
+            workspace.replace(os.altsep, os.sep) if os.altsep is not None else workspace
+        )
+        has_dot_segment = any(
+            segment in {".", ".."} for segment in separators_normalized.split(os.sep)
+        )
+        if not Path(workspace).is_absolute() or has_dot_segment:
+            raise PydanticCustomError(
+                "inventory_workspace",
+                "inventory workspace must be a canonical absolute lexical path",
+            )
+        return workspace
 
 
 class AgentInventory(RootModel[list[AgentSummary]]):

@@ -51,11 +51,13 @@ a compatibility/test seam, not the deploy persistence path. The Phase 0
 hardcoded development mapping remains active unless the environment variable
 is exactly `0`.
 
-`traderbot deploy` currently runs only wizard steps 1-3. Config mode accepts
-the documented `categories` and `mode: "backtest"` keys and derives standard
-OpenClaw workspaces from the invocation's active HOME; absolute non-linked
-workspace overrides remain optional. Successful output explicitly reports
-`deployment_complete: false` because steps 4-8 are not implemented here.
+`traderbot deploy` currently runs only wizard steps 1-3. It inventories all
+OpenClaw workspace ownership before mutation, adopts existing selected paths,
+and requires explicit paths and approval flags for missing selected agents.
+Approved dormant heartbeat state is written as `0m` through OpenClaw config;
+bootstrap automation is requested from Gateway only after selected state is
+verified. Successful output reports `deployment_complete: false` because steps
+4-8 are not implemented here.
 
 Per-agent configuration lives under `configs/openclaw/` with restrictive
 per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is

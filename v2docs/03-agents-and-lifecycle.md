@@ -72,7 +72,7 @@ The Dev-Liaison communicates with the AutoDev team via a low-latency webhook lay
 
 **Role**: Domain-specific traders. Each agent trades exclusively within its assigned category.
 
-**Current categories**: Weather (first implementation), with Economics, Politics, Sports, Crypto, Entertainment, Science & Technology, Health, Social to follow.
+**Current categories**: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, and Other.
 
 **Key constraints** (DD-008, DD-010, DD-011):
 - Prebuilt workspace files — no user customization
@@ -162,7 +162,7 @@ Deploy requests exactly one OpenClaw Gateway job: a self-deleting activation pro
 
 ## Cron/Heartbeat Architecture
 
-The self-deleting bootstrap prompt is the only agent schedule requested at deploy time. All recurring cron/heartbeat definitions remain dormant until explicit approval, and OpenClaw Gateway owns their registration, execution, and removal. TraderBot's daemon-internal workers are separate and never own OpenClaw agent schedules (DD-023).
+The self-deleting bootstrap prompt is the only agent automation requested at deploy time, and its Gateway CLI/RPC request occurs after all selected-agent postconditions pass. An approved `heartbeat.every: "0m"` value is desired-state config that disables heartbeat; it is not a cron job. OpenClaw Gateway owns heartbeat timers/monitor convergence and all automation registration, execution, and removal. TraderBot never creates heartbeat monitor rows, scratch, files, or OpenClaw SQLite state. TraderBot's daemon-internal workers remain separate (DD-023).
 
 ### SysAdmin Job Definitions
 

@@ -1,13 +1,12 @@
 """Focused tests for the Phase 4 deploy foundation CLI and config model."""
 
 import argparse
-import json
 import os
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 import traderbot.cli as cli
 from traderbot.kalshi.models import MarketCategory
@@ -27,6 +26,14 @@ def test_deploy_config_parses_documented_shape() -> None:
             "kalshi_private_key_pem": "example-pem",
         },
         "months_backfill": 6,
+        "category_workspaces": {"weather": "/srv/openclaw/weather"},
+        "approvals": {
+            "install_openclaw": False,
+            "setup_openclaw": False,
+            "create_agents": True,
+            "heartbeat_change": True,
+        },
+        "heartbeat_every": "0m",
     }
 
     # When: the external payload crosses the config boundary
@@ -38,18 +45,15 @@ def test_deploy_config_parses_documented_shape() -> None:
     assert config.tokens.get("kalshi_api_key") == "example-key"
 
 
-def test_deploy_config_minimal_defaults_are_isolated() -> None:
-    # Given/When: two minimal documented configs are parsed
+def test_deploy_config_requires_explicit_approval_and_heartbeat_fields() -> None:
+    # Given: config mode omits both explicit approval-bearing fields
     from traderbot.deploy.config import DeployConfig
 
-    first = DeployConfig(categories=[MarketCategory.WEATHER], mode="backtest")
-    second = DeployConfig(categories=[MarketCategory.WEATHER], mode="backtest")
-
-    # Then: optional connection data and token defaults are safe
-    assert first.infisical_url is None
-    assert first.tokens == second.tokens
-    assert first.tokens is not second.tokens
-    assert first.months_backfill == 6
+    # When/Then: the noninteractive trust boundary fails instead of assuming approval
+    with pytest.raises(ValidationError):
+        _ = DeployConfig.model_validate(
+            {"categories": [MarketCategory.WEATHER], "mode": "backtest"}
+        )
 
 
 @pytest.mark.parametrize(
@@ -60,11 +64,22 @@ def test_deploy_config_rejects_invalid_category_or_mode(field: str, value: str |
     # Given: a deploy payload containing an unsupported domain value
     from traderbot.deploy.config import DeployConfig
 
-    payload = {"categories": ["weather"], "mode": "backtest", field: value}
+    payload = {
+        "categories": ["weather"],
+        "mode": "backtest",
+        "approvals": {
+            "install_openclaw": False,
+            "setup_openclaw": False,
+            "create_agents": False,
+            "heartbeat_change": False,
+        },
+        "heartbeat_every": "preserve",
+        field: value,
+    }
 
     # When/Then: Pydantic rejects the malformed boundary input
     with pytest.raises(ValidationError):
-        DeployConfig.model_validate(payload)
+        _ = DeployConfig.model_validate(payload)
 
 
 def test_profile_create_prints_deterministic_json(capsys: pytest.CaptureFixture[str]) -> None:
@@ -76,7 +91,7 @@ def test_profile_create_prints_deterministic_json(capsys: pytest.CaptureFixture[
 
     # Then: stdout is one JSON document with the requested domain values
     assert exit_code == 0
-    payload = json.loads(output.out)
+    payload = TypeAdapter(dict[str, object]).validate_json(output.out)
     assert payload["name"] == "test"
     assert payload["mode"] == "backtest"
     assert payload["enabled_categories"] == ["weather"]

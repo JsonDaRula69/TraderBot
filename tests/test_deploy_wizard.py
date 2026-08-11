@@ -1,122 +1,36 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Never
 from unittest import mock
 
 import pytest
 from pydantic import ValidationError
 from rich.console import Console
 
-from traderbot.deploy.wizard import (
-    DeployResult,
-    DeployWizard,
-    StepStatus,
-    TokenProvisionResult,
-    WizardPorts,
-    WizardRequest,
+from tests.deploy_wizard_fakes import (
+    FakeEnvironment,
+    FakeOpenClaw,
+    FakeTokens,
+    fake_workspace,
 )
+from traderbot.deploy.wizard import DeployResult, StepStatus, WizardRequest
 from traderbot.deploy.wizard_command import collect_interactive_request, execute_deploy
+from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.models import MarketCategory
-from traderbot.profiles.injection import WorkspaceTemplate
-from traderbot.profiles.models import TradingProfile
 
 
-@dataclass(slots=True)
-class FakeOpenClaw:
-    installed: bool = True
-    install_succeeds: bool = True
-    setup_succeeds: bool = True
-    gateway_succeeds: bool = True
-    fail_secret_ref_for: set[str] = field(default_factory=set)
-    created_agents: set[str] = field(default_factory=set)
-    secret_refs: dict[str, str] = field(default_factory=dict)
-    cron_identities: set[tuple[str, str]] = field(default_factory=set)
-    setup_calls: int = 0
-    install_calls: int = 0
-
-    def detect(self) -> str | None:
-        return "/fake/openclaw" if self.installed else None
-
-    def install(self) -> bool:
-        self.install_calls += 1
-        if self.install_succeeds:
-            self.installed = True
-        return self.install_succeeds
-
-    def setup(self) -> bool:
-        self.setup_calls += 1
-        return self.setup_succeeds
-
-    def gateway_status(self) -> bool:
-        return self.gateway_succeeds
-
-    def create_agent(self, agent_id: str, workspace: Path) -> bool:
-        _ = workspace
-        self.created_agents.add(agent_id)
-        return True
-
-    def configure_secret_ref(self, agent_id: str, secret_id: str) -> bool:
-        if agent_id in self.fail_secret_ref_for:
-            return False
-        self.secret_refs[agent_id] = secret_id
-        return True
-
-    def ensure_bootstrap_cron(self) -> bool:
-        self.cron_identities.add(("traderbot-main-at-5m", "main"))
-        return True
-
-    def doctor(self) -> Never:
-        raise AssertionError("deploy must not invoke OpenClaw doctor")
-
-
-@dataclass(slots=True)
-class FakeTokens:
-    fail_for: set[str] = field(default_factory=set)
-    profiles: dict[str, str] = field(default_factory=dict)
-    created_count: dict[str, int] = field(default_factory=dict)
-
-    def ensure(self, profile: TradingProfile, agent_id: str) -> TokenProvisionResult:
-        if agent_id in self.fail_for:
-            return TokenProvisionResult.failed(agent_id, "encrypted token storage failed")
-        existing = self.profiles.get(agent_id)
-        if existing is not None:
-            return TokenProvisionResult.existing(agent_id)
-        self.profiles[agent_id] = profile.name
-        self.created_count[agent_id] = self.created_count.get(agent_id, 0) + 1
-        return TokenProvisionResult.created(agent_id)
-
-
-@dataclass(slots=True)
-class FakeInjector:
-    injected: set[tuple[Path, WorkspaceTemplate]] = field(default_factory=set)
-
-    def inject(self, workspace: Path, template: WorkspaceTemplate) -> str:
-        self.injected.add((workspace, template))
-        return f"manifest-{template.value}"
-
-
-@dataclass(slots=True)
-class FakeEnvironment:
-    openclaw: FakeOpenClaw = field(default_factory=FakeOpenClaw)
-    tokens: FakeTokens = field(default_factory=FakeTokens)
-    injector: FakeInjector = field(default_factory=FakeInjector)
-
-    def ports(self) -> WizardPorts:
-        return WizardPorts(self.openclaw, self.tokens, self.injector)
-
-    def wizard(self) -> DeployWizard:
-        return DeployWizard(self.ports())
-
-
-def _request(tmp_path: Path, *categories: MarketCategory) -> WizardRequest:
+def _request(
+    tmp_path: Path,
+    *categories: MarketCategory,
+    approvals: DeployApprovals | None = None,
+) -> WizardRequest:
     return WizardRequest(
         categories=categories,
         mode="backtest",
-        sysadmin_workspace=tmp_path / "main",
+        sysadmin_workspace=None,
         category_workspaces={category: tmp_path / category.value for category in categories},
+        approvals=approvals or DeployApprovals(create_agents=True),
     )
 
 
@@ -154,7 +68,13 @@ def test_openclaw_not_installed(tmp_path: Path) -> None:
     environment = FakeEnvironment(openclaw=FakeOpenClaw(installed=False, install_succeeds=False))
 
     # When: deployment starts
-    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+    result = environment.wizard().run(
+        _request(
+            tmp_path,
+            MarketCategory.WEATHER,
+            approvals=DeployApprovals(install_openclaw=True, create_agents=True),
+        )
+    )
 
     # Then: step 1 fails actionably and no later external state is touched
     _assert_failed_at(result, 1)
@@ -170,11 +90,21 @@ def test_step_1_failure_stops_later_mutation(tmp_path: Path, failure: str) -> No
     openclaw = FakeOpenClaw(
         setup_succeeds=failure != "setup",
         gateway_succeeds=failure != "gateway",
+        agents={} if failure == "setup" else {"main": fake_workspace("main")},
     )
     environment = FakeEnvironment(openclaw=openclaw)
 
     # When: deployment starts
-    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+    result = environment.wizard().run(
+        _request(
+            tmp_path,
+            MarketCategory.WEATHER,
+            approvals=DeployApprovals(
+                setup_openclaw=failure == "setup",
+                create_agents=True,
+            ),
+        )
+    )
 
     # Then: no SysAdmin or category mutation follows the failure
     _assert_failed_at(result, 1)
@@ -183,16 +113,17 @@ def test_step_1_failure_stops_later_mutation(tmp_path: Path, failure: str) -> No
 
 
 def test_storage_failure_reports_partial_without_category_mutation(tmp_path: Path) -> None:
-    # Given: encrypted SysAdmin token storage fails after workspace injection
+    # Given: encrypted SysAdmin token metadata cannot be inspected safely
     environment = FakeEnvironment(tokens=FakeTokens(fail_for={"main"}))
 
     # When: deployment runs
     result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
 
-    # Then: step 2 reports failure and step 3 does not create agents
-    _assert_failed_at(result, 2)
+    # Then: global preflight reports failure before workspace or category mutation
+    _assert_failed_at(result, 1)
     assert environment.openclaw.created_agents == set()
     assert environment.openclaw.secret_refs == {}
+    assert environment.injector.injected == set()
 
 
 def test_partial_category_rerun_reuses_tokens_and_heals_mapping(tmp_path: Path) -> None:
@@ -247,20 +178,23 @@ def test_invalid_selection_is_rejected_before_mutation(
     assert environment.injector.injected == set()
 
 
-def test_missing_selected_workspace_is_rejected_before_mutation(tmp_path: Path) -> None:
+def test_missing_selected_workspace_is_rejected_before_mutation() -> None:
     # Given: a selected category without its explicit workspace
     environment = FakeEnvironment()
 
-    # When/Then: the request is invalid before any OpenClaw call
-    with pytest.raises(ValidationError):
-        request = WizardRequest(
-            categories=(MarketCategory.WEATHER,),
-            mode="backtest",
-            sysadmin_workspace=tmp_path / "main",
-            category_workspaces={},
-        )
-        _ = environment.wizard().run(request)
+    # When: global preflight sees no approved path for the missing selected agent
+    request = WizardRequest(
+        categories=(MarketCategory.WEATHER,),
+        mode="backtest",
+        category_workspaces={},
+        approvals=DeployApprovals(create_agents=True),
+    )
+    result = environment.wizard().run(request)
+
+    # Then: it fails before mutation
+    _assert_failed_at(result, 1)
     assert environment.openclaw.setup_calls == 0
+    assert environment.injector.injected == set()
 
 
 def test_config_mode_performs_no_prompts(
@@ -275,8 +209,14 @@ def test_config_mode_performs_no_prompts(
             {
                 "categories": ["weather"],
                 "mode": "backtest",
-                "sysadmin_workspace": str(tmp_path / "main"),
                 "category_workspaces": {"weather": str(tmp_path / "weather")},
+                "approvals": {
+                    "install_openclaw": False,
+                    "setup_openclaw": False,
+                    "create_agents": True,
+                    "heartbeat_change": False,
+                },
+                "heartbeat_every": "preserve",
             }
         ),
         encoding="utf-8",
@@ -318,7 +258,6 @@ def test_interactive_selection_is_explicit_and_ordered(tmp_path: Path) -> None:
     answers = iter(
         [
             "crypto, weather",
-            str(tmp_path / "main"),
             str(tmp_path / "weather"),
             str(tmp_path / "crypto"),
         ]
@@ -326,12 +265,16 @@ def test_interactive_selection_is_explicit_and_ordered(tmp_path: Path) -> None:
     console = Console(file=mock.Mock(), force_terminal=False)
 
     # When: the interactive presenter collects the selection
-    with mock.patch("traderbot.deploy.wizard_command.Prompt.ask", side_effect=answers):
-        request = collect_interactive_request(console)
+    environment = FakeEnvironment()
+    with (
+        mock.patch("traderbot.deploy.wizard_command.Prompt.ask", side_effect=answers),
+        mock.patch("traderbot.deploy.wizard_command.Confirm.ask", side_effect=[True, False]),
+    ):
+        request = collect_interactive_request(console, environment.ports())
 
     # Then: domain order is deterministic and every workspace was explicitly supplied
     assert request.categories == (MarketCategory.WEATHER, MarketCategory.CRYPTO)
-    assert request.sysadmin_workspace == tmp_path / "main"
+    assert request.sysadmin_workspace is None
     assert request.category_workspaces == {
         MarketCategory.WEATHER: tmp_path / "weather",
         MarketCategory.CRYPTO: tmp_path / "crypto",

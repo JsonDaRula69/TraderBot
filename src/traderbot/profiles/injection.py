@@ -26,6 +26,7 @@ __all__ = (
     "WorkspaceInjectionError",
     "WorkspaceTemplate",
     "inject_workspace",
+    "preflight_workspace",
     "validate_workspace_path",
 )
 
@@ -84,6 +85,14 @@ class InjectionReport:
     template: WorkspaceTemplate
     records: tuple[InjectionRecord, ...]
     manifest_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class _InjectionOptions:
+    workspace_root: Path
+    template: WorkspaceTemplate | str
+    templates_root: Path | None
+    apply: bool
 
 
 def _default_templates_root() -> Path:
@@ -148,15 +157,10 @@ def _read_template(root: Path, template: WorkspaceTemplate, name: str) -> bytes:
         raise WorkspaceInjectionError(source, "required template file is missing") from exc
 
 
-def inject_workspace(
-    workspace_root: Path,
-    template: WorkspaceTemplate | str,
-    templates_root: Path | None = None,
-) -> InjectionReport:
-    """Safely synchronize one allowlisted template into a selected workspace root."""
-    selected = _parse_template(template)
-    source_root = _validate_root(templates_root or _default_templates_root())
-    root = _validate_root(workspace_root)
+def _synchronize_workspace(options: _InjectionOptions) -> InjectionReport:
+    selected = _parse_template(options.template)
+    source_root = _validate_root(options.templates_root or _default_templates_root())
+    root = _validate_root(options.workspace_root)
     names = _file_names(selected)
     templates = {
         name: _read_template(source_root, selected, name)
@@ -204,22 +208,23 @@ def inject_workspace(
             InjectionRecord(name, strategy, action, hashlib.sha256(desired).hexdigest())
         )
 
-    created_root = not root_exists
-    created_learnings = False
-    learnings = root / _LEARNINGS_DIRECTORY
-    try:
-        _ = _validate_root(root)
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if _LEARNINGS_DIRECTORY in names and not learnings.exists():
-            learnings.mkdir(mode=0o700)
-            created_learnings = True
-        _apply_writes(tuple(plans))
-    except (OSError, WorkspaceInjectionError):
-        if created_learnings:
-            learnings.rmdir()
-        if created_root:
-            root.rmdir()
-        raise
+    if options.apply:
+        created_root = not root_exists
+        created_learnings = False
+        learnings = root / _LEARNINGS_DIRECTORY
+        try:
+            _ = _validate_root(root)
+            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if _LEARNINGS_DIRECTORY in names and not learnings.exists():
+                learnings.mkdir(mode=0o700)
+                created_learnings = True
+            _apply_writes(tuple(plans))
+        except (OSError, WorkspaceInjectionError):
+            if created_learnings:
+                learnings.rmdir()
+            if created_root:
+                root.rmdir()
+            raise
 
     digest = hashlib.sha256()
     for record in records:
@@ -228,3 +233,25 @@ def inject_workspace(
         digest.update((record.sha256 or "directory").encode())
         digest.update(b"\n")
     return InjectionReport(selected, tuple(records), digest.hexdigest())
+
+
+def preflight_workspace(
+    workspace_root: Path,
+    template: WorkspaceTemplate | str,
+    templates_root: Path | None = None,
+) -> InjectionReport:
+    """Plan and validate one workspace injection without creating or updating paths."""
+    return _synchronize_workspace(
+        _InjectionOptions(workspace_root, template, templates_root, apply=False)
+    )
+
+
+def inject_workspace(
+    workspace_root: Path,
+    template: WorkspaceTemplate | str,
+    templates_root: Path | None = None,
+) -> InjectionReport:
+    """Safely synchronize one allowlisted template into a selected workspace root."""
+    return _synchronize_workspace(
+        _InjectionOptions(workspace_root, template, templates_root, apply=True)
+    )

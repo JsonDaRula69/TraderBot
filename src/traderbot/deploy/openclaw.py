@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -12,10 +11,10 @@ from typing import Final
 
 from pydantic import BaseModel, ValidationError
 
+from traderbot.deploy.openclaw_config import inspect_config, set_config, set_secret_ref
 from traderbot.deploy.openclaw_models import (
     AgentCreated,
     AgentInventory,
-    ConfigDryRun,
     CronJob,
     CronJobResult,
     DoctorResult,
@@ -25,10 +24,14 @@ from traderbot.deploy.openclaw_models import (
 )
 from traderbot.deploy.openclaw_process import run_bounded
 
+__all__ = (
+    "inspect_config",
+    "set_config",
+    "set_secret_ref",
+)
+
 _AGENT_ID_PATTERN: Final = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-_CONFIG_KEY_PATTERN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$")
 _RESERVED_AGENT_IDS: Final = frozenset({"main", "openclaw", "crestodian"})
-_SANDBOX_MODES: Final = frozenset({"off", "non-main", "all"})
 _NAMED_SESSIONS: Final = frozenset({"main", "isolated", "current"})
 _FAILURE_STATUSES: Final = frozenset({"error", "failed", "failure"})
 
@@ -122,45 +125,33 @@ def openclaw_setup() -> bool:
     ) is not None
 
 
-def create_agent(agent_id: str, sandbox_mode: str = "all") -> bool:
-    """Create one normalized agent and apply its sandbox mode separately."""
-    normalized = _normalize_agent_id(agent_id)
-    if (
-        normalized is None
-        or normalized in _RESERVED_AGENT_IDS
-        or sandbox_mode not in _SANDBOX_MODES
-    ):
-        return False
-    workspace = Path.home() / ".openclaw" / f"workspace-{normalized}"
-    inventory = _parse_result(
+def inspect_agents() -> AgentInventory | None:
+    """Return the complete checked configured-agent inventory."""
+    return _parse_result(
         ["openclaw", "agents", "list", "--json"],
         30.0,
         AgentInventory,
     )
-    if inventory is None:
+
+
+def create_agent(agent_id: str, workspace: Path) -> bool:
+    """Request one explicit-path agent creation without inferring ownership state."""
+    normalized = _normalize_agent_id(agent_id)
+    if normalized is None or normalized in _RESERVED_AGENT_IDS or not workspace.is_absolute():
         return False
-    matches = [agent for agent in inventory.root if agent.id == normalized]
-    if len(matches) > 1:
-        return False
-    if matches:
-        if _workspace_key(matches[0].workspace) != _workspace_key(str(workspace)):
-            return False
-    else:
-        created = _parse_result(
-            [
-                "openclaw", "agents", "add", normalized, "--workspace", str(workspace),
-                "--non-interactive", "--json",
-            ],
-            120.0,
-            AgentCreated,
-        )
-        if (
-            created is None
-            or created.agentId != normalized
-            or _workspace_key(created.workspace) != _workspace_key(str(workspace))
-        ):
-            return False
-    return set_config(f"agents.entries.{normalized}.sandbox.mode", sandbox_mode)
+    created = _parse_result(
+        [
+            "openclaw", "agents", "add", normalized, "--workspace", str(workspace),
+            "--non-interactive", "--json",
+        ],
+        120.0,
+        AgentCreated,
+    )
+    return (
+        created is not None
+        and created.agentId == normalized
+        and _workspace_key(created.workspace) == _workspace_key(str(workspace))
+    )
 
 
 def register_cron(
@@ -253,25 +244,3 @@ def gateway_status() -> bool:
         30.0,
         GatewayResult,
     ) is not None
-
-
-def set_config(key: str, value: str) -> bool:
-    """Set one dotted OpenClaw config key using strict JSON string syntax."""
-    if not _CONFIG_KEY_PATTERN.fullmatch(key):
-        return False
-    encoded = json.dumps(value)
-    validated = _parse_result(
-        [
-            "openclaw", "config", "set", key, encoded, "--strict-json", "--dry-run",
-            "--json",
-        ],
-        60.0,
-        ConfigDryRun,
-    )
-    if validated is None:
-        return False
-    result = _run(
-        ["openclaw", "config", "set", key, encoded, "--strict-json"],
-        timeout=60.0,
-    )
-    return result is not None and result.returncode == 0

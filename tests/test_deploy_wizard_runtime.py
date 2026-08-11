@@ -9,6 +9,7 @@ from traderbot.deploy import openclaw
 from traderbot.deploy.openclaw_models import CronJob, JsonValue
 from traderbot.deploy.wizard import ProvisionStatus
 from traderbot.deploy.wizard_runtime import OpenClawAdapter, SecretsTokenProvisioner
+from traderbot.deploy.wizard_state import SecretRefConfig
 from traderbot.kalshi.models import MarketCategory
 from traderbot.mcp.resolver import resolve_token_adapter
 from traderbot.profiles.generic import create_category_profile
@@ -59,7 +60,7 @@ def _managed_bootstrap_cron() -> CronJob:
     }
 
 
-def test_encrypted_identity_is_reused_and_restart_resolvable(
+def test_characterization_encrypted_identity_is_reused_and_restart_resolvable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -105,7 +106,9 @@ def test_storage_failure_does_not_echo_backend_secret() -> None:
     assert "opaque-test-value" not in result.message
 
 
-def test_bootstrap_cron_reuses_exact_main_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_characterization_bootstrap_cron_reuses_exact_main_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Given: the complete managed activation contract already belongs to main
     register = mock.Mock(return_value=True)
     monkeypatch.setattr(
@@ -207,48 +210,33 @@ def test_bootstrap_cron_collision_fails_without_add(monkeypatch: pytest.MonkeyPa
     assert register.call_count == 0
 
 
-def test_secret_ref_updates_only_selected_agent_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given: a recording safe-config boundary
-    writes: list[tuple[str, str]] = []
-
-    def record_write(key: str, value: str) -> bool:
-        writes.append((key, value))
-        return True
-
-    monkeypatch.setattr(openclaw, "set_config", record_write)
+def test_secret_ref_updates_only_selected_agent_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a recording atomic SecretRef boundary
+    write = mock.Mock(return_value=True)
+    monkeypatch.setattr(openclaw, "set_secret_ref", write)
 
     # When: one selected category mapping is configured
-    result = OpenClawAdapter().configure_secret_ref("crypto", "crypto_token")
+    secret_ref = SecretRefConfig(id="crypto_token")
+    result = OpenClawAdapter().set_secret_ref("crypto", secret_ref)
 
-    # Then: only the selected mapping's three SecretRef fields are touched
+    # Then: the complete selected mapping is written once
     assert result is True
-    assert writes == [
-        (
-            "plugins.entries.traderbot-token-injector.config.agentTokenMap.crypto.source",
-            "exec",
-        ),
-        (
-            "plugins.entries.traderbot-token-injector.config.agentTokenMap.crypto.provider",
-            "infisical",
-        ),
-        (
-            "plugins.entries.traderbot-token-injector.config.agentTokenMap.crypto.id",
-            "crypto_token",
-        ),
-    ]
+    write.assert_called_once_with("crypto", secret_ref)
 
 
-def test_agent_workspace_mismatch_fails_before_openclaw_mutation(
+def test_agent_workspace_is_forwarded_as_explicit_inert_data(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Given: a hostile explicit path that differs from the Todo-3 workspace convention
+    # Given: an arbitrary approved absolute path with shell-like text
     create = mock.Mock(return_value=True)
     monkeypatch.setattr(openclaw, "create_agent", create)
 
-    # When: the runtime adapter validates it
-    result = OpenClawAdapter().create_agent("weather", tmp_path / "$(touch-pwned)")
+    workspace = tmp_path / "$(touch-pwned)"
+    result = OpenClawAdapter().create_agent("weather", workspace)
 
-    # Then: the path remains inert data and no OpenClaw mutation is attempted
-    assert result is False
-    assert create.call_count == 0
+    # Then: the path remains one typed argument without local convention rewriting
+    assert result is True
+    create.assert_called_once_with("weather", workspace)

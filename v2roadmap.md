@@ -1725,28 +1725,32 @@ This section describes the v2 architecture that emerges from the design decision
 
 #### Step 1: OpenClaw Config
 - Detect `openclaw` on PATH
-- If missing: install via `npm install -g @openclaw/cli` (requires Node.js)
-- Run `openclaw setup` — this creates the `main` agent and configures gateway, model provider, web search, comms channels
-- Verify: `openclaw gateway status`
+- Require explicit approval before install or baseline setup; never use setup as a probe
+- Inventory every configured agent/workspace plus selected config, SecretRefs, token metadata, injection plans, heartbeat desired state, and bootstrap cron before category/user-state mutation
+- Require existing `main`; after any approved prerequisite setup, restart complete preflight
+- Verify Gateway RPC read-only; never invoke doctor implicitly
 
 #### Step 2: SysAdmin Setup
-- User chooses: use `main` as sysadmin (recommended) or create a new agent
-- Inject SysAdmin workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, `.learnings/`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly
-- Register bootstrap job: one-shot `openclaw cron add --at "5m" --session isolated --agent main --delete-after-run` that prompts SysAdmin to begin its activation protocol (DD-023)
+- Use existing `main` only, adopt its inventory workspace unchanged, and never call `agents add main`
+- Preflight then inject SysAdmin workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, `.learnings/`); preserve legacy `TOOLS.md`/`HEARTBEAT.md` exactly
+- Preflight the bootstrap contract, then request its one-shot Gateway job only after all selected agent/config postconditions pass (DD-023)
 - No other agent schedules are registered at deploy time; recurring cron/heartbeat definitions remain dormant until explicitly approved and requested through Gateway (DD-023)
 - Create sysadmin profile: `traderbot profile create sysadmin --mode paper --risk-multiplier 0.001 --all-categories`
 - Assign profile token to sysadmin agent via OpenClaw SecretRef
 - Verify: `traderbot auth check --json`
 
 #### Step 3: Category Selection
-- Present available categories: Weather, Economics, Politics, Sports, Crypto, Entertainment, Science & Technology, Health, Social
+- Present available categories: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, Other
 - User selects one or more
+- Existing selected agents reuse inventory workspaces; explicit mismatches fail before mutation
+- Missing selected agents require approved absolute paths; re-read inventory after every add exit and adopt only exact ID/path state
+- Reject linked, same-file, equal, and overlapping roots across every configured agent, including unselected agents
 - For each selected category:
-  - `openclaw agents add <category>` (creates OpenClaw agent)
+  - Request `openclaw agents add <category> --workspace <approved-path> --non-interactive --json` only when missing
   - Inject category workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly
-  - Leave recurring cron/heartbeat schedules dormant until explicit activation approval through OpenClaw Gateway (DD-023)
+  - Preserve user heartbeat state, or write explicitly approved dormant `0m` through OpenClaw config; never create heartbeat jobs/state directly
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category> --risk-multiplier <default>`
-  - Assign profile token to category agent via OpenClaw SecretRef
+  - Preserve exact SecretRefs, atomically create absent mappings, and fail closed on conflicts
 - Do not invoke doctor implicitly; user-state repair or migration requires a separate explicit operator action
 
 #### Step 4: API Tokens

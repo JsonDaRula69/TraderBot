@@ -2,92 +2,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal, final
+from typing import Literal
 from unittest import mock
 
 import pytest
 from pydantic import ValidationError
 
+from tests.deploy_safety_fakes import SafetyEnvironment
 from traderbot.deploy.config import DeployConfig
 from traderbot.deploy.wizard import (
     DeployWizard,
-    TokenProvisionResult,
-    WizardPorts,
     WizardRequest,
 )
 from traderbot.deploy.wizard_command import execute_deploy
+from traderbot.deploy.wizard_state import BootstrapCronState
 from traderbot.kalshi.models import MarketCategory
-from traderbot.profiles.injection import WorkspaceTemplate
-from traderbot.profiles.models import TradingProfile
-
-
-@final
-class RecordingOpenClaw:
-    def __init__(self, *, cron_succeeds: bool = True) -> None:
-        self.setup_calls = 0
-        self.created_agents: list[tuple[str, Path]] = []
-        self.cron_succeeds = cron_succeeds
-
-    def detect(self) -> str | None:
-        return "/fake/openclaw"
-
-    def install(self) -> bool:
-        raise AssertionError
-
-    def setup(self) -> bool:
-        self.setup_calls += 1
-        return True
-
-    def gateway_status(self) -> bool:
-        return True
-
-    def create_agent(self, agent_id: str, workspace: Path) -> bool:
-        self.created_agents.append((agent_id, workspace))
-        return True
-
-    def configure_secret_ref(self, agent_id: str, secret_id: str) -> bool:
-        _ = agent_id, secret_id
-        return True
-
-    def ensure_bootstrap_cron(self) -> bool:
-        return self.cron_succeeds
-
-    def doctor(self) -> bool:
-        return True
-
-
-@final
-class RecordingTokens:
-    def ensure(self, profile: TradingProfile, agent_id: str) -> TokenProvisionResult:
-        _ = profile
-        return TokenProvisionResult.created(agent_id)
-
-
-@final
-class RecordingInjector:
-    def __init__(self) -> None:
-        self.workspaces: list[Path] = []
-
-    def inject(self, workspace: Path, template: WorkspaceTemplate) -> str:
-        _ = template
-        self.workspaces.append(workspace)
-        return "manifest"
-
-
-@final
-class RecordingEnvironment:
-    def __init__(self, *, cron_succeeds: bool = True) -> None:
-        self.openclaw = RecordingOpenClaw(cron_succeeds=cron_succeeds)
-        self.tokens = RecordingTokens()
-        self.injector = RecordingInjector()
-
-    def ports(self) -> WizardPorts:
-        return WizardPorts(self.openclaw, self.tokens, self.injector)
 
 
 def _documented_payload(
+    workspace: Path,
     mode: str = "backtest",
-) -> dict[str, str | int | list[str] | dict[str, str]]:
+) -> dict[str, str | int | list[str] | dict[str, str] | dict[str, bool]]:
     return {
         "categories": ["weather"],
         "mode": mode,
@@ -98,66 +33,67 @@ def _documented_payload(
             "kalshi_private_key_pem": "example-pem",
         },
         "months_backfill": 6,
+        "category_workspaces": {"weather": str(workspace)},
+        "approvals": {
+            "install_openclaw": False,
+            "setup_openclaw": False,
+            "create_agents": True,
+            "heartbeat_change": True,
+        },
+        "heartbeat_every": "0m",
     }
 
 
-def test_documented_todo1_config_derives_isolated_home_without_prompts(
+def test_documented_config_uses_explicit_new_agent_path_without_prompts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Given: exactly the Todo-1 JSON keys and an isolated invocation HOME
+    # Given: explicit categories, new-agent path, and approvals in isolated config mode
     home = tmp_path / "home"
     data_dir = tmp_path / "data"
     config_path = tmp_path / "deploy.json"
-    _ = config_path.write_text(json.dumps(_documented_payload()), encoding="utf-8")
+    weather = home / "approved" / "weather"
+    _ = config_path.write_text(json.dumps(_documented_payload(weather)), encoding="utf-8")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("TRADERBOT_DATA_DIR", str(data_dir))
-    environment = RecordingEnvironment()
+    environment = SafetyEnvironment({"main": home / "existing-main"})
 
     # When: config mode executes with prompts forbidden
     with mock.patch("traderbot.deploy.wizard_command.Prompt.ask", side_effect=AssertionError):
         code = execute_deploy(config_path, json_output=True, ports=environment.ports())
 
-    # Then: standard current OpenClaw paths reach orchestration inside isolated HOME
+    # Then: only the explicit missing category path is created without prompting
     output = capsys.readouterr()
     assert code == 0
     assert output.err == ""
-    assert environment.injector.workspaces == [
-        home / ".openclaw" / "workspace",
-        home / ".openclaw" / "workspace-weather",
-    ]
-    assert environment.openclaw.created_agents == [
-        ("weather", home / ".openclaw" / "workspace-weather")
-    ]
+    assert environment.openclaw.agents["main"] == home / "existing-main"
+    assert environment.openclaw.agents["weather"] == weather
+    assert environment.openclaw.events.count("create:weather") == 1
     assert data_dir.exists() is False
 
 
-def test_partial_workspace_override_preserves_explicit_path_and_derives_missing(
+def test_existing_inventory_workspace_is_reused_without_config_assertion(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Given: only the optional SysAdmin workspace extension is explicit
-    home = tmp_path / "home"
-    explicit_main = tmp_path / "explicit-main"
-    config = _documented_payload()
-    config["sysadmin_workspace"] = str(explicit_main)
+    # Given: selected weather already has an arbitrary nested inventory workspace
+    nested = tmp_path / "production" / "heterogeneous" / "weather"
+    config = _documented_payload(tmp_path / "unused")
+    del config["category_workspaces"]
     config_path = tmp_path / "deploy.json"
     _ = config_path.write_text(json.dumps(config), encoding="utf-8")
-    monkeypatch.setenv("HOME", str(home))
-    environment = RecordingEnvironment()
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": nested})
+    environment.make_exact("main", "weather")
 
-    # When: config mode resolves selected workspace paths
+    # When: config mode selects the existing agent without asserting a path
     code = execute_deploy(config_path, json_output=True, ports=environment.ports())
 
-    # Then: the override is preserved and only the missing category path is derived
+    # Then: inventory remains authoritative and no add occurs
     _ = capsys.readouterr()
     assert code == 0
-    assert environment.injector.workspaces == [
-        explicit_main,
-        home / ".openclaw" / "workspace-weather",
-    ]
+    assert environment.openclaw.agents["weather"] == nested
+    assert "create:weather" not in environment.openclaw.events
 
 
 @pytest.mark.parametrize("mode", ["paper", "live"])
@@ -168,8 +104,11 @@ def test_lifecycle_mode_fails_actionably_before_mutation(
 ) -> None:
     # Given: a later-lifecycle mode in an otherwise documented config
     config_path = tmp_path / "deploy.json"
-    _ = config_path.write_text(json.dumps(_documented_payload(mode)), encoding="utf-8")
-    environment = RecordingEnvironment()
+    _ = config_path.write_text(
+        json.dumps(_documented_payload(tmp_path / "weather", mode)),
+        encoding="utf-8",
+    )
+    environment = SafetyEnvironment({"main": tmp_path / "main"})
 
     # When: the config crosses the CLI boundary
     code = execute_deploy(config_path, json_output=True, ports=environment.ports())
@@ -178,8 +117,7 @@ def test_lifecycle_mode_fails_actionably_before_mutation(
     output = capsys.readouterr()
     assert code == 2
     assert "Phase 7 lifecycle" in output.err
-    assert environment.openclaw.setup_calls == 0
-    assert environment.injector.workspaces == []
+    assert environment.mutations == ()
 
 
 def test_deploy_config_schema_is_backtest_only() -> None:
@@ -192,17 +130,19 @@ def test_deploy_config_schema_is_backtest_only() -> None:
     assert '"live"' not in schema_json
     for mode in ("paper", "live"):
         with pytest.raises(ValidationError, match="Phase 7 lifecycle"):
-            _ = DeployConfig.model_validate(_documented_payload(mode))
+            _ = DeployConfig.model_validate(_documented_payload(Path("/tmp/weather"), mode))
 
 
 def test_success_result_reports_partial_eight_step_deployment(tmp_path: Path) -> None:
     # Given: valid isolated workspaces and successful step adapters
-    environment = RecordingEnvironment()
+    environment = SafetyEnvironment(
+        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
+    )
+    environment.make_exact("main", "weather")
     request = WizardRequest(
         categories=(MarketCategory.WEATHER,),
         mode="backtest",
-        sysadmin_workspace=tmp_path / "main",
-        category_workspaces={MarketCategory.WEATHER: tmp_path / "weather"},
+        category_workspaces={},
     )
 
     # When: implemented steps complete successfully
@@ -217,22 +157,24 @@ def test_success_result_reports_partial_eight_step_deployment(tmp_path: Path) ->
 
 def test_bootstrap_contract_conflict_is_actionable_in_step_result(tmp_path: Path) -> None:
     # Given: cron reconciliation reports a managed contract conflict
-    environment = RecordingEnvironment(cron_succeeds=False)
+    environment = SafetyEnvironment(
+        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
+    )
+    environment.openclaw.bootstrap_state = BootstrapCronState.CONFLICT
     request = WizardRequest(
         categories=(MarketCategory.WEATHER,),
         mode="backtest",
-        sysadmin_workspace=tmp_path / "main",
-        category_workspaces={MarketCategory.WEATHER: tmp_path / "weather"},
+        category_workspaces={},
     )
 
-    # When: the wizard reaches SysAdmin setup
+    # When: global preflight reads the conflicting contract
     result = DeployWizard(environment.ports()).run(request)
 
-    # Then: step 2 names the contract conflict and later mutation remains blocked
+    # Then: step 1 reports the conflict and no later mutation occurs
     assert result.success is False
-    assert result.completed_steps == (1,)
-    assert "cron contract conflict" in result.steps[1].message
-    assert environment.openclaw.created_agents == []
+    assert result.completed_steps == ()
+    assert "cron" in result.steps[0].message
+    assert environment.mutations == ()
 
 
 def test_interactive_report_states_full_deployment_is_incomplete(
@@ -241,10 +183,17 @@ def test_interactive_report_states_full_deployment_is_incomplete(
 ) -> None:
     # Given: a documented config and successful adapters
     config_path = tmp_path / "deploy.json"
-    _ = config_path.write_text(json.dumps(_documented_payload()), encoding="utf-8")
+    _ = config_path.write_text(
+        json.dumps(_documented_payload(tmp_path / "weather")),
+        encoding="utf-8",
+    )
 
     # When: human-readable output is requested
-    code = execute_deploy(config_path, json_output=False, ports=RecordingEnvironment().ports())
+    code = execute_deploy(
+        config_path,
+        json_output=False,
+        ports=SafetyEnvironment({"main": tmp_path / "main"}).ports(),
+    )
 
     # Then: the report explicitly distinguishes step success from full deployment
     output = capsys.readouterr()
@@ -262,12 +211,12 @@ def test_linked_workspace_override_fails_before_openclaw_mutation(
     target.mkdir()
     linked = tmp_path / "linked"
     linked.symlink_to(target, target_is_directory=True)
-    config = _documented_payload()
+    config = _documented_payload(linked / "weather")
     config["sysadmin_workspace"] = str(linked / "main")
     config["category_workspaces"] = {"weather": str(linked / "weather")}
     config_path = tmp_path / "deploy.json"
     _ = config_path.write_text(json.dumps(config), encoding="utf-8")
-    environment = RecordingEnvironment()
+    environment = SafetyEnvironment({"main": tmp_path / "main"})
 
     # When: config mode validates all paths
     code = execute_deploy(config_path, json_output=True, ports=environment.ports())
@@ -275,8 +224,7 @@ def test_linked_workspace_override_fails_before_openclaw_mutation(
     # Then: linked paths fail before OpenClaw setup or workspace writes
     _ = capsys.readouterr()
     assert code == 2
-    assert environment.openclaw.setup_calls == 0
-    assert environment.injector.workspaces == []
+    assert environment.mutations == ()
 
 
 def test_deploy_docs_publish_machine_readable_incomplete_state() -> None:

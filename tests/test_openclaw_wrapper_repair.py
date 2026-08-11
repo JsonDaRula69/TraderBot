@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 import traderbot.deploy.openclaw as openclaw
+import traderbot.deploy.openclaw_config as openclaw_config
 
 
 def _dry_run_json(*, ok: bool = True) -> str:
@@ -51,90 +53,48 @@ def _completed(
     return subprocess.CompletedProcess(argv, returncode, stdout, "")
 
 
-class _AgentStateCli:
-    def __init__(self) -> None:
-        self.workspace: str | None = None
-        self.add_calls: int = 0
-        self.config_writes: int = 0
-        self.argv: list[list[str]] = []
+def test_create_agent_nonzero_is_reported_without_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the bounded explicit-path add exits nonzero
+    calls: list[list[str]] = []
 
-    def __call__(
-        self,
-        argv: list[str],
-        *,
-        timeout: float,
-    ) -> subprocess.CompletedProcess[str]:
+    def run(argv: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
         del timeout
-        self.argv.append(argv)
-        if argv[1:] == ["agents", "list", "--json"]:
-            agents = [] if self.workspace is None else [
-                {
-                    "id": "weather",
-                    "workspace": self.workspace,
-                    "agentDir": "/state/agents/weather/agent",
-                    "bindings": 0,
-                    "isDefault": False,
-                }
-            ]
-            return _completed(argv, stdout=json.dumps(agents))
-        if argv[1:3] == ["agents", "add"]:
-            self.add_calls += 1
-            if self.workspace is not None:
-                return _completed(argv, returncode=1, stdout="")
-            self.workspace = argv[argv.index("--workspace") + 1]
-            return _completed(
-                argv,
-                stdout=json.dumps(
-                    {
-                        "agentId": "weather",
-                        "workspace": self.workspace,
-                        "agentDir": "/state/agents/weather/agent",
-                        "bindings": {"added": [], "updated": [], "skipped": [], "conflicts": []},
-                    }
-                ),
-            )
-        if argv[1:3] == ["config", "set"] and "--dry-run" in argv:
-            return _completed(argv, stdout=_dry_run_json())
-        if argv[1:3] == ["config", "set"]:
-            self.config_writes += 1
-            return _completed(argv, returncode=1 if self.config_writes == 1 else 0)
-        raise AssertionError(f"unexpected argv: {argv}")
+        calls.append(argv)
+        return _completed(argv, returncode=1, stdout="")
+
+    monkeypatch.setattr(openclaw, "_run", run)
+
+    # When: one creation request is issued
+    workspace = Path(Path.cwd().anchor) / "srv" / "weather"
+    result = openclaw.create_agent("weather", workspace)
+
+    # Then: the wrapper reports failure without any rollback/delete request
+    assert result is False
+    argv = calls[0]
+    assert argv[1:3] == ["agents", "add"]
+    assert "delete" not in argv
 
 
-def test_create_agent_retry_heals_partial_sandbox_without_delete(
+def test_inspect_agents_preserves_existing_inventory_workspace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Given: add succeeds once and the first sandbox write fails
-    cli = _AgentStateCli()
-    monkeypatch.setattr(openclaw, "_run", cli)
-
-    # When: the same explicit provisioning request is retried
-    first = openclaw.create_agent("weather", sandbox_mode="all")
-    second = openclaw.create_agent("weather", sandbox_mode="all")
-
-    # Then: retry reconciles the same workspace and never deletes the agent
-    assert first is False and second is True
-    assert cli.add_calls == 1
-    assert cli.config_writes == 2
-    assert not [argv for argv in cli.argv if argv[1:3] == ["agents", "delete"]]
-
-
-def test_create_agent_refuses_existing_id_with_different_workspace(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: inventory contains the requested id owned by another workspace
+    # Given: inventory contains an arbitrary configured weather workspace
+    workspace = Path(Path.cwd().anchor) / "other" / "workspace"
     inventory = json.dumps(
-        [{"id": "weather", "workspace": "/other/workspace", "agentDir": "/state/agent",
+        [{"id": "weather", "workspace": str(workspace), "agentDir": "/state/agent",
           "bindings": 0, "isDefault": False}]
     )
     run = mock.Mock(return_value=_completed(["openclaw"], stdout=inventory))
     monkeypatch.setattr(openclaw, "_run", run)
 
-    # When: provisioning requests the conflicting id
-    result = openclaw.create_agent("weather", sandbox_mode="all")
+    # When: the strict read-only inventory wrapper executes
+    result = openclaw.inspect_agents()
 
-    # Then: takeover is refused after the read-only inventory command
-    assert result is False
+    # Then: the exact path crosses the typed boundary without mutation
+    assert result is not None
+    assert result.root[0].workspace == str(workspace)
     run.assert_called_once_with(["openclaw", "agents", "list", "--json"], timeout=30.0)
 
 
@@ -284,7 +244,7 @@ def test_doctor_rejects_malformed_findings(
 def test_set_config_rejects_failed_dry_run_without_write(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: strict JSON dry-run exits zero with a documented failure report
     run = mock.Mock(return_value=_completed(["openclaw"], stdout=_dry_run_json(ok=False)))
-    monkeypatch.setattr(openclaw, "_run", run)
+    monkeypatch.setattr(openclaw_config, "_run", run)
 
     # When: a configuration write is requested
     result = openclaw.set_config("agents.defaults.model", "provider/model")
@@ -305,7 +265,7 @@ def test_set_config_rejects_partial_success_dry_run_without_write(
 ) -> None:
     # Given: dry-run claims success but omits the documented report fields
     run = mock.Mock(return_value=_completed(["openclaw"], stdout='{"ok":true}'))
-    monkeypatch.setattr(openclaw, "_run", run)
+    monkeypatch.setattr(openclaw_config, "_run", run)
 
     # When: a configuration write is requested
     result = openclaw.set_config("agents.defaults.model", "provider/model")

@@ -12,6 +12,7 @@ from unittest import mock
 import pytest
 
 import traderbot.deploy.openclaw as openclaw
+from traderbot.deploy.openclaw_models import JsonObject
 from traderbot.services import deploy as service_deploy
 from traderbot.services.paths import BinPaths
 
@@ -28,17 +29,6 @@ def _completed(
 
 def _assert_run(run: mock.Mock, argv: list[str], timeout: float) -> None:
     run.assert_called_once_with(argv, timeout=timeout)
-
-
-def _dry_run_json() -> str:
-    return json.dumps(
-        {
-            "ok": True, "operations": 1, "configPath": "/tmp/openclaw.json",
-            "inputModes": ["value"],
-            "checks": {"schema": True, "resolvability": True, "resolvabilityComplete": True},
-            "refsChecked": 0, "skippedExecRefs": 0,
-        }
-    )
 
 
 def test_existing_subprocess_convention_is_bounded(
@@ -130,65 +120,58 @@ def test_openclaw_setup_uses_noninteractive_baseline(monkeypatch: pytest.MonkeyP
 
 
 def test_create_agent_weather(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given: agent creation and its separate sandbox write both succeed
+    # Given: explicit arbitrary workspace creation succeeds
+    workspace = Path(Path.cwd().anchor) / "srv" / "openclaw" / "teams" / "weather"
     run = mock.Mock(
-        side_effect=[
-            _completed(["openclaw"], stdout="[]"),
-            _completed(
-                ["openclaw"],
-                stdout=json.dumps(
-                    {
-                        "agentId": "weather-agent",
-                        "workspace": str(Path.home() / ".openclaw" / "workspace-weather-agent"),
-                        "agentDir": "/state/agents/weather-agent/agent",
-                        "bindings": {"added": [], "updated": [], "skipped": [], "conflicts": []},
-                    }
-                ),
+        return_value=_completed(
+            ["openclaw"],
+            stdout=json.dumps(
+                {
+                    "agentId": "weather-agent",
+                    "workspace": str(workspace),
+                    "agentDir": "/state/agents/weather-agent/agent",
+                    "bindings": {"added": [], "updated": [], "skipped": [], "conflicts": []},
+                }
             ),
-            _completed(["openclaw"], stdout=_dry_run_json()),
-            _completed(["openclaw"]),
-        ]
+        )
     )
     monkeypatch.setattr(openclaw, "_run", run)
 
     # When: an unnormalized weather agent is explicitly created
-    result = openclaw.create_agent(" Weather Agent ", sandbox_mode="all")
+    result = openclaw.create_agent(" Weather Agent ", workspace)
 
-    # Then: both commands use one canonical id and strict JSON sandbox value
+    # Then: one bounded request carries the canonical ID and approved path
     assert result is True
     add_argv = [
         "openclaw", "agents", "add", "weather-agent", "--workspace",
-        str(Path.home() / ".openclaw" / "workspace-weather-agent"),
+        str(workspace),
         "--non-interactive", "--json",
     ]
-    dry_run_argv = [
-        "openclaw", "config", "set", "agents.entries.weather-agent.sandbox.mode",
-        '"all"', "--strict-json", "--dry-run", "--json",
-    ]
-    sandbox_argv = dry_run_argv[:-2]
-    inventory_argv = ["openclaw", "agents", "list", "--json"]
-    assert [call.args[0] for call in run.call_args_list] == [
-        inventory_argv, add_argv, dry_run_argv, sandbox_argv,
-    ]
-    assert [call.kwargs["timeout"] for call in run.call_args_list] == [30.0, 120.0, 60.0, 60.0]
+    _assert_run(run, add_argv, 120.0)
 
 
 @pytest.mark.parametrize(
-    ("agent_id", "sandbox_mode"),
-    [("", "all"), ("---", "all"), ("main", "all"), ("OPENCLAW", "all"),
-     ("crestodian", "all"), ("weather", "docker")],
+    ("agent_id", "workspace"),
+    [
+        ("", Path("/tmp/weather")),
+        ("---", Path("/tmp/weather")),
+        ("main", Path("/tmp/main")),
+        ("OPENCLAW", Path("/tmp/openclaw")),
+        ("crestodian", Path("/tmp/crestodian")),
+        ("weather", Path("relative")),
+    ],
 )
 def test_create_agent_rejects_invalid_or_reserved_id(
     monkeypatch: pytest.MonkeyPatch,
     agent_id: str,
-    sandbox_mode: str,
+    workspace: Path,
 ) -> None:
     # Given: an identifier that cannot name a user-created agent
     run = mock.Mock()
     monkeypatch.setattr(openclaw, "_run", run)
 
     # When: creation is requested
-    result = openclaw.create_agent(agent_id, sandbox_mode=sandbox_mode)
+    result = openclaw.create_agent(agent_id, workspace)
 
     # Then: no OpenClaw state mutation is attempted
     assert result is False
@@ -328,7 +311,7 @@ def test_readonly_health_wrappers_use_strict_current_flags(
     monkeypatch: pytest.MonkeyPatch,
     function: Callable[[], bool],
     argv: list[str],
-    payload: dict[str, object],
+    payload: JsonObject,
 ) -> None:
     # Given: a current JSON response from a read-only health command
     run = mock.Mock(return_value=_completed(argv, stdout=json.dumps(payload)))
@@ -340,27 +323,3 @@ def test_readonly_health_wrappers_use_strict_current_flags(
     # Then: it succeeds only through the prompt-free current command
     assert result is True
     _assert_run(run, argv, 30.0)
-
-
-def test_set_config_encodes_hostile_string_as_strict_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given: a string containing shell syntax and JSON metacharacters
-    run = mock.Mock(
-        side_effect=[
-            _completed(["openclaw"], stdout=_dry_run_json()),
-            _completed(["openclaw"]),
-        ]
-    )
-    monkeypatch.setattr(openclaw, "_run", run)
-
-    # When: the config value is explicitly set
-    result = openclaw.set_config("agents.defaults.model", '$(echo pwned) "quoted"')
-
-    # Then: the value is one valid JSON argv atom under strict parsing
-    assert result is True
-    value = '"$(echo pwned) \\"quoted\\""'
-    base = ["openclaw", "config", "set", "agents.defaults.model", value, "--strict-json"]
-    assert [call.args[0] for call in run.call_args_list] == [
-        [*base, "--dry-run", "--json"], base,
-    ]
-    assert [call.kwargs["timeout"] for call in run.call_args_list] == [60.0, 60.0]
-    assert openclaw.set_config("--help", "ignored") is False
