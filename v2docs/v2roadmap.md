@@ -84,6 +84,7 @@
 - [x] Phase 3 Task 10: on-target macpro-linux QA passed via dev-liaison agent (13/13 probes green); PR #197 merged to v2-main (merge commit 8cce1b9). All CI green (ubuntu, macOS, Windows, build, security audit, Snyk).
 - [x] Phase 3 Final Wave remediation: secure Chroma root creation preserves pre-existing targets; the QA runner is consolidated into the sole allowed script; MCP storage-health fields are retained as the Task 7 response surface; and basedpyright warnings remain reported while warnings-only runs exit successfully. The cleaned remote `/tmp/phase3-qa-evidence.json` is recorded in the plan as expected ephemeral cleanup, with a local replay retained under workspace `.omo/evidence/`.
 - [x] Phase 4 deploy wizard steps 4-5: secret-safe environment references or hidden Kalshi input, strict local RSA validation, explicit Infisical status probing with encrypted fallback, current global/schema initialization, selected-category decisions databases through `DatabaseAccess`, canonical read-only SysAdmin enumeration, and lazy locked embedded Chroma provisioning.
+- [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
 
 ### Dev-Liaison Testing Protocols
 
@@ -1093,7 +1094,7 @@ Some problems require modification on both sides: new TraderBot module = new age
 | ECMWF on AWS S3 | Raw GRIB2 model output with full lead times (0h-144h+) | **Yes** — "forecast issued on date X for date X+N hours" | Free, public S3 bucket | GRIB2 processing required |
 | NWS Digital Forecast API | Current point forecasts for US locations | No (current only) | Free, no API key | REST API, XML/JSON |
 | Iowa Environmental Mesonet (IEM) | Archived NWS text forecasts | Possibly (API limited/changed) | Free | Uncertain API access |
-| Kalshi Historical Candlesticks | OHLC bid/ask + trade prices for settled markets | N/A (market data, not forecasts) | Requires API key | REST API, `GET /historical/markets/{ticker}/candlesticks` |
+| Kalshi Historical Candlesticks | OHLC bid/ask + trade prices for settled markets | N/A (market data, not forecasts) | Public | REST API, `GET /historical/markets/{ticker}/candlesticks` |
 | Kalshi Forecast Percentile History | Historical raw/formatted forecast percentiles for events | N/A (market consensus data) | Requires API key | REST API, up to 5-second granularity |
 | Kalshi Historical Trades | Historical trade data for settled markets | N/A (market data) | Requires API key | REST API, `GET /historical/trades` |
 

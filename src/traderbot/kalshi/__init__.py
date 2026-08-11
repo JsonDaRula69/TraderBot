@@ -35,7 +35,6 @@ from traderbot.kalshi.models import (
     Fill,
     Market,
     MarketCategory,
-    MarketListResponse,
     Order,
     OrderBook,
     OrderBookLevel,
@@ -58,6 +57,15 @@ from traderbot.kalshi.models import (
 )
 from traderbot.kalshi.pinning import CertPinningError, create_pinned_ssl_context
 from traderbot.kalshi.rate_limit import RateLimiter, TokenBucketRateLimiter
+from traderbot.kalshi.rest_models import (
+    ForecastHistoryResponse,
+    HistoricalCandlestickResponse,
+    KalshiMarket,
+    LiveCandlestickResponse,
+    MarketListResponse,
+    Series,
+    SeriesListResponse,
+)
 from traderbot.kalshi.signing import auth_headers, clear_key_cache, sign_request
 
 __all__ = [
@@ -71,9 +79,13 @@ __all__ = [
     "Event",
     "ExchangeStatus",
     "Fill",
+    "ForecastHistoryResponse",
+    "HistoricalCandlestickResponse",
     "KalshiAPIError",
     "KalshiClient",
     "KalshiError",
+    "KalshiMarket",
+    "LiveCandlestickResponse",
     "Market",
     "MarketCategory",
     "MarketListResponse",
@@ -93,6 +105,8 @@ __all__ = [
     "RateLimiter",
     "RiskCheckResult",
     "Settlement",
+    "Series",
+    "SeriesListResponse",
     "Ticker",
     "TokenBucketRateLimiter",
     "Trade",

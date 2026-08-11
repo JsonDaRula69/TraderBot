@@ -218,6 +218,17 @@ CREATE TABLE IF NOT EXISTS settlement_cache (
 );
 ```
 
+### Global migration v2 historical tables
+
+Migration v2 appends four global tables without changing migration v1:
+
+- `weather_observations` keeps the collector-compatible `date`, `city`, coordinates, `variable`, and `value` columns with `(date, city, variable)` identity.
+- `kalshi_markets` stores official lifecycle metadata, optional series/category discovery context, fixed-point volume/open-interest strings, and Unix-second timestamps indexed for event, series, category/status, and status/close queries.
+- `kalshi_candlesticks` flattens the distinct live and historical response shapes into lossless TEXT fields. Its `source` discriminator and `(ticker, period_interval, end_period_ts, source)` key prevent either source from silently replacing the other.
+- `kalshi_forecast_history` stores each event/series/period/percentile point separately. Raw and normalized numerical forecasts use TEXT so decimal values can be persisted without binary-float coercion.
+
+Only migration v2 is reversible. Rolling it back drops these four tables and their indexes while migration v1 tables and data remain intact.
+
 ---
 
 ## Per-agent database (`decisions.db`)
@@ -407,7 +418,7 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
 
 <!-- schema-manifest:start -->
 {
-  "version": "phase3-task0",
+  "version": "phase4-task7",
   "scopes": {
     "global": {
       "db_file": "traderbot.db",
@@ -420,7 +431,11 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
         "orderbook",
         "weather_forecasts",
         "nws_forecasts",
-        "settlement_cache"
+        "settlement_cache",
+        "weather_observations",
+        "kalshi_markets",
+        "kalshi_candlesticks",
+        "kalshi_forecast_history"
       ]
     },
     "per_agent": {
@@ -855,6 +870,80 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
       ],
       "foreign_keys": [],
       "indexes": []
+    },
+    "weather_observations": {
+      "scope": "global",
+      "columns": [
+        {"name": "date", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "city", "type": "TEXT", "nullable": false, "pk_ordinal": 2},
+        {"name": "latitude", "type": "REAL", "nullable": false, "pk_ordinal": 0},
+        {"name": "longitude", "type": "REAL", "nullable": false, "pk_ordinal": 0},
+        {"name": "variable", "type": "TEXT", "nullable": false, "pk_ordinal": 3},
+        {"name": "value", "type": "REAL", "nullable": false, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_markets": {
+      "scope": "global",
+      "columns": [
+        {"name": "ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "event_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "series_ticker", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "category", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "status", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "result", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "title", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "subtitle", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "yes_sub_title", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "no_sub_title", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "market_type", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "volume_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_interest_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "created_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "updated_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "close_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "settled_ts", "type": "INTEGER", "nullable": true, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_candlesticks": {
+      "scope": "global",
+      "columns": [
+        {"name": "ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "period_interval", "type": "INTEGER", "nullable": false, "pk_ordinal": 2},
+        {"name": "end_period_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 3},
+        {"name": "source", "type": "TEXT", "nullable": false, "pk_ordinal": 4},
+        {"name": "yes_bid_open", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_low", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_high", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_close", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_open", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_low", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_high", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_close", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "price_open", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_low", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_high", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_close", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_mean", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_previous", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_min", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_max", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "volume_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_interest_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_forecast_history": {
+      "scope": "global",
+      "columns": [
+        {"name": "event_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "series_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 2},
+        {"name": "end_period_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 3},
+        {"name": "period_interval", "type": "INTEGER", "nullable": false, "pk_ordinal": 4},
+        {"name": "percentile", "type": "INTEGER", "nullable": false, "pk_ordinal": 5},
+        {"name": "raw_numerical_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "numerical_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "formatted_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0}
+      ]
     },
     "decisions": {
       "scope": "per_agent",

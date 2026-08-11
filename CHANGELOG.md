@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a92] — 2026-08-11
+
+### Added
+
+- Added global migration v2 and strict official Kalshi v2 series, market, live/historical candlestick, and signed forecast-history methods for deterministic historical backfill.
+
 ## [2.0.0a91] — 2026-08-11
 
 ### Added

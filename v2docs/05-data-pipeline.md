@@ -37,7 +37,7 @@ TraderBot Service (always-on)
 │   └── Rotates all agent profile tokens via Infisical
 │
 └── Local Databases
-    ├── SQLite: global ~/.traderbot/traderbot.db (market_data, orderbook, weather_forecasts, nws_forecasts, settlement_cache)
+    ├── SQLite: global ~/.traderbot/traderbot.db (real-time cache, forecasts, observations, Kalshi history, settlements)
     ├── ChromaDB: shared collections with category metadata (Phase 3)
     └── WebSocket cache: real-time Kalshi prices, orderbooks, fills
 ```
@@ -53,6 +53,8 @@ The Kalshi WebSocket is the **sole source for all real-time Kalshi data**. REST 
 3. Fetching historical data (settled markets, candlesticks, historical trades)
 
 No REST polling for current market data — the WebSocket provides a continuous stream, and any REST call for data that the WebSocket already provides is a bug.
+
+The current typed historical REST surface follows the official v2 contracts: lowercase category discovery uses public `GET /series`; paginated metadata uses public `GET /markets`; live-window candles use public `GET /series/{series_ticker}/markets/{ticker}/candlesticks`; archived candles use public `GET /historical/markets/{ticker}/candlesticks`; and forecast percentiles use signed `GET /series/{series_ticker}/events/{event_ticker}/forecast_percentile_history`. Dollar and contract-count fixed points remain validated strings, and live/historical candle wire fields are modeled separately.
 
 **Channels subscribed**:
 - `market_lifecycle_v2`: detects new markets as they appear — no REST scan needed
@@ -122,7 +124,7 @@ The `--categories` flag for backfill becomes less critical since all categories 
 |---|---|---|---|
 | Historical NWS forecasts | NWS API | JSON | Ready to use (day-0 only) |
 | Open-Meteo Historical Forecast | Open-Meteo Archive API | JSON | Ready to use (day-0 only) |
-| Kalshi historical market data | HistoryService | JSON | Ready to use |
+| Kalshi historical market data | Typed KalshiClient v2 methods | JSON | Ready to use |
 | Kalshi historical orderbooks | Candlestick API (bid/ask OHLC + trade prices) | JSON | 1min/1hr/1day granularity |
 | Kalshi forecast percentiles | `forecast_percentile_history` API | JSON | Up to 5-second granularity |
 | Historical news with timestamps | ChromaDB with published_at | Vector | Verify metadata integrity |
