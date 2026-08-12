@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a96] — 2026-08-12
+
+### Fixed
+
+- Hardened workspace-write TOCTOU race, propagated configured `data_root` through all deploy phases, threaded `kalshi_environment` through backfill and verification, forced `TRADERBOT_USE_HARDCODED_AUTH=0` for `traderbot verify`, broke the deploy import cycle, fixed two stale/dependency tests, and split `wizard_command.py` via `wizard_request.py`.
+
 ## [2.0.0a95] — 2026-08-11
 
 ### Added
