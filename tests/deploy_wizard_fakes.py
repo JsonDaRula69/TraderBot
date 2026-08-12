@@ -3,9 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Never
 
+from traderbot.deploy.backfill_models import BackfillResult
+from traderbot.deploy.deploy_state import load_deploy_state, save_deploy_state
 from traderbot.deploy.openclaw_models import AgentInventory, AgentSummary
+from traderbot.deploy.verify_models import OverallStatus, VerificationResult
 from traderbot.deploy.wizard import DeployWizard
 from traderbot.deploy.wizard_contracts import (
+    DeployState,
+    LatePreflightResult,
     Phase45Result,
     TokenProvisionResult,
     WizardPorts,
@@ -21,6 +26,10 @@ from traderbot.deploy.wizard_state import (
 )
 from traderbot.profiles.injection import WorkspaceTemplate
 from traderbot.profiles.models import TradingProfile
+
+
+class LateStepCanaryError(RuntimeError):
+    pass
 
 
 def fake_workspace(agent_id: str) -> Path:
@@ -49,6 +58,7 @@ class FakeOpenClaw:
         self.heartbeats: dict[str, str] = {}
         self.sandboxes: dict[str, str] = {}
         self.cron_identities: set[tuple[str, str]] = set()
+        self.bootstrap_state: BootstrapCronState | None = None
         self.install_calls: int = 0
         self.setup_calls: int = 0
 
@@ -110,6 +120,8 @@ class FakeOpenClaw:
         )
 
     def inspect_bootstrap_cron(self) -> BootstrapCronState:
+        if self.bootstrap_state is not None:
+            return self.bootstrap_state
         return (
             BootstrapCronState.EXACT
             if ("traderbot-main-at-5m", "main") in self.cron_identities
@@ -135,7 +147,15 @@ class FakeOpenClaw:
         self.sandboxes[agent.agent_id] = value
         return True
 
-    def ensure_bootstrap_cron(self) -> bool:
+    def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool:
+        if state in {
+            BootstrapCronState.EXACT,
+            BootstrapCronState.COMPLETED_RETAINED,
+            BootstrapCronState.COMPLETED_ABSENT,
+        }:
+            return True
+        if state is not BootstrapCronState.MISSING:
+            return False
         self.cron_identities.add(("traderbot-main-at-5m", "main"))
         return True
 
@@ -181,7 +201,7 @@ class FakeInjector:
 
 class FakePhase45:
     def __init__(self, fail_step: int | None = None) -> None:
-        self.fail_step = fail_step
+        self.fail_step: int | None = fail_step
         self.calls: list[int] = []
 
     def provision_secrets(self, request: WizardRequest) -> Phase45Result:
@@ -199,6 +219,54 @@ class FakePhase45:
         return Phase45Result.completed("selected category databases ready")
 
 
+class FakePhase678:
+    def __init__(
+        self,
+        backfill: BackfillResult | None = None,
+        verification: VerificationResult | None = None,
+    ) -> None:
+        self.backfill: BackfillResult = backfill or BackfillResult(status="complete")
+        self.verification: VerificationResult = verification or VerificationResult(
+            overall=OverallStatus.OK,
+            checks=(),
+        )
+        self.calls: list[int] = []
+        self.raise_backfill: bool = False
+        self.raise_verification: bool = False
+        self.preflight_result: LatePreflightResult = LatePreflightResult(
+            valid=True,
+            action="late_preflight_complete",
+        )
+        self.preflight_calls: int = 0
+        self.state: DeployState | None = None
+
+    def preflight(self, request: WizardRequest) -> LatePreflightResult:
+        del request
+        self.preflight_calls += 1
+        return self.preflight_result
+
+    def run_backfill(self, request: WizardRequest) -> BackfillResult:
+        del request
+        self.calls.append(6)
+        if self.raise_backfill:
+            raise LateStepCanaryError("SECRET-BACKFILL-CANARY")
+        return self.backfill
+
+    def run_verification(self, request: WizardRequest) -> VerificationResult:
+        del request
+        self.calls.append(8)
+        if self.raise_verification:
+            raise LateStepCanaryError("SECRET-VERIFY-CANARY")
+        return self.verification
+
+    def load_state(self, request: WizardRequest) -> DeployState | None:
+        return self.state if self.state is not None else load_deploy_state(request.data_root)
+
+    def save_state(self, request: WizardRequest, state: DeployState) -> None:
+        self.state = state
+        save_deploy_state(request.data_root, state)
+
+
 class FakeEnvironment:
     def __init__(
         self,
@@ -206,14 +274,22 @@ class FakeEnvironment:
         tokens: FakeTokens | None = None,
         injector: FakeInjector | None = None,
         phase45: FakePhase45 | None = None,
+        phase678: FakePhase678 | None = None,
     ) -> None:
         self.openclaw: FakeOpenClaw = openclaw or FakeOpenClaw()
         self.tokens: FakeTokens = tokens or FakeTokens()
         self.injector: FakeInjector = injector or FakeInjector()
         self.phase45: FakePhase45 | None = phase45
+        self.phase678: FakePhase678 | None = phase678
 
     def ports(self) -> WizardPorts:
-        return WizardPorts(self.openclaw, self.tokens, self.injector, self.phase45)
+        return WizardPorts(
+            self.openclaw,
+            self.tokens,
+            self.injector,
+            self.phase45,
+            self.phase678,
+        )
 
     def wizard(self) -> DeployWizard:
         return DeployWizard(self.ports())

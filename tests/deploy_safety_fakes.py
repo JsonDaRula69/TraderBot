@@ -121,8 +121,10 @@ class SafetyOpenClaw:
         self.sandboxes[agent.agent_id] = value
         return True
 
-    def ensure_bootstrap_cron(self) -> bool:
+    def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool:
         self.events.append("cron:ensure")
+        if state is BootstrapCronState.COMPLETED_ABSENT:
+            return True
         if self.bootstrap_state is BootstrapCronState.CONFLICT:
             return False
         self.bootstrap_state = BootstrapCronState.EXACT

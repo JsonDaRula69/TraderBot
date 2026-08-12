@@ -56,6 +56,8 @@ No REST polling for current market data — the WebSocket provides a continuous 
 
 The current typed historical REST surface follows the official v2 contracts: lowercase category discovery uses public `GET /series`; one public `GET /historical/cutoff` partitions settled markets; current metadata uses public filtered `GET /markets`; archive metadata uses public selector-only `GET /historical/markets` and client-side bounds; live-window candles use public `GET /series/{series_ticker}/markets/{ticker}/candlesticks`; archived candles use public `GET /historical/markets/{ticker}/candlesticks`; and forecast percentiles use signed `GET /series/{series_ticker}/events/{event_ticker}/forecast_percentile_history`. Dollar and contract-count fixed points remain validated strings, and live/historical candle wire fields are modeled separately.
 
+Deploy Step 6 invokes this same typed backfill orchestration through its standalone dependency boundary. It does not duplicate discovery, API, collector, SQL, or reporting logic, and a partial result preserves committed forward progress while allowing independent read-only verification to run.
+
 **Channels subscribed**:
 - `market_lifecycle_v2`: detects new markets as they appear — no REST scan needed
 - Ticker updates: real-time price changes

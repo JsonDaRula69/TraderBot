@@ -104,7 +104,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Create or validate the owner-only embedded Chroma root, acquire the ownership lock, and verify the pinned Rust client/backend
 - Validate and report the exact five-name shared manifest, but create no collection until a real embedding write supplies an explicit dimension
 - Attempt Chroma close before pool shutdown on every path, retain both cleanup identities if both fail, and release the ownership lock even if client close fails
-- Successful output reports `deployment_complete: false` and remaining steps 6-8
+- Step 5 completion permits the wizard to continue through typed Steps 6-8; only all eight complete produces `deployment_complete: true`
 
 ### Step 6: Backfill
 
@@ -115,7 +115,8 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Kalshi weather data spans current and archive tiers around one runtime cutoff, with tier-correct candles and one forecast call per unique event
 - JSON stdout is one typed result line; progress and Rich output use stderr
 - Exit codes are 0 complete, 1 partial/runtime failure, and 2 invalid input
-- The standalone command is implemented; deploy-wizard invocation remains Step 6 work for Todo 9
+- The deploy wizard invokes the same typed `run_backfill` request/dependency boundary and embeds the result without a second JSON stream
+- Explicit collector input is prepared once before secrets/runtime construction, consumed from the immutable snapshot, and never reopened by Step 6
 
 ### Step 7: Simulation Start
 
@@ -132,7 +133,13 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
      c. Register backtesting oversight jobs
      d. Monitor progress
      e. Promote when deployment bar is met
-- Docker sandbox started for each category agent (mandatory, DD-010)
+- Phase 4 implements only an explicit Phase 5 sandbox stub. It starts no Docker sandbox, simulation, backtest, or trading lifecycle.
+- The stub performs one read-only strict inventory of the exact Gateway-owned bootstrap job. It never adds, updates, deletes, runs, or recreates a cron.
+- A persisted exact job passes. Post-execution absence from `deleteAfterRun: true` is recorded as an action-required partial state, not silently passed or recreated.
+- Owner-only deploy state records prior registration and per-step fingerprints; unchanged completed late steps are reused, while incomplete or affected downstream steps rerun.
+- Before factories, the selected data root is checked without creation for absolute containment, linked ancestors, directory type, current owner, and exact `0700`; resumability state additionally requires a no-follow owner-owned regular `0600` file no larger than 1 MiB.
+- Retained completed and authoritatively deleted one-shots are distinct lifecycle states that reach the read-only Step 7 partial outcome without recreation; unknown absence and disabled/error/conflicting inventory fail closed.
+- Persisted `bootstrap_registered: false` plus missing inventory is unknown absence, not a fresh install. Descriptor metadata is revalidated after no-follow open before any resumability state is trusted.
 
 ### Step 8: Verification
 
@@ -144,6 +151,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Active daemon health requires a bounded loopback streamable-http MCP handshake and actual `health` call. Daemon-owned Chroma is proved from this health response and is never opened by the verifier.
 - Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host.
 - JSON output is exactly one stdout line; the Rich table is stderr-only. Exit codes are 0 for OK, 1 for failed/degraded, and 2 for invalid input.
+- The deploy wizard composes the same `VerificationRequest` and read-only graph, embeds every typed check in its one JSON result, and still runs safe verification after a partial backfill.
 
 ---
 

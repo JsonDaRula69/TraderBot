@@ -86,6 +86,7 @@
 - [x] Phase 4 deploy wizard steps 4-5: secret-safe environment references or hidden Kalshi input, strict local RSA validation, explicit Infisical status probing with encrypted fallback, current global/schema initialization, selected-category decisions databases through `DatabaseAccess`, canonical read-only SysAdmin enumeration, and lazy locked embedded Chroma provisioning.
 - [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
 - [x] Phase 4 standalone backfill command: read-only snapshot collector import, current/archive Kalshi weather discovery around one cutoff, idempotent lossless persistence, redacted typed partial results, and strict human/JSON exit surfaces.
+- [x] Phase 4 deploy wizard Steps 6-8: typed standalone backfill and verification composition, one-line deploy JSON embedding, and an explicit read-only Phase 5 sandbox stub with strict Gateway cron outcomes.
 
 ### Dev-Liaison Testing Protocols
 

@@ -1,105 +1,28 @@
 from __future__ import annotations
 
 import json
-import os
-import secrets
 import sqlite3
 import stat
-import subprocess
-import sys
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Literal
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from pydantic import BaseModel, ConfigDict, Field
 
-from tests.deploy_fake_openclaw import write_fake_openclaw
+from tests.deploy_cli_support import (
+    FakeAgentConfig,
+    FakeAgentState,
+    FakeLedger,
+    build_fake_environment,
+    run_fake_cli,
+)
 from traderbot.db.chroma_store import ChromaStore
-from traderbot.deploy.openclaw_models import CronJob
 from traderbot.deploy.wizard import DeployResult
 from traderbot.deploy.wizard_state import SecretRefConfig
 from traderbot.profiles.registry import ProfileRegistry
 from traderbot.secrets.resolver import build_secrets_store
 
 
-class FakeAgentConfig(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-    heartbeat: dict[str, str] = Field(default_factory=dict)
-    sandbox: dict[str, str] = Field(default_factory=dict)
-
-
-class FakeAgentState(BaseModel):
-    workspace: str
-    config: FakeAgentConfig
-
-
-class FakeLedger(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-    mode: Literal["normal", "partial"]
-    agents: dict[str, FakeAgentState]
-    refs: dict[str, SecretRefConfig]
-    crons: list[CronJob]
-    events: list[str]
-    mutations: list[str]
-
-
-def build_fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    write_fake_openclaw(fake_bin / "openclaw")
-    home = tmp_path / "home"
-    home.mkdir()
-    data = tmp_path / "data"
-    state = tmp_path / "openclaw-state.json"
-    env = os.environ.copy()
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    private_key_pem = private_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    ).decode("ascii")
-    env.update(
-        {
-            "HOME": str(home),
-            "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
-            "TRADERBOT_DATA_DIR": str(data),
-            "FAKE_OC_STATE": str(state),
-            "TRADERBOT_USE_HARDCODED_AUTH": "1",
-            "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
-            "TRADERBOT_TEST_KALSHI_KEY": secrets.token_urlsafe(),
-            "TRADERBOT_TEST_KALSHI_PEM": private_key_pem,
-        }
-    )
-    return state, env
-
-
-def run_fake_cli(
-    config: Path,
-    env: dict[str, str],
-    cwd: Path | None = None,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from traderbot.cli import main; raise SystemExit(main())",
-            "deploy",
-            "--config",
-            str(config),
-            "--json",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30.0,
-        env=env,
-        cwd=cwd,
-    )
-
-
-def _write_happy_state(
+def write_happy_state(
     state_path: Path,
     tmp_path: Path,
     mode: Literal["normal", "partial"] = "normal",
@@ -131,7 +54,7 @@ def _write_happy_state(
     _ = state_path.write_text(state.model_dump_json(), encoding="utf-8")
 
 
-def _write_config(
+def write_config(
     path: Path,
     crypto_workspace: Path,
     secret_approvals: dict[str, bool] | None = None,
@@ -163,10 +86,10 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
 ) -> None:
     # Given: main and nested weather exist while selected crypto is missing
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     crypto = tmp_path / "approved" / "crypto"
     config = tmp_path / "deploy.json"
-    _write_config(config, crypto)
+    write_config(config, crypto)
 
     # When: the real console script runs twice against the fake Gateway CLI
     first = run_fake_cli(config, env)
@@ -190,9 +113,9 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     second_result = DeployResult.model_validate_json(second.stdout)
     assert first_result.required_new_agent_paths == {"crypto": crypto}
     assert second_result.required_new_agent_paths == {}
-    assert first_result.deployment_complete is False
-    assert first_result.completed_steps == (1, 2, 3, 4, 5)
-    assert first_result.remaining_steps == (6, 7, 8)
+    assert first_result.deployment_complete is True
+    assert first_result.completed_steps == tuple(range(1, 9))
+    assert first_result.remaining_steps == ()
     assert second_state.agents["main"].workspace == str(tmp_path / "existing-main")
     assert second_state.agents["weather"].workspace == str(tmp_path / "nested" / "team" / "weather")
 
@@ -235,12 +158,10 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
         assert chroma.list_collections() == []
     for path in expected_databases:
         with sqlite3.connect(path) as connection:
-            tables = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-                ).fetchall()
-            }
+            rows: list[tuple[str]] = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            tables = {row[0] for row in rows}
         assert len(tables - {"schema_version"}) == 7
     assert all(
         identity["token"] not in exposed
@@ -251,10 +172,10 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
 def test_real_cli_adopts_stable_nonzero_partial_creation(tmp_path: Path) -> None:
     # Given: the fake stable add commits config before returning nonzero malformed output
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path, "partial")
+    write_happy_state(state_path, tmp_path, "partial")
     crypto = tmp_path / "approved" / "crypto"
     config = tmp_path / "deploy.json"
-    _write_config(config, crypto)
+    write_config(config, crypto)
 
     # When: deploy and its rerun reconcile from post-exit inventory
     first = run_fake_cli(config, env)
@@ -271,10 +192,10 @@ def test_real_cli_adopts_stable_nonzero_partial_creation(tmp_path: Path) -> None
 def test_real_cli_overlap_failure_is_read_only(tmp_path: Path) -> None:
     # Given: unselected sports owns an ancestor of requested crypto workspace
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     crypto = tmp_path / "unselected-sports" / "crypto"
     config = tmp_path / "deploy.json"
-    _write_config(config, crypto)
+    write_config(config, crypto)
 
     # When: the real console script performs global ownership preflight
     result = run_fake_cli(config, env)

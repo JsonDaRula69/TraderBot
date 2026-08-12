@@ -9,8 +9,8 @@ from traderbot.deploy import openclaw
 from traderbot.deploy.openclaw_models import CronJob, JsonValue
 from traderbot.deploy.wizard import ProvisionStatus
 from traderbot.deploy.wizard_runtime import OpenClawAdapter, SecretsTokenProvisioner
-from traderbot.deploy.wizard_state import SecretRefConfig
-from traderbot.kalshi.models import MarketCategory
+from traderbot.deploy.wizard_state import BootstrapCronState, SecretRefConfig
+from traderbot.kalshi.order_models import MarketCategory
 from traderbot.mcp.resolver import resolve_token_adapter
 from traderbot.profiles.generic import create_category_profile
 from traderbot.profiles.tokens import set_store
@@ -119,7 +119,7 @@ def test_characterization_bootstrap_cron_reuses_exact_main_identity(
     monkeypatch.setattr(openclaw, "register_cron", register)
 
     # When: the adapter reconciles the bootstrap job
-    result = OpenClawAdapter().ensure_bootstrap_cron()
+    result = OpenClawAdapter().ensure_bootstrap_cron(BootstrapCronState.EXACT)
 
     # Then: the existing stable identity is accepted without duplicate creation
     assert result is True
@@ -149,7 +149,7 @@ def test_bootstrap_cron_mismatch_fails_without_add(
     monkeypatch.setattr(openclaw, "register_cron", register)
 
     # When: the adapter reconciles the managed identity
-    result = OpenClawAdapter().ensure_bootstrap_cron()
+    result = OpenClawAdapter().ensure_bootstrap_cron(BootstrapCronState.CONFLICT)
 
     # Then: the conflict fails closed without adding, editing, or deleting
     assert result is False
@@ -160,36 +160,51 @@ def test_bootstrap_cron_add_is_verified_from_inventory(monkeypatch: pytest.Monke
     # Given: no existing job and a misleading successful add followed by a wrong inventory
     wrong = _managed_bootstrap_cron()
     wrong["deleteAfterRun"] = False
-    inspect = mock.Mock(side_effect=[[], [wrong]])
+    inspect = mock.Mock(return_value=[wrong])
     register = mock.Mock(return_value=True)
     monkeypatch.setattr(openclaw, "inspect_crons", inspect)
     monkeypatch.setattr(openclaw, "register_cron", register)
 
     # When: the missing bootstrap cron is reconciled
-    result = OpenClawAdapter().ensure_bootstrap_cron()
+    result = OpenClawAdapter().ensure_bootstrap_cron(BootstrapCronState.MISSING)
 
     # Then: post-add verification rejects the wrong stored contract
     assert result is False
     assert register.call_count == 1
-    assert inspect.call_count == 2
+    assert inspect.call_count == 1
 
 
 def test_bootstrap_cron_add_succeeds_after_exact_inventory_confirmation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: no existing job and an exact managed contract after add
-    inspect = mock.Mock(side_effect=[[], [_managed_bootstrap_cron()]])
+    inspect = mock.Mock(return_value=[_managed_bootstrap_cron()])
     register = mock.Mock(return_value=True)
     monkeypatch.setattr(openclaw, "inspect_crons", inspect)
     monkeypatch.setattr(openclaw, "register_cron", register)
 
     # When: the missing bootstrap cron is reconciled
-    result = OpenClawAdapter().ensure_bootstrap_cron()
+    result = OpenClawAdapter().ensure_bootstrap_cron(BootstrapCronState.MISSING)
 
     # Then: one add and one confirmation inventory complete reconciliation
     assert result is True
     assert register.call_count == 1
-    assert inspect.call_count == 2
+    assert inspect.call_count == 1
+
+
+def test_completed_bootstrap_job_is_not_an_exact_pending_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: Gateway retains the canonical job with completed runtime state.
+    completed = _managed_bootstrap_cron()
+    completed["state"] = {"lastStatus": "ok", "lastRunAtMs": 1_700_000_300_000}
+    monkeypatch.setattr(openclaw, "inspect_crons", lambda: [completed])
+
+    # When: TraderBot inspects the pending one-shot contract.
+    state = OpenClawAdapter().inspect_bootstrap_cron()
+
+    # Then: completed state is distinct from the exact active matcher.
+    assert state is BootstrapCronState.COMPLETED_RETAINED
 
 
 def test_bootstrap_cron_collision_fails_without_add(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,7 +218,7 @@ def test_bootstrap_cron_collision_fails_without_add(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(openclaw, "register_cron", register)
 
     # When: reconciliation inspects the collision
-    result = OpenClawAdapter().ensure_bootstrap_cron()
+    result = OpenClawAdapter().ensure_bootstrap_cron(BootstrapCronState.CONFLICT)
 
     # Then: it fails closed rather than creating a duplicate
     assert result is False

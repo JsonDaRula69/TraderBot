@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict
 
 from traderbot.daemon import main as daemon_main
 from traderbot.deploy.backfill_command import BackfillCommandOptions, execute_backfill
+from traderbot.deploy.test_provider import injected_ports
 from traderbot.deploy.wizard_command import execute_deploy
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.profiles.generic import create_category_profile
@@ -154,7 +155,7 @@ def _cmd_auth_check(_args: argparse.Namespace) -> int:
 
 def _cmd_deploy(args: argparse.Namespace) -> int:
     parsed = _DeployArguments.model_validate(vars(args))
-    return execute_deploy(parsed.config, parsed.json_output)
+    return execute_deploy(parsed.config, parsed.json_output, injected_ports())
 
 
 def _cmd_backfill(args: argparse.Namespace) -> int:

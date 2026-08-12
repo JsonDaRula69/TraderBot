@@ -1,6 +1,6 @@
-# Deploy Wizard Steps 1-5 And Verification
+# Deploy Wizard Steps 1-8
 
-`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. The standalone Step 6 backfill and Step 8 verification commands are implemented. Steps 6-8 remain unwired in the wizard until Todo 9.
+`traderbot deploy` implements all eight ordered deploy steps. Steps 6 and 8 compose the exact standalone typed backfill and read-only verification boundaries. Step 7 remains an intentional Phase 5 sandbox stub: it starts no sandbox or simulation and mutates no Gateway scheduling state.
 
 ## Interactive Mode
 
@@ -34,7 +34,7 @@ Run `traderbot deploy`. A Rich table lists the nine `MarketCategory` values. Aft
 
 In this example, `weather` already exists and therefore needs no path assertion; `crypto` may be missing and has an approved creation path. `sysadmin_workspace` and paths for existing selected agents are optional equality assertions, never rebind requests. Assertions must be absolute and non-linked. The token fields are environment variable names, not secret values. Raw token fields, incomplete reference pairs, invalid variable names, remote Infisical URLs, empty/duplicate categories, extra fields, and missing-agent-without-path input fail before steps 1-3 mutation.
 
-JSON output includes deterministic `categories`, `required_new_agent_paths`, `approvals`, `heartbeat_every`, five ordered step records, `completed_steps`, `deployment_complete`, and `remaining_steps`. A successful current run reports `completed_steps: [1, 2, 3, 4, 5]`, `deployment_complete: false`, and `remaining_steps: [6, 7, 8]`. Secret values are never included.
+JSON output is exactly one stdout line and includes deterministic `categories`, `required_new_agent_paths`, `approvals`, `heartbeat_every`, eight ordered typed step records, `completed_steps`, `deployment_complete`, and `remaining_steps`. Step 6 embeds its `BackfillResult`; Step 8 embeds every verification check ID, status, action, and dependency. Secret values are never included. Human output uses stderr only and reuses the shared backfill and verification Rich reporters.
 
 ## Kalshi Secrets
 
@@ -67,6 +67,24 @@ Run `traderbot verify --categories weather [crypto ...] [--mode backtest] [--jso
 The command runs a fixed, sequential, read-only graph. It verifies Gateway RPC, selected OpenClaw inventory/workspaces/config, the exact managed bootstrap cron, persisted dormant heartbeat config, exact real-auth mode, selected five-field durable token documents, signed Kalshi `GET /portfolio/balance`, global and selected decisions database manifests, service-manager status, actual MCP `health`, daemon-owned Chroma health, and Infisical primary or encrypted fallback state. Gateway failures skip only Gateway children; unavailable token credentials skip signed Kalshi and daemon runtime; unavailable daemon runtime prevents a false embedded-Chroma pass.
 
 SQLite files are opened with URI `mode=ro`, `query_only`, `quick_check`, and exact latest schema/table/index manifests after no-link ownership checks. Verification never probes writability, creates WAL/journal files, opens daemon-owned embedded Chroma, installs or changes services, creates agents, edits config/cron/heartbeat, or writes secrets. JSON mode emits exactly one stdout line. Human mode emits one Rich table to stderr. Exit codes are 0 for `ok`, 1 for `failed` or `degraded`, and 2 for invalid input.
+
+## Wizard Steps 6-8
+
+Step 6 validates the complete backfill and verification request graph during global read-only preflight, before the first OpenClaw mutation. It calls `run_backfill` through `OwnedBackfillDependencies`, so explicit collector validation precedes credential, target, client, and pool construction. Complete results finish the step; partial or failed results preserve typed counts and committed progress, return nonzero, and do not suppress safe independent Step 8 verification.
+
+An explicit collector is converted into one immutable prepared snapshot before secret or runtime factories are constructed. The deploy command owns that snapshot until Step 6 consumes it, never reopens the original source, and removes the snapshot exactly once on success or abort. `invalid_input` is a deploy-level invalid request and exits 2.
+
+Step 7 prints the Phase 5 sandbox notice once in human mode and inspects the exact Gateway-owned `traderbot-main-at-5m` one-shot contract. It never calls add, update, delete, run, or heartbeat mutation. One exact persisted job completes the step. Unreadable, duplicate, malformed, disabled, completed, deleted, or conflicting inventory is nonzero. Because `deleteAfterRun: true` makes post-execution absence expected operationally, the read-only wizard records that absence as `phase5_sandbox_stub_cron_absent` with an action-required partial outcome; it does not recreate the job.
+
+Step 8 constructs `VerificationRequest` from the same validated categories, mode, workspaces, data root, Infisical origin, and daemon MCP URL and calls `run_verification`. `ok` completes the step; `degraded` is partial; `failed` fails. Exit 0 requires all eight steps complete, exit 1 covers partial/runtime/verification outcomes, and exit 2 covers invalid configuration before mutation.
+
+Late-step outcomes are stored in owner-only `deploy-state.json` under the selected data root with schema version and per-step configuration fingerprints. Completed unchanged Steps 6-8 are reused by default; partial, failed, and skipped steps rerun. Changing the backfill window/source invalidates Step 6 and downstream Step 8. Verification is intentionally not refreshed implicitly after a completed unchanged run; operators use the standalone `traderbot verify` command when fresh health evidence is required.
+
+The configured data root is validated without creation before secret or runtime factories: it must be absolute, traversal-free, have no linked/non-directory existing ancestor, and any existing root must be owner-owned mode `0700`. Existing deploy state is trusted only when it is an owner-owned regular no-follow file at exact mode `0600`, at most 1 MiB, and valid for the current schema. Unsafe state makes the request invalid before OpenClaw mutation; it is never silently hardened during a read.
+
+The bootstrap lifecycle distinguishes active pending, completed retained, known completed then deleted, never registered missing, unknown absence, and conflict/failure. Completed retained or authoritatively recorded deletion reaches Step 7 as action-required partial without recreation. Unknown absence fails closed. Disabled, errored, stale, duplicate, or malformed jobs never satisfy the active canonical matcher.
+
+A persisted state file is authoritative even when `bootstrap_registered` is false: missing Gateway inventory is then unknown absence and cannot trigger registration. Only a truly fresh deployment with no state may register the initial one-shot. State trust is checked again on the opened descriptor for regular-file type, current owner, exact `0600`, size, and device/inode identity.
 
 ## Resumability And Identity
 

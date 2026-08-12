@@ -7,7 +7,7 @@ from typing import ClassVar, Literal, override
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 
 class FrozenModel(BaseModel):
@@ -17,6 +17,9 @@ class FrozenModel(BaseModel):
 class BootstrapCronState(StrEnum):
     EXACT = "exact"
     MISSING = "missing"
+    UNKNOWN_ABSENT = "unknown_absent"
+    COMPLETED_RETAINED = "completed_retained"
+    COMPLETED_ABSENT = "completed_absent"
     CONFLICT = "conflict"
     FAILED = "failed"
 

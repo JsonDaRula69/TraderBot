@@ -138,7 +138,11 @@ def _token_action(readiness: AgentReadiness) -> ReconcileAction:
 
 
 def finalize_preflight(inputs: PreflightInputs) -> DeploymentPreflight:
-    if inputs.bootstrap_cron in {BootstrapCronState.CONFLICT, BootstrapCronState.FAILED}:
+    if inputs.bootstrap_cron in {
+        BootstrapCronState.UNKNOWN_ABSENT,
+        BootstrapCronState.CONFLICT,
+        BootstrapCronState.FAILED,
+    }:
         _fail(PreflightErrorCode.CRON_CONFLICT, "bootstrap cron inventory conflicts")
     if inputs.request.heartbeat_every == "0m" and not inputs.request.approvals.heartbeat_change:
         _fail(PreflightErrorCode.HEARTBEAT_APPROVAL, "0m heartbeat change is not approved")

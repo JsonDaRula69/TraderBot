@@ -14,7 +14,7 @@ from traderbot.deploy.validation import (
     validate_secret_references,
 )
 from traderbot.deploy.wizard_state import DeployApprovals
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 _REQUIRED_APPROVALS: Final[frozenset[str]] = frozenset(
     {"install_openclaw", "setup_openclaw", "create_agents", "heartbeat_change"}
@@ -43,7 +43,10 @@ class DeployConfig(BaseModel):
     secret_approvals: SecretReconciliationApprovals = Field(
         default_factory=SecretReconciliationApprovals
     )
-    months_backfill: Annotated[int, Field(gt=0)] = 6
+    months_backfill: Annotated[int, Field(ge=1, le=60)] = 6
+    collector_db: Path | None = None
+    data_root: Path | None = None
+    daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
     sysadmin_workspace: Path | None = None
     category_workspaces: dict[MarketCategory, Path] = Field(default_factory=dict)
     approvals: DeployApprovals

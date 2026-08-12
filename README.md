@@ -51,7 +51,7 @@ a compatibility/test seam, not the deploy persistence path. The Phase 0
 hardcoded development mapping remains active unless the environment variable
 is exactly `0`.
 
-`traderbot deploy` currently runs wizard steps 1-5. It inventories all
+`traderbot deploy` runs all eight wizard steps. It inventories all
 OpenClaw workspace ownership before mutation, adopts existing selected paths,
 and requires explicit paths and approval flags for missing selected agents.
 Approved dormant heartbeat state is written as `0m` through OpenClaw config;
@@ -59,14 +59,16 @@ bootstrap automation is requested from Gateway only after selected state is
 verified. It then reuses or securely collects only the canonical Kalshi secret
 pair, falling back to machine-bound encrypted storage when local Infisical is
 unusable, and provisions selected category databases plus a lazy embedded
-Chroma root in daemon ownership order. Successful output reports
-`deployment_complete: false` because steps 6-8 are not implemented here.
+Chroma root in daemon ownership order. Step 6 reuses the standalone typed
+backfill runtime, Step 7 is an intentional read-only Phase 5 sandbox stub, and
+Step 8 reuses the verification graph. No simulation, trading, or scheduling
+mutation occurs in Step 7.
 
 Historical data can be populated independently with `traderbot backfill --months 6`.
 Use `--collector-db PATH` to import an explicit legacy collector and `--json` for
 one machine-readable result line. The command imports weather data read-only and
-fetches both current and archived Kalshi weather history; deploy-wizard Step 6
-integration remains part of the next plan item.
+fetches both current and archived Kalshi weather history; the deploy wizard
+composes the same request and dependency boundary.
 
 Per-agent configuration lives under `configs/openclaw/` with restrictive
 per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is

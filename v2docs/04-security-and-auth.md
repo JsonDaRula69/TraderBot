@@ -29,7 +29,9 @@
 > rotation, the scheduler, the `openclaw-infisical-resolver` exec provider,
 > and the migration script are all committed and tested. Deploy step 4 now
 > validates and provisions the canonical Kalshi pair locally without exposing
-> values or making a live Kalshi request; later deploy steps remain incomplete.
+> values or making a live Kalshi request. Deploy Steps 6 and 8 reuse independently
+> owned backfill and read-only verification runtimes; the Step 7 Phase 5 stub
+> performs only a strict Gateway cron inventory and exposes no secret values.
 
 ---
 

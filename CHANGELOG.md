@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a95] — 2026-08-11
+
+### Added
+
+- Completed deploy wizard Steps 6-8 by composing typed backfill and read-only verification runtimes with an explicit non-mutating Phase 5 sandbox stub and strict Gateway cron outcome.
+- Repaired late-step snapshot ownership, invalid-input ordering, one-shot lifecycle evidence, selective resumability, cleanup truthfulness, and actual CLI-dispatch E2E coverage.
+- Hardened pre-factory data-root and deploy-state trust checks, completed one-shot lifecycle parsing, and suppression-free typed ordinary-exception boundaries.
+- Closed persisted-false cron registration, post-open deploy-state metadata races, and cleanup-error exit classification; split bootstrap cron contracts from the wizard runtime.
+
 ## [2.0.0a94] — 2026-08-11
 
 ### Added

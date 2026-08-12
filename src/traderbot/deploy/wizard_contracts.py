@@ -8,12 +8,14 @@ from typing import ClassVar, Literal, Protocol
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from traderbot.deploy.backfill_models import BackfillResult
 from traderbot.deploy.openclaw_models import AgentInventory
 from traderbot.deploy.validation import (
     SecretReconciliationApprovals,
     validate_infisical_origin,
     validate_secret_references,
 )
+from traderbot.deploy.verify_models import VerificationResult
 from traderbot.deploy.wizard_state import (
     AgentConfigState,
     BootstrapCronState,
@@ -24,13 +26,15 @@ from traderbot.deploy.wizard_state import (
     TokenMetadataState,
     WizardRequestState,
 )
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
+from traderbot.paths import get_data_dir
 from traderbot.profiles.injection import WorkspaceTemplate, validate_workspace_path
 from traderbot.profiles.models import TradingProfile
 
 
 class StepStatus(StrEnum):
     COMPLETED = "completed"
+    PARTIAL = "partial"
     FAILED = "failed"
     SKIPPED = "skipped"
 
@@ -66,20 +70,50 @@ class AgentDeployResult(FrozenModel):
 
 
 class WizardStepResult(FrozenModel):
-    step: Literal[1, 2, 3, 4, 5]
+    step: int = Field(ge=1, le=8)
     name: str
     status: StepStatus
+    action: str = Field(default="step_recorded", pattern=r"^[a-z][a-z0-9_]{0,63}$")
     message: str
     agents: tuple[AgentDeployResult, ...] = ()
+    backfill: BackfillResult | None = None
+    verification: VerificationResult | None = None
+
+
+class DeployState(FrozenModel):
+    schema_version: Literal[1] = 1
+    step6_fingerprint: str
+    step7_fingerprint: str
+    step8_fingerprint: str
+    steps: tuple[WizardStepResult, ...]
+    bootstrap_registered: bool = False
+
+    def completed(self, step: int, fingerprint: str) -> WizardStepResult | None:
+        expected = {
+            6: self.step6_fingerprint,
+            7: self.step7_fingerprint,
+            8: self.step8_fingerprint,
+        }.get(step)
+        if expected != fingerprint:
+            return None
+        return next(
+            (
+                result
+                for result in self.steps
+                if result.step == step and result.status is StepStatus.COMPLETED
+            ),
+            None,
+        )
 
 
 class DeployResult(FrozenModel):
     success: bool
+    input_valid: bool = True
     categories: tuple[MarketCategory, ...]
     steps: tuple[WizardStepResult, ...]
-    completed_steps: tuple[Literal[1, 2, 3, 4, 5], ...]
-    deployment_complete: Literal[False] = False
-    remaining_steps: tuple[Literal[4, 5, 6, 7, 8], ...] = (4, 5, 6, 7, 8)
+    completed_steps: tuple[int, ...]
+    deployment_complete: bool = False
+    remaining_steps: tuple[int, ...] = ()
     required_new_agent_paths: dict[MarketCategory, Path]
     approvals: DeployApprovals
     heartbeat_every: Literal["preserve", "0m"]
@@ -100,6 +134,10 @@ class WizardRequest(WizardRequestState):
     secret_approvals: SecretReconciliationApprovals = Field(
         default_factory=SecretReconciliationApprovals
     )
+    months_backfill: int = Field(default=6, ge=1, le=60)
+    collector_db: Path | None = None
+    data_root: Path = Field(default_factory=get_data_dir)
+    daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
 
     @field_validator("categories")
     @classmethod
@@ -160,7 +198,7 @@ class OpenClawPort(Protocol):
     def set_secret_ref(self, agent_id: str, secret_ref: SecretRefConfig) -> bool: ...
     def set_heartbeat(self, agent: AgentConfigState, value: str) -> bool: ...
     def set_sandbox(self, agent: AgentConfigState, value: str) -> bool: ...
-    def ensure_bootstrap_cron(self) -> bool: ...
+    def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool: ...
 
 
 class TokenProvisioner(Protocol):
@@ -192,9 +230,23 @@ class Phase45Port(Protocol):
     def provision_databases(self, request: WizardRequest) -> Phase45Result: ...
 
 
+class LatePreflightResult(FrozenModel):
+    valid: bool
+    action: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class Phase678Port(Protocol):
+    def preflight(self, request: WizardRequest) -> LatePreflightResult: ...
+    def run_backfill(self, request: WizardRequest) -> BackfillResult: ...
+    def run_verification(self, request: WizardRequest) -> VerificationResult: ...
+    def load_state(self, request: WizardRequest) -> DeployState | None: ...
+    def save_state(self, request: WizardRequest, state: DeployState) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class WizardPorts:
     openclaw: OpenClawPort
     tokens: TokenProvisioner
     injector: WorkspaceInjector
     phase45: Phase45Port | None = None
+    phase678: Phase678Port | None = None

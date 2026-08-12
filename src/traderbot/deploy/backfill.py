@@ -197,4 +197,27 @@ async def run_backfill(
         )
 
 
-__all__ = ["BackfillPorts", "BackfillRequest", "BackfillResult", "run_backfill"]
+async def run_prepared_backfill(
+    request: BackfillRequest,
+    dependencies: BackfillDependencies,
+    prepared: PreparedCollector,
+) -> BackfillResult:
+    try:
+        window = calendar_window(request.months, dependencies.now())
+        target = _validate_target(request.target_db)
+    except (BackfillWindowError, CollectorPathError, OSError) as exc:
+        return BackfillResult(
+            status="invalid_input",
+            failures=_failure("invalid_input", str(exc)),
+        )
+    async with dependencies.open_runtime() as runtime:
+        return await _execute(runtime, prepared, target, window, [])
+
+
+__all__ = [
+    "BackfillPorts",
+    "BackfillRequest",
+    "BackfillResult",
+    "run_backfill",
+    "run_prepared_backfill",
+]

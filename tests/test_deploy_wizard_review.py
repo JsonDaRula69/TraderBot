@@ -16,7 +16,7 @@ from traderbot.deploy.wizard import (
 )
 from traderbot.deploy.wizard_command import execute_deploy
 from traderbot.deploy.wizard_state import BootstrapCronState
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 
 def _documented_payload(
@@ -116,7 +116,8 @@ def test_lifecycle_mode_fails_actionably_before_mutation(
     # Then: Phase-7 guidance is returned before external or filesystem mutation
     output = capsys.readouterr()
     assert code == 2
-    assert "Phase 7 lifecycle" in output.err
+    assert json.loads(output.out) == {"error": "invalid_request"}
+    assert output.err == ""
     assert environment.mutations == ()
 
 
@@ -194,8 +195,9 @@ def test_interactive_report_states_full_deployment_is_incomplete(
     # Then: the report explicitly distinguishes step success from full deployment
     output = capsys.readouterr()
     assert code == 0
-    assert "full deployment remains incomplete" in output.out.lower()
-    assert "steps 4-8" in output.out.lower()
+    assert output.out == ""
+    assert "full deployment remains incomplete" in output.err.lower()
+    assert "steps 4-8" in output.err.lower()
 
 
 def test_linked_workspace_override_fails_before_openclaw_mutation(
@@ -223,11 +225,11 @@ def test_linked_workspace_override_fails_before_openclaw_mutation(
     assert environment.mutations == ()
 
 
-def test_deploy_docs_publish_machine_readable_incomplete_state() -> None:
+def test_deploy_docs_publish_machine_readable_complete_state() -> None:
     # Given: user-facing deploy documentation
     docs = (Path(__file__).parents[1] / "docs" / "deploy-wizard.md").read_text()
 
-    # When/Then: its output contract cannot imply the full eight-step deploy completed
+    # When/Then: its output contract describes all typed eight-step outcomes.
     assert "deployment_complete" in docs
-    assert "false" in docs
-    assert "Steps 6-8 remain" in docs
+    assert "eight ordered typed step records" in docs
+    assert "Exit 0 requires all eight steps complete" in docs

@@ -17,9 +17,12 @@ from traderbot.deploy.wizard_contracts import (
     WizardStepResult,
     WorkspaceInjector,
 )
+from traderbot.deploy.wizard_late_steps import append_blocked_late_steps, run_late_steps
 from traderbot.deploy.wizard_preflight import finalize_preflight, resolve_agent_targets
+from traderbot.deploy.wizard_result import build_deploy_result
 from traderbot.deploy.wizard_state import (
     AgentReadiness,
+    BootstrapCronState,
     DeploymentPreflight,
     DeploymentPreflightError,
     PreflightErrorCode,
@@ -56,6 +59,22 @@ class DeployWizard:
         self._ports: WizardPorts = ports
 
     def run(self, request: WizardRequest) -> DeployResult:
+        phase678 = self._ports.phase678
+        if phase678 is not None:
+            late_preflight = phase678.preflight(request)
+            if not late_preflight.valid:
+                action = late_preflight.action
+                steps = [
+                    self._step(
+                        1,
+                        "OpenClaw config",
+                        StepStatus.FAILED,
+                        "late deploy preflight failed",
+                        action,
+                    )
+                ]
+                append_blocked_late_steps(steps, 2)
+                return build_deploy_result(request, steps, None, input_valid=False)
         if self._ports.openclaw.detect() is None:
             if not request.approvals.install_openclaw:
                 return self._preflight_failure(request, "OpenClaw install is not approved")
@@ -83,7 +102,7 @@ class DeployWizard:
                 self._step(2, "SysAdmin setup", StepStatus.FAILED, main_result.message),
                 self._step(3, "Category selection", StepStatus.SKIPPED, "blocked"),
             ]
-            return self._result(request, steps, plan)
+            return build_deploy_result(request, steps, plan)
         agent_results = list(transaction.apply_categories())
         if agent_results and agent_results[-1].status is StepStatus.FAILED:
             steps = [
@@ -97,9 +116,19 @@ class DeployWizard:
                     agents=tuple(agent_results),
                 ),
             ]
-            return self._result(request, steps, plan)
+            return build_deploy_result(request, steps, plan)
         verification = transaction.verify()
-        if verification is not None or not self._ports.openclaw.ensure_bootstrap_cron():
+        bootstrap_state = plan.bootstrap_cron
+        prior_late_state = None if phase678 is None else phase678.load_state(request)
+        if bootstrap_state is BootstrapCronState.MISSING and prior_late_state is not None:
+            bootstrap_state = (
+                BootstrapCronState.COMPLETED_ABSENT
+                if prior_late_state.bootstrap_registered
+                else BootstrapCronState.UNKNOWN_ABSENT
+            )
+        if verification is not None or not self._ports.openclaw.ensure_bootstrap_cron(
+            bootstrap_state
+        ):
             message = verification or "bootstrap cron final verification failed"
             agent_results.append(
                 AgentDeployResult(agent_id="main", status=StepStatus.FAILED, message=message)
@@ -124,7 +153,9 @@ class DeployWizard:
         ]
         phase45 = self._ports.phase45
         if phase45 is None or status is StepStatus.FAILED:
-            return self._result(request, steps, plan)
+            if phase678 is not None:
+                append_blocked_late_steps(steps, 4)
+            return build_deploy_result(request, steps, plan)
         secret_result = phase45.provision_secrets(request)
         steps.append(
             self._step(
@@ -136,12 +167,24 @@ class DeployWizard:
         )
         if secret_result.status is StepStatus.FAILED:
             steps.append(self._step(5, "Database creation", StepStatus.SKIPPED, "blocked"))
-            return self._result(request, steps, plan)
+            if phase678 is not None:
+                append_blocked_late_steps(steps, 6)
+            return build_deploy_result(request, steps, plan)
         database_result = phase45.provision_databases(request)
         steps.append(
             self._step(5, "Database creation", database_result.status, database_result.message)
         )
-        return self._result(request, steps, plan)
+        if phase678 is not None:
+            if database_result.status is StepStatus.COMPLETED:
+                run_late_steps(request, self._ports, steps, bootstrap_state)
+            else:
+                append_blocked_late_steps(steps, 6)
+        return build_deploy_result(
+            request,
+            steps,
+            plan,
+            input_valid=not any(step.action == "backfill_invalid_input" for step in steps),
+        )
 
     def _preflight(self, request: WizardRequest) -> DeploymentPreflight:
         inventory = self._ports.openclaw.inventory_agents()
@@ -191,40 +234,20 @@ class DeployWizard:
             self._step(2, "SysAdmin setup", StepStatus.SKIPPED, "blocked"),
             self._step(3, "Category selection", StepStatus.SKIPPED, "blocked"),
         ]
-        return self._result(request, steps, None)
+        return build_deploy_result(request, steps, None)
 
     @staticmethod
     def _step(
-        step: Literal[1, 2, 3, 4, 5],
+        step: Literal[1, 2, 3, 4, 5, 6, 7, 8],
         name: str,
         status: StepStatus,
         message: str,
+        action: str = "step_recorded",
     ) -> WizardStepResult:
-        return WizardStepResult(step=step, name=name, status=status, message=message)
-
-    @staticmethod
-    def _result(
-        request: WizardRequest,
-        steps: list[WizardStepResult],
-        plan: DeploymentPreflight | None,
-    ) -> DeployResult:
-        return DeployResult(
-            success=all(step.status is StepStatus.COMPLETED for step in steps),
-            categories=request.categories,
-            steps=tuple(steps),
-            completed_steps=tuple(
-                step.step for step in steps if step.status is StepStatus.COMPLETED
-            ),
-            remaining_steps=(6, 7, 8) if len(steps) == 5 else (4, 5, 6, 7, 8),
-            required_new_agent_paths=(
-                {
-                    agent.category: agent.workspace
-                    for agent in plan.agents
-                    if not agent.existed and agent.category is not None
-                }
-                if plan is not None
-                else dict(request.category_workspaces)
-            ),
-            approvals=request.approvals,
-            heartbeat_every=request.heartbeat_every,
+        return WizardStepResult(
+            step=step,
+            name=name,
+            status=status,
+            action=action,
+            message=message,
         )

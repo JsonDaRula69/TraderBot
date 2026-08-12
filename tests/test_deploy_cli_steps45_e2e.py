@@ -6,12 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_deploy_cli_fake_e2e import (
-    _write_config,
-    _write_happy_state,
-    build_fake_environment,
-    run_fake_cli,
-)
+from tests.deploy_cli_support import build_fake_environment, run_fake_cli
+from tests.test_deploy_cli_fake_e2e import write_config, write_happy_state
 from traderbot.db.chroma_store import ChromaStore
 from traderbot.db.security import create_chroma_root
 from traderbot.deploy.wizard import DeployResult, StepStatus
@@ -22,10 +18,10 @@ from traderbot.secrets.store import SecretsStore
 def test_real_cli_invalid_pem_stops_before_kalshi_or_database_mutation(tmp_path: Path) -> None:
     # Given: a complete config whose referenced PEM is malformed.
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     env["TRADERBOT_TEST_KALSHI_PEM"] = "malformed-non-secret-test-input"
     config = tmp_path / "deploy.json"
-    _write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, tmp_path / "approved" / "crypto")
 
     # When: the real CLI reaches local RSA validation.
     result = run_fake_cli(config, env)
@@ -49,11 +45,11 @@ def test_real_cli_missing_environment_references_name_only_missing_variables(
 ) -> None:
     # Given: a complete reference pair whose environment values are absent.
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     del env["TRADERBOT_TEST_KALSHI_KEY"]
     del env["TRADERBOT_TEST_KALSHI_PEM"]
     config = tmp_path / "deploy.json"
-    _write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, tmp_path / "approved" / "crypto")
 
     # When: the real CLI resolves noninteractive secret references.
     result = run_fake_cli(config, env)
@@ -73,10 +69,11 @@ def test_real_cli_chroma_lock_blocks_then_rerun_reopens(
 ) -> None:
     # Given: valid secret references and an externally held embedded Chroma lock.
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     config = tmp_path / "deploy.json"
-    _write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, tmp_path / "approved" / "crypto")
     data_root = Path(env["TRADERBOT_DATA_DIR"])
+    data_root.mkdir(mode=0o700)
     monkeypatch.setenv("TRADERBOT_DATA_DIR", str(data_root))
     chroma_root = data_root / "chromadb"
     create_chroma_root(chroma_root)
@@ -96,7 +93,7 @@ def test_real_cli_chroma_lock_blocks_then_rerun_reopens(
     assert blocked_result.steps[4].status is StepStatus.FAILED
     assert chroma_root.is_dir()
     assert healed.returncode == 0
-    assert healed_result.completed_steps == (1, 2, 3, 4, 5)
+    assert healed_result.completed_steps == tuple(range(1, 9))
     with ChromaStore(chroma_root) as reopened:
         assert reopened.list_collections() == []
 
@@ -104,10 +101,10 @@ def test_real_cli_chroma_lock_blocks_then_rerun_reopens(
 def test_real_cli_proxy_environment_uses_honest_encrypted_fallback(tmp_path: Path) -> None:
     # Given: a complete deploy and an unsafe SDK proxy environment.
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     env["HTTPS_PROXY"] = "http://proxy.invalid:3128"
     config = tmp_path / "deploy.json"
-    _write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, tmp_path / "approved" / "crypto")
 
     # When: the real CLI reaches backend selection.
     result = run_fake_cli(config, env)
@@ -124,7 +121,7 @@ def test_real_cli_partial_pair_requires_approval_then_reruns_without_rewrite(
 ) -> None:
     # Given: only the matching API field is durable and reconciliation is explicit.
     state_path, env = build_fake_environment(tmp_path)
-    _write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, tmp_path)
     data_root = Path(env["TRADERBOT_DATA_DIR"])
     local = LocalEncryptedStore(data_root / "secrets")
     local.set(
@@ -134,7 +131,7 @@ def test_real_cli_partial_pair_requires_approval_then_reruns_without_rewrite(
         namespace="global",
     )
     config = tmp_path / "deploy.json"
-    _write_config(
+    write_config(
         config,
         tmp_path / "approved" / "crypto",
         {"reconcile_incomplete": True},

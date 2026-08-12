@@ -12,13 +12,15 @@ from tests.deploy_wizard_fakes import (
     FakeEnvironment,
     FakeOpenClaw,
     FakePhase45,
+    FakePhase678,
     FakeTokens,
     fake_workspace,
 )
+from traderbot.deploy.backfill_models import BackfillResult
 from traderbot.deploy.wizard import DeployResult, StepStatus, WizardRequest
 from traderbot.deploy.wizard_command import collect_interactive_request, execute_deploy
 from traderbot.deploy.wizard_state import DeployApprovals
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 
 def _request(
@@ -32,6 +34,7 @@ def _request(
         sysadmin_workspace=None,
         category_workspaces={category: tmp_path / category.value for category in categories},
         approvals=approvals or DeployApprovals(create_agents=True),
+        data_root=tmp_path / "data",
     )
 
 
@@ -78,6 +81,30 @@ def test_steps_4_5_advance_result_and_leave_steps_6_8(tmp_path: Path) -> None:
     assert result.remaining_steps == (6, 7, 8)
     assert result.deployment_complete is False
     assert phase45.calls == [4, 5]
+
+
+def test_steps_6_8_complete(tmp_path: Path) -> None:
+    # Given: every composed deploy dependency succeeds.
+    environment = FakeEnvironment(phase45=FakePhase45(), phase678=FakePhase678())
+
+    # When: the full wizard runs.
+    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+
+    # Then: all eight stable step identifiers complete.
+    assert result.completed_steps == tuple(range(1, 9))
+
+
+def test_backfill_failure_partial(tmp_path: Path) -> None:
+    # Given: backfill commits partial progress.
+    phase678 = FakePhase678(backfill=BackfillResult(status="partial"))
+    environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
+
+    # When: the full wizard runs.
+    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+
+    # Then: Step 6 is partial and independent verification still completes.
+    assert result.steps[5].status is StepStatus.PARTIAL
+    assert result.steps[7].status is StepStatus.COMPLETED
 
 
 def test_step_4_failure_skips_step_5(tmp_path: Path) -> None:
@@ -261,7 +288,7 @@ def test_config_mode_performs_no_prompts(
     # Then: one deterministic JSON document reports success without prompting
     output = capsys.readouterr()
     assert code == 0
-    assert '"success": true' in output.out
+    assert json.loads(output.out)["success"] is True
     assert output.err == ""
 
 
@@ -280,7 +307,8 @@ def test_malformed_config_fails_before_external_mutation(
     # Then: it exits with usage failure and performs no external mutation
     output = capsys.readouterr()
     assert code == 2
-    assert "invalid deploy config" in output.err
+    assert json.loads(output.out) == {"error": "invalid_request"}
+    assert output.err == ""
     assert environment.openclaw.setup_calls == 0
     assert environment.injector.injected == set()
 

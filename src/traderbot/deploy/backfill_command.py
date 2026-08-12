@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Protocol, assert_never
+from typing import ClassVar, Protocol
 
 import anyio
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -165,15 +165,8 @@ def _fallback_render(result: BackfillResult, *, json_output: bool) -> None:
 
 
 def _exit_code(result: BackfillResult) -> int:
-    match result.status:
-        case "complete":
-            return 0
-        case "partial" | "failure":
-            return 1
-        case "invalid_input":
-            return 2
-        case unreachable:
-            assert_never(unreachable)
+    codes = {"complete": 0, "partial": 1, "failure": 1, "invalid_input": 2}
+    return codes[result.status]
 
 
 def execute_backfill(

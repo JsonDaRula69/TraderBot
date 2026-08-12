@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Final, Literal, Self
 
-from infisical_sdk.infisical_requests import APIError
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from pydantic_core import PydanticCustomError
+from pydantic import ValidationError
 
 from traderbot.deploy import openclaw
+from traderbot.deploy.backfill_collector_types import PreparedCollector
+from traderbot.deploy.bootstrap_cron import (
+    BOOTSTRAP_PROMPT,
+    classify_bootstrap_crons,
+)
+from traderbot.deploy.bootstrap_cron import (
+    SysAdminBootstrapCron as SysAdminBootstrapCron,
+)
 from traderbot.deploy.openclaw_models import (
     AgentInventory,
-    CronAgentTurnPayload,
-    CronAtSchedule,
-    CronJob,
-    JsonValue,
 )
 from traderbot.deploy.wizard_contracts import (
+    DeployState,
     Phase45Port,
     ProvisionStatus,
     TokenProvisionResult,
@@ -40,73 +41,6 @@ from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.tokens import generate_token
 from traderbot.secrets.local_encrypted import SecretIntegrityError
 from traderbot.secrets.store import ProfileTokenEntry, SecretsStore
-
-_BOOTSTRAP_NAME: Final = "traderbot-main-at-5m"
-_BOOTSTRAP_DELAY_SECONDS: Final = 300.0
-_BOOTSTRAP_DELAY_TOLERANCE_SECONDS: Final = 5.0
-_BOOTSTRAP_PROMPT: Final = (
-    "Begin the SysAdmin activation protocol: remove this bootstrap job, verify the "
-    "TraderBot service and data freshness, register essential jobs, enable the SysAdmin "
-    "heartbeat, then activate selected categories one at a time."
-)
-
-
-class SysAdminBootstrapCron(BaseModel):
-    """Canonical persisted contract for TraderBot's managed SysAdmin activation job."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True, strict=True)
-
-    id: str = Field(min_length=1)
-    name: Literal["traderbot-main-at-5m"]
-    agentId: Literal["main"]
-    enabled: Literal[True]
-    createdAtMs: int = Field(ge=0)
-    updatedAtMs: int = Field(ge=0)
-    schedule: CronAtSchedule
-    sessionTarget: Literal["isolated"]
-    wakeMode: Literal["now"]
-    payload: CronAgentTurnPayload
-    deleteAfterRun: Literal[True]
-    state: dict[str, JsonValue]
-
-    @model_validator(mode="after")
-    def exact_schedule_and_payload(self) -> Self:
-        if self.payload.message != _BOOTSTRAP_PROMPT:
-            raise PydanticCustomError("bootstrap_payload", "activation payload differs")
-        scheduled_at = self.schedule.at
-        if scheduled_at == "5m":
-            return self
-        try:
-            scheduled = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise PydanticCustomError(
-                "bootstrap_schedule",
-                "one-shot schedule must be a valid absolute timestamp",
-            ) from exc
-        if scheduled.tzinfo is None:
-            raise PydanticCustomError(
-                "bootstrap_schedule",
-                "one-shot schedule timestamp must include a timezone",
-            )
-        created = datetime.fromtimestamp(self.createdAtMs / 1000, tz=UTC)
-        delay = (scheduled - created).total_seconds()
-        if abs(delay - _BOOTSTRAP_DELAY_SECONDS) > _BOOTSTRAP_DELAY_TOLERANCE_SECONDS:
-            raise PydanticCustomError(
-                "bootstrap_schedule",
-                "one-shot schedule must represent the managed five-minute delay",
-            )
-        return self
-
-    @classmethod
-    def is_unique_match(cls, jobs: list[CronJob]) -> bool:
-        matches = [job for job in jobs if job.get("name") == _BOOTSTRAP_NAME]
-        if len(matches) != 1:
-            return False
-        try:
-            _ = cls.model_validate(matches[0])
-        except ValidationError:
-            return False
-        return True
 
 
 class OpenClawAdapter:
@@ -132,17 +66,7 @@ class OpenClawAdapter:
         return None if inventory is None else openclaw.inspect_config(agent_ids, inventory)
 
     def inspect_bootstrap_cron(self) -> BootstrapCronState:
-        jobs = openclaw.inspect_crons()
-        if jobs is None:
-            return BootstrapCronState.FAILED
-        matches = [job for job in jobs if job.get("name") == _BOOTSTRAP_NAME]
-        if not matches:
-            return BootstrapCronState.MISSING
-        return (
-            BootstrapCronState.EXACT
-            if SysAdminBootstrapCron.is_unique_match(matches)
-            else BootstrapCronState.CONFLICT
-        )
+        return classify_bootstrap_crons(openclaw.inspect_crons())
 
     def create_agent(self, agent_id: str, workspace: Path) -> bool:
         return openclaw.create_agent(agent_id, workspace)
@@ -156,15 +80,19 @@ class OpenClawAdapter:
     def set_sandbox(self, agent: AgentConfigState, value: str) -> bool:
         return openclaw.set_config(f"{agent.path_prefix}.sandbox.mode", value)
 
-    def ensure_bootstrap_cron(self) -> bool:
-        state = self.inspect_bootstrap_cron()
+    def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool:
         if state is BootstrapCronState.EXACT:
+            return True
+        if state in {
+            BootstrapCronState.COMPLETED_RETAINED,
+            BootstrapCronState.COMPLETED_ABSENT,
+        }:
             return True
         if state is not BootstrapCronState.MISSING:
             return False
         added = openclaw.register_cron(
             agent="main",
-            prompt=_BOOTSTRAP_PROMPT,
+            prompt=BOOTSTRAP_PROMPT,
             at="5m",
             session="isolated",
             delete_after_run=True,
@@ -189,7 +117,7 @@ class SecretsTokenProvisioner:
         try:
             existing = self._store.get_profile_token(agent_id)
             raw = self._store.get(agent_id, "token", namespace="tokens")
-        except (APIError, OSError, SecretIntegrityError, ValidationError):
+        except (OSError, SecretIntegrityError, ValidationError):
             return TokenMetadataState.FAILED
         if existing is None:
             return TokenMetadataState.MISSING if raw is None else TokenMetadataState.CONFLICT
@@ -215,7 +143,7 @@ class SecretsTokenProvisioner:
                 categories=[category.value for category in profile.enabled_categories],
                 permissions=list(profile.permissions),
             )
-        except (APIError, OSError, SecretIntegrityError, ValidationError):
+        except (OSError, SecretIntegrityError, ValidationError):
             return TokenProvisionResult.failed(agent_id, "encrypted identity storage failed")
         return TokenProvisionResult.created(agent_id)
 
@@ -252,10 +180,15 @@ class WorkspaceInjectionAdapter:
 def build_wizard_ports(
     store: SecretsStore,
     phase45: Phase45Port | None = None,
+    prepared_collector: PreparedCollector | None = None,
+    prepared_state: DeployState | None = None,
 ) -> WizardPorts:
+    from traderbot.deploy.phase678_runtime import Phase678Adapter
+
     return WizardPorts(
         openclaw=OpenClawAdapter(),
         tokens=SecretsTokenProvisioner(store),
         injector=WorkspaceInjectionAdapter(),
         phase45=phase45,
+        phase678=Phase678Adapter(prepared_collector, prepared_state),
     )

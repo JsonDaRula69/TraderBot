@@ -139,6 +139,8 @@ BACKTESTING → PAPER TRADING → LIVE TRADING → (SUSPENDED)
 
 Deploy requests exactly one OpenClaw Gateway job: a self-deleting activation prompt that fires 5 minutes after deploy (DD-023). Gateway owns this automation and triggers SysAdmin's startup protocol:
 
+Phase 4 Step 7 does not trigger this protocol. It is a read-only Phase 5 sandbox stub that requires one exact persisted contract at deploy completion. If Gateway has already executed and deleted the one-shot, the wizard reports an action-required partial state and does not recreate it.
+
 1. Confirm Gateway deleted the one-shot bootstrap job after execution
 2. Inspect TraderBot service, authentication, and profile state with the implemented TraderBot inspection tools
 3. Keep every recurring agent cron/heartbeat schedule dormant
