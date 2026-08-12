@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import pytest
@@ -45,7 +46,11 @@ class _CleanupDependencies:
         return FixedClock().now()
 
     @asynccontextmanager
-    async def open_runtime(self) -> AsyncIterator[BackfillRuntime]:
+    async def open_runtime(
+        self,
+        environment: Literal["production", "demo"] = "production",
+    ) -> AsyncIterator[BackfillRuntime]:
+        del environment
         pool = SQLiteConnectionPool()
         try:
             yield BackfillRuntime(client=_FailingRuntimeKalshi(self._canary), pool=pool)

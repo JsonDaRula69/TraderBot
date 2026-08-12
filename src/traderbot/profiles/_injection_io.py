@@ -93,6 +93,17 @@ def temporary_file(target: Path, content: bytes, mode: int = NEW_FILE_MODE) -> P
 
 
 def apply_writes(plans: tuple[WritePlan, ...]) -> None:
+    if os.name != "nt":
+        from traderbot.profiles._injection_posix import (
+            PosixPublicationError,
+            apply_posix_writes,
+        )
+
+        try:
+            apply_posix_writes(plans)
+        except PosixPublicationError as exc:
+            raise WorkspaceInjectionError(exc.path, exc.reason) from exc
+        return
     staged: list[tuple[Path, WritePlan]] = []
     committed: list[WritePlan] = []
     try:

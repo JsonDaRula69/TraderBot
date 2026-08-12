@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Protocol
+from typing import ClassVar, Literal, Protocol
 
 import anyio
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -55,17 +55,24 @@ def _build_store() -> SecretsStore:
     return store
 
 
-def _build_client(pair: KalshiSecretPair) -> ManagedKalshiHistoryPort:
+def _build_client(
+    pair: KalshiSecretPair,
+    environment: Literal["production", "demo"],
+) -> ManagedKalshiHistoryPort:
     return KalshiClient(
         api_key=pair.api_key.get_secret_value(),
         private_key_pem=pair.private_key_pem.get_secret_value(),
+        environment=environment,
     )
 
 
 @dataclass(frozen=True, slots=True)
 class BackfillRuntimeFactories:
     store: Callable[[], SecretsStore] = _build_store
-    client: Callable[[KalshiSecretPair], ManagedKalshiHistoryPort] = _build_client
+    client: Callable[
+        [KalshiSecretPair, Literal["production", "demo"]],
+        ManagedKalshiHistoryPort,
+    ] = _build_client
     pool: Callable[[], SQLiteConnectionPool] = SQLiteConnectionPool
 
 
@@ -79,14 +86,17 @@ class OwnedBackfillDependencies:
         return self.clock.now()
 
     @asynccontextmanager
-    async def open_runtime(self) -> AsyncGenerator[BackfillRuntime, None]:
+    async def open_runtime(
+        self,
+        environment: Literal["production", "demo"] = "production",
+    ) -> AsyncGenerator[BackfillRuntime, None]:
         store: SecretsStore | None = None
         client: ManagedKalshiHistoryPort | None = None
         pool: SQLiteConnectionPool | None = None
         try:
             store = self.factories.store()
             pair = _credentials(store)
-            client = self.factories.client(pair)
+            client = self.factories.client(pair, environment)
             pool = self.factories.pool()
             yield BackfillRuntime(client=client, pool=pool, progress=NullProgress())
         finally:

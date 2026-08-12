@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import final
 
 from traderbot.deploy import openclaw
+from traderbot.deploy.bootstrap_cron import SysAdminBootstrapCron
 from traderbot.deploy.openclaw_config import inspect_config
 from traderbot.deploy.openclaw_models import AgentInventory
 from traderbot.deploy.verify_models import ProbeResult, VerificationRequest
 from traderbot.deploy.wizard_preflight import resolve_agent_targets
-from traderbot.deploy.wizard_runtime import SysAdminBootstrapCron
 from traderbot.deploy.wizard_state import (
     DeployApprovals,
     DeploymentPreflightError,

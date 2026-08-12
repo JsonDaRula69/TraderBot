@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -28,7 +29,11 @@ class _LazyDependencies:
         return FixedClock().now()
 
     @asynccontextmanager
-    async def open_runtime(self) -> AsyncIterator[BackfillRuntime]:
+    async def open_runtime(
+        self,
+        environment: Literal["production", "demo"] = "production",
+    ) -> AsyncIterator[BackfillRuntime]:
+        del environment
         self.opens += 1
         pool = SQLiteConnectionPool()
         try:

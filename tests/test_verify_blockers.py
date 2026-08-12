@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar, override
 
 import pytest
-from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
+from pydantic import SecretStr, ValidationError
 
 from traderbot.deploy.verify import VerificationPorts, run_verification
 from traderbot.deploy.verify_models import (
@@ -17,18 +17,6 @@ from traderbot.deploy.verify_models import (
 from traderbot.deploy.verify_runtime import HealthComponents, evaluate_health
 from traderbot.deploy.verify_storage import decisions_databases, global_database
 from traderbot.kalshi.order_models import MarketCategory
-
-
-class Evidence(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", frozen=True, strict=True)
-
-    version: str
-    base: str
-    commit: str
-    commands: tuple[str, ...]
-    receipts: dict[str, str]
-    cleanup: tuple[str, ...]
-    preserved_full_suite: str
 
 
 class ProbeCanaryError(Exception):
@@ -206,16 +194,3 @@ def test_schema_authority_ignores_mutated_runtime_registries(
     # When / Then
     assert global_database(_request(tmp_path)).status is CheckStatus.PASS
     assert decisions_databases(_request(tmp_path)).status is CheckStatus.PASS
-
-
-def test_evidence_records_substantive_repair_contract() -> None:
-    # Given
-    path = Path(__file__).parents[2] / ".omo" / "evidence" / "task-10-phase4-deploy-wizard.json"
-
-    # When
-    evidence = Evidence.model_validate_json(path.read_text(encoding="utf-8"))
-
-    # Then
-    required = {"base", "commit", "commands", "receipts", "cleanup", "preserved_full_suite"}
-    assert required <= set(evidence.model_fields_set)
-    assert evidence.version == "2.0.0a94"

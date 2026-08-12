@@ -5,7 +5,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.kalshi.models import CutoffTimestamps
@@ -97,7 +97,10 @@ class BackfillDependencies(Protocol):
 
     def now(self) -> datetime: ...
 
-    def open_runtime(self) -> AbstractAsyncContextManager[BackfillRuntime]: ...
+    def open_runtime(
+        self,
+        environment: Literal["production", "demo"],
+    ) -> AbstractAsyncContextManager[BackfillRuntime]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +115,11 @@ class BackfillPorts:
         return self.clock.now()
 
     @asynccontextmanager
-    async def open_runtime(self) -> AsyncGenerator[BackfillRuntime, None]:
+    async def open_runtime(
+        self,
+        environment: Literal["production", "demo"] = "production",
+    ) -> AsyncGenerator[BackfillRuntime, None]:
+        del environment
         yield BackfillRuntime(client=self.client, pool=self.pool, progress=self.progress)
 
 

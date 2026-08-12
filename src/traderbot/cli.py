@@ -285,13 +285,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_profile_create(args)
     if command.command == "auth" and command.action == "check":
         return _cmd_auth_check(args)
-    if command.command in {"deploy", "backfill"}:
+    if command.command in {"deploy", "backfill", "verify"}:
         os.environ["TRADERBOT_USE_HARDCODED_AUTH"] = "0"
         if command.command == "deploy":
             return _cmd_deploy(args)
         if command.command == "backfill":
             return _cmd_backfill(args)
-    if command.command == "verify":
         return _cmd_verify(args)
 
     parser.error(f"unknown command: {command.command}")

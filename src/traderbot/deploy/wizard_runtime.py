@@ -6,7 +6,6 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from traderbot.deploy import openclaw
-from traderbot.deploy.backfill_collector_types import PreparedCollector
 from traderbot.deploy.bootstrap_cron import (
     BOOTSTRAP_PROMPT,
     classify_bootstrap_crons,
@@ -18,7 +17,6 @@ from traderbot.deploy.openclaw_models import (
     AgentInventory,
 )
 from traderbot.deploy.wizard_contracts import (
-    DeployState,
     Phase45Port,
     ProvisionStatus,
     TokenProvisionResult,
@@ -180,15 +178,10 @@ class WorkspaceInjectionAdapter:
 def build_wizard_ports(
     store: SecretsStore,
     phase45: Phase45Port | None = None,
-    prepared_collector: PreparedCollector | None = None,
-    prepared_state: DeployState | None = None,
 ) -> WizardPorts:
-    from traderbot.deploy.phase678_runtime import Phase678Adapter
-
     return WizardPorts(
         openclaw=OpenClawAdapter(),
         tokens=SecretsTokenProvisioner(store),
         injector=WorkspaceInjectionAdapter(),
         phase45=phase45,
-        phase678=Phase678Adapter(prepared_collector, prepared_state),
     )

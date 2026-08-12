@@ -13,8 +13,8 @@ Public API surface for the Phase 2 REST client:
 * Data models (``traderbot.kalshi.models``): MarketCategory, Market, Order,
   Fill, OrderBook, Ticker, and friends.
 
-Credentials come from :class:`traderbot.secrets.store.SecretsStore` — the
-client never reads env files or keyring.
+Credentials are supplied through :class:`traderbot.secrets.store.SecretsStore`;
+the client never loads them from process environment files.
 """
 
 from traderbot.kalshi.client import (

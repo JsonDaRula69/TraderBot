@@ -264,12 +264,18 @@ def test_partial_replace_failure_rolls_back_and_removes_temps(
     real_replace = os.replace
     failed = False
 
-    def fail_second_replace(source: str | Path, target: str | Path) -> None:
+    def fail_second_replace(
+        source: str | Path,
+        target: str | Path,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+    ) -> None:
         nonlocal failed
         if Path(target).name == "SOUL.md" and not failed:
             failed = True
             raise OSError("interrupted replace")
-        real_replace(source, target)
+        real_replace(source, target, src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd)
 
     monkeypatch.setattr(os, "replace", fail_second_replace)
 

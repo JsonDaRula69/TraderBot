@@ -6,7 +6,7 @@ import stat
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -47,6 +47,7 @@ class BackfillRequest(BaseModel):
     months: int = Field(ge=1, le=60)
     target_db: Path
     collector_db: Path | None = None
+    kalshi_environment: Literal["production", "demo"] = "production"
 
 
 def _failure(code: str, detail: str) -> tuple[BackfillFailure, ...]:
@@ -187,7 +188,7 @@ async def run_backfill(
         )
     try:
         with _prepared_collector(collector) as prepared:
-            async with dependencies.open_runtime() as runtime:
+            async with dependencies.open_runtime(request.kalshi_environment) as runtime:
                 return await _execute(runtime, prepared, target, window, warnings)
     except (CollectorPathError, CollectorSchemaError) as exc:
         return BackfillResult(
@@ -210,7 +211,7 @@ async def run_prepared_backfill(
             status="invalid_input",
             failures=_failure("invalid_input", str(exc)),
         )
-    async with dependencies.open_runtime() as runtime:
+    async with dependencies.open_runtime(request.kalshi_environment) as runtime:
         return await _execute(runtime, prepared, target, window, [])
 
 

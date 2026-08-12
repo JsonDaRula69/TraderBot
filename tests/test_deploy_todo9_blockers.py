@@ -9,12 +9,11 @@ import pytest
 
 from tests.deploy_wizard_fakes import FakeEnvironment, FakePhase45, FakePhase678
 from traderbot.deploy.backfill_collector import prepare_collector_source
-from traderbot.deploy.backfill_collector_types import PreparedCollector
 from traderbot.deploy.deploy_state import DeployStateError, load_deploy_state
 from traderbot.deploy.phase45_runtime import Phase45Adapter
 from traderbot.deploy.phase678_runtime import Phase678Adapter
 from traderbot.deploy.wizard_command import execute_deploy
-from traderbot.deploy.wizard_contracts import DeployState, WizardPorts
+from traderbot.deploy.wizard_contracts import WizardPorts
 
 
 class CleanupCanaryError(RuntimeError):
@@ -162,8 +161,6 @@ def test_cleanup_failure_returns_sanitized_nonzero(
     def ports_factory(
         _store: None,
         _phase45: Phase45Adapter,
-        _prepared: PreparedCollector | None = None,
-        _state: DeployState | None = None,
     ) -> WizardPorts:
         return environment.ports()
 
@@ -376,8 +373,6 @@ def test_cleanup_oserror_is_runtime_failure(
     def ports_factory(
         _store: None,
         _phase45: Phase45Adapter,
-        _prepared: PreparedCollector | None = None,
-        _state: DeployState | None = None,
     ) -> WizardPorts:
         return environment.ports()
 

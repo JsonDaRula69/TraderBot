@@ -19,16 +19,17 @@ from traderbot.deploy.config import DeployConfig
 from traderbot.deploy.deploy_state import DeployStateError, load_deploy_state, validate_data_root
 from traderbot.deploy.openclaw_models import AgentInventory
 from traderbot.deploy.phase45_runtime import Phase45Adapter
+from traderbot.deploy.phase678_runtime import Phase678Adapter
 from traderbot.deploy.secret_step import HiddenSecretInput, select_deploy_secrets
 from traderbot.deploy.validation import SecretReconciliationApprovals
 from traderbot.deploy.verify_reporter import RichReporter as VerificationRichReporter
 from traderbot.deploy.wizard import DeployWizard
 from traderbot.deploy.wizard_contracts import DeployResult, WizardPorts, WizardRequest
 from traderbot.deploy.wizard_late_steps import STUB_MESSAGE
+from traderbot.deploy.wizard_request import request_from_config
 from traderbot.deploy.wizard_runtime import build_wizard_ports
 from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.order_models import MarketCategory
-from traderbot.paths import get_data_dir
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,10 +56,17 @@ def _prepare_deploy(
             selection.store,
             Phase45Adapter(selection, hidden.read),
         )
+        runtime_ports = WizardPorts(
+            openclaw=runtime_ports.openclaw,
+            tokens=runtime_ports.tokens,
+            injector=runtime_ports.injector,
+            phase45=runtime_ports.phase45,
+            phase678=Phase678Adapter(),
+        )
         request = collect_interactive_request(console, runtime_ports)
         return _PreparedDeploy(request, runtime_ports, resources)
     config = DeployConfig.model_validate_json(config_path.read_text(encoding="utf-8"))
-    request = _request_from_config(config)
+    request = request_from_config(config)
     _ = validate_data_root(request.data_root)
     prepared_state = load_deploy_state(request.data_root)
     prepared_collector: PreparedCollector | None = None
@@ -70,36 +78,19 @@ def _prepare_deploy(
     _ = resources.callback(selection.close)
     runtime_ports = build_wizard_ports(
         selection.store,
-        Phase45Adapter(selection, None),
-        prepared_collector,
-        prepared_state,
+        Phase45Adapter(selection, None, request.data_root),
+    )
+    runtime_ports = WizardPorts(
+        openclaw=runtime_ports.openclaw,
+        tokens=runtime_ports.tokens,
+        injector=runtime_ports.injector,
+        phase45=runtime_ports.phase45,
+        phase678=Phase678Adapter(prepared_collector, prepared_state),
     )
     return _PreparedDeploy(request, runtime_ports, resources)
 
 
-def _request_from_config(config: DeployConfig) -> WizardRequest:
-    return WizardRequest.model_validate(
-        {
-            "categories": tuple(config.categories),
-            "mode": config.mode,
-            "sysadmin_workspace": config.sysadmin_workspace,
-            "category_workspaces": config.category_workspaces,
-            "approvals": config.approvals,
-            "heartbeat_every": config.heartbeat_every,
-            "infisical_url": config.infisical_url or "http://localhost:8080",
-            "kalshi_api_key_env": config.tokens.kalshi_api_key_env,
-            "kalshi_private_key_pem_env": config.tokens.kalshi_private_key_pem_env,
-            "secret_approvals": config.secret_approvals,
-            "months_backfill": config.months_backfill,
-            "collector_db": config.collector_db,
-            "data_root": get_data_dir() if config.data_root is None else config.data_root,
-            "daemon_mcp_url": config.daemon_mcp_url,
-        }
-    )
-
-
 def collect_interactive_request(console: Console, ports: WizardPorts) -> WizardRequest:
-    """Collect explicit category and workspace choices through Rich."""
     table = Table(title="TraderBot Market Categories")
     table.add_column("Category")
     table.add_column("Agent ID")

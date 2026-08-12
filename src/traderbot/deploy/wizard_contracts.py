@@ -138,6 +138,7 @@ class WizardRequest(WizardRequestState):
     collector_db: Path | None = None
     data_root: Path = Field(default_factory=get_data_dir)
     daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
+    kalshi_environment: Literal["production", "demo"] = "production"
 
     @field_validator("categories")
     @classmethod

@@ -104,6 +104,7 @@ class ProductionVerificationPorts(VerificationPorts):
             client = KalshiClient(
                 api_key=pair.api_key.get_secret_value(),
                 private_key_pem=pair.private_key_pem.get_secret_value(),
+                environment=self.request.kalshi_environment,
                 max_retries=0,
             )
             try:

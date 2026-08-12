@@ -125,11 +125,14 @@ def test_cli_help_is_available(capsys: pytest.CaptureFixture[str]) -> None:
     assert "--categories" in captured.out
 
 
-def test_verify_cli_does_not_mutate_auth_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_cli_forces_real_auth_before_handler(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given
     monkeypatch.setenv("TRADERBOT_USE_HARDCODED_AUTH", "1")
 
+    observed: list[str | None] = []
+
     def handler(_args: argparse.Namespace) -> int:
+        observed.append(os.environ.get("TRADERBOT_USE_HARDCODED_AUTH"))
         return 0
 
     monkeypatch.setattr("traderbot.cli._cmd_verify", handler)
@@ -139,7 +142,7 @@ def test_verify_cli_does_not_mutate_auth_mode(monkeypatch: pytest.MonkeyPatch) -
 
     # Then
     assert exit_code == 0
-    assert os.environ["TRADERBOT_USE_HARDCODED_AUTH"] == "1"
+    assert observed == ["0"]
 
 
 def test_argparse_failure_is_one_json_stdout_line(

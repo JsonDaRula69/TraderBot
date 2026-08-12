@@ -54,6 +54,7 @@ class VerificationRequest(FrozenModel):
     infisical_origin: str = "http://localhost:8080"
     daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
     timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    kalshi_environment: Literal["production", "demo"] = "production"
 
     @field_validator("categories")
     @classmethod
