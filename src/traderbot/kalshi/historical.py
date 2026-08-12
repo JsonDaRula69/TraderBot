@@ -8,8 +8,9 @@ from typing import Final, override
 import httpx
 
 from traderbot.kalshi.archive import KalshiArchiveMethods
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 from traderbot.kalshi.rest_models import (
+    BalanceResponse,
     CandlePeriod,
     ForecastHistoryResponse,
     ForecastPeriod,
@@ -104,6 +105,10 @@ class KalshiHistoricalMethods(KalshiArchiveMethods, ABC):
             raise KalshiParameterError("category", "must not be empty")
         response = await self.get("/series", category=category_value)
         return SeriesListResponse.model_validate_json(response.content)
+
+    async def get_balance(self, *, timeout: float = 3.0) -> BalanceResponse:
+        response = await self.get("/portfolio/balance", timeout=timeout)
+        return BalanceResponse.model_validate_json(response.content)
 
     async def get_markets(
         self,

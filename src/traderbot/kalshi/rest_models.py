@@ -46,6 +46,13 @@ class _ResponseModel(BaseModel):
     error: None = None
 
 
+class BalanceResponse(_ResponseModel):
+    balance: int
+    balance_dollars: FixedPointDollars
+    portfolio_value: int
+    updated_ts: int = Field(ge=0)
+
+
 class SettlementSource(_ResponseModel):
     name: str | None = None
     url: str | None = None

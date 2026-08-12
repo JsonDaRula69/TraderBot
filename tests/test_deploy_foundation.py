@@ -9,7 +9,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 import traderbot.cli as cli
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 
 def test_deploy_config_parses_documented_shape() -> None:
@@ -132,7 +132,7 @@ def test_auth_check_json_reports_exact_missing_token(capsys: pytest.CaptureFixtu
 
 @pytest.mark.parametrize(
     ("command", "handler_name"),
-    [("deploy", "_cmd_deploy"), ("backfill", "_cmd_backfill"), ("verify", "_cmd_verify")],
+    [("deploy", "_cmd_deploy"), ("backfill", "_cmd_backfill")],
 )
 def test_foundation_stub_sets_real_auth_before_handler(
     command: str,
@@ -155,23 +155,6 @@ def test_foundation_stub_sets_real_auth_before_handler(
     # Then: real auth was selected before control reached its handler
     assert exit_code == 0
     assert observed == ["0"]
-
-
-@pytest.mark.parametrize("command", ["verify"])
-def test_remaining_foundation_command_is_explicit_stub(
-    command: str,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given/When: a later-phase command is invoked during Todo 1
-    monkeypatch.setenv("TRADERBOT_USE_HARDCODED_AUTH", "1")
-    exit_code = cli.main([command])
-    output = capsys.readouterr()
-
-    # Then: it succeeds only as an explicit not-yet-implemented stub
-    assert exit_code == 0
-    assert output.out == f"{command}: not yet implemented\n"
-    assert output.err == ""
 
 
 def test_deploy_cli_forwards_config_and_json(

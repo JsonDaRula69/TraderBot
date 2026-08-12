@@ -432,3 +432,9 @@ tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the 
 through MCP tools only, and TraderBot handles API communication on the backend.
 This table is planned architecture, not a claim that Infisical, provider
 credential validation, token injection, rotation, or deployment is complete.
+
+### Deployment verification
+
+`traderbot verify` requires the exact environment value `TRADERBOT_USE_HARDCODED_AUTH=0`. It reads only selected durable five-field profile-token documents through the active SecretsStore, validates profile, agent, category, permission, and nonempty opaque-token contracts, and never calls the hardcoded resolver or installs a global adapter. Values, hashes, lengths, prefixes, backend exceptions, and request material are absent from typed results and reporters.
+
+Kalshi credential proof is a signed, read-only `GET /portfolio/balance`. Infisical proof is target-local `/api/status` plus non-value access to both project roots with cache disabled and proxy-aware backend selection. Development tests use MockTransport and isolated stores; real macpro-linux service exercise remains Final-Wave verification.

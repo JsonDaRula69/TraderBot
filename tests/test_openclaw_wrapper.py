@@ -41,7 +41,7 @@ def test_existing_subprocess_convention_is_bounded(
     destination.touch()
     paths = BinPaths(tmp_path / "traderbot", tmp_path / "python", tmp_path, "tester")
     monkeypatch.setattr(service_deploy, "detect_service_manager", mock.Mock(return_value="systemd"))
-    monkeypatch.setattr(service_deploy, "_destination", mock.Mock(return_value=destination))
+    monkeypatch.setattr(service_deploy, "service_destination", mock.Mock(return_value=destination))
     monkeypatch.setattr(subprocess, "run", run)
 
     # When: the existing wrapper executes a system command
@@ -105,8 +105,11 @@ def test_install_openclaw_no_npm(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_openclaw_setup_uses_noninteractive_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: baseline setup emits current JSON
     payload = {
-        "ok": True, "configPath": "/tmp/openclaw.json", "configStatus": "unchanged",
-        "workspaceDir": "/tmp/workspace", "sessionsDir": "/tmp/sessions",
+        "ok": True,
+        "configPath": "/tmp/openclaw.json",
+        "configStatus": "unchanged",
+        "workspaceDir": "/tmp/workspace",
+        "sessionsDir": "/tmp/sessions",
     }
     run = mock.Mock(return_value=_completed(["openclaw"], stdout=json.dumps(payload)))
     monkeypatch.setattr(openclaw, "_run", run)
@@ -143,9 +146,14 @@ def test_create_agent_weather(monkeypatch: pytest.MonkeyPatch) -> None:
     # Then: one bounded request carries the canonical ID and approved path
     assert result is True
     add_argv = [
-        "openclaw", "agents", "add", "weather-agent", "--workspace",
+        "openclaw",
+        "agents",
+        "add",
+        "weather-agent",
+        "--workspace",
         str(workspace),
-        "--non-interactive", "--json",
+        "--non-interactive",
+        "--json",
     ]
     _assert_run(run, add_argv, 120.0)
 
@@ -202,8 +210,11 @@ def test_register_cron_maps_prompt_to_message_atom(monkeypatch: pytest.MonkeyPat
     # Then: prompt text remains one argv atom and obsolete --prompt is absent
     assert result is True
     argv = [
-        "openclaw", "cron", "add",
-        "--name", "traderbot-main-at-5m",
+        "openclaw",
+        "cron",
+        "add",
+        "--name",
+        "traderbot-main-at-5m",
         "--agent",
         "main",
         "--session",
@@ -220,8 +231,12 @@ def test_register_cron_maps_prompt_to_message_atom(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.parametrize(
     ("at", "every", "session"),
-    [(None, None, "isolated"), ("5m", "1h", "isolated"), ("", "1h", "isolated"),
-     ("5m", None, "shared")],
+    [
+        (None, None, "isolated"),
+        ("5m", "1h", "isolated"),
+        ("", "1h", "isolated"),
+        ("5m", None, "shared"),
+    ],
 )
 def test_register_cron_rejects_invalid_schedule_or_session(
     monkeypatch: pytest.MonkeyPatch,

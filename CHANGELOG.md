@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a94] — 2026-08-11
+
+### Added
+
+- Added the read-only `traderbot verify` command with dependency-aware deployment checks, signed Kalshi balance authentication, strict storage manifests, and stable JSON/Rich results.
+
 ## [2.0.0a93] — 2026-08-11
 
 ### Added

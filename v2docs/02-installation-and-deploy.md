@@ -136,15 +136,14 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 8: Verification
 
-- OpenClaw gateway reachable
-- All agent tokens resolve correctly
-- Kalshi credentials valid (`traderbot auth check --json`)
-- All cron jobs visible via `openclaw cron list`
-- All DB paths writable
-- ChromaDB accessible; collection creation remains lazy until explicit embeddings exist
-- Docker sandbox running
-- Infisical integration verified (all projects accessible, tokens valid, rotation timer started)
-- Print summary with agent names, profiles, tokens, and status
+- `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph.
+- Gateway health uses `gateway status --json --require-rpc`; selected inventory, workspaces, config, exact bootstrap cron, and persisted heartbeat `0m` state reuse the typed OpenClaw read seams.
+- Exact real-auth mode and selected five-field token documents are read from the currently selected durable SecretsStore without installing adapters or revealing token values.
+- Kalshi authentication uses signed `GET /portfolio/balance`; public market data is not authentication proof.
+- Global and current-mode category databases use no-follow owner checks, SQLite URI `mode=ro`, `query_only`, `quick_check`, and exact schema/table/index manifests. A SysAdmin decisions database is forbidden; writability is never probed.
+- Active daemon health requires a bounded loopback streamable-http MCP handshake and actual `health` call. Daemon-owned Chroma is proved from this health response and is never opened by the verifier.
+- Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host.
+- JSON output is exactly one stdout line; the Rich table is stderr-only. Exit codes are 0 for OK, 1 for failed/degraded, and 2 for invalid input.
 
 ---
 

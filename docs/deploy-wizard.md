@@ -1,6 +1,6 @@
-# Deploy Wizard Steps 1-5
+# Deploy Wizard Steps 1-5 And Verification
 
-`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. The standalone Step 6 backfill command is implemented. Steps 6-8 remain unwired in the wizard until Todo 9.
+`traderbot deploy` currently implements the first five deploy steps: OpenClaw baseline configuration, SysAdmin setup on agent `main`, explicit category-agent selection, Kalshi secret provisioning, and database creation. The standalone Step 6 backfill and Step 8 verification commands are implemented. Steps 6-8 remain unwired in the wizard until Todo 9.
 
 ## Interactive Mode
 
@@ -59,6 +59,14 @@ An existing Chroma ownership lock is a non-destructive blocker. Deploy does not 
 Run `traderbot backfill --months 6 [--collector-db PATH] [--json]`. The command resolves the existing canonical Kalshi credential pair without prompting, opens one target `SQLiteConnectionPool`, optionally imports the legacy collector read-only, and fetches both current and archived Kalshi weather history around one cutoff. It never initializes Chroma.
 
 The default collector path is optional; an absent default produces a warning while an invalid explicitly supplied path exits 2 before target or API writes. Complete runs exit 0. Isolated item failures or systemic Kalshi failures after committed work return a redacted typed partial result and exit 1; total runtime failures also exit 1. JSON mode reserves stdout for one result line and sends no Rich output there.
+
+## Standalone Verification
+
+Run `traderbot verify --categories weather [crypto ...] [--mode backtest] [--json]` on the host that owns the deployment. Production loopback means macpro-linux-local; development localhost is not the production target, and local QA uses isolated fakes only.
+
+The command runs a fixed, sequential, read-only graph. It verifies Gateway RPC, selected OpenClaw inventory/workspaces/config, the exact managed bootstrap cron, persisted dormant heartbeat config, exact real-auth mode, selected five-field durable token documents, signed Kalshi `GET /portfolio/balance`, global and selected decisions database manifests, service-manager status, actual MCP `health`, daemon-owned Chroma health, and Infisical primary or encrypted fallback state. Gateway failures skip only Gateway children; unavailable token credentials skip signed Kalshi and daemon runtime; unavailable daemon runtime prevents a false embedded-Chroma pass.
+
+SQLite files are opened with URI `mode=ro`, `query_only`, `quick_check`, and exact latest schema/table/index manifests after no-link ownership checks. Verification never probes writability, creates WAL/journal files, opens daemon-owned embedded Chroma, installs or changes services, creates agents, edits config/cron/heartbeat, or writes secrets. JSON mode emits exactly one stdout line. Human mode emits one Rich table to stderr. Exit codes are 0 for `ok`, 1 for `failed` or `degraded`, and 2 for invalid input.
 
 ## Resumability And Identity
 

@@ -10,6 +10,9 @@ and verification remain reserved for later plan items.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
+import json
 import os
 import sys
 from collections.abc import Sequence
@@ -21,7 +24,7 @@ from pydantic import BaseModel, ConfigDict
 from traderbot.daemon import main as daemon_main
 from traderbot.deploy.backfill_command import BackfillCommandOptions, execute_backfill
 from traderbot.deploy.wizard_command import execute_deploy
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 from traderbot.profiles.generic import create_category_profile
 from traderbot.services.deploy import (
     deploy_service,
@@ -34,6 +37,7 @@ from traderbot.services.deploy import (
 
 _EXIT_OK = 0
 _EXIT_ERROR = 1
+_EXIT_INVALID = 2
 
 
 class _DeployArguments(BaseModel):
@@ -51,6 +55,41 @@ class _BackfillArguments(BaseModel):
     json_output: bool = False
 
 
+class _DaemonArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    host: str
+    port: int
+    environment: str
+
+
+class _ProfileArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    name: str
+    mode: str
+    categories: tuple[MarketCategory, ...]
+
+
+class _VerifyArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    categories: tuple[MarketCategory, ...] | None = None
+    mode: str
+    data_root: Path | None = None
+    infisical_url: str
+    daemon_mcp_url: str
+    timeout: float
+    json_output: bool
+
+
+class _CommandArguments(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
+
+    command: str
+    action: str | None = None
+
+
 def _parse_market_category(value: str) -> MarketCategory:
     try:
         return MarketCategory(value)
@@ -60,13 +99,14 @@ def _parse_market_category(value: str) -> MarketCategory:
 
 
 def _cmd_daemon(args: argparse.Namespace) -> int:
+    parsed = _DaemonArguments.model_validate(vars(args))
     forwarded = [
         "--host",
-        args.host,
+        parsed.host,
         "--port",
-        str(args.port),
+        str(parsed.port),
         "--environment",
-        args.environment,
+        parsed.environment,
     ]
     daemon_main(forwarded)
     return _EXIT_OK
@@ -85,7 +125,7 @@ def _cmd_service_install(_args: argparse.Namespace) -> int:
 
 
 def _cmd_service_uninstall(_args: argparse.Namespace) -> int:
-    disable_and_stop_service()
+    _ = disable_and_stop_service()
     if not remove_service():
         print("No daemon service file present; nothing to uninstall.", file=sys.stderr)
         return _EXIT_ERROR
@@ -101,7 +141,8 @@ def _cmd_service_status(_args: argparse.Namespace) -> int:
 
 
 def _cmd_profile_create(args: argparse.Namespace) -> int:
-    profile = create_category_profile(args.name, args.mode, args.categories)
+    parsed = _ProfileArguments.model_validate(vars(args))
+    profile = create_category_profile(parsed.name, parsed.mode, parsed.categories)
     print(profile.model_dump_json())
     return _EXIT_OK
 
@@ -128,9 +169,26 @@ def _cmd_backfill(args: argparse.Namespace) -> int:
     return execute_backfill(options)
 
 
-def _cmd_verify(_args: argparse.Namespace) -> int:
-    print("verify: not yet implemented")
-    return _EXIT_OK
+def _cmd_verify(args: argparse.Namespace) -> int:
+    from traderbot.deploy.verify_command import (
+        VerificationCommandOptions,
+        execute_verification,
+    )
+
+    parsed = _VerifyArguments.model_validate(vars(args))
+    return execute_verification(
+        VerificationCommandOptions.model_validate(
+            {
+                "categories": parsed.categories or (),
+                "mode": parsed.mode,
+                "data_root": parsed.data_root,
+                "infisical_origin": parsed.infisical_url,
+                "daemon_mcp_url": parsed.daemon_mcp_url,
+                "timeout_seconds": parsed.timeout,
+                "json_output": parsed.json_output,
+            }
+        )
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -141,9 +199,9 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     daemon = subparsers.add_parser("daemon", help="Run the always-on TraderBot daemon")
-    daemon.add_argument("--host", default="127.0.0.1", help="bind host (loopback only)")
-    daemon.add_argument("--port", type=int, default=8765, help="bind port")
-    daemon.add_argument(
+    _ = daemon.add_argument("--host", default="127.0.0.1", help="bind host (loopback only)")
+    _ = daemon.add_argument("--port", type=int, default=8765, help="bind port")
+    _ = daemon.add_argument(
         "--environment",
         default="production",
         choices=["production", "demo"],
@@ -152,20 +210,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     service = subparsers.add_parser("service", help="Manage the daemon service")
     service_sub = service.add_subparsers(dest="action", required=True)
-    service_sub.add_parser("install", help="Install the daemon service")
-    service_sub.add_parser("uninstall", help="Uninstall the daemon service")
-    service_sub.add_parser("status", help="Report daemon service status")
+    _ = service_sub.add_parser("install", help="Install the daemon service")
+    _ = service_sub.add_parser("uninstall", help="Uninstall the daemon service")
+    _ = service_sub.add_parser("status", help="Report daemon service status")
 
     profile = subparsers.add_parser("profile", help="Manage trading profiles")
     profile_sub = profile.add_subparsers(dest="action", required=True)
     profile_create = profile_sub.add_parser("create", help="Create a category profile")
-    profile_create.add_argument("name")
-    profile_create.add_argument(
+    _ = profile_create.add_argument("name")
+    _ = profile_create.add_argument(
         "--mode",
         default="backtest",
         choices=["backtest", "paper", "live"],
     )
-    profile_create.add_argument(
+    _ = profile_create.add_argument(
         "--categories",
         nargs="+",
         required=True,
@@ -176,48 +234,66 @@ def _build_parser() -> argparse.ArgumentParser:
     auth = subparsers.add_parser("auth", help="Check profile authentication")
     auth_sub = auth.add_subparsers(dest="action", required=True)
     auth_check = auth_sub.add_parser("check", help="Check the active profile token")
-    auth_check.add_argument("--json", action="store_true", dest="json_output")
+    _ = auth_check.add_argument("--json", action="store_true", dest="json_output")
 
     deploy = subparsers.add_parser("deploy", help="Deploy TraderBot steps 1-5")
-    deploy.add_argument("--config", type=Path, help="prompt-free deploy JSON path")
-    deploy.add_argument("--json", action="store_true", dest="json_output")
+    _ = deploy.add_argument("--config", type=Path, help="prompt-free deploy JSON path")
+    _ = deploy.add_argument("--json", action="store_true", dest="json_output")
     backfill = subparsers.add_parser("backfill", help="Import weather and fetch Kalshi history")
-    backfill.add_argument("--months", type=int, default=6, help="calendar months to backfill")
-    backfill.add_argument("--collector-db", type=Path, help="legacy collector SQLite path")
-    backfill.add_argument("--json", action="store_true", dest="json_output")
-    subparsers.add_parser("verify", help="Verify deployment (not yet implemented)")
+    _ = backfill.add_argument("--months", type=int, default=6, help="calendar months to backfill")
+    _ = backfill.add_argument("--collector-db", type=Path, help="legacy collector SQLite path")
+    _ = backfill.add_argument("--json", action="store_true", dest="json_output")
+    verify = subparsers.add_parser("verify", help="Verify the deployed TraderBot system")
+    _ = verify.add_argument("--categories", nargs="+", type=_parse_market_category)
+    _ = verify.add_argument("--mode", choices=["backtest", "paper", "live"], default="backtest")
+    _ = verify.add_argument("--data-root", type=Path)
+    _ = verify.add_argument("--infisical-url", default="http://localhost:8080")
+    _ = verify.add_argument("--daemon-mcp-url", default="http://127.0.0.1:8765/mcp")
+    _ = verify.add_argument("--timeout", type=float, default=3.0)
+    _ = verify.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the traderbot CLI, returning the process exit code."""
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    arguments = tuple(sys.argv[1:] if argv is None else argv)
+    if "--json" in arguments:
+        with contextlib.redirect_stderr(io.StringIO()):
+            try:
+                args = parser.parse_args(arguments)
+            except SystemExit as error:
+                if error.code != 2:
+                    raise
+                _ = sys.stdout.write(json.dumps({"error": "invalid_request"}) + "\n")
+                return _EXIT_INVALID
+    else:
+        args = parser.parse_args(arguments)
 
-    if args.command == "daemon":
+    command = _CommandArguments.model_validate(vars(args))
+    if command.command == "daemon":
         return _cmd_daemon(args)
-    if args.command == "service":
-        if args.action == "install":
+    if command.command == "service":
+        if command.action == "install":
             return _cmd_service_install(args)
-        if args.action == "uninstall":
+        if command.action == "uninstall":
             return _cmd_service_uninstall(args)
-        if args.action == "status":
+        if command.action == "status":
             return _cmd_service_status(args)
-    if args.command == "profile" and args.action == "create":
+    if command.command == "profile" and command.action == "create":
         return _cmd_profile_create(args)
-    if args.command == "auth" and args.action == "check":
+    if command.command == "auth" and command.action == "check":
         return _cmd_auth_check(args)
-    if args.command in {"deploy", "backfill", "verify"}:
+    if command.command in {"deploy", "backfill"}:
         os.environ["TRADERBOT_USE_HARDCODED_AUTH"] = "0"
-        if args.command == "deploy":
+        if command.command == "deploy":
             return _cmd_deploy(args)
-        if args.command == "backfill":
+        if command.command == "backfill":
             return _cmd_backfill(args)
-        if args.command == "verify":
-            return _cmd_verify(args)
+    if command.command == "verify":
+        return _cmd_verify(args)
 
-    parser.error(f"unknown command: {args.command}")
-    return _EXIT_ERROR
+    parser.error(f"unknown command: {command.command}")
 
 
 if __name__ == "__main__":

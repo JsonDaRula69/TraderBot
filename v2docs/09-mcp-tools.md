@@ -46,6 +46,8 @@ resolution. The MCP server resolves `token → profile`, checks the tool
 permission, then checks the category for category-bearing tools. The profile
 also supplies mode and access context.
 
+The deployment verifier proves daemon runtime through the same streamable-http boundary: initialize one bounded loopback MCP session, call `health` with one already validated selected profile token, and strictly require resolved auth plus running MCP/data-pipeline/WebSocket and initialized database/Chroma/ownership-lock components. A TCP connection, HTTP status, `405`, or CLI-local state snapshot is not runtime health.
+
 ---
 
 ## Authentication Flow

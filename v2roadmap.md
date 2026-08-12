@@ -1781,14 +1781,13 @@ This section describes the v2 architecture that emerges from the design decision
 - SysAdmin manages phase transitions: backtest → paper → live, one category at a time
 
 #### Step 8: Verification
-- OpenClaw gateway reachable
-- All agent tokens resolve correctly
-- Kalshi credentials valid (`traderbot auth check --json`)
-- All cron jobs registered (`openclaw cron list`)
-- All DB paths writable
-- ChromaDB ownership accessible; exact shared manifest validated with collections remaining lazy until an explicit embedding dimension exists
-- Docker sandbox running (if Docker available)
-- Print summary with agent names, profiles, tokens, and status
+- Run `traderbot verify --categories ...` as a fixed dependency-aware read-only graph.
+- Require Gateway RPC and selected OpenClaw inventory/workspace/config, exact bootstrap cron, and persisted heartbeat contracts through strict typed read seams.
+- Require exact real-auth mode, durable selected token-document metadata, and signed Kalshi `GET /portfolio/balance` without exposing credentials.
+- Verify global/current-mode databases with no-follow owner checks, `mode=ro`, `query_only`, `quick_check`, and exact latest manifests; SysAdmin decisions DB is forbidden.
+- Require bounded actual daemon MCP `health`; derive daemon-owned Chroma state from MCP rather than opening embedded storage.
+- Report Infisical primary or encrypted fallback state; production loopback is macpro-linux-local and real-service replay remains Final Wave.
+- Emit one JSON stdout line or a Rich stderr table with stable IDs/status/action/timing; exit 0/1/2.
 
 ---
 

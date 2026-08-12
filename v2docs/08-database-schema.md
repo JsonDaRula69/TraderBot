@@ -48,6 +48,7 @@ Phase 3 Tasks 0-9 are implemented and merged to `v2-main` via PR #197 (merge com
 - A daemon-owned `SQLiteConnectionPool` with WAL and the PRAGMAs documented below. `DatabaseAccess` enforces resolved profile identity, active-mode writes, read-only access to authorized earlier modes, path containment, and SysAdmin-only enumeration.
 - One embedded `chromadb.PersistentClient` with the Rust bindings backend pinned, telemetry disabled, explicit caller-supplied vectors, five shared logical collections, mode-qualified per-agent collections, category-prefixed IDs, and mandatory category filters.
 - Daemon startup and shutdown integration with database, ChromaDB, and Chroma ownership-lock health reporting. Reads never create a per-agent database; explicit deployment/promotion or the first authorized write initializes it.
+- Standalone deployment verification performs no-follow ownership checks, opens exact expected databases with SQLite URI `mode=ro`, enables connection-local `query_only`, runs `quick_check`, and requires the latest schema/table/index manifests without creating WAL, journal, or missing database files. Canonical SysAdmin must have no decisions database.
 
 ### ChromaDB accepted risk: GHSA-f4j7-r4q5-qw2c
 
