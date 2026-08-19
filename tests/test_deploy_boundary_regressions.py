@@ -101,8 +101,10 @@ def test_configured_data_root_is_shared_by_all_runtime_phases(
         monkeypatch.setattr(
             phase45_runtime,
             "provision_deploy_databases",
-            lambda _categories, _mode, root: observed.update(database=root)
-            or DatabaseProvisionReport(root / "traderbot.db", (), 0, (), ()),
+            lambda _categories, _mode, root: (
+                observed.update(database=root)
+                or DatabaseProvisionReport(root / "traderbot.db", (), 0, (), ())
+            ),
         )
         assert phase45.provision_databases(prepared.request).status.value == "completed"
         phase678.save_state(

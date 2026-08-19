@@ -1,3 +1,5 @@
+"""Provide CLI and interactive boundaries for the deploy wizard."""
+
 from __future__ import annotations
 
 import logging
@@ -218,7 +220,6 @@ def execute_deploy(
     json_output: bool,
     ports: WizardPorts | None = None,
 ) -> int:
-    """Run wizard steps 1-5 from config or explicit Rich prompts."""
     previous_logging_level = logging.root.manager.disable
     if json_output:
         logging.disable(logging.CRITICAL)

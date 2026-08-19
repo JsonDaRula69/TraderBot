@@ -69,11 +69,7 @@ def test_fenced_merge_preserves_user_bytes_and_replaces_only_block(tmp_path: Pat
     )
 
     assert target.read_bytes() == (
-        b"user-prefix\x80\n"
-        + START_MARKER
-        + b"\nnew policy\n"
-        + END_MARKER
-        + b"\nuser-suffix"
+        b"user-prefix\x80\n" + START_MARKER + b"\nnew policy\n" + END_MARKER + b"\nuser-suffix"
     )
 
 

@@ -1,3 +1,5 @@
+"""Backfill Kalshi candlesticks and forecast history."""
+
 from __future__ import annotations
 
 import math

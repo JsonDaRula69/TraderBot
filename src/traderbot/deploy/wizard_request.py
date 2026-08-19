@@ -1,3 +1,5 @@
+"""Convert validated deploy configuration into a wizard request."""
+
 from __future__ import annotations
 
 from traderbot.deploy.config import DeployConfig

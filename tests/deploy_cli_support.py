@@ -75,13 +75,11 @@ def run_fake_cli(
     child_env = dict(env)
     project_root = Path(__file__).parents[1]
     child_env["PYTHONPATH"] = os.pathsep.join((str(project_root), str(project_root / "src")))
-    child_env["TRADERBOT_DEPLOY_PROVIDER"] = "tests.deploy_cli_provider:provider"
-    child_env["TRADERBOT_TEST_PROVIDER_ALLOWED"] = "1"
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "traderbot.cli",
+            "tests.deploy_cli_runner",
             "deploy",
             "--config",
             str(config),

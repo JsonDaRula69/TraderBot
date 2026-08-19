@@ -6,7 +6,9 @@ agents drive it through typed MCP tools (`traderbot__*`). The CLI is retired
 from containers.
 
 > **Status**: v2 Phase 4 implementation Todos 1-13 for issue #168 are locally
-> complete at `2.0.0a98`, subject to Atlas acceptance and Final Wave F1-F4.
+> complete at `2.0.0a99`, subject to Atlas acceptance and Final Wave F1-F4 re-review.
+> The a99 remediation removes production environment-selected deploy test providers
+> and closes the rejected F2 typing, formatting, documentation, and cleanup gates.
 > Todo 12 landed in local commit `498ddc1` at `2.0.0a97`: 917 full tests and
 > 192 targeted deploy/backfill/verify tests passed, including isolated config-mode
 > CLI and malformed-JSON coverage with no live service or default-state mutation.

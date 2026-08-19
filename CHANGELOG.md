@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a99] — 2026-08-19
+
+### Fixed
+
+- Removed the production environment-selected deploy test-provider path and packaged success fake, moved subprocess injection into a distribution-excluded test runner, and closed the final Phase 4 typing, formatting, module-documentation, and cleanup blockers.
+
 ## [2.0.0a98] — 2026-08-18
 
 ### Changed

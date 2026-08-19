@@ -1,3 +1,5 @@
+"""Define collector validation errors and prepared snapshot contracts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

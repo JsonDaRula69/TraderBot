@@ -1,3 +1,5 @@
+"""Assemble deploy results from wizard step records."""
+
 from __future__ import annotations
 
 from traderbot.deploy.wizard_contracts import (

@@ -9,9 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol
 
-_DIRECTORY_FLAGS: Final = (
-    os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-)
+_DIRECTORY_FLAGS: Final = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _LEAF_FLAGS: Final = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
 _PERMISSION_BITS: Final = 0o777
 
@@ -86,9 +84,7 @@ def _assert_directory_identity(directory: _Directory) -> None:
     try:
         info = directory.path.lstat()
     except OSError as exc:
-        raise PosixPublicationError(
-            directory.path, "directory changed during publication"
-        ) from exc
+        raise PosixPublicationError(directory.path, "directory changed during publication") from exc
     if (
         stat.S_ISLNK(info.st_mode)
         or not stat.S_ISDIR(info.st_mode)

@@ -1,3 +1,5 @@
+"""Verify deployed filesystem and database integrity."""
+
 from __future__ import annotations
 
 import os

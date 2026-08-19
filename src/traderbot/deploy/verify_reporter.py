@@ -1,3 +1,5 @@
+"""Render verification results as JSON or Rich output."""
+
 from __future__ import annotations
 
 import sys

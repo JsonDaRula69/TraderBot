@@ -1,3 +1,5 @@
+"""Define typed requests, ports, state, and results for deployment."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

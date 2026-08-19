@@ -9,8 +9,7 @@ from traderbot.mcp.tools import TOOL_DEFINITIONS
 CONFIG_DIR: Final = Path(__file__).parents[1] / "configs" / "openclaw"
 CATEGORY_NAMES: Final = tuple(category.value for category in MarketCategory)
 AGENT_CONFIG_PATHS: Final = {
-    agent: CONFIG_DIR / f"{agent}.json"
-    for agent in ("sysadmin", "dev-liaison", *CATEGORY_NAMES)
+    agent: CONFIG_DIR / f"{agent}.json" for agent in ("sysadmin", "dev-liaison", *CATEGORY_NAMES)
 }
 GATEWAY_CONFIG_PATH: Final = CONFIG_DIR / "gateway.json"
 STRICT_AGENT_FIELDS: Final = frozenset({"id", "sandbox", "tools"})
@@ -156,9 +155,7 @@ def test_agent_policies_use_restrictive_allow_instead_of_additive_also_allow() -
 
 def test_live_traderbot_allowlists_are_subsets_of_implemented_tools() -> None:
     # Given
-    implemented = {
-        f"traderbot__{definition['name']}" for definition in TOOL_DEFINITIONS
-    }
+    implemented = {f"traderbot__{definition['name']}" for definition in TOOL_DEFINITIONS}
 
     # When / Then
     for config_path in AGENT_CONFIG_PATHS.values():

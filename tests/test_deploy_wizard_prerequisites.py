@@ -50,9 +50,7 @@ def test_absent_openclaw_requires_install_approval(tmp_path: Path) -> None:
 
 def test_user_heartbeat_is_preserved_when_desired_state_is_preserve(tmp_path: Path) -> None:
     # Given: existing main and weather have heterogeneous user heartbeat cadences
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.openclaw.heartbeats = {"main": "30m", "weather": "2h"}
     environment.make_exact("main", "weather")
     request = WizardRequest(

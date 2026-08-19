@@ -1,3 +1,5 @@
+"""Define typed requests and results for deployment verification."""
+
 from __future__ import annotations
 
 from enum import StrEnum

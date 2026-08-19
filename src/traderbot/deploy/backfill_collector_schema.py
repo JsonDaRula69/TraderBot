@@ -1,3 +1,5 @@
+"""Validate and copy supported legacy collector schemas."""
+
 from __future__ import annotations
 
 import sqlite3

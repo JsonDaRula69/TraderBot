@@ -1,3 +1,5 @@
+"""Verify profile-token resolution and authentication mode."""
+
 from __future__ import annotations
 
 import os

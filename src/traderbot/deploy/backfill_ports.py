@@ -1,3 +1,5 @@
+"""Define protocols and dependency bundles for deploy backfill."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Sequence

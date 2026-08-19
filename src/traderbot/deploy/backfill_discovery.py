@@ -1,3 +1,5 @@
+"""Discover Kalshi markets eligible for historical backfill."""
+
 from __future__ import annotations
 
 import math

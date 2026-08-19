@@ -172,4 +172,4 @@ def test_deploy_cli_forwards_config_and_json(
 
     # Then: the typed path and machine-output flag reach the command layer
     assert code == 0
-    execute.assert_called_once_with(config_path, True, None)
+    execute.assert_called_once_with(config_path, True)

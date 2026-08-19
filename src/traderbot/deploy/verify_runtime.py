@@ -1,3 +1,5 @@
+"""Probe service and daemon health for deployment verification."""
+
 from __future__ import annotations
 
 from typing import ClassVar, Final, Literal

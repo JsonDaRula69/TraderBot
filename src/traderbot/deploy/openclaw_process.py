@@ -7,6 +7,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from typing import BinaryIO, Final
 
 _MAX_OUTPUT_BYTES: Final = 1_048_576
@@ -52,15 +53,11 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
             if result.returncode != 0:
                 os.kill(process.pid, _WINDOWS_CTRL_BREAK_EVENT)
         except (OSError, subprocess.TimeoutExpired):
-            try:
+            with suppress(OSError):
                 os.kill(process.pid, _WINDOWS_CTRL_BREAK_EVENT)
-            except OSError:
-                pass
     else:
-        try:
+        with suppress(PermissionError, ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-        except (PermissionError, ProcessLookupError):
-            pass
     if process.poll() is None:
         process.kill()
 

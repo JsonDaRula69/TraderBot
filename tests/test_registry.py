@@ -40,10 +40,7 @@ def test_list_profiles_correctness() -> None:
     )
     assert profiles["sysadmin"]["mode"] == "paper"
     assert profiles["dev-liaison"]["mode"] == "paper"
-    assert all(
-        profiles[category.value]["mode"] == "backtest"
-        for category in MarketCategory
-    )
+    assert all(profiles[category.value]["mode"] == "backtest" for category in MarketCategory)
     assert profiles["sysadmin"]["categories"] == [category.value for category in MarketCategory]
     assert profiles["dev-liaison"]["categories"] == ["all"]
     assert profiles["weather"]["categories"] == ["weather"]

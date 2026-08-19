@@ -1,3 +1,5 @@
+"""Define typed results for deploy backfill operations."""
+
 from __future__ import annotations
 
 from typing import ClassVar, Literal

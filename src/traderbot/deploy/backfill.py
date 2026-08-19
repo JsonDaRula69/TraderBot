@@ -1,3 +1,5 @@
+"""Orchestrate collector import and Kalshi historical backfill."""
+
 from __future__ import annotations
 
 import os

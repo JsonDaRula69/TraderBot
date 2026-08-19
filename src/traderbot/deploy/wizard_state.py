@@ -1,3 +1,5 @@
+"""Define typed state for OpenClaw deployment planning."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

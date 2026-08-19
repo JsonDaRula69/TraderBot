@@ -117,10 +117,7 @@ def test_run_bounded_terminates_and_reaps_timeout_child(
     # Given: the parent fixture captures the child pid before its deadline begins
     launched = _capture_processes(monkeypatch)
     marker = tmp_path / "timeout-finished"
-    script = (
-        "import time; from pathlib import Path; time.sleep(10); "
-        f"Path({str(marker)!r}).touch()"
-    )
+    script = f"import time; from pathlib import Path; time.sleep(10); Path({str(marker)!r}).touch()"
 
     # When: execution exceeds its deadline
     started = time.monotonic()
@@ -199,8 +196,7 @@ def test_run_bounded_kills_pipe_inheriting_descendant_by_deadline(
     ready = tmp_path / "descendant.ready"
     marker = tmp_path / "descendant-finished"
     descendant = (
-        "import time; from pathlib import Path; time.sleep(2); "
-        f"Path({str(marker)!r}).touch()"
+        f"import time; from pathlib import Path; time.sleep(2); Path({str(marker)!r}).touch()"
     )
     parent = (
         "import subprocess,sys,time; from pathlib import Path; "

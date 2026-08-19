@@ -185,11 +185,7 @@ def _synchronize_workspace(options: _InjectionOptions) -> InjectionReport:
             continue
         _reject_symlink_or_wrong_type(target, directory=False)
         existing = target.read_bytes() if target.exists() else None
-        mode = (
-            _NEW_FILE_MODE
-            if existing is None
-            else _existing_file_mode(target)
-        )
+        mode = _NEW_FILE_MODE if existing is None else _existing_file_mode(target)
         if name in _FENCED_FILES:
             desired = _merge_fenced(target, existing or b"", templates[name])
             action = (
@@ -204,9 +200,7 @@ def _synchronize_workspace(options: _InjectionOptions) -> InjectionReport:
             action = InjectionAction.CREATED if existing is None else InjectionAction.PRESERVED
         if existing != desired:
             plans.append(_WritePlan(target, desired, existing, mode))
-        records.append(
-            InjectionRecord(name, strategy, action, hashlib.sha256(desired).hexdigest())
-        )
+        records.append(InjectionRecord(name, strategy, action, hashlib.sha256(desired).hexdigest()))
 
     if options.apply:
         created_root = not root_exists

@@ -1,3 +1,5 @@
+"""Orchestrate the stateful eight-step deploy wizard."""
+
 from __future__ import annotations
 
 from typing import Literal

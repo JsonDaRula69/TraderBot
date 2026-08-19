@@ -1,3 +1,5 @@
+"""Provide production dependency ports for deployment verification."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

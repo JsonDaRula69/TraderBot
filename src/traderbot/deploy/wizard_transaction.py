@@ -1,3 +1,5 @@
+"""Execute OpenClaw agent reconciliation transactionally."""
+
 from __future__ import annotations
 
 from typing import final
@@ -134,9 +136,7 @@ class DeploymentTransaction:
             ):
                 return f"agent {agent.agent_id} config postcondition failed"
             expected_heartbeat = (
-                "0m"
-                if self._request.heartbeat_every == "0m"
-                else agent.config.heartbeat_every
+                "0m" if self._request.heartbeat_every == "0m" else agent.config.heartbeat_every
             )
             if state.heartbeat_every != expected_heartbeat:
                 return f"agent {agent.agent_id} heartbeat postcondition failed"

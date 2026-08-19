@@ -1,3 +1,5 @@
+"""Calculate calendar windows for historical backfill."""
+
 from __future__ import annotations
 
 import calendar

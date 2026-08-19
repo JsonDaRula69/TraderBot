@@ -1,3 +1,5 @@
+"""Inspect and mutate typed OpenClaw configuration values."""
+
 from __future__ import annotations
 
 import json
@@ -103,10 +105,7 @@ def inspect_config(
             if agent is None:
                 return None
             agents.append(agent)
-        secret_path = (
-            "plugins.entries.traderbot-token-injector.config.agentTokenMap."
-            f"{agent_id}"
-        )
+        secret_path = f"plugins.entries.traderbot-token-injector.config.agentTokenMap.{agent_id}"
         secret = _read_config(secret_path, SecretRefConfig)
         if secret.status is _ConfigReadStatus.FAILED:
             return None
@@ -124,7 +123,13 @@ def _set_config(key: str, encoded: str) -> bool:
         return False
     validated = _run(
         [
-            "openclaw", "config", "set", key, encoded, "--strict-json", "--dry-run",
+            "openclaw",
+            "config",
+            "set",
+            key,
+            encoded,
+            "--strict-json",
+            "--dry-run",
             "--json",
         ],
         timeout=60.0,

@@ -9,8 +9,7 @@ PROJECT_ROOT: Final = Path(__file__).parents[1]
 WORKSPACE_DIR: Final = PROJECT_ROOT / "workspace"
 CATEGORY_NAMES: Final = tuple(category.value for category in MarketCategory)
 AGENTS_PATHS: Final = [
-    WORKSPACE_DIR / agent / "AGENTS.md"
-    for agent in ("sysadmin", "dev-liaison", *CATEGORY_NAMES)
+    WORKSPACE_DIR / agent / "AGENTS.md" for agent in ("sysadmin", "dev-liaison", *CATEGORY_NAMES)
 ]
 
 

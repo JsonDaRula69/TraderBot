@@ -1,3 +1,5 @@
+"""Provide the CLI execution boundary for historical backfill."""
+
 from __future__ import annotations
 
 import sys
@@ -191,7 +193,7 @@ def execute_backfill(
         )
         reporter = JsonReporter() if options.json_output else RichReporter()
         reporter.render(result)
-    except Exception:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK — outer CLI redaction
+    except Exception:  # noqa: BLE001 - outer CLI redaction boundary
         result = _runtime_failure()
         _fallback_render(result, json_output=options.json_output)
     return _exit_code(result)

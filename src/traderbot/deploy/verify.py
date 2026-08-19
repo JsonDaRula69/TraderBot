@@ -1,3 +1,5 @@
+"""Orchestrate dependency-aware deployment verification."""
+
 from __future__ import annotations
 
 from time import monotonic

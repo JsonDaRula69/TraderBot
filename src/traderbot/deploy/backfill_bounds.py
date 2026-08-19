@@ -1,3 +1,5 @@
+"""Filter historical records to validated backfill windows."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

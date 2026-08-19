@@ -1,3 +1,5 @@
+"""Run OpenClaw-specific deployment verification checks."""
+
 from __future__ import annotations
 
 from typing import final

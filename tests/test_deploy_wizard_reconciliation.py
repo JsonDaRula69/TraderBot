@@ -162,9 +162,7 @@ def test_stable_partial_agent_creation_is_adopted_after_nonzero_exit(tmp_path: P
 
 def test_conflicting_secret_ref_fails_global_preflight(tmp_path: Path) -> None:
     # Given: selected weather has a user-owned nonmatching SecretRef
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.make_exact("main")
     environment.openclaw.secret_refs["weather"] = SecretRefConfig(id="user_owned")
 
@@ -179,9 +177,7 @@ def test_conflicting_secret_ref_fails_global_preflight(tmp_path: Path) -> None:
 
 def test_approved_dormant_heartbeat_uses_config_and_bootstrap_is_last(tmp_path: Path) -> None:
     # Given: selected existing agents approve dormant Gateway-owned heartbeat state
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.make_exact("main", "weather")
 
     # When: the approved 0m desired state is reconciled
@@ -202,9 +198,7 @@ def test_approved_dormant_heartbeat_uses_config_and_bootstrap_is_last(tmp_path: 
 
 def test_heartbeat_change_without_approval_fails_before_mutation(tmp_path: Path) -> None:
     # Given: main has a user cadence and the request asks for 0m without approval
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.openclaw.heartbeats["main"] = "30m"
 
     # When: the unapproved desired state crosses preflight
@@ -218,9 +212,7 @@ def test_heartbeat_change_without_approval_fails_before_mutation(tmp_path: Path)
 
 def test_bootstrap_conflict_is_detected_before_workspace_mutation(tmp_path: Path) -> None:
     # Given: the managed cron identity conflicts before deployment starts
-    environment = SafetyEnvironment(
-        {"main": tmp_path / "main", "weather": tmp_path / "weather"}
-    )
+    environment = SafetyEnvironment({"main": tmp_path / "main", "weather": tmp_path / "weather"})
     environment.openclaw.bootstrap_state = BootstrapCronState.CONFLICT
 
     # When: global preflight inspects Gateway automation

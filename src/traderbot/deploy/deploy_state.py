@@ -1,3 +1,5 @@
+"""Validate and persist trusted deploy state and fingerprints."""
+
 from __future__ import annotations
 
 import hashlib
@@ -5,6 +7,7 @@ import json
 import os
 import secrets
 import stat
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import override
@@ -145,10 +148,8 @@ def save_deploy_state(data_root: Path, state: DeployState) -> None:
     finally:
         if descriptor >= 0:
             os.close(descriptor)
-        try:
+        with suppress(FileNotFoundError):
             os.unlink(temporary, dir_fd=directory)
-        except FileNotFoundError:
-            pass
         os.close(directory)
 
 

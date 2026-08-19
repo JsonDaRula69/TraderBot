@@ -1,3 +1,5 @@
+"""Provide the CLI execution boundary for deployment verification."""
+
 from __future__ import annotations
 
 import logging

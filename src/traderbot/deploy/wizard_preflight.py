@@ -1,3 +1,5 @@
+"""Resolve global OpenClaw inventory and workspace ownership preflight."""
+
 from __future__ import annotations
 
 import os

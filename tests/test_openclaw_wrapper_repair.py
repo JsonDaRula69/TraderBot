@@ -83,8 +83,15 @@ def test_inspect_agents_preserves_existing_inventory_workspace(
     # Given: inventory contains an arbitrary configured weather workspace
     workspace = Path(Path.cwd().anchor) / "other" / "workspace"
     inventory = json.dumps(
-        [{"id": "weather", "workspace": str(workspace), "agentDir": "/state/agent",
-          "bindings": 0, "isDefault": False}]
+        [
+            {
+                "id": "weather",
+                "workspace": str(workspace),
+                "agentDir": "/state/agent",
+                "bindings": 0,
+                "isDefault": False,
+            }
+        ]
     )
     run = mock.Mock(return_value=_completed(["openclaw"], stdout=inventory))
     monkeypatch.setattr(openclaw, "_run", run)
@@ -124,9 +131,20 @@ def test_register_cron_maps_current_session_payload(
     # Then: main uses a system event while agent-turn targets use a message
     assert result is True
     expected = [
-        "openclaw", "cron", "add", "--name", "traderbot-weather-every-1h",
-        "--agent", "weather", "--session", target, "--every", "1h",
-        payload_flag, "run", "--json",
+        "openclaw",
+        "cron",
+        "add",
+        "--name",
+        "traderbot-weather-every-1h",
+        "--agent",
+        "weather",
+        "--session",
+        target,
+        "--every",
+        "1h",
+        payload_flag,
+        "run",
+        "--json",
     ]
     run.assert_called_once_with(expected, timeout=60.0)
 
@@ -253,8 +271,14 @@ def test_set_config_rejects_failed_dry_run_without_write(monkeypatch: pytest.Mon
     assert result is False
     run.assert_called_once_with(
         [
-            "openclaw", "config", "set", "agents.defaults.model", '"provider/model"',
-            "--strict-json", "--dry-run", "--json",
+            "openclaw",
+            "config",
+            "set",
+            "agents.defaults.model",
+            '"provider/model"',
+            "--strict-json",
+            "--dry-run",
+            "--json",
         ],
         timeout=60.0,
     )

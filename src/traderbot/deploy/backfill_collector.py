@@ -1,3 +1,5 @@
+"""Prepare and import read-only legacy collector snapshots."""
+
 from __future__ import annotations
 
 import os

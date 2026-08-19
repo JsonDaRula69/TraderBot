@@ -118,11 +118,14 @@ def install_openclaw() -> bool:
 
 def openclaw_setup() -> bool:
     """Create or observe the noninteractive OpenClaw baseline configuration."""
-    return _parse_result(
-        ["openclaw", "setup", "--baseline", "--json"],
-        120.0,
-        SetupResult,
-    ) is not None
+    return (
+        _parse_result(
+            ["openclaw", "setup", "--baseline", "--json"],
+            120.0,
+            SetupResult,
+        )
+        is not None
+    )
 
 
 def inspect_agents() -> AgentInventory | None:
@@ -141,8 +144,14 @@ def create_agent(agent_id: str, workspace: Path) -> bool:
         return False
     created = _parse_result(
         [
-            "openclaw", "agents", "add", normalized, "--workspace", str(workspace),
-            "--non-interactive", "--json",
+            "openclaw",
+            "agents",
+            "add",
+            normalized,
+            "--workspace",
+            str(workspace),
+            "--non-interactive",
+            "--json",
         ],
         120.0,
         AgentCreated,
@@ -167,12 +176,7 @@ def register_cron(
     session_target = _normalize_session(session)
     schedules = [("at", at), ("every", every)]
     selected = [(kind, value) for kind, value in schedules if value is not None]
-    if (
-        normalized is None
-        or len(selected) != 1
-        or session_target is None
-        or not prompt.strip()
-    ):
+    if normalized is None or len(selected) != 1 or session_target is None or not prompt.strip():
         return False
     kind, schedule = selected[0]
     if not schedule.strip():
@@ -230,17 +234,23 @@ def list_crons() -> list[CronJob]:
 
 def openclaw_doctor() -> bool:
     """Run the read-only OpenClaw configuration lint."""
-    return _parse_result(
-        ["openclaw", "doctor", "--lint", "--json"],
-        30.0,
-        DoctorResult,
-    ) is not None
+    return (
+        _parse_result(
+            ["openclaw", "doctor", "--lint", "--json"],
+            30.0,
+            DoctorResult,
+        )
+        is not None
+    )
 
 
 def gateway_status() -> bool:
     """Require a successful gateway RPC status response."""
-    return _parse_result(
-        ["openclaw", "gateway", "status", "--json", "--require-rpc"],
-        30.0,
-        GatewayResult,
-    ) is not None
+    return (
+        _parse_result(
+            ["openclaw", "gateway", "status", "--json", "--require-rpc"],
+            30.0,
+            GatewayResult,
+        )
+        is not None
+    )
