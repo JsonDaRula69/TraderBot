@@ -6,24 +6,25 @@ import pytest
 from pydantic import ValidationError
 
 import traderbot.cli as cli
-from traderbot.kalshi.models import MarketCategory
+from traderbot.kalshi.order_models import MarketCategory
 
 
-def test_create_category_profile_weather() -> None:
-    # Given: a weather profile request in backtest mode
+@pytest.mark.parametrize("category", tuple(MarketCategory))
+def test_create_category_profile_for_every_category(category: MarketCategory) -> None:
+    # Given: a category profile request in backtest mode
     from traderbot.profiles.generic import create_category_profile
 
     # When: the generic profile is created
     profile = create_category_profile(
-        name="test",
+        name=category.value,
         mode="backtest",
-        categories=[MarketCategory.WEATHER],
+        categories=[category],
     )
 
     # Then: its identity and category scope match the request
-    assert profile.name == "test"
+    assert profile.name == category.value
     assert profile.mode == "backtest"
-    assert profile.enabled_categories == [MarketCategory.WEATHER]
+    assert profile.enabled_categories == [category]
 
 
 def test_default_categories_are_not_shared() -> None:
@@ -46,7 +47,7 @@ def test_invalid_mode_raises() -> None:
 
     # When/Then: constructing the profile fails at the model boundary
     with pytest.raises(ValidationError):
-        create_category_profile("test", mode="invalid")
+        _ = create_category_profile("test", mode="invalid")
 
 
 def test_invalid_category_raises(
@@ -60,9 +61,7 @@ def test_invalid_category_raises(
 
     # When: the real TraderBot CLI parses the profile request
     with pytest.raises(SystemExit) as raised:
-        _ = cli.main(
-            ["profile", "create", "test", "--mode", "backtest", "--categories", "invalid"]
-        )
+        _ = cli.main(["profile", "create", "test", "--mode", "backtest", "--categories", "invalid"])
     output = capsys.readouterr()
 
     # Then: the production boundary rejects it actionably without creating state

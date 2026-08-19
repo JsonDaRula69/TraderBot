@@ -9,7 +9,10 @@ from traderbot.deploy.wizard_runtime import build_wizard_ports
 
 class Provider:
     def build(self) -> WizardPorts:
-        selection = select_deploy_secrets("http://localhost:8080")
+        selection = select_deploy_secrets(
+            "http://localhost:8080",
+            status_probe=lambda _url: False,
+        )
         ports = build_wizard_ports(selection.store, Phase45Adapter(selection, None))
         return WizardPorts(
             ports.openclaw,
