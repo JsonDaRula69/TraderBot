@@ -14,6 +14,7 @@ from traderbot.deploy.validation import (
     validate_secret_references,
 )
 from traderbot.deploy.wizard_state import DeployApprovals
+from traderbot.kalshi.client import Environment
 from traderbot.kalshi.order_models import MarketCategory
 
 _REQUIRED_APPROVALS: Final[frozenset[str]] = frozenset(
@@ -38,7 +39,7 @@ class DeployConfig(BaseModel):
     categories: list[MarketCategory]
     mode: Literal["backtest"]
     infisical_url: str | None = None
-    kalshi_environment: Literal["production", "demo"] = "production"
+    kalshi_environment: Environment = "production"
     tokens: DeployTokens = Field(default_factory=DeployTokens)
     secret_approvals: SecretReconciliationApprovals = Field(
         default_factory=SecretReconciliationApprovals

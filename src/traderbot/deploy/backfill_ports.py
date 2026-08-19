@@ -7,9 +7,10 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Protocol
 
 from traderbot.db.pool import SQLiteConnectionPool
+from traderbot.kalshi.client import Environment
 from traderbot.kalshi.models import CutoffTimestamps
 from traderbot.kalshi.rest_models import (
     ForecastHistoryResponse,
@@ -101,7 +102,7 @@ class BackfillDependencies(Protocol):
 
     def open_runtime(
         self,
-        environment: Literal["production", "demo"],
+        environment: Environment,
     ) -> AbstractAsyncContextManager[BackfillRuntime]: ...
 
 
@@ -119,7 +120,7 @@ class BackfillPorts:
     @asynccontextmanager
     async def open_runtime(
         self,
-        environment: Literal["production", "demo"] = "production",
+        environment: Environment = "production",
     ) -> AsyncGenerator[BackfillRuntime, None]:
         del environment
         yield BackfillRuntime(client=self.client, pool=self.pool, progress=self.progress)

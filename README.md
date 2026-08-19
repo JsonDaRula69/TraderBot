@@ -6,9 +6,9 @@ agents drive it through typed MCP tools (`traderbot__*`). The CLI is retired
 from containers.
 
 > **Status**: v2 Phase 4 implementation Todos 1-13 for issue #168 are locally
-> complete at `2.0.0a99`, subject to Atlas acceptance and Final Wave F1-F4 re-review.
-> The a99 remediation removes production environment-selected deploy test providers
-> and closes the rejected F2 typing, formatting, documentation, and cleanup gates.
+> complete at `2.0.0a100`, subject to Atlas acceptance and Final Wave F1-F4 re-review.
+> The a100 remediation adds explicit production/demo routing to standalone backfill
+> and verification; F3 remains pending on-target demo-secret visibility and rerun.
 > Todo 12 landed in local commit `498ddc1` at `2.0.0a97`: 917 full tests and
 > 192 targeted deploy/backfill/verify tests passed, including isolated config-mode
 > CLI and malformed-JSON coverage with no live service or default-state mutation.
@@ -62,7 +62,9 @@ Approved dormant heartbeat state is written as `0m` through OpenClaw config;
 bootstrap automation is requested from OpenClaw Gateway only after selected
 state is verified. Gateway owns agent cron and heartbeat; the TraderBot daemon
 owns provider and token schedules; MCP owns neither. Deploy then reuses or
-securely collects only `kalshi_api_key` and `kalshi_private_key_pem`, using
+securely collects only the environment-scoped Kalshi pair: `kalshi_api_key` and
+`kalshi_private_key_pem` for production, `kalshi_demo_api_key` and
+`kalshi_demo_private_key_pem` for demo, using
 Infisical as primary and machine-bound encrypted local storage as fallback.
 One explicit data root and `production`/`demo` Kalshi environment propagate
 through database creation, backfill, verification, and deploy state. Selected
@@ -71,11 +73,19 @@ read-only enumeration and no decisions database. Chroma collection creation is
 lazy. Step 7 is a read-only Phase 5 sandbox stub: Phase 4 starts no Docker,
 simulation, backtest, trading lifecycle, or scheduling mutation.
 
-Historical data can be populated independently with `traderbot backfill --months 6`.
+Historical data can be populated independently with
+`traderbot backfill --environment production --months 6`. Use `demo` to route every
+Kalshi history request to the demo API; omitting the option explicitly defaults to
+`production` for backward compatibility.
 Use `--collector-db PATH` to import an explicit legacy collector and `--json` for
 one machine-readable result line. The command imports weather data read-only and
 fetches both current and archived Kalshi weather history; the deploy wizard
 composes the same request and dependency boundary.
+
+Standalone verification accepts the same selection:
+`traderbot verify --environment demo --categories weather`. Its signed Kalshi
+balance probe uses only the selected environment. Invalid environment values are
+rejected by argparse before command factories or filesystem work.
 
 Per-agent configuration lives under `configs/openclaw/` with restrictive
 per-agent `allow`/`deny` policies. Secure per-agent profile-token delivery is

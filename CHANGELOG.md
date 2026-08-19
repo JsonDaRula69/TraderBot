@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a100] — 2026-08-19
+
+### Fixed
+
+- Added strict `production|demo` routing to standalone backfill and verification, including typed request propagation, exact demo REST endpoint selection, production-compatible defaults, and pre-dispatch rejection of invalid environments.
+- Routed deploy secret provisioning, standalone backfill credentials, and verification Kalshi probes by Kalshi environment: production reads/writes only `kalshi_api_key`/`kalshi_private_key_pem` (service `kalshi`), demo only `kalshi_demo_api_key`/`kalshi_demo_private_key_pem` (service `kalshi_demo`), with missing or malformed demo credentials failing closed and no cross-environment fallback.
+
 ## [2.0.0a99] — 2026-08-19
 
 ### Fixed

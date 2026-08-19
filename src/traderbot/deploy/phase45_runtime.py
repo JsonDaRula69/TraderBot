@@ -32,6 +32,7 @@ from traderbot.deploy.secret_step import (
     SecretPairValidationError,
     SecretReconciliationError,
     SecretsSelection,
+    kalshi_secret_names,
     provision_kalshi_secrets,
 )
 from traderbot.deploy.wizard_contracts import Phase45Result, WizardRequest
@@ -78,6 +79,7 @@ class Phase45Adapter:
                 read_once,
                 backend=self._selection.backend,
                 approvals=request.secret_approvals,
+                environment=request.kalshi_environment,
             )
         except MissingSecretEnvironmentError as exc:
             return Phase45Result.failed(str(exc))
@@ -101,7 +103,7 @@ class Phase45Adapter:
             ):
                 boundary = SecretReconciliationError(
                     written_secret_names=(),
-                    pending_secret_names=("kalshi_api_key", "kalshi_private_key_pem"),
+                    pending_secret_names=kalshi_secret_names(request.kalshi_environment),
                 )
                 return self._fallback_after_remote_failure(request, read_once, boundary)
             return Phase45Result.failed("Kalshi secret validation or storage failed")
@@ -148,6 +150,7 @@ class Phase45Adapter:
                 read_once,
                 backend="local-encrypted",
                 approvals=request.secret_approvals,
+                environment=request.kalshi_environment,
             )
         except (
             MissingSecretEnvironmentError,

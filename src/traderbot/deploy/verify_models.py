@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_core import PydanticCustomError
 
 from traderbot.deploy.validation import validate_infisical_origin
+from traderbot.kalshi.client import Environment
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.paths import get_data_dir
 
@@ -56,7 +57,7 @@ class VerificationRequest(FrozenModel):
     infisical_origin: str = "http://localhost:8080"
     daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
     timeout_seconds: float = Field(default=3.0, gt=0, le=30)
-    kalshi_environment: Literal["production", "demo"] = "production"
+    kalshi_environment: Environment = "production"
 
     @field_validator("categories")
     @classmethod

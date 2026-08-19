@@ -8,7 +8,7 @@ import stat
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -40,6 +40,7 @@ from traderbot.deploy.backfill_ports import (
     BackfillRuntime,
 )
 from traderbot.deploy.backfill_window import BackfillWindow, BackfillWindowError, calendar_window
+from traderbot.kalshi.client import Environment
 from traderbot.kalshi.errors import AuthenticationError, KalshiAPIError, RateLimitError
 
 
@@ -49,7 +50,7 @@ class BackfillRequest(BaseModel):
     months: int = Field(ge=1, le=60)
     target_db: Path
     collector_db: Path | None = None
-    kalshi_environment: Literal["production", "demo"] = "production"
+    kalshi_environment: Environment = "production"
 
 
 def _failure(code: str, detail: str) -> tuple[BackfillFailure, ...]:

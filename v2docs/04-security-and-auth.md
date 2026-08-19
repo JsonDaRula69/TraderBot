@@ -32,6 +32,9 @@
 > values or making a live Kalshi request. Deploy Steps 6 and 8 reuse independently
 > owned backfill and read-only verification runtimes; the Step 7 Phase 5 stub
 > performs only a strict Gateway cron inventory and exposes no secret values.
+> Their standalone CLIs require an explicit typed `production|demo` route
+> (defaulting to `production` for compatibility); demo selection reaches every
+> Kalshi history/auth client without a hidden production fallback.
 
 ---
 
@@ -116,7 +119,9 @@ global/
 
 Deploy currently collects only the canonical Kalshi pair consumed by the daemon. NewsProvider is a stub, OpenMeteo and NWS are keyless, and no production consumer exists for the previously planned provider credentials, so deploy exposes no prompt or storage path for them.
 
-Config documents contain environment variable names only (`kalshi_api_key_env` and `kalshi_private_key_pem_env`). Interactive collection uses hidden prompts. A complete existing pair is reused without writes; replacement values are validated together before mutation, including strict local RSA PEM parsing. Output and reconciliation errors contain secret names and backend state only, never values.
+Standalone backfill and verification select the Kalshi environment only through argparse's strict `production|demo` choice and the shared typed request field. Invalid values stop before secret resolution, client construction, external calls, or filesystem mutation. Verification continues to force `TRADERBOT_USE_HARDCODED_AUTH=0`; the selected environment is passed to the signed balance client rather than inferred from credential names.
+
+Config documents contain environment variable names only (`kalshi_api_key_env` and `kalshi_private_key_pem_env`). The selected Kalshi environment selects the secret service: production reads/writes only `kalshi_api_key` and `kalshi_private_key_pem` (service `kalshi`), demo only `kalshi_demo_api_key` and `kalshi_demo_private_key_pem` (service `kalshi_demo`). Missing or malformed demo credentials fail closed; there is no fallback to the production pair. Interactive collection uses hidden prompts. A complete existing pair is reused without writes; replacement values are validated together before mutation, including strict local RSA PEM parsing. Output and reconciliation errors contain secret names and backend state only, never values.
 
 **Project 2: "TraderBot Agent Tokens"** — Profile tokens (one per agent)
 

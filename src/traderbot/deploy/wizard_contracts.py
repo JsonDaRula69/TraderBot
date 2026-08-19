@@ -28,6 +28,7 @@ from traderbot.deploy.wizard_state import (
     TokenMetadataState,
     WizardRequestState,
 )
+from traderbot.kalshi.client import Environment
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.paths import get_data_dir
 from traderbot.profiles.injection import WorkspaceTemplate, validate_workspace_path
@@ -140,7 +141,7 @@ class WizardRequest(WizardRequestState):
     collector_db: Path | None = None
     data_root: Path = Field(default_factory=get_data_dir)
     daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
-    kalshi_environment: Literal["production", "demo"] = "production"
+    kalshi_environment: Environment = "production"
 
     @field_validator("categories")
     @classmethod

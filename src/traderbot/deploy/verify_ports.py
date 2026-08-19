@@ -12,6 +12,7 @@ from pydantic import SecretStr
 from traderbot.deploy.secret_step import (
     KalshiSecretPair,
     SecretPairValidationError,
+    kalshi_secret_service,
     validate_kalshi_secret_pair,
 )
 from traderbot.deploy.verify import VerificationPorts
@@ -97,8 +98,9 @@ class ProductionVerificationPorts(VerificationPorts):
 
     async def _kalshi(self) -> ProbeResult:
         store, _ = self._selection()
-        api_key = store.get("kalshi", "api_key")
-        private_key = store.get("kalshi", "private_key_pem")
+        service = kalshi_secret_service(self.request.kalshi_environment)
+        api_key = store.get(service, "api_key")
+        private_key = store.get(service, "private_key_pem")
         if api_key is None or private_key is None:
             return ProbeResult.failed("kalshi_credentials_missing", "Kalshi credentials missing")
         try:

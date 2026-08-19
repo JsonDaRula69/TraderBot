@@ -27,7 +27,7 @@ class _Store:
         self.values: dict[tuple[str, str], str] = {}
         self.set_calls: list[tuple[str, str]] = []
         self.fail_on: str | None = None
-        self.persist = True
+        self.persist: bool = True
 
     def get(self, service: str, key: str, namespace: str = "global") -> str | None:
         del namespace
@@ -56,6 +56,7 @@ class _RequestUpdates(TypedDict, total=False):
     kalshi_api_key_env: str
     kalshi_private_key_pem_env: str
     secret_approvals: dict[str, bool]
+    kalshi_environment: str
 
 
 type _RequestPayloadValue = str | tuple[str, ...] | dict[str, bool]
@@ -92,6 +93,8 @@ def _request(**updates: Unpack[_RequestUpdates]) -> WizardRequest:
         payload["kalshi_private_key_pem_env"] = updates["kalshi_private_key_pem_env"]
     if "secret_approvals" in updates:
         payload["secret_approvals"] = updates["secret_approvals"]
+    if "kalshi_environment" in updates:
+        payload["kalshi_environment"] = updates["kalshi_environment"]
     return WizardRequest.model_validate(payload)
 
 
@@ -221,11 +224,147 @@ def test_partial_mismatch_requires_separate_replacement_approval() -> None:
     assert store.set_calls == []
 
 
+def test_demo_partial_write_reports_demo_reconciliation_names() -> None:
+    # Given: a backend that fails only on the second demo write.
+    pair = _pair()
+    store = _Store()
+    store.fail_on = "private_key_pem"
+
+    # When: demo provisioning hits the partial write.
+    with pytest.raises(SecretReconciliationError) as raised:
+        _ = provision_kalshi_secrets(
+            store,
+            lambda: pair,
+            backend="local-encrypted",
+            environment="demo",
+        )
+
+    # Then: the boundary names the demo namespace and never the production one.
+    assert raised.value.written_secret_names == ("kalshi_demo_api_key",)
+    assert raised.value.pending_secret_names == ("kalshi_demo_private_key_pem",)
+    assert store.set_calls == [("kalshi_demo", "api_key")]
+    assert _plain(pair.api_key) not in str(raised.value)
+    assert _plain(pair.private_key_pem) not in str(raised.value)
+
+
+def test_demo_malformed_pair_requires_replacement_without_production_fallback() -> None:
+    # Given: a valid production pair and a malformed demo pair.
+    production = _pair()
+    demo = _pair()
+    store = _Store()
+    store.values[("kalshi", "api_key")] = _plain(production.api_key)
+    store.values[("kalshi", "private_key_pem")] = _plain(production.private_key_pem)
+    store.values[("kalshi_demo", "api_key")] = "malformed-demo-key"
+    store.values[("kalshi_demo", "private_key_pem")] = "malformed-demo-pem"
+
+    # When/Then: no approval fails closed on the demo pair alone.
+    with pytest.raises(SecretPairApprovalError):
+        _ = provision_kalshi_secrets(
+            store,
+            lambda: demo,
+            backend="local-encrypted",
+            environment="demo",
+        )
+    assert store.set_calls == []
+
+    # When: replacement is approved, only the demo namespace is rewritten.
+    request = _request(
+        kalshi_api_key_env="KEY_REF",
+        kalshi_private_key_pem_env="PEM_REF",
+        secret_approvals={"replace_existing": True},
+        kalshi_environment="demo",
+    )
+    report = provision_kalshi_secrets(
+        store,
+        lambda: demo,
+        backend="local-encrypted",
+        approvals=request.secret_approvals,
+        environment="demo",
+    )
+    assert report.status == "replaced"
+    assert store.values[("kalshi_demo", "api_key")] == _plain(demo.api_key)
+    assert store.values[("kalshi_demo", "private_key_pem")] == _plain(demo.private_key_pem)
+    assert store.values[("kalshi", "api_key")] == _plain(production.api_key)
+    assert store.values[("kalshi", "private_key_pem")] == _plain(production.private_key_pem)
+
+
+def test_phase45_demo_request_provisions_only_demo_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a demo wizard request with environment references and a local backend.
+    pair = _pair()
+    backend = _LocalBackend()
+    adapter = Phase45Adapter(
+        SecretsSelection(
+            store=SecretsStore(local_store=backend),
+            backend="local-encrypted",
+            fallback_store=SecretsStore(local_store=_LocalBackend()),
+        ),
+        None,
+    )
+    monkeypatch.setenv("KEY_REF", _plain(pair.api_key))
+    monkeypatch.setenv("PEM_REF", _plain(pair.private_key_pem))
+    request = _request(
+        kalshi_api_key_env="KEY_REF",
+        kalshi_private_key_pem_env="PEM_REF",
+        kalshi_environment="demo",
+    )
+
+    # When: step 4 provisions secrets for the demo request.
+    result = adapter.provision_secrets(request)
+
+    # Then: only the demo namespace is written and the report names demo secrets.
+    assert result.status is StepStatus.COMPLETED
+    assert backend.set_calls == [
+        ("kalshi_demo", "api_key"),
+        ("kalshi_demo", "private_key_pem"),
+    ]
+    assert _plain(pair.api_key) not in result.message
+    assert _plain(pair.private_key_pem) not in result.message
+
+
+def test_demo_remote_failure_falls_back_to_demo_local_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a remote backend that fails the second write and a demo request.
+    pair = _pair()
+    remote_backend = _LocalBackend(fail_private_key=True)
+    local_backend = _LocalBackend()
+    adapter = Phase45Adapter(
+        SecretsSelection(
+            store=SecretsStore(local_store=remote_backend),
+            backend="infisical",
+            fallback_store=SecretsStore(local_store=local_backend),
+        ),
+        lambda: pair,
+    )
+    monkeypatch.setenv("KEY_REF", _plain(pair.api_key))
+    monkeypatch.setenv("PEM_REF", _plain(pair.private_key_pem))
+    request = _request(
+        kalshi_api_key_env="KEY_REF",
+        kalshi_private_key_pem_env="PEM_REF",
+        secret_approvals={"reconcile_incomplete": True},
+        kalshi_environment="demo",
+    )
+
+    # When: the remote write fails and the adapter falls back locally.
+    result = adapter.provision_secrets(request)
+
+    # Then: the local fallback writes the demo namespace only.
+    assert result.status is StepStatus.COMPLETED
+    assert "local fallback" in result.message
+    assert remote_backend.set_calls == [("kalshi_demo", "api_key")]
+    assert local_backend.set_calls == [
+        ("kalshi_demo", "api_key"),
+        ("kalshi_demo", "private_key_pem"),
+    ]
+
+
 class _LocalBackend:
     def __init__(self, *, fail_private_key: bool = False) -> None:
         self.values: dict[tuple[str, str], str] = {}
         self.set_calls: list[tuple[str, str]] = []
-        self.fail_private_key = fail_private_key
+        self.fail_private_key: bool = fail_private_key
 
     def get(self, *, service: str, key: str, namespace: str) -> str | None:
         del namespace

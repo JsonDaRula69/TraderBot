@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 type QueryParamValue = str | int | float | bool | None
 type Environment = Literal["production", "demo"]
+KALSHI_ENVIRONMENTS: tuple[Environment, ...] = ("production", "demo")
 
-_BASE_URLS: dict[str, str] = {
+_BASE_URLS: dict[Environment, str] = {
     "production": "https://external-api.kalshi.com/trade-api/v2",
     "demo": "https://external-api.demo.kalshi.co/trade-api/v2",
 }

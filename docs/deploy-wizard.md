@@ -14,6 +14,7 @@ Run `traderbot deploy`. A Rich table lists the exact nine `MarketCategory` value
 {
   "categories": ["weather", "crypto"],
   "mode": "backtest",
+  "kalshi_environment": "demo",
   "infisical_url": "http://127.0.0.1:8080",
   "tokens": {
     "kalshi_api_key_env": "TRADERBOT_DEPLOY_KALSHI_KEY",
@@ -40,7 +41,7 @@ JSON output is exactly one stdout line and includes deterministic `categories`, 
 
 Step 4 probes the configured loopback HTTP Infisical origin at `GET /api/status` with a one-second timeout and environment proxies disabled. In production, `http://localhost:8080` is target-local: Infisical runs on macpro-linux beside TraderBot, so `localhost` is resolved by that target host. Development verification uses isolated fake clients and loopback servers and does not prove target integration; actual Infisical integration is deferred to Final-Wave QA on macpro-linux. Because the supported SDK exposes no public proxy-free transport, any nonempty HTTP/HTTPS/ALL proxy environment variable refuses SDK use. After universal-auth login, deploy checks non-value list access to both required project roots with caching disabled. A denied or unusable setup is closed, selects `LocalEncryptedStore` through the same `SecretsStore` facade, and reports `backend=local-encrypted`; deploy never starts Docker or creates a machine identity.
 
-Only `kalshi_api_key` and `kalshi_private_key_pem`, the two secrets consumed by the daemon, are eligible. Secret-bearing values use redacted typed objects. A valid existing complete pair is parsed and reused without writes. An incomplete pair requires explicit `reconcile_incomplete`; a malformed or differing durable field requires separate `replace_existing`, and both approvals require a complete environment-reference pair. Otherwise config mode resolves the named environment variables, while interactive mode uses hidden password prompts. The API key must be nonempty and the PEM must parse locally as an RSA private key before the first write. No live Kalshi request is made. News, weather, embedding, social, economics, crypto, and sports service credentials are not prompted or stored by deploy.
+Only the environment-scoped Kalshi pair is eligible: `kalshi_api_key` and `kalshi_private_key_pem` (service `kalshi`) for production, `kalshi_demo_api_key` and `kalshi_demo_private_key_pem` (service `kalshi_demo`) for demo. The daemon consumes the production pair; demo deploy, backfill, and verification consume the demo pair. There is no cross-environment fallback. Secret-bearing values use redacted typed objects. A valid existing complete pair is parsed and reused without writes. An incomplete pair requires explicit `reconcile_incomplete`; a malformed or differing durable field requires separate `replace_existing`, and both approvals require a complete environment-reference pair. Otherwise config mode resolves the named environment variables, while interactive mode uses hidden password prompts. The API key must be nonempty and the PEM must parse locally as an RSA private key before the first write. No live Kalshi request is made. News, weather, embedding, social, economics, crypto, and sports service credentials are not prompted or stored by deploy.
 
 The pair is prevalidated as one decision. Every set is post-read verified. First-write, second-write, and no-op backend failures re-read durable state and report only exact canonical written/pending names. A matching durable field is never rewritten on a forward rerun. If Infisical becomes unavailable mid-operation, remote partial state is preserved and reported while the same validated pair reconciles through encrypted local fallback; no backend state is deleted.
 
@@ -56,17 +57,19 @@ An existing Chroma ownership lock is a non-destructive blocker. Deploy does not 
 
 ## Standalone Backfill
 
-Run `traderbot backfill --months 6 [--collector-db PATH] [--json]`. The command resolves the existing canonical Kalshi credential pair without prompting, opens one target `SQLiteConnectionPool`, optionally imports the legacy collector read-only, and fetches both current and archived Kalshi weather history around one cutoff. It never initializes Chroma.
+Run `traderbot backfill [--environment production|demo] --months 6 [--collector-db PATH] [--json]`. The option defaults explicitly to `production`; `demo` is carried through the typed request and every owned Kalshi history-client factory to the demo REST base URL. The command resolves the existing canonical Kalshi credential pair without prompting, opens one target `SQLiteConnectionPool`, optionally imports the legacy collector read-only, and fetches both current and archived Kalshi weather history around one cutoff. It never initializes Chroma.
 
 The default collector path is optional; an absent default produces a warning while an invalid explicitly supplied path exits 2 before target or API writes. Complete runs exit 0. Isolated item failures or systemic Kalshi failures after committed work return a redacted typed partial result and exit 1; total runtime failures also exit 1. JSON mode reserves stdout for one result line and sends no Rich output there.
 
 ## Standalone Verification
 
-Run `traderbot verify --categories weather [crypto ...] [--mode backtest] [--json]` on the host that owns the deployment. Production loopback means macpro-linux-local; development localhost is not the production target, and local QA uses isolated fakes only.
+Run `traderbot verify [--environment production|demo] --categories weather [crypto ...] [--mode backtest] [--json]` on the host that owns the deployment. The option defaults explicitly to `production`; `demo` reaches the typed verification request and signed Kalshi balance client without a production fallback. Production loopback means macpro-linux-local; development localhost is not the production target, and local QA uses isolated fakes only.
 
 The command runs a fixed, sequential, read-only graph. It verifies Gateway RPC, selected OpenClaw inventory/workspaces/config, the exact managed bootstrap cron, persisted dormant heartbeat config, exact real-auth mode, selected five-field durable token documents, signed Kalshi `GET /portfolio/balance`, global and selected decisions database manifests, service-manager status, actual MCP `health`, daemon-owned Chroma health, and Infisical primary or encrypted fallback state. Gateway failures skip only Gateway children; unavailable token credentials skip signed Kalshi and daemon runtime; unavailable daemon runtime prevents a false embedded-Chroma pass.
 
 SQLite files are opened with URI `mode=ro`, `query_only`, `quick_check`, and exact latest schema/table/index manifests after no-link ownership checks. Verification never probes writability, creates WAL/journal files, opens daemon-owned embedded Chroma, installs or changes services, creates agents, edits config/cron/heartbeat, or writes secrets. JSON mode emits exactly one stdout line. Human mode emits one Rich table to stderr. Exit codes are 0 for `ok`, 1 for `failed` or `degraded`, and 2 for invalid input.
+
+Both standalone commands restrict the environment to `production` or `demo` at argparse. Invalid values exit 2 before handlers, secret/client factories, external calls, or filesystem mutation. Standalone verify continues to force `TRADERBOT_USE_HARDCODED_AUTH=0` before dispatch.
 
 ## Wizard Steps 6-8
 

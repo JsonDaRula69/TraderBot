@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict
 from traderbot.daemon import main as daemon_main
 from traderbot.deploy.backfill_command import BackfillCommandOptions, execute_backfill
 from traderbot.deploy.wizard_command import execute_deploy
+from traderbot.kalshi.client import KALSHI_ENVIRONMENTS, Environment
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.profiles.generic import create_category_profile
 from traderbot.services.deploy import (
@@ -51,6 +52,7 @@ class _BackfillArguments(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
 
     months: int
+    environment: Environment
     collector_db: Path | None = None
     json_output: bool = False
 
@@ -60,7 +62,7 @@ class _DaemonArguments(BaseModel):
 
     host: str
     port: int
-    environment: str
+    environment: Environment
 
 
 class _ProfileArguments(BaseModel):
@@ -76,6 +78,7 @@ class _VerifyArguments(BaseModel):
 
     categories: tuple[MarketCategory, ...] | None = None
     mode: str
+    environment: Environment
     data_root: Path | None = None
     infisical_url: str
     daemon_mcp_url: str
@@ -162,6 +165,7 @@ def _cmd_backfill(args: argparse.Namespace) -> int:
     options = BackfillCommandOptions.model_validate(
         {
             "months": parsed.months,
+            "environment": parsed.environment,
             "collector_db": parsed.collector_db,
             "json_output": parsed.json_output,
         }
@@ -181,6 +185,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             {
                 "categories": parsed.categories or (),
                 "mode": parsed.mode,
+                "environment": parsed.environment,
                 "data_root": parsed.data_root,
                 "infisical_origin": parsed.infisical_url,
                 "daemon_mcp_url": parsed.daemon_mcp_url,
@@ -204,7 +209,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _ = daemon.add_argument(
         "--environment",
         default="production",
-        choices=["production", "demo"],
+        choices=KALSHI_ENVIRONMENTS,
         help="Kalshi environment",
     )
 
@@ -241,11 +246,23 @@ def _build_parser() -> argparse.ArgumentParser:
     _ = deploy.add_argument("--json", action="store_true", dest="json_output")
     backfill = subparsers.add_parser("backfill", help="Import weather and fetch Kalshi history")
     _ = backfill.add_argument("--months", type=int, default=6, help="calendar months to backfill")
+    _ = backfill.add_argument(
+        "--environment",
+        default="production",
+        choices=KALSHI_ENVIRONMENTS,
+        help="Kalshi environment (default: production)",
+    )
     _ = backfill.add_argument("--collector-db", type=Path, help="legacy collector SQLite path")
     _ = backfill.add_argument("--json", action="store_true", dest="json_output")
     verify = subparsers.add_parser("verify", help="Verify the deployed TraderBot system")
     _ = verify.add_argument("--categories", nargs="+", type=_parse_market_category)
     _ = verify.add_argument("--mode", choices=["backtest", "paper", "live"], default="backtest")
+    _ = verify.add_argument(
+        "--environment",
+        default="production",
+        choices=KALSHI_ENVIRONMENTS,
+        help="Kalshi environment (default: production)",
+    )
     _ = verify.add_argument("--data-root", type=Path)
     _ = verify.add_argument("--infisical-url", default="http://localhost:8080")
     _ = verify.add_argument("--daemon-mcp-url", default="http://127.0.0.1:8765/mcp")
