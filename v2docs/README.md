@@ -28,9 +28,9 @@ The following inconsistencies were found during the v2 roadmap review and have b
 
 | Topic | DD-009 (original) | Superseding DD | Resolution |
 |---|---|---|---|
-| Step 7: Simulation start | "Paper trading mode" | DD-017, DD-019 | Agents begin by backtesting, not paper trading |
-| Step 4: API tokens | "Prompt for tokens" | DD-037 | Infisical health check, vault creation, token entry, SecretRef config |
-| Step 2: SysAdmin setup | "Choose whether to use pre-existing main agent" | DD-036 | SysAdmin is always `main` (non-optional) |
+| Step 7: Simulation start | "Paper trading mode" | DD-017, DD-019 | Phase 4 implements a read-only Phase 5 sandbox stub; no simulation or trading |
+| Step 4: API tokens | "Prompt for tokens" | DD-037 | Infisical primary, encrypted fallback, canonical Kalshi pair only |
+| Step 2: SysAdmin setup | "Choose whether to use pre-existing main agent" | DD-036 | Existing `main` is required and never created |
 | Step 6: Backfill | "Filtered by enabled categories" | DD-027 | All data sources begin collection at install |
 | MCP tool names | Generic names (scan, analyze, weather_forecast) | DD-035, DD-036 | Category-specific toolkits replace generic names |
 | Secrets management | 1Password Connect | DD-037 | Infisical replaces 1Password as primary vault |
@@ -41,9 +41,9 @@ The following inconsistencies were found during the v2 roadmap review and have b
 | Item | Status | Notes |
 |---|---|---|
 | Update pipeline | Deferred | To be designed after roadmap completes |
-| Category workspace templates | Shelved | Focus on SysAdmin, Dev-Liaison, Weather first |
+| Category workspace templates | Implemented | All nine categories use AGENTS/SOUL/IDENTITY; tool guidance is AGENTS-only |
 | Exact promotion metrics | TBD | Deployment bar thresholds to be determined |
-| Other category toolkits | Design pending | Election, crypto, sports, etc. follow weather pattern |
+| Other category toolkits | Design pending | economics, crypto, sports, politics, entertainment, financial, world, other |
 | GRIB2 Phase 2 | Pending | True multi-day lead time forecasts |
 | Layer 3 dev team | In development | Future: autonomous dev agents |
 | TEMPLATE.md modifications | Pending | Review for TraderBot-specific use |

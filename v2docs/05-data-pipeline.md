@@ -207,7 +207,7 @@ traderbot__market_prices    — Current and historical price data from Kalshi We
 
 ### Future Toolkits (Design Pending)
 
-- Election toolkit: `traderbot__election_poll_aggregate`, `traderbot__election_demographic`, `traderbot__election_accuracy`, `traderbot__election_decision_brief`
+- Politics toolkit: design pending under the `politics` category
 - Crypto toolkit: `traderbot__crypto_volatility`, `traderbot__crypto_onchain`, `traderbot__crypto_accuracy`, `traderbot__crypto_decision_brief`
 - Other categories follow the same pattern, designed from scratch for each domain
 

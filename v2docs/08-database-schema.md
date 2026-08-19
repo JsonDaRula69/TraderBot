@@ -11,7 +11,7 @@
 ├── traderbot.db                    # Global DB: schema version, profiles, config, market data,
 │                                   # weather forecasts, NWS forecasts, settlement cache
 ├── secrets/                        # Encrypted secrets (outside DB scope)
-├── tokens.enc                      # Profile token registry (Fernet-encrypted)
+│   └── secrets.json                # Machine-bound encrypted fallback; Infisical is primary
 ├── chromadb/                       # Embedded PersistentClient root (daemon-owned, owner-only).
 │                                   # Collections (news, data_points, market_patterns,
 │                                   # news_signals, market_conditions) are logical objects
@@ -442,7 +442,7 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
       ]
     },
     "per_agent": {
-      "db_file": "{mode}-{profile}/db/decisions.db",
+      "db_file": "{mode}-{name}/db/decisions.db",
       "created_by": "init_decisions_db()",
       "tables": [
         "decisions",

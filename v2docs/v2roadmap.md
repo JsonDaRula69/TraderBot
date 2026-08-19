@@ -87,7 +87,9 @@
 - [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
 - [x] Phase 4 standalone backfill command: read-only snapshot collector import, current/archive Kalshi weather discovery around one cutoff, idempotent lossless persistence, redacted typed partial results, and strict human/JSON exit surfaces.
 - [x] Phase 4 deploy wizard Steps 6-8: typed standalone backfill and verification composition, one-line deploy JSON embedding, and an explicit read-only Phase 5 sandbox stub with strict Gateway cron outcomes.
-- [x] Phase 4 stabilization wave (2026-08-12, commit 9f938d6, VERSION 2.0.0a96): workspace-write TOCTOU race fixed with no-follow descriptor traversal + fd-relative atomic replace + post-publish inode/owner/mode revalidation; configured `data_root` propagated through all deploy phases (Step 5 DB/Chroma, Step 6 backfill, Step 8 verify, deploy state); `kalshi_environment` carried through `WizardRequest` → backfill → verification with exact prod/demo endpoint selection; `traderbot verify` forces `TRADERBOT_USE_HARDCODED_AUTH=0` like deploy/backfill; deploy import cycle broken; two previously-failing tests fixed (stale 2-arg assert, external `.omo/evidence` dependency removed); `wizard_command.py` split via new `wizard_request.py` (249 pure LOC). Todo 11 cleanup landed: removed unused `TradingProfile.env_file`, removed keyring wording from Kalshi package docstring, added `tests/test_legacy_cleanup.py`. Clean full suite: 907 passed, 0 failed. Decision A: Phase 4 completes against the original plan; stricter installer requirements deferred to Phase 4b (#168). Decision B: F2 code-quality gate scoped to changed/Phase-4 surface + no new full-tree regressions.
+- [x] Phase 4 stabilization wave (2026-08-12, commit 9f938d6, VERSION 2.0.0a96): workspace-write TOCTOU race fixed with no-follow descriptor traversal + fd-relative atomic replace + post-publish inode/owner/mode revalidation; configured `data_root` propagated through all deploy phases (Step 5 DB/Chroma, Step 6 backfill, Step 8 verify, deploy state); `kalshi_environment` carried through `WizardRequest` → backfill → verification with exact prod/demo endpoint selection; `traderbot verify` forces `TRADERBOT_USE_HARDCODED_AUTH=0` like deploy/backfill; deploy import cycle broken; two previously-failing tests fixed (stale 2-arg assert, external `.omo/evidence` dependency removed); `wizard_command.py` split via new `wizard_request.py` (249 pure LOC). Todo 11 cleanup landed: removed unused `TradingProfile.env_file`, removed keyring wording from Kalshi package docstring, added `tests/test_legacy_cleanup.py`. Clean full suite: 907 passed, 0 failed. Decision A: Phase 4 uses the original-plan contract: approved missing selected category agents may be created with approved absolute paths; existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b (#168). Decision B: F2 requires zero errors on the changed/Phase-4 surface plus no new full-tree regressions; it is not a historical full-tree-zero claim.
+- [x] Phase 4 Todo 12 (2026-08-18, local commit `498ddc1`, VERSION `2.0.0a97`): 917 full tests and 192 targeted deploy/backfill/verify tests passed; isolated config-mode CLI happy/rerun and malformed-JSON paths proved no live-service or default-state mutation.
+- [x] Phase 4 Todo 13 documentation synchronization (VERSION `2.0.0a98`): active v2docs, README/status, deploy guide, both roadmaps, CHANGELOG, and issue #168 now use one Phase 4 contract. Todos 1-13 implementation is locally complete subject to Atlas acceptance; Final Wave F1-F4 remains, including pending on-target F3. The branch is local-only and unpushed.
 
 ### Dev-Liaison Testing Protocols
 
@@ -99,7 +101,7 @@ Each development phase has a detailed testing protocol designed for partnership 
 | 1.5 | #165 | Infisical secrets resolution, token rotation, fallback chain | Rotation < 15min, fallback chain works, 0 plaintext secrets |
 | 2 | #166 | Always-on service, WebSocket, data pipeline resilience | Service uptime 24h, WS reconnect < 5s, 0 REST polling |
 | 3 | #167 | Database isolation, per-agent SQLite, ChromaDB filtering | 0 cross-agent reads, migration exit 0, < 10ms cached read |
-| 4 | #168 | pipx install, deploy wizard, service registration | pipx install succeeds, all 8 steps complete, services registered |
+| 4 | #168 | deploy, backfill, read-only verification | isolated commands pass; on-target demo F3 remains pending |
 | 5 | #169 | Docker sandbox builds, isolation, bind mounts | Sandbox builds, no host file access, bind mounts correct |
 | 6 | #170 | Weather toolkit tools, category isolation enforcement | Weather tools respond, non-weather tools denied, category filter works |
 | 7a | #171 | Backtesting engine, SimulationClock, edge filtering | Backtest completes, clock advances, edge filter reduces runtime |
@@ -228,15 +230,16 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Context**: The deploy process needs a clear sequential flow that ensures each step's prerequisites are met before proceeding.
 **Decision**: Deploy follows this exact order:
 
-1. **OpenClaw config** — Configure LLM model/provider, web search, gateway, daemon, comms channels. Create the `main` agent with all config choices.
-2. **SysAdmin setup** — Use the pre-existing `main` agent as SysAdmin, inject workspace files, request one self-deleting bootstrap prompt through OpenClaw Gateway, and authenticate SysAdmin with TraderBot. No recurring agent schedules are registered at deploy time.
-3. **Category selection** — For each selected category: create the OpenClaw agent (`openclaw agents add <category>`), inject category workspace files, and authenticate the agent with TraderBot. Recurring cron/heartbeat schedules remain dormant until approved activation through Gateway; deploy never invokes doctor implicitly.
+1. **OpenClaw config** — Detect OpenClaw and inventory all configured agents, workspaces, selected config, SecretRefs, heartbeat state, and bootstrap cron before mutation. Existing `main` is required and never created.
+2. **SysAdmin setup** — Adopt the pre-existing `main` workspace, inject managed guidance, request one self-deleting bootstrap prompt through OpenClaw Gateway only after selected postconditions pass, and authenticate SysAdmin with TraderBot. No recurring agent schedules are registered at deploy time.
+3. **Category selection** — Existing selected agents retain inventory workspaces. A missing selected category agent may be created only with an explicitly approved absolute path. Inject managed guidance and authenticate selected agents; recurring cron/heartbeat schedules remain dormant until approved activation through Gateway, and deploy never invokes doctor implicitly.
 4. **API tokens** — Reuse or securely collect only the canonical Kalshi API key and RSA private key consumed by the daemon. Inactive and keyless providers have no deploy prompt or storage path.
-5. **Database creation** — Create per-agent databases with isolation. Shared ChromaDB with category-scoped queries. Sysadmin gets cross-agent access.
-6. **Backfill** — Populate enabled datasource databases with 6 months of historical data, filtered by enabled categories.
-7. **Simulation start** — All agents begin by backtesting on already-settled markets using historical data (DD-017, DD-019). Mechanism to promote to paper trading and live trading exists (DD-017).
+5. **Database creation** — Under the explicit shared data root, create selected category databases at `{mode}-{name}/db/decisions.db`, leave Chroma collections lazy, and give SysAdmin read-only enumeration without a decisions database.
+6. **Backfill** — Reuse the standalone typed collector/Kalshi backfill boundary with the same data root and selected `production`/`demo` environment.
+7. **Phase 5 sandbox stub** — Read the exact Gateway bootstrap contract only. Phase 4 starts no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat.
+8. **Verification** — Reuse the standalone dependency-aware read-only graph with the same data root and environment.
 
-**Additional note**: SysAdmin should always use the `main` agent. Creating a separate sysadmin agent adds complexity without benefit, since the sysadmin's workspace files already assume it IS the main agent. Recommendation: make step 2 non-optional — sysadmin is always `main`.
+**Additional note**: SysAdmin always uses the pre-existing `main` agent. The original Phase 4 plan permits explicitly approved creation of missing selected category agents; stricter existing-agents-only and per-agent paper/live/channel/Telegram requirements are Phase 4b.
 
 ### DD-010: Docker isolation is mandatory (not optional)
 **Date**: 2025-06-08
@@ -438,7 +441,7 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 2. **Restructure Docker bind mounts** (per-agent, not blanket)
    - Remove: `$HOME/.traderbot:/home/traderbot/.traderbot:rw` (blanket mount)
    - Add per-agent selective mounts:
-     - `~/.traderbot/paper-{category}/:/home/traderbot/.traderbot/paper-{category}/:rw` (agent's own data)
+     - `~/.traderbot/{mode}-{name}/:/home/traderbot/.traderbot/{mode}-{name}/:rw` (agent's own data)
      - `~/.traderbot/chroma/:/home/traderbot/.traderbot/chroma/:ro` (shared ChromaDB, read-only)
      - `$HOME/traderbot:/traderbot:ro` (source code, unchanged)
    - **NOT mounted**: `.env`, `tokens.enc`, `keys/`, `secrets/`, `profiles.enc`, `.master_key`
@@ -533,13 +536,13 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 > An OpenClaw plugin registers a `before_tool_call` hook that:
 > 1. Matches `traderbot__*` tool names
 > 2. Reads `ctx.agentId` (host-derived, trusted, not model-controllable)
-> 3. Resolves the agent's token from a Vault-backed SecretRef via `resolveSecretRefValues` from `openclaw/plugin-sdk/secret-ref-runtime`
+> 3. Resolves the agent's token from an Infisical-backed SecretRef via `resolveSecretRefValues` from `openclaw/plugin-sdk/secret-ref-runtime`
 > 4. Returns `{ params: { ...event.params, token: resolvedToken } }` to inject the token
 > 5. Blocks unrecognized agents (`{ block: true }`)
 >
 > The model never sees or controls the token. TraderBot's existing `resolver.py` → `TradingProfile` → `auth.py` pipeline still validates the injected token server-side.
 
-**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery is handled by an OpenClaw `before_tool_call` plugin hook (issue #187, Phase 1.1), not by static configuration. Implementation plan: `.omo/plans/phase1-1-token-injector.md`. The plugin code is complete and **deployment-verified on macpro-linux** (2026-08-03): E2E injection works — the hook fires, resolves the agent's token from the env provider, injects it into the MCP call, and the server resolves the weather profile. Three fixes were required during deployment testing: manifest metadata + `configSchema` (`f8b5065`), token optional in MCP tool schemas (`f1aa518`), and MCP server env must explicitly set `TRADERBOT_USE_HARDCODED_AUTH=0` (`0dbc981`). 113 Python + 11 TypeScript tests pass on-target. Vault SecretRef integration is deferred to Phase 1.5.
+**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery is handled by an OpenClaw `before_tool_call` plugin hook (issue #187, Phase 1.1), not by static configuration. Implementation plan: `.omo/plans/phase1-1-token-injector.md`. The plugin code is complete and **deployment-verified on macpro-linux** (2026-08-03): E2E injection works — the hook fires, resolves the agent's token from the env provider, injects it into the MCP call, and the server resolves the weather profile. Three fixes were required during deployment testing: manifest metadata + `configSchema` (`f8b5065`), token optional in MCP tool schemas (`f1aa518`), and MCP server env must explicitly set `TRADERBOT_USE_HARDCODED_AUTH=0` (`0dbc981`). 113 Python + 11 TypeScript tests pass on-target. Infisical SecretRef integration is implemented; Vault is retired.
 
 **Architecture:**
 
@@ -1740,10 +1743,11 @@ This section describes the v2 architecture that emerges from the design decision
 - Verify: `traderbot auth check --json`
 
 #### Step 3: Category Selection
-- Present available categories: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, Other
+- Present exact categories: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, `other`
 - User selects one or more
 - Existing selected agents reuse inventory workspaces; explicit mismatches fail before mutation
 - Missing selected agents require approved absolute paths; re-read inventory after every add exit and adopt only exact ID/path state
+- Existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b
 - Reject linked, same-file, equal, and overlapping roots across every configured agent, including unselected agents
 - For each selected category:
   - Request `openclaw agents add <category> --workspace <approved-path> --non-interactive --json` only when missing
@@ -1762,25 +1766,22 @@ This section describes the v2 architecture that emerges from the design decision
 - Do not prompt or store credentials for inactive, planned, or keyless providers
 
 #### Step 5: Database Creation
-- Apply all current global migrations to `~/.traderbot/traderbot.db` and create one connection pool
+- Apply all current global migrations under the explicit shared data root and create one connection pool
 - Acquire and health-check the hardened embedded Chroma root before category database mutation
-- Create only selected category databases through `DatabaseAccess` at `{mode}-{profile}/db/decisions.db`
+- Create only selected category databases through `DatabaseAccess` at `{mode}-{name}/db/decisions.db`
 - Enumerate through canonical SysAdmin read-only access; do not create a SysAdmin decisions database
 - Validate the exact five-name shared Chroma manifest but leave collection creation lazy until a real embedding supplies its dimension
 - Close Chroma before the pool on every path; treat lock contention as a non-destructive blocker
 
 #### Step 6: Backfill
-- Run `traderbot backfill --months 6 --categories <enabled_categories> --json`
-- Only backfill data sources relevant to enabled categories
-- This populates ChromaDB `data_points` collection with historical weather, economics, and crypto data
-- Progress reporting during backfill (can take 1-3 minutes for initial seed)
+- Reuse `traderbot backfill --months 6 [--collector-db PATH] [--json]` through the typed boundary
+- Import the optional collector read-only and fetch current/archive Kalshi weather history around one cutoff
+- Carry the same explicit data root and `production`/`demo` Kalshi environment; never initialize Chroma here
 
-#### Step 7: Simulation Start
-- All agents begin in backtesting mode (`mode: backtest`), not paper trading (DD-017, DD-023)
-- SysAdmin is activated with heartbeat and essential cron jobs (DD-023)
-- SysAdmin activates the first category agent and starts its backtesting phase
-- Docker sandbox is started for each category agent (mandatory, DD-010)
-- SysAdmin manages phase transitions: backtest → paper → live, one category at a time
+#### Step 7: Phase 5 Sandbox Stub
+- Inspect the exact Gateway-owned bootstrap one-shot read-only
+- Start no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat in Phase 4
+- Record executed/deleted one-shots as action-required partial state without recreation
 
 #### Step 8: Verification
 - Run `traderbot verify --categories ...` as a fixed dependency-aware read-only graph.
@@ -1789,6 +1790,7 @@ This section describes the v2 architecture that emerges from the design decision
 - Verify global/current-mode databases with no-follow owner checks, `mode=ro`, `query_only`, `quick_check`, and exact latest manifests; SysAdmin decisions DB is forbidden.
 - Require bounded actual daemon MCP `health`; derive daemon-owned Chroma state from MCP rather than opening embedded storage.
 - Report Infisical primary or encrypted fallback state; production loopback is macpro-linux-local and real-service replay remains Final Wave.
+- Reuse the same explicit data root and `production`/`demo` Kalshi environment carried by database creation and backfill.
 - Emit one JSON stdout line or a Rich stderr table with stable IDs/status/action/timing; exit 0/1/2.
 
 ---
@@ -1874,19 +1876,7 @@ The `news` and `data_points` collections already have `category` metadata fields
 
 ### Category → Workspace Template Mapping
 
-Phase 1 `HEAD` includes workspace files for weather, SysAdmin, and Dev-Liaison. Category-specific templates beyond weather remain future work:
-
-| Category | IDENTITY.md Name | SOUL.md Theme | Data Sources |
-|---|---|---|---|
-| Weather | Vane 🌪️ | Atmospheric chaos, ensemble models | NWS, Open-Meteo, OpenWeatherMap |
-| Economics | Mint 💰 | Data-driven macro, leading indicators | FRED, BLS |
-| Politics | Gavel ⚖️ | Polling aggregation, institutional analysis | NewsAPI |
-| Sports | Edge 🏟️ | Statistical edge, situational spotting | TheSportsDB |
-| Crypto | Flux ₿ | Volatility regimes, on-chain analysis | CoinGecko |
-| Entertainment | Spotlight 🎬 | Box office, cultural trend momentum | NewsAPI |
-| Science & Technology | Circuit ⚡ | Innovation cycles, breakthrough detection | NewsAPI |
-| Health | Pulse ❤️ | Epidemiological modeling, regulatory analysis | NewsAPI |
-| Social | Signal 📢 | Virality dynamics, sentiment momentum | Twitter, Reddit |
+Phase 4 ships `AGENTS.md`, `SOUL.md`, and `IDENTITY.md` templates for every exact `MarketCategory`: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, and `other`. Canonical exact-five-tool guidance appears only in managed `AGENTS.md ## Tools`; TraderBot does not package or manage legacy `TOOLS.md` or `HEARTBEAT.md`.
 
 ---
 
@@ -2093,8 +2083,8 @@ Current (insecure):
 
 New (per-agent, minimal):
 ```
--v $HOME/.traderbot/paper-{category}/db:/home/traderbot/.traderbot/paper-{category}/db:rw
--v $HOME/.traderbot/paper-{category}/audit:/home/traderbot/.traderbot/paper-{category}/audit:rw
+-v $HOME/.traderbot/{mode}-{name}/db:/home/traderbot/.traderbot/{mode}-{name}/db:rw
+-v $HOME/.traderbot/{mode}-{name}/audit:/home/traderbot/.traderbot/{mode}-{name}/audit:rw
 -v $HOME/.traderbot/chroma:/home/traderbot/.traderbot/chroma:ro
 -v $HOME/.openclaw/workspace/{category}/:/workspace:rw
 # NOT mounted: secrets/, keys/, tokens.enc, profiles.enc, .env, .master_key
@@ -2345,7 +2335,7 @@ Your deployment must provide the token securely; current local tests pass it exp
   params before the MCP server receives them (commit `5b5088e`, verified
   on macpro-linux).
 - The config artifacts are now deployable with the plugin active.
-- Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
+- Infisical SecretRef integration is implemented; Vault is retired.
 
 **MCP server configuration (OpenClaw)**
 
@@ -3082,7 +3072,7 @@ Issues:
 - `vectors.py` manages ChromaDB collections — already has category filtering but needs audit (pending item)
 - `reconciliation.py` is for paper-vs-live reconciliation — solid for v2
 - No per-mode DB naming convention exists yet
-- Under v2 (DD-019/021), each agent gets 3 databases: `backtesting-{name}/db/`, `paper-{name}/db/`, `live-{name}/db/`
+- Under v2 (DD-019/021), each agent gets 3 databases: `backtest-{name}/db/`, `paper-{name}/db/`, `live-{name}/db/`
 
 Actions:
 - Implement per-agent per-mode DB isolation (backtesting/paper/live)
@@ -4007,7 +3997,7 @@ GITHUB_REPOSITORY=<owner/repo>                # Shared repo
 
 Each category agent receives a bespoke set of MCP tools reflecting its domain's analytical needs. Tools are namespaced by category, and the OpenClaw `alsoAllow` mechanism (DD-025) ensures each agent only sees its own toolkit.
 
-This is not a generic framework with pluggable modules — each toolkit is **custom-designed** for its category. Weather needs calibrated probability estimates from forecast distributions. Elections need polling aggregates and demographic modeling. Crypto needs volatility analysis and order flow metrics. The analysis pipeline, data sources, statistical models, and tool outputs are all category-specific.
+This is not a generic framework with pluggable modules — each toolkit is **custom-designed** for its category. Weather needs calibrated probability estimates from forecast distributions. Politics needs polling aggregates and demographic modeling. Crypto needs volatility analysis and order flow metrics. The analysis pipeline, data sources, statistical models, and tool outputs are all category-specific.
 
 The `AnalysisRegistry` pattern is preserved as an internal dispatch mechanism — each toolkit calls into its category's registered analyzer. But the agent never sees the analyzer directly. It only sees MCP tool responses.
 
@@ -4025,12 +4015,12 @@ traderbot__weather_seasonal_context — Historical temperature distributions and
 traderbot__weather_decision_brief   — Assembled analytical brief for a specific market/ticker
 ```
 
-**Election toolkit** (election agent only, design pending):
+**Politics toolkit** (`politics` agent only, design pending):
 ```
-traderbot__election_poll_aggregate  — Polling averages with methodology weighting
-traderbot__election_demographic     — Demographic composition and voting pattern data
-traderbot__election_accuracy        — Historical polling accuracy by type, lead time, source
-traderbot__election_decision_brief  — Assembled analytical brief for an election market
+traderbot__politics_poll_aggregate  — Polling averages with methodology weighting
+traderbot__politics_demographic     — Demographic composition and voting pattern data
+traderbot__politics_accuracy        — Historical polling accuracy by type, lead time, source
+traderbot__politics_decision_brief  — Assembled analytical brief for a politics market
 ```
 
 **Crypto toolkit** (crypto agent only, design pending):

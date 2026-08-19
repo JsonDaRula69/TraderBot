@@ -32,10 +32,9 @@ This command:
 
 | Feature | macOS | Linux (GUI) | Linux (headless) | Windows |
 |---|---|---|---|---|
-| Keyring | Available | Available | Not available — skip keyring questions | Available |
-| Docker | Offered | Offered | Offered (required for agents) | Offered |
+| Phase 5 Docker sandbox | Deferred; no Phase 4 operation | Same | Same | Same |
 | Infisical | Existing loopback instance or encrypted fallback | Same | Same | Same |
-| Service manager | launchd | systemd | systemd | Task Scheduler |
+| Service manager detection | launchd | systemd | systemd | Task Scheduler |
 | Service template resolution | `shutil.which('traderbot')` + `.resolve()` | Same | Same | Same |
 
 Service template paths use `{placeholder}` syntax resolved at install time via `shutil.which('traderbot')` + `.resolve()` (DD-007). This handles pipx virtualenv backend variations (venv vs uv) and user-customizable `PIPX_BIN_DIR` locations. Templates are stored as package data in `src/traderbot/services/` and read via `importlib.resources`.
@@ -66,11 +65,12 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 3: Category Selection
 
-- Present available categories: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, Other
+- Present the exact categories: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, `other`
 - User selects one or more
 - Config mode supports only `mode: "backtest"` until Phase 7 lifecycle transitions; paper/live are rejected before mutation
 - Existing selected agents adopt their configured inventory workspace unchanged; an explicit path mismatch fails global preflight
 - Missing selected agents require an explicit absolute path plus `approvals.create_agents: true`; inventory is re-read after every add exit, including nonzero/malformed output
+- This original-plan creation contract is current for Phase 4. Existing-agents-only installation plus per-agent paper/live, channel binding, and same-name Telegram accounts are deferred to Phase 4b.
 - Reject linked, same-file, normalized-equal, and overlapping workspace roots across every configured agent, including unselected agents
 - For each selected category:
   - For missing selected agents only: `openclaw agents add <category> --workspace <approved-absolute-path> --non-interactive --json`
@@ -98,7 +98,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 ### Step 5: Database Creation
 
 - Run `init_schema()` with every currently registered global migration, then construct one `SQLiteConnectionPool`
-- Provision only selected category databases through `DatabaseAccess.writable_decisions` at `{mode}-{profile}/db/decisions.db`; initial deploy mode is `backtest`
+- Provision only selected category databases through `DatabaseAccess.writable_decisions` at `{mode}-{name}/db/decisions.db`; initial deploy mode is `backtest`
 - Verify each selected database has the current seven-table domain schema and accepts a committed writable transaction
 - Use canonical SysAdmin only with `all_agent_decisions` for read-only enumeration; never create a SysAdmin decisions database
 - Create or validate the owner-only embedded Chroma root, acquire the ownership lock, and verify the pinned Rust client/backend
@@ -118,22 +118,10 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - The deploy wizard invokes the same typed `run_backfill` request/dependency boundary and embeds the result without a second JSON stream
 - Explicit collector input is prepared once before secrets/runtime construction, consumed from the immutable snapshot, and never reopened by Step 6
 
-### Step 7: Simulation Start
+### Step 7: Phase 5 Sandbox Stub
 
-- All agents begin in **backtesting mode** (not paper trading) — DD-017, DD-019
-- SysAdmin is activated with its bootstrap job
-- SysAdmin follows its activation protocol (DD-023):
-  1. Verify TraderBot service is running
-  2. Verify data streams are fresh
-  3. Register essential cron jobs (health-check, error-logger)
-  4. Enable own heartbeat
-  5. For each category (one at a time):
-     a. Verify category data available
-     b. Activate agent in backtesting mode
-     c. Register backtesting oversight jobs
-     d. Monitor progress
-     e. Promote when deployment bar is met
-- Phase 4 implements only an explicit Phase 5 sandbox stub. It starts no Docker sandbox, simulation, backtest, or trading lifecycle.
+- Step 7 is a read-only Phase 5 sandbox stub. Phase 4 starts no Docker sandbox, simulation, backtest, trading lifecycle, or agent schedule.
+- Agent backtesting activation and the SysAdmin lifecycle protocol are future behavior, not Phase 4 execution.
 - The stub performs one read-only strict inventory of the exact Gateway-owned bootstrap job. It never adds, updates, deletes, runs, or recreates a cron.
 - A persisted exact job passes. Post-execution absence from `deleteAfterRun: true` is recorded as an action-required partial state, not silently passed or recreated.
 - Owner-only deploy state records prior registration and per-step fingerprints; unchanged completed late steps are reused, while incomplete or affected downstream steps rerun.
@@ -152,6 +140,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host.
 - JSON output is exactly one stdout line; the Rich table is stderr-only. Exit codes are 0 for OK, 1 for failed/degraded, and 2 for invalid input.
 - The deploy wizard composes the same `VerificationRequest` and read-only graph, embeds every typed check in its one JSON result, and still runs safe verification after a partial backfill.
+- The explicit data root and `production`/`demo` Kalshi environment are shared unchanged across database creation, backfill, verification, and deploy state.
 
 ---
 

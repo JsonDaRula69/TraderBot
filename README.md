@@ -5,16 +5,14 @@ MCP-based (DD-015): TraderBot registers as an MCP server with OpenClaw, and
 agents drive it through typed MCP tools (`traderbot__*`). The CLI is retired
 from containers.
 
-> **Status**: v2 Phase 2 (issue #166) is implemented. TraderBot now runs as an
-> always-on daemon: the Kalshi WebSocket stream, the scheduled data pipeline
-> (weather 1h, news stub 30m, settlement 1h), and the MCP server all run in one
-> process, serving MCP over streamable-http on loopback (`127.0.0.1:8765/mcp`).
-> The MCP layer exposes 5 tools (`health`, `auth_check`, `profile_list`,
-> `market_edge`, `market_prices`) with WS-first market data, profile-token
-> resolution, tool-permission checks, and DD-011 category enforcement. On-target
-> macpro-linux QA (24h uptime, WS reconnect, live E2E) was in progress; Phase 3
-> items (ChromaDB, GRIB2 multi-day forecasts, crypto/sports workers, three-mode
-> trading engine) remain on the roadmap.
+> **Status**: v2 Phase 4 implementation Todos 1-13 for issue #168 are locally
+> complete at `2.0.0a98`, subject to Atlas acceptance and Final Wave F1-F4.
+> Todo 12 landed in local commit `498ddc1` at `2.0.0a97`: 917 full tests and
+> 192 targeted deploy/backfill/verify tests passed, including isolated config-mode
+> CLI and malformed-JSON coverage with no live service or default-state mutation.
+> F3 on-target macpro-linux QA remains pending, so Phase 4 and issue #168 remain
+> open. The branch is local-only and unpushed; no remote CI or publication is
+> claimed.
 
 ## Quick start
 
@@ -52,17 +50,24 @@ hardcoded development mapping remains active unless the environment variable
 is exactly `0`.
 
 `traderbot deploy` runs all eight wizard steps. It inventories all
-OpenClaw workspace ownership before mutation, adopts existing selected paths,
-and requires explicit paths and approval flags for missing selected agents.
+OpenClaw workspace ownership before mutation and requires the pre-existing
+`main` agent; deploy never creates `main`. Existing selected category paths are
+adopted unchanged. A missing selected category agent may be created only with
+an explicitly approved absolute workspace path. The stricter existing-agents-only
+contract and per-agent paper/live, channel, and same-name Telegram requirements
+are deferred to Phase 4b.
 Approved dormant heartbeat state is written as `0m` through OpenClaw config;
-bootstrap automation is requested from Gateway only after selected state is
-verified. It then reuses or securely collects only the canonical Kalshi secret
-pair, falling back to machine-bound encrypted storage when local Infisical is
-unusable, and provisions selected category databases plus a lazy embedded
-Chroma root in daemon ownership order. Step 6 reuses the standalone typed
-backfill runtime, Step 7 is an intentional read-only Phase 5 sandbox stub, and
-Step 8 reuses the verification graph. No simulation, trading, or scheduling
-mutation occurs in Step 7.
+bootstrap automation is requested from OpenClaw Gateway only after selected
+state is verified. Gateway owns agent cron and heartbeat; the TraderBot daemon
+owns provider and token schedules; MCP owns neither. Deploy then reuses or
+securely collects only `kalshi_api_key` and `kalshi_private_key_pem`, using
+Infisical as primary and machine-bound encrypted local storage as fallback.
+One explicit data root and `production`/`demo` Kalshi environment propagate
+through database creation, backfill, verification, and deploy state. Selected
+category databases use `{mode}-{name}/db/decisions.db`; SysAdmin receives
+read-only enumeration and no decisions database. Chroma collection creation is
+lazy. Step 7 is a read-only Phase 5 sandbox stub: Phase 4 starts no Docker,
+simulation, backtest, trading lifecycle, or scheduling mutation.
 
 Historical data can be populated independently with `traderbot backfill --months 6`.
 Use `--collector-db PATH` to import an explicit legacy collector and `--json` for

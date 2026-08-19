@@ -72,7 +72,9 @@ The Dev-Liaison communicates with the AutoDev team via a low-latency webhook lay
 
 **Role**: Domain-specific traders. Each agent trades exclusively within its assigned category.
 
-**Current categories**: Weather, Economics, Crypto, Sports, Politics, Entertainment, Financial, World, and Other.
+**Current categories**: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, and `other`.
+
+Phase 4 may create a missing selected category agent only with an explicitly approved absolute workspace path. Existing selected agents keep their inventory paths, and `main` must already exist. Existing-agents-only installation plus per-agent paper/live, channel binding, and same-name Telegram accounts are deferred to Phase 4b.
 
 **Key constraints** (DD-008, DD-010, DD-011):
 - Prebuilt workspace files — no user customization

@@ -308,7 +308,7 @@ Agent (model) → OpenClaw tool dispatch → before_tool_call hook
 The hook runs host-side in the OpenClaw gateway, so the model never sees or
 controls the injected token. `ctx.agentId` is host-derived from the caller's
 OpenClaw agent session, not from anything the model supplies. The hook resolves
-the agent's token from a Vault-backed SecretRef using OpenClaw's
+the agent's token from an Infisical-backed SecretRef using OpenClaw's
 `resolveSecretRefValues` helper, then returns the full params object with the
 extra `token` field. Unrecognized agents fail closed.
 
@@ -346,7 +346,7 @@ The verified config is in `configs/openclaw/with-plugin.json`. It registers:
 - `mcp.servers.traderbot.env.TRADERBOT_USE_HARDCODED_AUTH: "0"` so the MCP
   subprocess runs in real-auth mode
 
-This replaces the earlier Vault-based `secrets.providers.vault` example.
+This replaces the retired Vault-based `secrets.providers.vault` example.
 
 ### References
 
@@ -363,7 +363,7 @@ This replaces the earlier Vault-based `secrets.providers.vault` example.
 
 The target architecture requires all category agents to run in Docker containers with the properties below. A separate OpenClaw remediation hardens agent tool policies only; it does not encode these bind mounts and has not been deployed or tested on target hardware:
 - Base image: `python:3.12-slim-bookworm`
-- Agent data dir bind-mounted RW: `~/.traderbot/paper-{category}/`
+- Agent data dir bind-mounted RW from the active `{mode}-{name}/` data-root path
 - Workspace files bind-mounted RO: `~/.openclaw/workspace/{category}/`
 - No blanket `~/.traderbot/` mount — each agent only sees its own data
 - No profile token is injected by the remediation fragments
@@ -385,18 +385,8 @@ allowlist. Sandboxed agents also use a second sandbox-tool gate for
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",
-      "traderbot__weather_forecast_prob",
-      "traderbot__weather_accuracy",
-      "traderbot__weather_seasonal_context",
-      "traderbot__weather_decision_brief",
       "traderbot__market_edge",
       "traderbot__market_prices",
-      "traderbot__trade",
-      "traderbot__positions",
-      "traderbot__heartbeat",
-      "traderbot__performance",
-      "traderbot__audit",
-      "traderbot__learnings",
     ],
     deny: ["group:runtime", "group:fs"],
     sandbox: {
@@ -406,8 +396,8 @@ allowlist. Sandboxed agents also use a second sandbox-tool gate for
 }
 ```
 
-Only `health`, `auth_check`, `profile_list`, and `market_edge` currently exist;
-the remaining names in the full design are planned. SysAdmin stays unsandboxed
+Only `health`, `auth_check`, `profile_list`, `market_edge`, and `market_prices`
+currently exist; planned names are excluded from live allowlists. SysAdmin stays unsandboxed
 per DD-036 and its deny list explicitly blocks trading and category-specific
 tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the remediation agent fragments omit invalid nested `mcp` and per-agent `env` fields.
 
@@ -420,7 +410,7 @@ tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the 
 
 ---
 
-## Planned Division of Secrets Responsibility (Phase 1.5)
+## Division of Secrets Responsibility
 
 | Secret Type | Manager | Storage | Access |
 |---|---|---|---|
@@ -432,8 +422,9 @@ tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the 
 
 **Target principle**: Agents never see API tokens. They interact with TraderBot
 through MCP tools only, and TraderBot handles API communication on the backend.
-This table is planned architecture, not a claim that Infisical, provider
-credential validation, token injection, rotation, or deployment is complete.
+Infisical-backed profile-token injection and rotation are implemented. Phase 4
+deploy collects only the canonical Kalshi pair and uses machine-bound encrypted
+local storage when Infisical is unavailable or unusable.
 
 ### Deployment verification
 

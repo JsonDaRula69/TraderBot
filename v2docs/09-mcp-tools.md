@@ -8,7 +8,7 @@
 > implementation, deployment, CI, or on-target verification. Per-agent token
 > injection is architecturally resolved in issue #187 and **deployment-verified
 > on macpro-linux** (2026-08-03, commits `5b5088e`/`f8b5065`/`f1aa518`/`0dbc981`).
-> Issue #187 tracks the remaining Vault provider integration (Phase 1.5).
+> Infisical-backed SecretRef integration is implemented; Vault is retired.
 
 ---
 
@@ -106,8 +106,9 @@ category skip the final check.
 | `traderbot__market_edge` | Authenticates, checks `market_edge` permission, enforces DD-011 category access, validates strict input, and returns a stub response. |
 | `traderbot__market_prices` | Authenticates, checks `market_prices` permission, and returns current price data (last/bid/ask/spread/volume) for a ticker read from the daemon's in-memory `MarketCache` — **zero REST calls** (WS-first). |
 
-External API credential validation is deferred to the secrets, provider, and
-deploy phases. Infisical and automatic rotation remain Phase 1.5 plans.
+`auth_check` intentionally does not validate external provider credentials.
+Phase 4 verification performs the separate signed Kalshi and secrets-backend
+checks; Infisical-backed token resolution and automatic rotation are implemented.
 
 ## Planned Tool Surface
 
@@ -496,4 +497,4 @@ agent tokens. Secure per-agent token injection is implemented with a Phase
 SecretRefs and rewrites tool call params (see `04-security-and-auth.md` and
 `.omo/plans/phase1-1-token-injector.md`). The plugin is complete and
 deployment-verified on macpro-linux (commits `5b5088e`, `f8b5065`, `f1aa518`,
-`0dbc981`); Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
+`0dbc981`); Infisical SecretRef integration is implemented and Vault is retired.

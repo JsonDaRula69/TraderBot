@@ -10,13 +10,13 @@
 |---|---|---|---|
 | DD-001 | pipx as sole installation method | Remove installer script, plain pip, venv. pipx-only. | — |
 | DD-002 | OpenClaw is a hard dependency | TraderBot requires OpenClaw. Not for standalone human use. | — |
-| DD-003 | Docker sandbox in setup | Docker sandbox step included in deploy, not optional. | DD-010 |
-| DD-004 | Service registration in setup | System service registration during deploy. | DD-007, DD-022 |
+| DD-003 | Docker sandbox target | Mandatory category sandbox is deferred to Phase 5; Phase 4 Step 7 is read-only. | DD-010 |
+| DD-004 | Service registration | Platform service commands/templates are separate; Phase 4 deploy does not mutate service state. | DD-007, DD-022 |
 | DD-005 | Retire bootstrap, rename to deploy | Remove `traderbot bootstrap`. First-time config is "deploy". | — |
 | DD-006 | OS-aware capability detection | Detect OS, adjust prompts (no keyring on headless Linux). | DD-037 |
 | DD-007 | Service templates as package data | Templates in `src/traderbot/services/`, read via `importlib.resources`. | DD-001, DD-022 |
 | DD-008 | Prebuilt agent workspaces | No user customization. Shipped by TraderBot. | — |
-| DD-009 | 8-step deploy flow | OpenClaw config → SysAdmin → Categories → API tokens → DB → Backfill → Simulate → Verify | DD-001–DD-008, DD-023, DD-037 |
+| DD-009 | 8-step deploy flow | OpenClaw config → SysAdmin → Categories → API tokens → DB → Backfill → Phase 5 stub → Verify | DD-001–DD-008, DD-023, DD-037 |
 | DD-010 | Mandatory Docker sandbox | All category agents run in Docker. No opt-out. | DD-002 |
 | DD-011 | Per-agent data source access control | Category filtering at CLI/MCP level. `enabled_categories` enforcement. | DD-015, DD-025 |
 | DD-013 | Three-mode trading | Backtest → Paper → Live → (Suspended). Profile-aware MCP routing. | DD-017, DD-019, DD-021 |
@@ -59,9 +59,9 @@
 
 | Topic | Original (DD-009) | Current | Reference |
 |---|---|---|---|
-| Step 7: Simulation start | "paper trading mode" | Agents begin in backtesting | DD-017, DD-019 |
-| Step 4: API tokens | "prompt for tokens" | Infisical health check, vault creation, token entry, SecretRef config | DD-037 |
-| Step 2: SysAdmin setup | "choose whether to use pre-existing main agent" | SysAdmin is always `main` (non-optional) | DD-036 |
+| Step 7: Simulation start | "paper trading mode" | Phase 4 implements a read-only Phase 5 sandbox stub; no simulation or trading | DD-017, DD-019 |
+| Step 4: API tokens | "prompt for tokens" | Infisical primary, encrypted fallback, canonical Kalshi pair only | DD-037 |
+| Step 2: SysAdmin setup | "choose whether to use pre-existing main agent" | Existing `main` is required and never created | DD-036 |
 | Step 6: Backfill | "filtered by enabled categories" | All data sources collect at install | DD-027 |
 | MCP tool names | Generic names (scan, analyze, weather_forecast) | Category-specific toolkits (weather_forecast_prob, weather_accuracy, etc.) | DD-035, DD-036 |
 | Secrets management | 1Password Connect | Infisical (free, open source) | DD-037 |
@@ -74,12 +74,12 @@
 | Item | Status | Notes |
 |---|---|---|
 | Update pipeline | Deferred | `traderbot update` for pipx, to be designed after roadmap completes |
-| Category workspace templates | Shelved | Focusing on SysAdmin, Dev-Liaison, Weather first |
-| Docs/code drift | Deferred | To be addressed after roadmap completes |
+| Category workspace templates | Implemented | AGENTS/SOUL/IDENTITY for all nine categories; exact-five-tool guidance in AGENTS only |
+| Docs/code drift | Current | Phase 4 contract synchronized in VERSION 2.0.0a98 |
 | Exact promotion metrics | TBD | Deployment bar thresholds (Sharpe, win rate, sample size) to be determined |
-| Election toolkit | Design pending | Will follow same pattern as weather toolkit |
+| Politics toolkit | Design pending | Will follow the category-specific toolkit pattern |
 | Crypto toolkit | Design pending | Will follow same pattern as weather toolkit |
-| Other category toolkits | Design pending | Sports, politics, entertainment, science, health, social |
+| Other category toolkits | Design pending | economics, crypto, sports, politics, entertainment, financial, world, other |
 | GRIB2 Phase 2 implementation | Pending | Tier 2 data pipeline for true multi-day lead time forecasts |
 | Layer 3 autonomous dev team | In development | Future: isolated dev agents for GitHub issue pickup |
 | TEMPLATE.md modifications | Pending | Review and update for TraderBot-specific agent-debate use |
@@ -103,7 +103,8 @@ Implemented in Phase 2 (PR on `feat/v2-data-pipeline` → `v2-main`):
   recovery, and historical data. `traderbot__market_prices` reads from the
   in-memory `MarketCache` with zero REST calls.
 
-Deferred to later phases: ChromaDB (Phase 3), GRIB2 multi-day forecasts (DD-033),
-crypto/sports workers, full news NLP/sentiment, Docker sandbox (Phase 5),
-per-agent DB isolation (Phase 3), three-mode trading engine (Phase 6/7),
-category toolkits (Phase 6), full `traderbot deploy` wizard (Phase 4).
+Deferred to later phases: GRIB2 multi-day forecasts (DD-033), crypto/sports
+workers, full news NLP/sentiment, Docker sandbox (Phase 5), three-mode trading
+engine (Phase 7), and category toolkits (Phase 6). Phase 3 database isolation
+and Phase 4 deploy/backfill/verification implementation are present; Phase 4
+still awaits Final Wave F1-F4 and on-target F3 acceptance.
