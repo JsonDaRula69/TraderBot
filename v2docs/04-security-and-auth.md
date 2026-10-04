@@ -94,9 +94,11 @@ offline fallback.
 - `TRADERBOT_USE_HARDCODED_AUTH=0` selects real auth through `TokenStore`.
 - By default `SecretsResolver` installs a `TokenStoreAdapter` backed by
   `SecretsStore` (Infisical primary, `LocalEncryptedStore` fallback). The
-  resolver reads `~/.traderbot/infisical-credentials.json` and falls back to
-  the local encrypted store when credentials are missing or Infisical is
-  unreachable.
+  resolver reads `~/.traderbot/infisical-credentials.json`, requiring only
+  `host` and `machineIdentity.{clientId,clientSecret}` while ignoring unrelated
+  routing metadata keys owned by the `openclaw-infisical-resolver` script,
+  including extra nested identity fields. It falls back to the local encrypted
+  store when required credentials are missing or Infisical is unusable.
 - `LocalTokenStore` at `~/.traderbot/tokens.json` is still readable for
   one-way migration to Infisical via `traderbot secrets migrate`.
 

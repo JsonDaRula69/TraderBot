@@ -47,15 +47,17 @@ _ACCESS_TARGETS = (
 )
 
 
+# The shared document includes routing metadata owned by openclaw-infisical-resolver;
+# both readers below ignore unrelated fields while requiring the login credentials.
 class _MachineIdentity(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
 
     client_id: str = Field(validation_alias="clientId")
     client_secret: SecretStr = Field(validation_alias="clientSecret")
 
 
 class _InfisicalCredentials(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", frozen=True)
 
     host: str
     machine_identity: _MachineIdentity = Field(validation_alias="machineIdentity")
