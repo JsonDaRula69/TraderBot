@@ -116,13 +116,21 @@ def write_fake_openclaw(path: Path) -> None:
             print(json.dumps({"jobs": state["crons"]}))
             save()
         elif args[:2] == ["cron", "add"]:
+            # Deployed OpenClaw 2026.7.1-2 populates the pending one-shot
+            # envelope the moment the job is scheduled: state nextRunAtMs plus
+            # top-level nextRunAtMs and status "idle"
+            # (.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json).
+            next_run_at_ms = 1700000300000
             job = {"id": "bootstrap-1", "name": "traderbot-main-at-5m",
                    "agentId": "main", "enabled": True,
                    "createdAtMs": 1700000000000, "updatedAtMs": 1700000000000,
                    "schedule": {"kind": "at", "at": "2023-11-14T22:18:20+00:00"},
                    "sessionTarget": "isolated", "wakeMode": "now",
-                   "payload": {"kind": "agentTurn", "message": args[args.index("--message") + 1]},
-                   "state": {}, "deleteAfterRun": True}
+                   "payload": {"kind": "agentTurn",
+                               "message": args[args.index("--message") + 1]},
+                   "state": {"nextRunAtMs": next_run_at_ms},
+                   "nextRunAtMs": next_run_at_ms, "status": "idle",
+                   "deleteAfterRun": True}
             state["crons"] = [job]
             state["mutations"].append("cron:add")
             save()

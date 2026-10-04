@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a105] — 2026-10-04
+
+### Fixed
+
+- Deploy and verify bootstrap-cron readback now accepts the deployed pending one-shot envelope instead of fail-closing a successful registration as a conflict: OpenClaw 2026.7.1-2 populates `state: {"nextRunAtMs": <positive int>}` plus top-level `nextRunAtMs` and `status: "idle"` the moment a job is scheduled (recorded on-target in `.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json`). A pending one-shot is exact whether `state` is `{}` or exactly `{"nextRunAtMs": <positive int>}`, and unrelated deployed top-level extras are ignored. Identity fields stay strict fail-closed: job name, agent, schedule, session, wake mode, payload message, and delete-after-run; garbage `nextRunAtMs` values (non-int, non-positive, bool) and state shapes indicating an already-run or errored job still classify as conflict. This repairs both wizard step 3's post-registration verification (C1, "bootstrap cron final verification failed") and the standalone verify cron probe (C5, `bootstrap_cron_mismatch`), which share the same classifier.
+
 ## [2.0.0a104] — 2026-10-03
 
 ### Fixed

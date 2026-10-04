@@ -45,9 +45,18 @@ class SysAdminBootstrapCron(BaseModel):
     @field_validator("state")
     @classmethod
     def pending_state(cls, state: dict[str, JsonValue]) -> dict[str, JsonValue]:
-        if state:
-            raise PydanticCustomError("bootstrap_state", "one-shot must be active and pending")
-        return state
+        # Deployed OpenClaw 2026.7.1-2 populates the pending one-shot envelope
+        # with state {"nextRunAtMs": <positive int>} the moment the job is
+        # scheduled (.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json);
+        # the documented CLI shape remains an empty state. Any other state
+        # shape, garbage values or already-run/errored markers, is a
+        # non-pending contract and fails closed.
+        if not state:
+            return state
+        next_run_at_ms = state.get("nextRunAtMs")
+        if set(state) == {"nextRunAtMs"} and type(next_run_at_ms) is int and next_run_at_ms > 0:
+            return state
+        raise PydanticCustomError("bootstrap_state", "one-shot must be active and pending")
 
     @model_validator(mode="after")
     def exact_schedule_and_payload(self) -> Self:
