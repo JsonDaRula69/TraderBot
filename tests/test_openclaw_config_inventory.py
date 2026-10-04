@@ -18,6 +18,10 @@ def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess[
     return subprocess.CompletedProcess(["openclaw"], returncode, stdout, "")
 
 
+def _streams(stdout: str, stderr: str, returncode: int) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(["openclaw"], returncode, stdout, stderr)
+
+
 def _inventory() -> AgentInventory:
     workspace = Path(Path.cwd().anchor) / "srv" / "main"
     return AgentInventory(
@@ -130,6 +134,42 @@ def test_stable_list_config_and_exact_secret_ref_are_typed(
     assert agent.path_prefix == "agents.list[0]"
     assert agent.heartbeat_every == "0m"
     assert snapshot.secret_ref("main") == secret_ref
+
+
+def test_deployed_stderr_missing_path_reaches_agents_list_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the deployed OpenClaw 2026.7.1-2 CLI prints missing-path errors to
+    # STDERR with EMPTY stdout and serves the agents.list[] config shape
+    secret_path = "plugins.entries.traderbot-token-injector.config.agentTokenMap.main"
+    run = mock.Mock(
+        side_effect=[
+            _streams("", "Config path not found: agents.entries.main\n", 1),
+            _streams('{"id":"main","heartbeat":{"every":"0m"}}', "", 0),
+            _streams("", f"Config path not found: {secret_path}\n", 1),
+        ]
+    )
+    monkeypatch.setattr(openclaw_config, "_run", run)
+
+    # When: selected config state is inspected against the deployed shape
+    snapshot = openclaw.inspect_config(("main",), _inventory())
+
+    # Then: the agents.list[index] fallback is reached and state is typed
+    assert snapshot is not None
+    agent = snapshot.agent("main")
+    assert agent is not None
+    assert agent.path_prefix == "agents.list[0]"
+    assert agent.heartbeat_every == "0m"
+    assert snapshot.secret_ref("main") is None
+
+
+def test_unmarked_stderr_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: a nonzero exit whose stderr carries no missing-path evidence
+    run = mock.Mock(return_value=_streams("", "connection refused\n", 1))
+    monkeypatch.setattr(openclaw_config, "_run", run)
+
+    # When/Then: the read is FAILED, not MISSING, and no snapshot is built
+    assert openclaw.inspect_config(("main",), _inventory()) is None
 
 
 def test_malformed_config_output_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:

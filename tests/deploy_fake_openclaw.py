@@ -24,7 +24,9 @@ def write_fake_openclaw(path: Path) -> None:
             state_path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
 
         def missing(key: str) -> None:
-            print(json.dumps({"error": f"Config path not found: {key}"}))
+            # Deployed OpenClaw 2026.7.1-2 prints missing-path errors to STDERR
+            # as plain text and leaves STDOUT empty.
+            print(f"Config path not found: {key}", file=sys.stderr)
             save()
             raise SystemExit(1)
 
@@ -48,6 +50,15 @@ def write_fake_openclaw(path: Path) -> None:
                 if agent_id not in state["agents"]:
                     missing(key)
                 print(json.dumps(state["agents"][agent_id]["config"]))
+            elif key.startswith("agents.list[") and key.endswith("]"):
+                # Deployed config shape: agents.list[index] returns the agent's
+                # config with its id, mirroring `config get agents.list[0]`.
+                index_text = key[len("agents.list["):-1]
+                agent_ids = list(state["agents"])
+                if not index_text.isdigit() or int(index_text) >= len(agent_ids):
+                    missing(key)
+                agent_id = agent_ids[int(index_text)]
+                print(json.dumps({**state["agents"][agent_id]["config"], "id": agent_id}))
             else:
                 agent_id = key.rsplit(".", 1)[-1]
                 if agent_id not in state["refs"]:

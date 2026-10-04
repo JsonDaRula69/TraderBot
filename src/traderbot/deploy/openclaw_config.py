@@ -25,6 +25,7 @@ from traderbot.deploy.wizard_state import (
 )
 
 _CONFIG_KEY_PATTERN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$")
+_MISSING_PATH_PREFIX: Final = "Config path not found:"
 _run = run_bounded
 
 
@@ -40,6 +41,21 @@ class _ConfigRead[ValueT: BaseModel]:
     value: ValueT | None = None
 
 
+def _missing_path_evidence(stream: str) -> bool:
+    """Detect the CLI's missing-path error on one captured stream.
+
+    Deployed OpenClaw 2026.7.1-2 prints ``Config path not found:`` to STDERR as
+    plain text with empty STDOUT; the legacy CLI printed the typed JSON error
+    envelope to STDOUT. Both channels are classified so the ``agents.list``
+    fallback stays reachable across CLI generations.
+    """
+    try:
+        error = ConfigGetError.model_validate_json(stream)
+    except ValidationError:
+        return _MISSING_PATH_PREFIX in stream
+    return error.error.startswith(_MISSING_PATH_PREFIX)
+
+
 def _read_config[ValueT: BaseModel](key: str, model: type[ValueT]) -> _ConfigRead[ValueT]:
     result = _run(["openclaw", "config", "get", key, "--json"], timeout=30.0)
     if result is None:
@@ -49,16 +65,9 @@ def _read_config[ValueT: BaseModel](key: str, model: type[ValueT]) -> _ConfigRea
             return _ConfigRead(_ConfigReadStatus.FOUND, model.model_validate_json(result.stdout))
         except ValidationError:
             return _ConfigRead(_ConfigReadStatus.FAILED)
-    try:
-        error = ConfigGetError.model_validate_json(result.stdout)
-    except ValidationError:
-        return _ConfigRead(_ConfigReadStatus.FAILED)
-    status = (
-        _ConfigReadStatus.MISSING
-        if error.error.startswith("Config path not found:")
-        else _ConfigReadStatus.FAILED
-    )
-    return _ConfigRead(status)
+    if _missing_path_evidence(result.stdout) or _missing_path_evidence(result.stderr):
+        return _ConfigRead(_ConfigReadStatus.MISSING)
+    return _ConfigRead(_ConfigReadStatus.FAILED)
 
 
 def _state(agent_id: str, path: str, value: AgentRuntimeConfig) -> AgentConfigState:

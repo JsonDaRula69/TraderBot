@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from tests.kalshi_rest_fixtures import install_transport, market_payload
 from traderbot.kalshi.client import (
@@ -294,3 +295,40 @@ async def test_get_markets_preserves_opaque_cursor_exactly() -> None:
     assert result.cursor == ""
     assert len(requests) == 1
     assert requests[0].url.params["cursor"] == opaque_cursor
+
+
+@pytest.mark.asyncio
+async def test_get_series_normalizes_production_null_series_to_empty_list() -> None:
+    # Given: production returns HTTP 200 with {"series": null} for an empty or
+    # unmatched category query (observed on-target against external-api.kalshi.com)
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"series": None})
+
+    client = KalshiClient()
+    await install_transport(client, handler)
+    try:
+        result = await client.get_series(MarketCategory.WEATHER)
+    finally:
+        await client.close()
+
+    # Then: the observed empty encoding is normalized and the request is unchanged
+    assert result.series == []
+    assert dict(requests[0].url.params) == {"category": "weather"}
+
+
+@pytest.mark.asyncio
+async def test_get_series_missing_series_key_fails_closed() -> None:
+    # Given: an undocumented envelope lacking the required series key
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"unexpected": True})
+
+    client = KalshiClient()
+    await install_transport(client, handler)
+    try:
+        with pytest.raises(ValidationError):
+            _ = await client.get_series(MarketCategory.WEATHER)
+    finally:
+        await client.close()

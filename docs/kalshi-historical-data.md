@@ -16,6 +16,8 @@ TraderBot keeps the Kalshi WebSocket as the only real-time market source. The RE
 
 Both market-list methods return one page and its cursor; callers decide when to request the next page. The live method exposes only the official status, limit, cursor, event, series, and supported timestamp filters. The archive method exposes limit/cursor and at most one official ticker, event, series, or MVE selector; it has no status, category, or settled-time query.
 
+`get_series` returns the official required `series` array. Production additionally emits HTTP 200 `{"series": null}` for an empty or unmatched category query (re-verified 2026-10-03); the typed boundary normalizes only that observed null value to an empty list, while a missing `series` key still fails validation.
+
 Ticker path values are checked before interpolation. Empty values, separators, query fragments, control characters, and traversal syntax do not reach transport.
 
 ## Wire Precision

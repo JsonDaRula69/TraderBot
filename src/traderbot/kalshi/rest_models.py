@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 type FixedPointDollars = Annotated[
     str,
@@ -76,6 +76,19 @@ class Series(_ResponseModel):
 
 class SeriesListResponse(_ResponseModel):
     series: list[Series]
+
+    @field_validator("series", mode="before")
+    @classmethod
+    def _normalize_observed_empty(cls, value: object) -> object:
+        """Normalize production's observed empty-series encoding.
+
+        Production returns HTTP 200 with ``{"series": null}`` for an empty or
+        unmatched ``category`` query (observed on-target against
+        ``external-api.kalshi.com``). The official Get Series List schema
+        declares ``series`` a required array, so only the observed null value is
+        normalized to an empty list; a missing key still fails validation.
+        """
+        return [] if value is None else value
 
 
 class PriceRange(_ResponseModel):

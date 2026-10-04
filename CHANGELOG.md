@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a104] — 2026-10-03
+
+### Fixed
+
+- Deploy and verify OpenClaw config reads now classify a missing config path from the deployed CLI's plain-text STDERR error (empty STDOUT) as well as the legacy STDOUT JSON error envelope, so the `agents.list[index]` fallback is reachable against the deployed `agents.list[]` config shape and wizard step 1 no longer fails with "config inventory is unreadable" on OpenClaw 2026.7.1-2.
+- Kalshi series discovery tolerates production's observed empty-series encoding — HTTP 200 `{"series": null}` for an empty or unmatched `category` query — and normalizes it to an empty list; a missing `series` key still fails validation. The request mapping is unchanged: official Get Series List schema (OpenAPI 3.32.0, re-verified 2026-10-03) declares `category` a plain string filter with exact, case-sensitive matching, so an unmatched value legally yields an empty result and only the response's observed null form required repair.
+
 ## [2.0.0a103] — 2026-10-03
 
 ### Fixed
