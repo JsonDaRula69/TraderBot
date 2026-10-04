@@ -74,7 +74,7 @@ def _run_checked(
     return result
 
 
-def build_and_install_wheel(tmp_path: Path) -> tuple[Path, tuple[str, ...], str]:
+def _build_and_install_wheel(tmp_path: Path) -> tuple[Path, tuple[str, ...], str]:
     uv = shutil.which("uv")
     assert uv is not None
     wheel_root = tmp_path / "wheel"
@@ -122,7 +122,7 @@ def test_source_cli_rejects_environment_selected_fake_provider(tmp_path: Path) -
 def test_installed_wheel_rejects_provider_environment_and_contains_no_fake(
     tmp_path: Path,
 ) -> None:
-    install_root, wheel_names, production_sources = build_and_install_wheel(tmp_path)
+    install_root, wheel_names, production_sources = _build_and_install_wheel(tmp_path)
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir()
     config_path, environment = _provider_attempt(runtime_root)

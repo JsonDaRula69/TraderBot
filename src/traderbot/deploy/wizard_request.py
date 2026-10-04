@@ -24,7 +24,6 @@ def request_from_config(config: DeployConfig) -> WizardRequest:
             "collector_db": config.collector_db,
             "data_root": get_data_dir() if config.data_root is None else config.data_root,
             "daemon_mcp_url": config.daemon_mcp_url,
-            "kalshi_environment": config.kalshi_environment,
         }
     )
 

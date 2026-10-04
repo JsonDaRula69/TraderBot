@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a101] — 2026-10-03
+
+### Removed
+
+- Removed the Phase-4 hosted Kalshi demo surface per the 2026-08-20 contract correction: TraderBot Phase 4 demo/QA is local backtest simulation plus canonical read-only production market-data/auth reads, and TraderBot never uses Kalshi's hosted demo endpoint. Reverts the a100 standalone endpoint routing and removes the `kalshi_environment` request/config threading, the standalone backfill/verify `--environment` flags, the `kalshi_demo_*` secret-name routing, and the `KALSHI_ENVIRONMENTS` constant; deploy, backfill, and verify always read the canonical `kalshi` service (`kalshi_api_key`/`kalshi_private_key_pem`) against production. Generic `KalshiClient` environment support and the daemon `--environment` flag are unchanged.
+
 ## [2.0.0a100] — 2026-08-19
 
 ### Fixed

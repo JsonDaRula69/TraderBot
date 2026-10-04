@@ -40,7 +40,6 @@ from traderbot.deploy.backfill_ports import (
     BackfillRuntime,
 )
 from traderbot.deploy.backfill_window import BackfillWindow, BackfillWindowError, calendar_window
-from traderbot.kalshi.client import Environment
 from traderbot.kalshi.errors import AuthenticationError, KalshiAPIError, RateLimitError
 
 
@@ -50,7 +49,6 @@ class BackfillRequest(BaseModel):
     months: int = Field(ge=1, le=60)
     target_db: Path
     collector_db: Path | None = None
-    kalshi_environment: Environment = "production"
 
 
 def _failure(code: str, detail: str) -> tuple[BackfillFailure, ...]:
@@ -191,7 +189,7 @@ async def run_backfill(
         )
     try:
         with _prepared_collector(collector) as prepared:
-            async with dependencies.open_runtime(request.kalshi_environment) as runtime:
+            async with dependencies.open_runtime() as runtime:
                 return await _execute(runtime, prepared, target, window, warnings)
     except (CollectorPathError, CollectorSchemaError) as exc:
         return BackfillResult(
@@ -214,7 +212,7 @@ async def run_prepared_backfill(
             status="invalid_input",
             failures=_failure("invalid_input", str(exc)),
         )
-    async with dependencies.open_runtime(request.kalshi_environment) as runtime:
+    async with dependencies.open_runtime() as runtime:
         return await _execute(runtime, prepared, target, window, [])
 
 

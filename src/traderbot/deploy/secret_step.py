@@ -16,29 +16,12 @@ from requests import RequestException
 
 from traderbot.deploy.capabilities import infisical_is_running
 from traderbot.deploy.validation import SecretReconciliationApprovals, validate_infisical_origin
-from traderbot.kalshi.client import Environment
 from traderbot.secrets.local_encrypted import LocalEncryptedStore
 from traderbot.secrets.resolver import build_secrets_store_selection, close_secrets_store
 from traderbot.secrets.store import SecretsStore
 
 type SecretsBackend = Literal["infisical", "local-encrypted"]
 type SecretProvisionStatus = Literal["created", "existing", "reconciled", "replaced"]
-
-_KALSHI_SECRET_SERVICES: dict[Environment, str] = {
-    "production": "kalshi",
-    "demo": "kalshi_demo",
-}
-
-
-def kalshi_secret_service(environment: Environment) -> str:
-    """Return the flat secret service name for a Kalshi environment."""
-    return _KALSHI_SECRET_SERVICES[environment]
-
-
-def kalshi_secret_names(environment: Environment) -> tuple[str, str]:
-    """Return the canonical flat secret names for a Kalshi environment."""
-    service = kalshi_secret_service(environment)
-    return (f"{service}_api_key", f"{service}_private_key_pem")
 
 
 class DeploySecrets(Protocol):
@@ -85,7 +68,7 @@ class SecretsSelection:
         close_secrets_store(self.store)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class MissingSecretEnvironmentError(RuntimeError):
     names: tuple[str, ...]
 
@@ -94,7 +77,7 @@ class MissingSecretEnvironmentError(RuntimeError):
         return f"missing secret environment variables: {', '.join(self.names)}"
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SecretPairValidationError(RuntimeError):
     reason: str
 
@@ -103,7 +86,7 @@ class SecretPairValidationError(RuntimeError):
         return f"Kalshi secret pair is invalid: {self.reason}"
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SecretReconciliationError(RuntimeError):
     written_secret_names: tuple[str, ...]
     pending_secret_names: tuple[str, ...]
@@ -115,7 +98,7 @@ class SecretReconciliationError(RuntimeError):
         return f"secret reconciliation required; written={written}; pending={pending}"
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SecretPairApprovalError(RuntimeError):
     reason: str
 
@@ -166,7 +149,7 @@ class HiddenSecretInput:
         )
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SecretInputRequiredError(RuntimeError):
     @override
     def __str__(self) -> str:
@@ -194,13 +177,10 @@ def provision_kalshi_secrets(
     *,
     backend: SecretsBackend,
     approvals: SecretReconciliationApprovals | None = None,
-    environment: Environment = "production",
 ) -> SecretProvisionReport:
     authority = approvals or SecretReconciliationApprovals()
-    service = kalshi_secret_service(environment)
-    secret_names = kalshi_secret_names(environment)
-    existing_api_key = store.get(service, "api_key")
-    existing_private_key = store.get(service, "private_key_pem")
+    existing_api_key = store.get("kalshi", "api_key")
+    existing_private_key = store.get("kalshi", "private_key_pem")
     if existing_api_key is not None and existing_private_key is not None:
         try:
             _ = validate_kalshi_secret_pair(
@@ -238,35 +218,28 @@ def provision_kalshi_secrets(
             continue
         failed_state: tuple[tuple[str, ...], tuple[str, ...]] | None = None
         try:
-            store.set(service, key, desired[key])
-            if store.get(service, key) != desired[key]:
+            store.set("kalshi", key, desired[key])
+            if store.get("kalshi", key) != desired[key]:
                 raise SecretPersistenceVerificationError
         except (InfisicalError, OSError, RequestException, RuntimeError):
-            failed_state = _reconciliation_state(
-                store,
-                desired,
-                service=service,
-                secret_names=secret_names,
-            )
+            failed_state = _reconciliation_state(store, desired)
         if failed_state is not None:
             written, pending = failed_state
             raise SecretReconciliationError(written, pending) from None
         existing[key] = desired[key]
-    return SecretProvisionReport(status=status, backend=backend, secret_names=secret_names)
+    return SecretProvisionReport(status=status, backend=backend)
 
 
 def _reconciliation_state(
     store: DeploySecrets,
     desired: dict[str, str],
-    *,
-    service: str,
-    secret_names: tuple[str, str],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     written: list[str] = []
     pending: list[str] = []
-    for key, canonical in zip(("api_key", "private_key_pem"), secret_names):
+    for key in ("api_key", "private_key_pem"):
+        canonical = f"kalshi_{key}"
         try:
-            durable = store.get(service, key) == desired[key]
+            durable = store.get("kalshi", key) == desired[key]
         except (InfisicalError, OSError, RequestException, RuntimeError):
             durable = False
         (written if durable else pending).append(canonical)
@@ -310,8 +283,6 @@ __all__ = [
     "SecretReconciliationError",
     "SecretsSelection",
     "SecretsBackend",
-    "kalshi_secret_names",
-    "kalshi_secret_service",
     "provision_kalshi_secrets",
     "select_deploy_secrets",
     "validate_kalshi_secret_pair",

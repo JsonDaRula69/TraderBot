@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Protocol
+from typing import ClassVar, Literal, Protocol
 
 import anyio
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -26,10 +26,9 @@ from traderbot.deploy.backfill_reporter import JsonReporter, RichReporter
 from traderbot.deploy.secret_step import (
     KalshiSecretPair,
     SecretPairValidationError,
-    kalshi_secret_service,
     validate_kalshi_secret_pair,
 )
-from traderbot.kalshi.client import ConfigurationError, Environment, KalshiClient
+from traderbot.kalshi.client import ConfigurationError, KalshiClient
 from traderbot.paths import get_db_path
 from traderbot.secrets.resolver import build_secrets_store_selection, close_secrets_store
 from traderbot.secrets.store import SecretsStore
@@ -39,7 +38,6 @@ class BackfillCommandOptions(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(strict=True, extra="forbid", frozen=True)
 
     months: int
-    environment: Environment = "production"
     collector_db: Path | None = None
     json_output: bool = False
     target_db: Path | None = None
@@ -61,7 +59,7 @@ def _build_store() -> SecretsStore:
 
 def _build_client(
     pair: KalshiSecretPair,
-    environment: Environment,
+    environment: Literal["production", "demo"],
 ) -> ManagedKalshiHistoryPort:
     return KalshiClient(
         api_key=pair.api_key.get_secret_value(),
@@ -74,7 +72,7 @@ def _build_client(
 class BackfillRuntimeFactories:
     store: Callable[[], SecretsStore] = _build_store
     client: Callable[
-        [KalshiSecretPair, Environment],
+        [KalshiSecretPair, Literal["production", "demo"]],
         ManagedKalshiHistoryPort,
     ] = _build_client
     pool: Callable[[], SQLiteConnectionPool] = SQLiteConnectionPool
@@ -92,14 +90,14 @@ class OwnedBackfillDependencies:
     @asynccontextmanager
     async def open_runtime(
         self,
-        environment: Environment = "production",
+        environment: Literal["production", "demo"] = "production",
     ) -> AsyncGenerator[BackfillRuntime, None]:
         store: SecretsStore | None = None
         client: ManagedKalshiHistoryPort | None = None
         pool: SQLiteConnectionPool | None = None
         try:
             store = self.factories.store()
-            pair = _credentials(store, environment)
+            pair = _credentials(store)
             client = self.factories.client(pair, environment)
             pool = self.factories.pool()
             yield BackfillRuntime(client=client, pool=pool, progress=NullProgress())
@@ -123,10 +121,9 @@ def _invalid(code: str) -> BackfillResult:
     )
 
 
-def _credentials(store: SecretsStore, environment: Environment) -> KalshiSecretPair:
-    service = kalshi_secret_service(environment)
-    api_key = store.get(service, "api_key")
-    private_key = store.get(service, "private_key_pem")
+def _credentials(store: SecretsStore) -> KalshiSecretPair:
+    api_key = store.get("kalshi", "api_key")
+    private_key = store.get("kalshi", "private_key_pem")
     if api_key is None or private_key is None:
         raise SecretPairValidationError("complete stored credential pair is required")
     return validate_kalshi_secret_pair(KalshiSecretPair.from_plain(api_key, private_key))
@@ -136,7 +133,6 @@ async def _run_owned(options: BackfillCommandOptions) -> BackfillResult:
     try:
         request = BackfillRequest(
             months=options.months,
-            kalshi_environment=options.environment,
             target_db=get_db_path() if options.target_db is None else options.target_db,
             collector_db=options.collector_db,
         )
@@ -154,7 +150,6 @@ async def _run_injected(
     try:
         request = BackfillRequest(
             months=options.months,
-            kalshi_environment=options.environment,
             target_db=get_db_path() if options.target_db is None else options.target_db,
             collector_db=options.collector_db,
         )

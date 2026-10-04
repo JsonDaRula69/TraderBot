@@ -87,7 +87,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Refuse SDK use when any HTTP/HTTPS/ALL proxy environment variable is nonempty, because the supported SDK has no public proxy-free transport
 - After universal-auth login with `cache_ttl=None`, check both required project roots with non-value `list_secrets`; denial closes the SDK client and reports machine-bound `LocalEncryptedStore` through `SecretsStore`
 - Reuse a complete valid stored Kalshi pair without rewriting it
-- Otherwise obtain only the environment-scoped Kalshi pair: `kalshi_api_key`/`kalshi_private_key_pem` for production or `kalshi_demo_api_key`/`kalshi_demo_private_key_pem` for demo, via hidden prompts in interactive mode or environment-variable-name references in config mode; never fall back across environments
+- Otherwise obtain only `kalshi_api_key` and `kalshi_private_key_pem`: hidden prompts in interactive mode or environment-variable-name references in config mode
 - Keep secret-bearing values redacted on repr, string, serialization, exception, and logging surfaces
 - Reject raw secret fields, incomplete references, empty API keys, and non-RSA/malformed PEM before the first secret write; incomplete state requires `reconcile_incomplete`, while malformed or differing state separately requires `replace_existing`
 - Validate locally only; do not sign or send a live Kalshi request
@@ -108,7 +108,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 6: Backfill
 
-- Run `traderbot backfill [--environment production|demo] --months 6 --json`; omission explicitly selects `production`, while `demo` reaches every typed history-client factory and the demo REST base URL
+- Run `traderbot backfill --months 6 --json`
 - **All data sources begin collection at install time** (DD-027), not just enabled categories
 - This ensures backtesting data is available for any category the user might enable later
 - The optional legacy collector source is opened read-only and copied in idempotent 1,000-row transactions; a missing default source is a warning
@@ -131,7 +131,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 8: Verification
 
-- `traderbot verify [--environment production|demo] --categories ...` runs a stable, dependency-aware read-only graph; omission explicitly selects `production`, while `demo` reaches the signed balance client and demo REST base URL.
+- `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph.
 - Gateway health uses `gateway status --json --require-rpc`; selected inventory, workspaces, config, exact bootstrap cron, and persisted heartbeat `0m` state reuse the typed OpenClaw read seams.
 - Exact real-auth mode and selected five-field token documents are read from the currently selected durable SecretsStore without installing adapters or revealing token values.
 - Kalshi authentication uses signed `GET /portfolio/balance`; public market data is not authentication proof.
@@ -139,9 +139,8 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Active daemon health requires a bounded loopback streamable-http MCP handshake and actual `health` call. Daemon-owned Chroma is proved from this health response and is never opened by the verifier.
 - Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host.
 - JSON output is exactly one stdout line; the Rich table is stderr-only. Exit codes are 0 for OK, 1 for failed/degraded, and 2 for invalid input.
-- Both standalone parsers reject any environment outside `production|demo` with exit 2 before handler dispatch, external calls, or filesystem mutation; standalone verify still forces real-auth mode.
 - The deploy wizard composes the same `VerificationRequest` and read-only graph, embeds every typed check in its one JSON result, and still runs safe verification after a partial backfill.
-- The explicit data root and `production`/`demo` Kalshi environment are shared unchanged across database creation, backfill, verification, and deploy state.
+- The explicit data root is shared unchanged across database creation, backfill, verification, and deploy state; Kalshi reads are canonical read-only production requests.
 
 ---
 

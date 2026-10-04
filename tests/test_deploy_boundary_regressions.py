@@ -14,7 +14,6 @@ from rich.console import Console
 from tests.deploy_wizard_fakes import FakeEnvironment, FakePhase45, FakePhase678
 from traderbot.deploy import phase45_runtime, verify_ports, wizard_command
 from traderbot.deploy.backfill_command import _build_client
-from traderbot.deploy.config import DeployConfig
 from traderbot.deploy.database_step import DatabaseProvisionReport
 from traderbot.deploy.phase45_runtime import Phase45Adapter
 from traderbot.deploy.phase678_runtime import Phase678Adapter
@@ -22,7 +21,6 @@ from traderbot.deploy.secret_step import KalshiSecretPair
 from traderbot.deploy.verify_models import VerificationRequest
 from traderbot.deploy.verify_ports import ProductionVerificationPorts
 from traderbot.deploy.wizard_contracts import DeployState, WizardPorts
-from traderbot.deploy.wizard_request import request_from_config
 from traderbot.kalshi.client import KalshiClient
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.kalshi.websocket import KalshiWebSocket
@@ -124,30 +122,6 @@ def test_configured_data_root_is_shared_by_all_runtime_phases(
     assert not environment_default.exists()
 
 
-def test_demo_config_reaches_backfill_and_verification_requests(tmp_path: Path) -> None:
-    config = DeployConfig.model_validate(
-        {
-            "categories": ["weather"],
-            "mode": "backtest",
-            "data_root": tmp_path,
-            "kalshi_environment": "demo",
-            "approvals": {
-                "install_openclaw": False,
-                "setup_openclaw": False,
-                "create_agents": False,
-                "heartbeat_change": False,
-            },
-            "heartbeat_every": "preserve",
-        }
-    )
-    request = request_from_config(config)
-    adapter = Phase678Adapter()
-
-    assert request.kalshi_environment == "demo"
-    assert adapter._backfill_request(request).kalshi_environment == "demo"
-    assert adapter._verification_request(request).kalshi_environment == "demo"
-
-
 def test_deploy_runtime_import_graph_has_no_late_step_cycle() -> None:
     deploy = Path(__file__).parents[1] / "src" / "traderbot" / "deploy"
     wizard_runtime = (deploy / "wizard_runtime.py").read_text(encoding="utf-8")
@@ -165,7 +139,7 @@ def test_split_wizard_modules_stay_within_pure_line_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_clients_select_exact_demo_endpoints_without_live_calls(
+async def test_standalone_kalshi_paths_are_production_canonical_without_live_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -175,23 +149,22 @@ async def test_demo_clients_select_exact_demo_endpoints_without_live_calls(
         serialization.NoEncryption(),
     ).decode("ascii")
     pair = KalshiSecretPair.from_plain(secrets.token_urlsafe(), pem)
-    production_client = cast(KalshiClient, _build_client(pair, "production"))
-    production_base_url = str(production_client._client.base_url)
-    await production_client.close()
-    backfill_client = cast(KalshiClient, _build_client(pair, "demo"))
+    backfill_client = cast(KalshiClient, _build_client(pair, "production"))
     backfill_base_url = str(backfill_client._client.base_url)
     await backfill_client.close()
-    captured: list[str] = []
+    services: list[str] = []
+    environments: list[object] = []
 
     class Store:
         @staticmethod
         def get(service: str, key: str, namespace: str = "global") -> str:
-            del service, namespace
+            del namespace
+            services.append(service)
             return pair.api_key.get_secret_value() if key == "api_key" else pem
 
     class Client:
         def __init__(self, **values: object) -> None:
-            captured.append(cast(str, values["environment"]))
+            environments.append(values.get("environment", "production-default"))
 
         async def get_balance(self, timeout: float) -> None:
             del timeout
@@ -201,16 +174,15 @@ async def test_demo_clients_select_exact_demo_endpoints_without_live_calls(
 
     request = VerificationRequest(
         categories=(MarketCategory.WEATHER,),
-        kalshi_environment="demo",
     )
     ports = ProductionVerificationPorts(request)
     monkeypatch.setattr(ports, "_selection", lambda: (Store(), "local-encrypted"))
     monkeypatch.setattr(verify_ports, "KalshiClient", Client)
     result = await ports._kalshi()
-    websocket = KalshiWebSocket(pair.api_key.get_secret_value(), pem, environment="demo")
+    websocket = KalshiWebSocket(pair.api_key.get_secret_value(), pem, environment="production")
 
     assert result.action == "kalshi_auth_valid"
-    assert production_base_url == "https://external-api.kalshi.com/trade-api/v2/"
-    assert backfill_base_url == "https://external-api.demo.kalshi.co/trade-api/v2/"
-    assert captured == ["demo"]
-    assert websocket._ws_url == "wss://external-api-ws.demo.kalshi.co/trade-api/ws/v2"
+    assert backfill_base_url == "https://external-api.kalshi.com/trade-api/v2/"
+    assert services == ["kalshi", "kalshi"]
+    assert environments == ["production-default"]
+    assert websocket._ws_url == "wss://external-api-ws.kalshi.com/trade-api/ws/v2"

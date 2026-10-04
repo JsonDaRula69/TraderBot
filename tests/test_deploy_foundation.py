@@ -20,7 +20,6 @@ def test_deploy_config_parses_documented_shape() -> None:
         "categories": ["weather"],
         "mode": "backtest",
         "infisical_url": "http://localhost:8080",
-        "kalshi_environment": "production",
         "tokens": {
             "kalshi_api_key_env": "TEST_KALSHI_KEY",
             "kalshi_private_key_pem_env": "TEST_KALSHI_PEM",

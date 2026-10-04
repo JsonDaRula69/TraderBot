@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
-from typing import override
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -50,7 +49,6 @@ class _InjectedBackendWriteFault(RuntimeError):
 
 
 class _SecondWriteFails(_MemorySecrets):
-    @override
     def set(
         self,
         service: str,
@@ -212,37 +210,6 @@ def test_valid_pair_is_stored_once_without_values_in_report() -> None:
     report_text = f"{first!r}{second!r}"
     assert _plain(pair.api_key) not in report_text
     assert _plain(pair.private_key_pem) not in report_text
-
-
-def test_production_default_uses_only_canonical_secret_service() -> None:
-    store = _MemorySecrets()
-    pair = _secret_pair()
-
-    report = provision_kalshi_secrets(store, lambda: pair, backend="local-encrypted")
-
-    assert store.set_calls == [("kalshi", "api_key"), ("kalshi", "private_key_pem")]
-    assert report.secret_names == ("kalshi_api_key", "kalshi_private_key_pem")
-    assert all(service != "kalshi_demo" for service, _ in store.values)
-
-
-def test_demo_provisioning_uses_only_demo_service_and_preserves_production() -> None:
-    store = _MemorySecrets()
-    production = _secret_pair()
-    demo = _secret_pair()
-    store.values[("kalshi", "api_key")] = _plain(production.api_key)
-    store.values[("kalshi", "private_key_pem")] = _plain(production.private_key_pem)
-    before = dict(store.values)
-
-    report = provision_kalshi_secrets(
-        store,
-        lambda: demo,
-        backend="local-encrypted",
-        environment="demo",
-    )
-
-    assert store.set_calls == [("kalshi_demo", "api_key"), ("kalshi_demo", "private_key_pem")]
-    assert report.secret_names == ("kalshi_demo_api_key", "kalshi_demo_private_key_pem")
-    assert {key: value for key, value in store.values.items() if key[0] == "kalshi"} == before
 
 
 def test_partial_backend_write_reports_forward_reconciliation_boundary() -> None:

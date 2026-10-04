@@ -21,7 +21,6 @@ from traderbot.deploy.verify_models import (
 )
 from traderbot.deploy.verify_ports import ProductionVerificationPorts
 from traderbot.deploy.verify_reporter import JsonReporter, RichReporter
-from traderbot.kalshi.client import Environment
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.paths import get_data_dir
 
@@ -32,7 +31,6 @@ class VerificationCommandOptions(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
     categories: tuple[MarketCategory, ...]
     mode: str
-    environment: Environment = "production"
     data_root: Path | None = None
     infisical_origin: str
     daemon_mcp_url: str
@@ -73,7 +71,6 @@ def _execute_verification(
             {
                 "categories": options.categories,
                 "mode": options.mode,
-                "kalshi_environment": options.environment,
                 "data_root": get_data_dir() if options.data_root is None else options.data_root,
                 "infisical_origin": options.infisical_origin,
                 "daemon_mcp_url": options.daemon_mcp_url,

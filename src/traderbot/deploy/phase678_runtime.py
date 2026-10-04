@@ -84,7 +84,6 @@ class Phase678Adapter:
             months=request.months_backfill,
             target_db=request.data_root / "traderbot.db",
             collector_db=None if self._prepared_collector is not None else request.collector_db,
-            kalshi_environment=request.kalshi_environment,
         )
 
     @staticmethod
@@ -97,7 +96,6 @@ class Phase678Adapter:
             data_root=request.data_root,
             infisical_origin=request.infisical_url,
             daemon_mcp_url=request.daemon_mcp_url,
-            kalshi_environment=request.kalshi_environment,
         )
 
 

@@ -87,10 +87,10 @@
 - [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
 - [x] Phase 4 standalone backfill command: read-only snapshot collector import, current/archive Kalshi weather discovery around one cutoff, idempotent lossless persistence, redacted typed partial results, and strict human/JSON exit surfaces.
 - [x] Phase 4 deploy wizard Steps 6-8: typed standalone backfill and verification composition, one-line deploy JSON embedding, and an explicit read-only Phase 5 sandbox stub with strict Gateway cron outcomes.
-- [x] Phase 4 stabilization wave (2026-08-12, commit 9f938d6, VERSION 2.0.0a96): workspace-write TOCTOU race fixed with no-follow descriptor traversal + fd-relative atomic replace + post-publish inode/owner/mode revalidation; configured `data_root` propagated through all deploy phases (Step 5 DB/Chroma, Step 6 backfill, Step 8 verify, deploy state); `kalshi_environment` carried through `WizardRequest` → backfill → verification with exact prod/demo endpoint selection; `traderbot verify` forces `TRADERBOT_USE_HARDCODED_AUTH=0` like deploy/backfill; deploy import cycle broken; two previously-failing tests fixed (stale 2-arg assert, external `.omo/evidence` dependency removed); `wizard_command.py` split via new `wizard_request.py` (249 pure LOC). Todo 11 cleanup landed: removed unused `TradingProfile.env_file`, removed keyring wording from Kalshi package docstring, added `tests/test_legacy_cleanup.py`. Clean full suite: 907 passed, 0 failed. Decision A: Phase 4 uses the original-plan contract: approved missing selected category agents may be created with approved absolute paths; existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b (#168). Decision B: F2 requires zero errors on the changed/Phase-4 surface plus no new full-tree regressions; it is not a historical full-tree-zero claim.
+- [x] Phase 4 stabilization wave (2026-08-12, commit 9f938d6, VERSION 2.0.0a96): workspace-write TOCTOU race fixed with no-follow descriptor traversal + fd-relative atomic replace + post-publish inode/owner/mode revalidation; configured `data_root` propagated through all deploy phases (Step 5 DB/Chroma, Step 6 backfill, Step 8 verify, deploy state); production Kalshi endpoint selection carried through `WizardRequest` → backfill → verification; `traderbot verify` forces `TRADERBOT_USE_HARDCODED_AUTH=0` like deploy/backfill; deploy import cycle broken; two previously-failing tests fixed (stale 2-arg assert, external `.omo/evidence` dependency removed); `wizard_command.py` split via new `wizard_request.py` (249 pure LOC). Todo 11 cleanup landed: removed unused `TradingProfile.env_file`, removed keyring wording from Kalshi package docstring, added `tests/test_legacy_cleanup.py`. Clean full suite: 907 passed, 0 failed. Decision A: Phase 4 uses the original-plan contract: approved missing selected category agents may be created with approved absolute paths; existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b (#168). Decision B: F2 requires zero errors on the changed/Phase-4 surface plus no new full-tree regressions; it is not a historical full-tree-zero claim.
 - [x] Phase 4 Todo 12 (2026-08-18, local commit `498ddc1`, VERSION `2.0.0a97`): 917 full tests and 192 targeted deploy/backfill/verify tests passed; isolated config-mode CLI happy/rerun and malformed-JSON paths proved no live-service or default-state mutation.
 - [x] Phase 4 Todo 13 documentation synchronization (VERSION `2.0.0a98`): active v2docs, README/status, deploy guide, both roadmaps, CHANGELOG, and issue #168 now use one Phase 4 contract. Todos 1-13 implementation is locally complete subject to Atlas acceptance; Final Wave F1-F4 remains, including pending on-target F3. The branch is local-only and unpushed.
-- [x] Phase 4 F3 routing remediation (VERSION `2.0.0a100`): standalone backfill and verification now expose strict `--environment production|demo`, preserve explicit production defaults, thread the shared typed environment through requests and all Kalshi history/auth client factories, and reject invalid values before dispatch. This code freeze does not approve F3; on-target demo-secret visibility and F3 rerun remain pending, and F1/F2/F4 require re-review for a100.
+- [x] Phase 4 hosted-demo surface removal (VERSION `2.0.0a101`): per the 2026-08-20 contract correction, Phase 4 demo/QA is local backtest simulation plus canonical read-only production market-data/auth reads and never uses Kalshi's hosted demo endpoint; the a100 standalone Kalshi-environment endpoint/credential routing, request/config threading, and environment-scoped secret names were removed, and standalone backfill/verify always resolve the canonical production pair. Generic `KalshiClient` environment support and the daemon environment flag are unchanged. F3 on-target QA and F1/F2/F4 re-review remain pending for a101.
 
 ### Dev-Liaison Testing Protocols
 
@@ -102,7 +102,7 @@ Each development phase has a detailed testing protocol designed for partnership 
 | 1.5 | #165 | Infisical secrets resolution, token rotation, fallback chain | Rotation < 15min, fallback chain works, 0 plaintext secrets |
 | 2 | #166 | Always-on service, WebSocket, data pipeline resilience | Service uptime 24h, WS reconnect < 5s, 0 REST polling |
 | 3 | #167 | Database isolation, per-agent SQLite, ChromaDB filtering | 0 cross-agent reads, migration exit 0, < 10ms cached read |
-| 4 | #168 | deploy, backfill, read-only verification | isolated commands pass; on-target demo F3 remains pending |
+| 4 | #168 | deploy, backfill, read-only verification | isolated commands pass; on-target F3 QA remains pending |
 | 5 | #169 | Docker sandbox builds, isolation, bind mounts | Sandbox builds, no host file access, bind mounts correct |
 | 6 | #170 | Weather toolkit tools, category isolation enforcement | Weather tools respond, non-weather tools denied, category filter works |
 | 7a | #171 | Backtesting engine, SimulationClock, edge filtering | Backtest completes, clock advances, edge filter reduces runtime |
@@ -236,7 +236,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 3. **Category selection** — Existing selected agents retain inventory workspaces. A missing selected category agent may be created only with an explicitly approved absolute path. Inject managed guidance and authenticate selected agents; recurring cron/heartbeat schedules remain dormant until approved activation through Gateway, and deploy never invokes doctor implicitly.
 4. **API tokens** — Reuse or securely collect only the canonical Kalshi API key and RSA private key consumed by the daemon. Inactive and keyless providers have no deploy prompt or storage path.
 5. **Database creation** — Under the explicit shared data root, create selected category databases at `{mode}-{name}/db/decisions.db`, leave Chroma collections lazy, and give SysAdmin read-only enumeration without a decisions database.
-6. **Backfill** — Reuse the standalone typed collector/Kalshi backfill boundary with the same data root and selected `production`/`demo` environment.
+6. **Backfill** — Reuse the standalone typed collector/Kalshi backfill boundary with the same data root and canonical production Kalshi reads.
 7. **Phase 5 sandbox stub** — Read the exact Gateway bootstrap contract only. Phase 4 starts no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat.
 8. **Verification** — Reuse the standalone dependency-aware read-only graph with the same data root and environment.
 
@@ -1761,7 +1761,7 @@ This section describes the v2 architecture that emerges from the design decision
 #### Step 4: API Tokens
 - Probe the configured loopback Infisical origin at `GET /api/status` with a one-second timeout and `trust_env=False`; production `localhost` is local to macpro-linux beside TraderBot, isolated development fakes do not prove integration, and Final-Wave QA validates the target host
 - Reuse a usable existing Infisical setup; otherwise report and select machine-bound encrypted local storage through `SecretsStore`
-- Reuse a valid complete stored pair, or obtain only the environment-scoped pair (`kalshi_api_key`/`kalshi_private_key_pem` for production, `kalshi_demo_api_key`/`kalshi_demo_private_key_pem` for demo) through hidden input/environment-variable-name references
+- Reuse a valid complete stored pair, or obtain only `kalshi_api_key` and `kalshi_private_key_pem` through hidden input/environment-variable-name references
 - Require a nonempty key and locally parse the PEM as RSA before the first write; do not make a live Kalshi request
 - Preserve partial durable writes and reconcile forward by canonical secret name; never delete user secrets as rollback
 - Do not prompt or store credentials for inactive, planned, or keyless providers
@@ -1777,7 +1777,7 @@ This section describes the v2 architecture that emerges from the design decision
 #### Step 6: Backfill
 - Reuse `traderbot backfill --months 6 [--collector-db PATH] [--json]` through the typed boundary
 - Import the optional collector read-only and fetch current/archive Kalshi weather history around one cutoff
-- Carry the same explicit data root and `production`/`demo` Kalshi environment; never initialize Chroma here
+- Carry the same explicit data root with canonical production Kalshi reads; never initialize Chroma here
 
 #### Step 7: Phase 5 Sandbox Stub
 - Inspect the exact Gateway-owned bootstrap one-shot read-only
@@ -1791,7 +1791,7 @@ This section describes the v2 architecture that emerges from the design decision
 - Verify global/current-mode databases with no-follow owner checks, `mode=ro`, `query_only`, `quick_check`, and exact latest manifests; SysAdmin decisions DB is forbidden.
 - Require bounded actual daemon MCP `health`; derive daemon-owned Chroma state from MCP rather than opening embedded storage.
 - Report Infisical primary or encrypted fallback state; production loopback is macpro-linux-local and real-service replay remains Final Wave.
-- Reuse the same explicit data root and `production`/`demo` Kalshi environment carried by database creation and backfill.
+- Reuse the same explicit data root carried by database creation and backfill; Kalshi reads are canonical production.
 - Emit one JSON stdout line or a Rich stderr table with stable IDs/status/action/timing; exit 0/1/2.
 
 ---
@@ -4531,9 +4531,7 @@ The `SecretsStore` interface is identical regardless of backend. The implemented
 Infisical Project: "TraderBot"
   Environment: "prod" (global keys)
     ├── kalshi_api_key
-    ├── kalshi_private_key_pem
-    ├── kalshi_demo_api_key
-    └── kalshi_demo_private_key_pem
+    └── kalshi_private_key_pem
 
 Infisical Project: "TraderBot Agent Tokens"
   Environment: "prod"
@@ -4552,11 +4550,11 @@ Deploy accepts a loopback HTTP(S) origin and probes its canonical `/api/status` 
 
 **Step 4b: API token entry**
 
-Only the environment-scoped Kalshi pair is eligible: `kalshi_api_key` and `kalshi_private_key_pem` (service `kalshi`) for production, `kalshi_demo_api_key` and `kalshi_demo_private_key_pem` (service `kalshi_demo`) for demo. Deploy, standalone backfill, and verification select the service by the typed Kalshi environment; missing or malformed demo credentials fail closed without falling back to the production pair. Config mode contains environment variable names rather than values; interactive mode uses hidden prompts. A complete valid stored pair is reused without mutation. A replacement pair is validated before the first write: the key is nonempty and the PEM parses locally as an RSA private key. No live provider request is made, and output contains no values.
+Only `kalshi_api_key` and `kalshi_private_key_pem` are eligible. Config mode contains environment variable names rather than values; interactive mode uses hidden prompts. A complete valid stored pair is reused without mutation. A replacement pair is validated before the first write: the key is nonempty and the PEM parses locally as an RSA private key. No live provider request is made, and output contains no values.
 
 **Step 4c: Forward reconciliation**
 
-The pair is prevalidated as one decision. If a backend unexpectedly fails after writing the first canonical key (`kalshi_api_key` or `kalshi_demo_api_key`), deploy reports that exact written boundary and the matching second key as pending. It leaves the verified forward state intact and retries safely on rerun; it never deletes user secrets.
+The pair is prevalidated as one decision. If a backend unexpectedly fails after writing `kalshi_api_key`, deploy reports that exact written boundary and `kalshi_private_key_pem` as pending. It leaves the verified forward state intact and retries safely on rerun; it never deletes user secrets.
 
 #### 6. Agent profile token provisioning (unchanged from DD-026/037)
 
@@ -4711,7 +4709,7 @@ Failed checks produce actionable guidance:
 ```
   ✗ Kalshi API key validation failed: 401 Unauthorized
     → Check your Kalshi API key in Infisical project "TraderBot"
-    → Environment: "prod", Secret: "kalshi_api_key" (demo: "kalshi_demo_api_key")
+    → Environment: "prod", Secret: "kalshi_api_key"
     → Update with: infisical secrets update kalshi_api_key --project traderbot --env prod
 ```
 
