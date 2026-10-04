@@ -30,7 +30,9 @@ def _fail(code: PreflightErrorCode, detail: str) -> Never:
 
 
 def _normalized(path: Path) -> Path:
-    checked = validate_workspace_path(path)
+    if not path.is_absolute() or ".." in path.parts:
+        _ = validate_workspace_path(path)
+    checked = validate_workspace_path(Path(os.path.realpath(os.path.expanduser(path))))
     return Path(os.path.normcase(os.path.abspath(os.path.expanduser(checked))))
 
 
@@ -41,18 +43,30 @@ def _same_workspace(first: Path, second: Path) -> bool:
         return True
     if os.path.realpath(normalized_first) == os.path.realpath(normalized_second):
         return True
-    if normalized_first.exists() and normalized_second.exists():
-        try:
-            return os.path.samefile(normalized_first, normalized_second)
-        except OSError as exc:
-            _fail(PreflightErrorCode.WORKSPACE_OWNERSHIP, str(exc))
+    for left, right in ((normalized_first, normalized_second), (first, second)):
+        if left.exists() and right.exists():
+            try:
+                if os.path.samefile(left, right):
+                    return True
+            except OSError as exc:
+                _fail(PreflightErrorCode.WORKSPACE_OWNERSHIP, str(exc))
     return False
 
 
 def _overlaps(first: Path, second: Path) -> bool:
     left = _normalized(first)
     right = _normalized(second)
-    return _same_workspace(left, right) or left in right.parents or right in left.parents
+    return _same_workspace(first, second) or left in right.parents or right in left.parents
+
+
+def _is_allowed_main_container(first: tuple[str, Path], second: tuple[str, Path]) -> bool:
+    if _same_workspace(first[1], second[1]):
+        return False
+    left = _normalized(first[1])
+    right = _normalized(second[1])
+    return (first[0] == "main" and left in right.parents) or (
+        second[0] == "main" and right in left.parents
+    )
 
 
 def _inventory_by_id(inventory: AgentInventory) -> dict[str, AgentSummary]:
@@ -68,7 +82,11 @@ def _assert_global_ownership(inventory: AgentInventory) -> None:
     agents = inventory.root
     for index, agent in enumerate(agents):
         for other in agents[index + 1 :]:
-            if _overlaps(Path(agent.workspace), Path(other.workspace)):
+            if _overlaps(Path(agent.workspace), Path(other.workspace)) and not (
+                _is_allowed_main_container(
+                    (agent.id, Path(agent.workspace)), (other.id, Path(other.workspace))
+                )
+            ):
                 _fail(
                     PreflightErrorCode.WORKSPACE_OWNERSHIP,
                     f"agents {agent.id} and {other.id} have overlapping workspaces",
@@ -111,14 +129,26 @@ def resolve_agent_targets(
         targets.append(ResolvedAgent(category.value, category, asserted, False))
     for target in targets:
         for owner in inventory.root:
-            if owner.id != target.agent_id and _overlaps(target.workspace, Path(owner.workspace)):
+            if (
+                owner.id != target.agent_id
+                and _overlaps(target.workspace, Path(owner.workspace))
+                and not _is_allowed_main_container(
+                    (target.agent_id, target.workspace), (owner.id, Path(owner.workspace))
+                )
+            ):
                 _fail(
                     PreflightErrorCode.WORKSPACE_OWNERSHIP,
                     f"agent {target.agent_id} overlaps configured owner {owner.id}",
                 )
     for index, target in enumerate(targets):
         for other in targets[index + 1 :]:
-            if target.agent_id != other.agent_id and _overlaps(target.workspace, other.workspace):
+            if (
+                target.agent_id != other.agent_id
+                and _overlaps(target.workspace, other.workspace)
+                and not _is_allowed_main_container(
+                    (target.agent_id, target.workspace), (other.agent_id, other.workspace)
+                )
+            ):
                 _fail(
                     PreflightErrorCode.WORKSPACE_OWNERSHIP,
                     f"selected agents {target.agent_id} and {other.agent_id} overlap",

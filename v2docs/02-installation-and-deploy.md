@@ -71,7 +71,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - Existing selected agents adopt their configured inventory workspace unchanged; an explicit path mismatch fails global preflight
 - Missing selected agents require an explicit absolute path plus `approvals.create_agents: true`; inventory is re-read after every add exit, including nonzero/malformed output
 - This original-plan creation contract is current for Phase 4. Existing-agents-only installation plus per-agent paper/live, channel binding, and same-name Telegram accounts are deferred to Phase 4b.
-- Reject linked, same-file, normalized-equal, and overlapping workspace roots across every configured agent, including unselected agents
+- Reject exact-equal, normalized-equal, realpath-equal, and same-file workspace roots across every configured agent, including unselected agents; permit ancestor/descendant containment only when the ancestor workspace belongs to `main` (the OpenClaw-canonical container), including symlink-resolved paths; reject all non-`main` containment
 - For each selected category:
   - For missing selected agents only: `openclaw agents add <category> --workspace <approved-absolute-path> --non-interactive --json`
   - Inject category workspace files (`AGENTS.md`, `SOUL.md`, and `IDENTITY.md`); exact-five-tool guidance is in `AGENTS.md ## Tools`

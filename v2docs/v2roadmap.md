@@ -1749,7 +1749,7 @@ This section describes the v2 architecture that emerges from the design decision
 - Existing selected agents reuse inventory workspaces; explicit mismatches fail before mutation
 - Missing selected agents require approved absolute paths; re-read inventory after every add exit and adopt only exact ID/path state
 - Existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b
-- Reject linked, same-file, equal, and overlapping roots across every configured agent, including unselected agents
+- Reject exact-equal, normalized-equal, realpath-equal, and same-file roots across every configured agent, including unselected agents; permit ancestor/descendant containment only when the ancestor workspace belongs to `main` (the OpenClaw-canonical container), including symlink-resolved paths; reject all non-`main` containment
 - For each selected category:
   - Request `openclaw agents add <category> --workspace <approved-path> --non-interactive --json` only when missing
   - Inject category workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly

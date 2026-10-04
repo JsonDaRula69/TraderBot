@@ -88,7 +88,7 @@ A persisted state file is authoritative even when `bootstrap_registered` is fals
 
 ## Resumability And Identity
 
-Before category or workspace mutation, deploy performs one global read-only preflight: checked agent inventory, every configured workspace identity, selected config/SecretRefs, token metadata, injection plans, heartbeat desired state, and the exact bootstrap cron contract. It rejects exact, normalized, realpath, same-file, and ancestor/descendant workspace ownership across selected and unselected agents.
+Before category or workspace mutation, deploy performs one global read-only preflight: checked agent inventory, every configured workspace identity, selected config/SecretRefs, token metadata, injection plans, heartbeat desired state, and the exact bootstrap cron contract. It rejects exact, normalized, realpath, and same-file workspace ownership across selected and unselected agents. Ancestor/descendant containment is permitted only for the OpenClaw-canonical layout where `main`'s workspace is the ancestor container of other agents' distinct workspaces, including through symlink-resolved paths; all non-`main` containment is rejected. This ownership allowance does not bypass injection's separate no-symlink write protection.
 
 OpenClaw is installed only when PATH detection fails and installation is approved. Setup uses `openclaw setup --baseline --json` only when `main` is absent and setup is approved; setup is never a probe. Every approved prerequisite mutation is followed by a complete preflight restart. Existing `main` is required, never passed to `agents add`, and its inventory workspace is authoritative. Deploy never invokes doctor because doctor may repair or migrate user-owned OpenClaw state.
 
