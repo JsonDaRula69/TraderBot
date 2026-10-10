@@ -131,7 +131,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 
 ### Step 8: Verification
 
-- `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph.
+- `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph. The requiredness contract is formalized as DD-039: required means deploy-asserted.
 - **Required checks assert exactly the postconditions a deployment wrote.** The deploy's own postconditions are the authoritative required set: agent presence, config readability, exact SecretRefs, sandbox mode for agents the deploy created, heartbeat cadence the deploy approved, five-field token documents, the bootstrap cron contract, and the provisioned databases. Preserved posture the deployment never wrote is reported as advisory divergence that states actual values (`unset`/`30m`/...), never as required failure.
 - Sandbox posture is required only for agents the deploy created (`created_agents`); `main` always pre-exists, is never created, and is only reported. Heartbeat dormancy (`0m`) is required only under `heartbeat_policy: require_0m` — set exclusively by an approved `heartbeat_every: "0m"` in the deploy request; a preserved fleet's cadence (unset or active) is advisory.
 - The bootstrap cron probe is lifecycle-aware: an exact pending managed one-shot passes; a completed retained one-shot passes with its own action; absence with recorded registration in deploy state is honest degraded state (the job fired); absence without recorded registration fails closed; conflicts or unreadable inventory fail.

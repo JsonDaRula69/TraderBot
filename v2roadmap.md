@@ -49,6 +49,7 @@
 | DD-036 | SysAdmin sandbox — unsandboxed with principled restrictions | Decided |
 | DD-037 | Secrets management — Infisical as primary vault | Decided |
 | DD-038 | Agent-debate integration, sub-agent configuration, TEMPLATE.md | Decided |
+| DD-039 | Verification requiredness — required means deploy-asserted | Decided (implemented, fix/verify-deploy-contract) |
 
 
 ### Progress Tracking
@@ -5178,3 +5179,21 @@ sessions_spawn({
 4. **Ephemeral sessions**: Debate sub-agents are created for a single cycle and terminated after convergence. OpenClaw's sub-agent lifecycle supports this — `sessions_spawn` creates isolated sessions, and they can be terminated via the `subagents` tool when the cycle completes.
 
 5. **No recursive spawning**: Debate sub-agents are leaf agents (depth 1). They cannot spawn further children. This prevents debate sub-agents from spawning their own sub-agents, which maintains the orchestrated debate structure.
+
+---
+
+### DD-039: Verification requiredness — required means deploy-asserted
+
+**Date**: 2026-10-10
+**Status**: Decided
+
+**Context**: Step 8 verification originally encoded a fresh-install posture as required state — sandbox `"off"` for main, `"all"` for each category agent, heartbeat `0m`, and a connected daemon — while the deploy preserves a pre-existing fleet's posture by default and owns no daemon lifecycle (DD-009, DD-023; no wizard step installs, starts, or restarts the daemon). On any host with a pre-existing OpenClaw fleet — every real deployment target — the two contracts contradict: no product code path writes main's sandbox mode (main always pre-exists and adopts its inventory config) and no deploy step starts a daemon, so the strict posture was never satisfiable anywhere. Every local seam that could have caught this was stubbed (the fake CLI E2E stubs step 8), which is why the contradiction survived to the first on-target F3 run (a104 rerun #5 REJECT; defects C2/C3/C4).
+
+**Decision**: A required verification check asserts exactly a postcondition the deployment itself wrote; everything else is advisory divergence reporting, and the required set is carried on the verification request — `heartbeat_policy` ("preserve" default; "require_0m" only from an explicitly approved heartbeat change), `created_agents` (the agents this deploy created), `daemon_required` (True) — never inferred from the operator's inventory. Required: agents exist, configs readable, SecretRefs exact, sandbox `"all"` for created agents only, heartbeat cadence equal to the approved value or preserved baseline, the bootstrap cron classified against deploy state, token documents, auth mode, signed Kalshi balance, Infisical selection, databases, and schema pin. Advisory: preserved agents' sandbox/heartbeat posture (reported with actual values, never required) and daemon liveness on the wizard path. Standalone `traderbot verify` keeps daemon health required — that tool's job is fleet health. Wizard step 8 completes iff no required check failed; advisory divergences embed visibly and degrade the standalone exit but never block the deployment, and sanctioned required-degraded state (the encrypted local fallback selected in Step 4) no longer fails the deployment it belongs to.
+
+**Consequences:**
+
+- C2/C3/C4 resolved: a preserve-mode deployment with unset sandbox/heartbeat posture and a foreign-age daemon now completes step 8 with three embedded advisories instead of failing.
+- main's `"off"` sandbox requirement is deleted; preserved agents including main are reported, never required.
+- The lifecycle-aware cron check classifies the deleteAfterRun one-shot against deploy state (EXACT passes; completed-retained passes with its own action; registered-but-absent degrades as fired; unregistered-absent fails; conflicts fail) — this is also the on-target proof of the a105 C1/C5 classifier fix.
+- Standalone verify semantics are unchanged: exit 1 on any failure or degradation, daemon health still required.

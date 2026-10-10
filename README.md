@@ -91,7 +91,7 @@ daemon over streamable-http at `http://127.0.0.1:8765/mcp` (see
 
 | Doc | Purpose |
 |---|---|
-| `v2roadmap.md` | Design decisions (DD-001..DD-038) and phase tracking |
+| `v2roadmap.md` | Design decisions (DD-001..DD-039) and phase tracking |
 | `v2docs/00-10*.md` | Derived design docs (architecture, security, MCP tools, ...) |
 
 Key decisions: DD-011 (category enforcement), DD-015 (MCP server), DD-016

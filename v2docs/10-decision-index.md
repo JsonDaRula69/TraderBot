@@ -1,6 +1,6 @@
 # TraderBot v2 — Decision Index
 
-> Cross-referenced index of all 38 design decisions with status, dependencies, and key consequences.
+> Cross-referenced index of all 39 design decisions with status, dependencies, and key consequences.
 
 ---
 
@@ -42,6 +42,7 @@
 | DD-036 | SysAdmin sandbox | Unsandboxed with principled restrictions: no trading tools, workspace file immutability, lifecycle confirmation. | DD-010 |
 | DD-037 | Infisical as primary secrets vault | Two-project structure. Machine identity. 4-hour token rotation. Local encrypted fallback. | DD-012, DD-014, DD-024, DD-026 |
 | DD-038 | Agent-debate integration | gumbel-ai/agent-debate via OpenClaw sessions_spawn/send/yield. 5-round cycle. TEMPLATE.md modifications. | DD-018, DD-034 |
+| DD-039 | Verification requiredness | Required = deploy-asserted postconditions carried on the request; preserved posture and wizard-path daemon liveness advisory. | DD-009, DD-023, DD-037 |
 
 ## Superseded Decisions
 

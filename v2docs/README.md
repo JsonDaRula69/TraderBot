@@ -1,6 +1,6 @@
 # TraderBot v2 Documentation
 
-> Authoritative documentation for the TraderBot v2 architecture, grounded in the 38 design decisions recorded in v2roadmap.md. Where there are contradictions between these docs and the roadmap, the roadmap takes precedence.
+> Authoritative documentation for the TraderBot v2 architecture, grounded in the 39 design decisions recorded in v2roadmap.md. Where there are contradictions between these docs and the roadmap, the roadmap takes precedence.
 
 ## Document Index
 
@@ -20,7 +20,7 @@
 
 ## Relationship to v2roadmap.md
 
-These documents are derived from and grounded in the design decisions in `v2roadmap.md`. They synthesize the 38 decisions into coherent, topic-focused documentation suitable for implementation reference.
+These documents are derived from and grounded in the design decisions in `v2roadmap.md`. They synthesize the 39 decisions into coherent, topic-focused documentation suitable for implementation reference.
 
 ### Reconciled Inconsistencies
 

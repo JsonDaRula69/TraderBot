@@ -1,6 +1,6 @@
 # TraderBot v2 — Architecture Overview
 
-> This document describes the complete system architecture emerging from the 38 design decisions in v2roadmap.md.
+> This document describes the complete system architecture emerging from the 39 design decisions in v2roadmap.md.
 
 ---
 
