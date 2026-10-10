@@ -59,8 +59,12 @@ class Phase678Adapter:
             self._prepared_collector,
         )
 
-    def run_verification(self, request: WizardRequest) -> VerificationResult:
-        verification_request = self._verification_request(request)
+    def run_verification(
+        self,
+        request: WizardRequest,
+        created_agents: tuple[str, ...],
+    ) -> VerificationResult:
+        verification_request = self._verification_request(request, created_agents)
 
         async def run_owned() -> VerificationResult:
             ports = ProductionVerificationPorts(verification_request)
@@ -87,7 +91,15 @@ class Phase678Adapter:
         )
 
     @staticmethod
-    def _verification_request(request: WizardRequest) -> VerificationRequest:
+    def _verification_request(
+        request: WizardRequest,
+        created_agents: tuple[str, ...] = (),
+    ) -> VerificationRequest:
+        # The wizard path asserts exactly the postconditions it wrote: the
+        # heartbeat cadence it approved ("0m" only with explicit approval)
+        # and the sandbox modes of the agents it created. Preserved posture
+        # and daemon liveness are reported as advisory divergence, and no
+        # wizard step installs the daemon, so the wizard never requires it.
         return VerificationRequest(
             categories=request.categories,
             mode=request.mode,
@@ -96,6 +108,9 @@ class Phase678Adapter:
             data_root=request.data_root,
             infisical_origin=request.infisical_url,
             daemon_mcp_url=request.daemon_mcp_url,
+            heartbeat_policy="require_0m" if request.heartbeat_every == "0m" else "preserve",
+            created_agents=created_agents,
+            daemon_required=False,
         )
 
 

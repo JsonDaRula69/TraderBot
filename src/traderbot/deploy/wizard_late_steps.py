@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from traderbot.deploy.backfill_models import BackfillResult
 from traderbot.deploy.deploy_state import step_fingerprint
-from traderbot.deploy.verify_models import OverallStatus, VerificationResult
+from traderbot.deploy.verify_models import (
+    CheckStatus,
+    OverallStatus,
+    VerificationResult,
+)
 from traderbot.deploy.wizard_contracts import (
     DeployState,
     Phase678Port,
@@ -92,12 +96,19 @@ def _cron_step(state: BootstrapCronState) -> WizardStepResult:
 
 
 def _verification_step(result: VerificationResult) -> WizardStepResult:
-    mapping = {
-        OverallStatus.OK: (StepStatus.COMPLETED, "verification_ok"),
-        OverallStatus.DEGRADED: (StepStatus.PARTIAL, "verification_degraded"),
-        OverallStatus.FAILED: (StepStatus.FAILED, "verification_failed"),
-    }
-    status, action = mapping[result.overall]
+    # Step 8 is COMPLETED iff no required check failed. Advisory divergences
+    # (preserved posture, daemon liveness the deploy does not own) and
+    # required-but-degraded state (sanctioned encrypted fallback) are embedded
+    # and visible without blocking the deployment they do not contradict.
+    required_failed = any(
+        check.required and check.status is CheckStatus.FAIL for check in result.checks
+    )
+    if required_failed or result.overall is OverallStatus.FAILED:
+        status, action = StepStatus.FAILED, "verification_failed"
+    elif result.overall is OverallStatus.DEGRADED:
+        status, action = StepStatus.COMPLETED, "verification_advisories"
+    else:
+        status, action = StepStatus.COMPLETED, "verification_ok"
     return WizardStepResult(
         step=8,
         name="Verification",
@@ -113,6 +124,7 @@ def run_late_steps(
     ports: WizardPorts,
     steps: list[WizardStepResult],
     bootstrap_state: BootstrapCronState,
+    created_agents: tuple[str, ...],
 ) -> None:
     phase678 = ports.phase678
     if phase678 is None:
@@ -158,7 +170,9 @@ def run_late_steps(
     verification_step = completed[8]
     try:
         if verification_step is None:
-            verification_step = _verification_step(phase678.run_verification(request))
+            verification_step = _verification_step(
+                phase678.run_verification(request, created_agents)
+            )
         steps.append(verification_step)
     except (OSError, RuntimeError, ValueError):
         steps.append(_failed_step(8, "Verification", "verification_exception"))

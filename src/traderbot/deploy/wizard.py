@@ -178,7 +178,8 @@ class DeployWizard:
         )
         if phase678 is not None:
             if database_result.status is StepStatus.COMPLETED:
-                run_late_steps(request, self._ports, steps, bootstrap_state)
+                created_agents = tuple(agent.agent_id for agent in plan.agents if not agent.existed)
+                run_late_steps(request, self._ports, steps, bootstrap_state, created_agents)
             else:
                 append_blocked_late_steps(steps, 6)
         return build_deploy_result(

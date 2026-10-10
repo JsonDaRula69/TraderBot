@@ -6,7 +6,13 @@ import pytest
 
 from tests.deploy_wizard_fakes import FakeEnvironment, FakePhase45, FakePhase678
 from traderbot.deploy.backfill_models import BackfillResult
-from traderbot.deploy.verify_models import OverallStatus, VerificationResult
+from traderbot.deploy.verify_models import (
+    CheckId,
+    CheckResult,
+    CheckStatus,
+    OverallStatus,
+    VerificationResult,
+)
 from traderbot.deploy.wizard import StepStatus, WizardRequest
 from traderbot.deploy.wizard_contracts import DeployState, LatePreflightResult
 from traderbot.deploy.wizard_state import BootstrapCronState, DeployApprovals
@@ -53,20 +59,119 @@ def test_backfill_failure_partial(tmp_path: Path) -> None:
     assert result.success is False
 
 
-def test_verification_degraded_is_partial(tmp_path: Path) -> None:
-    # Given: all mutation steps and backfill complete but verification is degraded.
-    phase678 = FakePhase678(
-        verification=VerificationResult(overall=OverallStatus.DEGRADED, checks=())
+def _check(
+    check_id: CheckId,
+    status: CheckStatus,
+    required: bool,
+    action: str,
+) -> CheckResult:
+    return CheckResult(
+        id=check_id,
+        status=status,
+        required=required,
+        action=action,
+        message="contract matrix check",
+        elapsed_ms=0,
     )
+
+
+def test_verification_advisory_divergences_complete_deployment(tmp_path: Path) -> None:
+    # Given: verification reports only advisory divergences from preserved posture
+    advisory = VerificationResult(
+        overall=OverallStatus.DEGRADED,
+        checks=(
+            _check(
+                CheckId.DAEMON_RUNTIME,
+                CheckStatus.FAIL,
+                required=False,
+                action="daemon_websocket_inactive",
+            ),
+            _check(
+                CheckId.HEARTBEAT,
+                CheckStatus.DEGRADED,
+                required=False,
+                action="heartbeat_posture_reported",
+            ),
+        ),
+    )
+    phase678 = FakePhase678(verification=advisory)
     environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
 
     # When: deploy reaches the verification graph.
     result = environment.wizard().run(_request(tmp_path))
 
-    # Then: the typed verification result maps to a nonzero partial step.
-    assert result.steps[7].status is StepStatus.PARTIAL
-    assert result.steps[7].action == "verification_degraded"
+    # Then: no required check failed, so the step completes and embeds the
+    # divergences it does not own.
+    assert result.steps[7].status is StepStatus.COMPLETED
+    assert result.steps[7].action == "verification_advisories"
+    assert result.deployment_complete is True
+    assert result.success is True
+    embedded = result.steps[7].verification
+    assert embedded is not None
+    assert {check.action for check in embedded.checks} == {
+        "daemon_websocket_inactive",
+        "heartbeat_posture_reported",
+    }
+
+
+def test_verification_required_degraded_check_still_completes(tmp_path: Path) -> None:
+    # Given: a required check reports sanctioned degraded state (encrypted
+    # fallback selected by step 4) with no required failure anywhere.
+    degraded = VerificationResult(
+        overall=OverallStatus.DEGRADED,
+        checks=(
+            _check(
+                CheckId.INFISICAL,
+                CheckStatus.DEGRADED,
+                required=True,
+                action="encrypted_fallback",
+            ),
+        ),
+    )
+    phase678 = FakePhase678(verification=degraded)
+    environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
+
+    # When: deploy reaches the verification graph.
+    result = environment.wizard().run(_request(tmp_path))
+
+    # Then: a required degraded state is embedded and visible but no longer
+    # deadlocks a deploy that legitimately selected the encrypted fallback.
+    assert result.steps[7].status is StepStatus.COMPLETED
+    assert result.steps[7].action == "verification_advisories"
+    assert result.deployment_complete is True
+    assert result.success is True
+
+
+def test_verification_required_failure_fails_deployment(tmp_path: Path) -> None:
+    # Given: a required check failed outright.
+    failed = VerificationResult(
+        overall=OverallStatus.FAILED,
+        checks=(_check(CheckId.TOKENS, CheckStatus.FAIL, required=True, action="tokens_invalid"),),
+    )
+    phase678 = FakePhase678(verification=failed)
+    environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
+
+    # When: deploy reaches the verification graph.
+    result = environment.wizard().run(_request(tmp_path))
+
+    # Then: any required failure keeps the step and the deployment failed.
+    assert result.steps[7].status is StepStatus.FAILED
+    assert result.steps[7].action == "verification_failed"
+    assert result.deployment_complete is False
     assert result.success is False
+
+
+def test_wizard_threads_created_agents_into_verification(tmp_path: Path) -> None:
+    # Given: the fake environment creates the selected weather agent.
+    phase678 = FakePhase678()
+    environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
+
+    # When: the full deploy workflow runs.
+    result = environment.wizard().run(_request(tmp_path))
+
+    # Then: verification receives exactly the agents the deploy created.
+    assert result.steps[7].status is StepStatus.COMPLETED
+    assert phase678.verification_agents == ("weather",)
 
 
 @pytest.mark.parametrize(

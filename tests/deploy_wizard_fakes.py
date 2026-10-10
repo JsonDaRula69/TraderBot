@@ -233,6 +233,7 @@ class FakePhase678:
         self.calls: list[int] = []
         self.raise_backfill: bool = False
         self.raise_verification: bool = False
+        self.verification_agents: tuple[str, ...] = ()
         self.preflight_result: LatePreflightResult = LatePreflightResult(
             valid=True,
             action="late_preflight_complete",
@@ -252,9 +253,14 @@ class FakePhase678:
             raise LateStepCanaryError("SECRET-BACKFILL-CANARY")
         return self.backfill
 
-    def run_verification(self, request: WizardRequest) -> VerificationResult:
+    def run_verification(
+        self,
+        request: WizardRequest,
+        created_agents: tuple[str, ...] = (),
+    ) -> VerificationResult:
         del request
         self.calls.append(8)
+        self.verification_agents = created_agents
         if self.raise_verification:
             raise LateStepCanaryError("SECRET-VERIFY-CANARY")
         return self.verification
