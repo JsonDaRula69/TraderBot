@@ -15,15 +15,15 @@ _PROVIDER_REFERENCE = "traderbot.deploy.installed_test_provider:provider"
 _PROVIDER_ENV_NAMES = ("TRADERBOT_DEPLOY_PROVIDER", "TRADERBOT_TEST_PROVIDER_ALLOWED")
 
 
-def _provider_attempt(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+def _provider_attempt(tmp_path: Path, clean_workspace_root: Path) -> tuple[Path, dict[str, str]]:
     state_path, environment = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     _ = environment.pop("TRADERBOT_TEST_KALSHI_KEY")
     _ = environment.pop("TRADERBOT_TEST_KALSHI_PEM")
     environment["TRADERBOT_DEPLOY_PROVIDER"] = _PROVIDER_REFERENCE
     environment["TRADERBOT_TEST_PROVIDER_ALLOWED"] = "1"
     config_path = tmp_path / "deploy.json"
-    write_config(config_path, tmp_path / "approved" / "crypto")
+    write_config(config_path, clean_workspace_root / "approved" / "crypto")
     return config_path, environment
 
 
@@ -111,8 +111,11 @@ def _build_and_install_wheel(tmp_path: Path) -> tuple[Path, tuple[str, ...], str
     return install_root, names, production_sources
 
 
-def test_source_cli_rejects_environment_selected_fake_provider(tmp_path: Path) -> None:
-    config_path, environment = _provider_attempt(tmp_path)
+def test_source_cli_rejects_environment_selected_fake_provider(
+    tmp_path: Path,
+    clean_workspace_root: Path,
+) -> None:
+    config_path, environment = _provider_attempt(tmp_path, clean_workspace_root)
 
     result = _run_production_deploy(Path(sys.executable), config_path, environment, tmp_path)
 
@@ -121,11 +124,12 @@ def test_source_cli_rejects_environment_selected_fake_provider(tmp_path: Path) -
 
 def test_installed_wheel_rejects_provider_environment_and_contains_no_fake(
     tmp_path: Path,
+    clean_workspace_root: Path,
 ) -> None:
     install_root, wheel_names, production_sources = _build_and_install_wheel(tmp_path)
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir()
-    config_path, environment = _provider_attempt(runtime_root)
+    config_path, environment = _provider_attempt(runtime_root, clean_workspace_root)
     environment["PYTHONPATH"] = str(install_root)
     origin = _run_checked(
         [

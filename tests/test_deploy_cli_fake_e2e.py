@@ -24,22 +24,22 @@ from traderbot.secrets.resolver import build_secrets_store
 
 def write_happy_state(
     state_path: Path,
-    tmp_path: Path,
+    workspace_root: Path,
     mode: Literal["normal", "partial"] = "normal",
 ) -> None:
     state = FakeLedger(
         mode=mode,
         agents={
             "main": FakeAgentState(
-                workspace=str(tmp_path / "existing-main"),
+                workspace=str(workspace_root / "existing-main"),
                 config=FakeAgentConfig(heartbeat={"every": "30m"}, sandbox={"mode": "off"}),
             ),
             "weather": FakeAgentState(
-                workspace=str(tmp_path / "nested" / "team" / "weather"),
+                workspace=str(workspace_root / "nested" / "team" / "weather"),
                 config=FakeAgentConfig(heartbeat={"every": "30m"}, sandbox={"mode": "all"}),
             ),
             "sports": FakeAgentState(
-                workspace=str(tmp_path / "unselected-sports"),
+                workspace=str(workspace_root / "unselected-sports"),
                 config=FakeAgentConfig(heartbeat={"every": "15m"}, sandbox={"mode": "all"}),
             ),
         },
@@ -82,12 +82,13 @@ def write_config(
 
 def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     tmp_path: Path,
+    clean_workspace_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: main and nested weather exist while selected crypto is missing
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
-    crypto = tmp_path / "approved" / "crypto"
+    write_happy_state(state_path, clean_workspace_root)
+    crypto = clean_workspace_root / "approved" / "crypto"
     config = tmp_path / "deploy.json"
     write_config(config, crypto)
 
@@ -116,8 +117,10 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     assert first_result.deployment_complete is True
     assert first_result.completed_steps == tuple(range(1, 9))
     assert first_result.remaining_steps == ()
-    assert second_state.agents["main"].workspace == str(tmp_path / "existing-main")
-    assert second_state.agents["weather"].workspace == str(tmp_path / "nested" / "team" / "weather")
+    assert second_state.agents["main"].workspace == str(clean_workspace_root / "existing-main")
+    assert second_state.agents["weather"].workspace == str(
+        clean_workspace_root / "nested" / "team" / "weather"
+    )
 
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -169,11 +172,14 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     )
 
 
-def test_real_cli_adopts_stable_nonzero_partial_creation(tmp_path: Path) -> None:
+def test_real_cli_adopts_stable_nonzero_partial_creation(
+    tmp_path: Path,
+    clean_workspace_root: Path,
+) -> None:
     # Given: the fake stable add commits config before returning nonzero malformed output
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path, "partial")
-    crypto = tmp_path / "approved" / "crypto"
+    write_happy_state(state_path, clean_workspace_root, "partial")
+    crypto = clean_workspace_root / "approved" / "crypto"
     config = tmp_path / "deploy.json"
     write_config(config, crypto)
 
@@ -189,11 +195,14 @@ def test_real_cli_adopts_stable_nonzero_partial_creation(tmp_path: Path) -> None
     assert ledger.agents["crypto"].workspace == str(crypto)
 
 
-def test_real_cli_overlap_failure_is_read_only(tmp_path: Path) -> None:
+def test_real_cli_overlap_failure_is_read_only(
+    tmp_path: Path,
+    clean_workspace_root: Path,
+) -> None:
     # Given: unselected sports owns an ancestor of requested crypto workspace
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
-    crypto = tmp_path / "unselected-sports" / "crypto"
+    write_happy_state(state_path, clean_workspace_root)
+    crypto = clean_workspace_root / "unselected-sports" / "crypto"
     config = tmp_path / "deploy.json"
     write_config(config, crypto)
 

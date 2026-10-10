@@ -15,13 +15,16 @@ from traderbot.secrets.local_encrypted import LocalEncryptedStore
 from traderbot.secrets.store import SecretsStore
 
 
-def test_real_cli_invalid_pem_stops_before_kalshi_or_database_mutation(tmp_path: Path) -> None:
+def test_real_cli_invalid_pem_stops_before_kalshi_or_database_mutation(
+    tmp_path: Path,
+    clean_workspace_root: Path,
+) -> None:
     # Given: a complete config whose referenced PEM is malformed.
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     env["TRADERBOT_TEST_KALSHI_PEM"] = "malformed-non-secret-test-input"
     config = tmp_path / "deploy.json"
-    write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, clean_workspace_root / "approved" / "crypto")
 
     # When: the real CLI reaches local RSA validation.
     result = run_fake_cli(config, env)
@@ -42,14 +45,15 @@ def test_real_cli_invalid_pem_stops_before_kalshi_or_database_mutation(tmp_path:
 
 def test_real_cli_missing_environment_references_name_only_missing_variables(
     tmp_path: Path,
+    clean_workspace_root: Path,
 ) -> None:
     # Given: a complete reference pair whose environment values are absent.
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     del env["TRADERBOT_TEST_KALSHI_KEY"]
     del env["TRADERBOT_TEST_KALSHI_PEM"]
     config = tmp_path / "deploy.json"
-    write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, clean_workspace_root / "approved" / "crypto")
 
     # When: the real CLI resolves noninteractive secret references.
     result = run_fake_cli(config, env)
@@ -65,13 +69,14 @@ def test_real_cli_missing_environment_references_name_only_missing_variables(
 
 def test_real_cli_chroma_lock_blocks_then_rerun_reopens(
     tmp_path: Path,
+    clean_workspace_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: valid secret references and an externally held embedded Chroma lock.
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     config = tmp_path / "deploy.json"
-    write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, clean_workspace_root / "approved" / "crypto")
     data_root = Path(env["TRADERBOT_DATA_DIR"])
     data_root.mkdir(mode=0o700)
     monkeypatch.setenv("TRADERBOT_DATA_DIR", str(data_root))
@@ -98,13 +103,16 @@ def test_real_cli_chroma_lock_blocks_then_rerun_reopens(
         assert reopened.list_collections() == []
 
 
-def test_real_cli_proxy_environment_uses_honest_encrypted_fallback(tmp_path: Path) -> None:
+def test_real_cli_proxy_environment_uses_honest_encrypted_fallback(
+    tmp_path: Path,
+    clean_workspace_root: Path,
+) -> None:
     # Given: a complete deploy and an unsafe SDK proxy environment.
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     env["HTTPS_PROXY"] = "http://proxy.invalid:3128"
     config = tmp_path / "deploy.json"
-    write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, clean_workspace_root / "approved" / "crypto")
 
     # When: the real CLI reaches backend selection.
     result = run_fake_cli(config, env)
@@ -118,10 +126,11 @@ def test_real_cli_proxy_environment_uses_honest_encrypted_fallback(tmp_path: Pat
 
 def test_real_cli_partial_pair_requires_approval_then_reruns_without_rewrite(
     tmp_path: Path,
+    clean_workspace_root: Path,
 ) -> None:
     # Given: only the matching API field is durable and reconciliation is explicit.
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     data_root = Path(env["TRADERBOT_DATA_DIR"])
     local = LocalEncryptedStore(data_root / "secrets")
     local.set(
@@ -133,7 +142,7 @@ def test_real_cli_partial_pair_requires_approval_then_reruns_without_rewrite(
     config = tmp_path / "deploy.json"
     write_config(
         config,
-        tmp_path / "approved" / "crypto",
+        clean_workspace_root / "approved" / "crypto",
         {"reconcile_incomplete": True},
     )
 

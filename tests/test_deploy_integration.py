@@ -12,12 +12,12 @@ from tests.test_deploy_cli_fake_e2e import write_config, write_happy_state
 from traderbot.deploy.wizard import DeployResult
 
 
-def test_full_deploy_mocked(tmp_path: Path) -> None:
+def test_full_deploy_mocked(tmp_path: Path, clean_workspace_root: Path) -> None:
     # Given: a unique data root, fake OpenClaw, and a Docker invocation canary
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     config = tmp_path / "deploy.json"
-    write_config(config, tmp_path / "approved" / "crypto")
+    write_config(config, clean_workspace_root / "approved" / "crypto")
     default_root = Path(env["HOME"]) / ".traderbot"
     docker_log = tmp_path / "docker-calls.jsonl"
     docker = tmp_path / "bin" / "docker"
@@ -50,10 +50,10 @@ def test_full_deploy_mocked(tmp_path: Path) -> None:
     assert not [event for event in ledger.events if "docker" in event.lower()]
 
 
-def test_invalid_json_exits_2(tmp_path: Path) -> None:
+def test_invalid_json_exits_2(tmp_path: Path, clean_workspace_root: Path) -> None:
     # Given: malformed config input and observable fake external state
     state_path, env = build_fake_environment(tmp_path)
-    write_happy_state(state_path, tmp_path)
+    write_happy_state(state_path, clean_workspace_root)
     initial_state = state_path.read_bytes()
     config = tmp_path / "deploy.json"
     _ = config.write_text('{"categories": ["weather"],', encoding="utf-8")
