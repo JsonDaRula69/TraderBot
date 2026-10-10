@@ -81,6 +81,54 @@ async def test_token_failure_skips_credential_consumers() -> None:
 
 
 @pytest.mark.asyncio
+async def test_daemon_runtime_failure_fails_when_required() -> None:
+    # Given: a strict standalone posture and a fail-open daemon
+    ports = FakePorts(
+        outcomes={
+            CheckId.DAEMON_RUNTIME: ProbeResult.failed(
+                "daemon_websocket_inactive", "websocket is not connected"
+            )
+        }
+    )
+
+    # When: the graph runs with the default request posture
+    result = await run_verification(
+        VerificationRequest(categories=(MarketCategory.WEATHER,)), ports
+    )
+
+    # Then: the strict standalone tool fails closed on fleet health
+    indexed = {check.id: check for check in result.checks}
+    assert indexed[CheckId.DAEMON_RUNTIME].required is True
+    assert indexed[CheckId.DAEMON_RUNTIME].status is CheckStatus.FAIL
+    assert result.overall == "failed"
+
+
+@pytest.mark.asyncio
+async def test_daemon_runtime_failure_is_advisory_when_not_required() -> None:
+    # Given: a wizard-embedded posture that does not own the daemon lifecycle
+    ports = FakePorts(
+        outcomes={
+            CheckId.DAEMON_RUNTIME: ProbeResult.failed(
+                "daemon_websocket_inactive", "websocket is not connected"
+            )
+        }
+    )
+    request = VerificationRequest(
+        categories=(MarketCategory.WEATHER,),
+        daemon_required=False,
+    )
+
+    # When: the graph runs the wizard-embedded posture
+    result = await run_verification(request, ports)
+
+    # Then: the divergence is advisory, visible, and non-blocking
+    indexed = {check.id: check for check in result.checks}
+    assert indexed[CheckId.DAEMON_RUNTIME].required is False
+    assert indexed[CheckId.DAEMON_RUNTIME].status is CheckStatus.FAIL
+    assert result.overall == "degraded"
+
+
+@pytest.mark.asyncio
 async def test_stable_order_and_optional_degraded_overall() -> None:
     # Given
     ports = FakePorts(

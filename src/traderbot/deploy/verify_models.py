@@ -56,6 +56,13 @@ class VerificationRequest(FrozenModel):
     infisical_origin: str = "http://localhost:8080"
     daemon_mcp_url: str = "http://127.0.0.1:8765/mcp"
     timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    # Deploy-owned posture: required checks assert exactly what the deployment
+    # wrote; everything else is reported as advisory divergence. Standalone
+    # verification keeps its strict defaults (daemon health required, posture
+    # reported), while the wizard path threads the contract it actually owes.
+    heartbeat_policy: Literal["preserve", "require_0m"] = "preserve"
+    created_agents: tuple[str, ...] = ()
+    daemon_required: bool = True
 
     @field_validator("categories")
     @classmethod

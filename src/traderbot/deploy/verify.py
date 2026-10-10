@@ -29,15 +29,19 @@ _GATEWAY_CHILDREN = frozenset({CheckId.AGENTS_WORKSPACES, CheckId.CRON, CheckId.
 _ORDINARY_EXCEPTIONS: tuple[type[Exception], ...] = (Exception,)
 
 
-def _required(check_id: CheckId) -> bool:
+def _required(check_id: CheckId, request: VerificationRequest) -> bool:
+    """Required checks assert deploy-owned state; the daemon is required only
+    on a strict (standalone) posture because no wizard step installs it."""
+    if check_id is CheckId.DAEMON_RUNTIME:
+        return request.daemon_required
     return check_id not in _OPTIONAL
 
 
-def _skip(check_id: CheckId, dependency: CheckId) -> CheckResult:
+def _skip(check_id: CheckId, dependency: CheckId, request: VerificationRequest) -> CheckResult:
     return CheckResult(
         id=check_id,
         status=CheckStatus.SKIP,
-        required=_required(check_id),
+        required=_required(check_id, request),
         action="dependency_unavailable",
         message="Dependency did not pass",
         elapsed_ms=0,
@@ -45,23 +49,33 @@ def _skip(check_id: CheckId, dependency: CheckId) -> CheckResult:
     )
 
 
-def _result(check_id: CheckId, probe: ProbeResult, started: float) -> CheckResult:
+def _result(
+    check_id: CheckId,
+    probe: ProbeResult,
+    started: float,
+    request: VerificationRequest,
+) -> CheckResult:
     elapsed = min(300_000, max(0, round((monotonic() - started) * 1000)))
     return CheckResult(
         id=check_id,
         status=probe.status,
-        required=_required(check_id),
+        required=_required(check_id, request),
         action=probe.action,
         message=probe.message,
         elapsed_ms=elapsed,
     )
 
 
-def _exception_result(check_id: CheckId, started: float) -> CheckResult:
+def _exception_result(
+    check_id: CheckId,
+    started: float,
+    request: VerificationRequest,
+) -> CheckResult:
     return _result(
         check_id,
         ProbeResult.failed("check_exception", "Check failed unexpectedly"),
         started,
+        request,
     )
 
 
@@ -81,17 +95,16 @@ async def run_verification(
     request: VerificationRequest,
     ports: VerificationPorts,
 ) -> VerificationResult:
-    _ = request
     checks: list[CheckResult] = []
     gateway_passed = False
     token: SecretStr | None = None
     tokens_passed = False
     for check_id in CheckId:
         if check_id in _GATEWAY_CHILDREN and not gateway_passed:
-            checks.append(_skip(check_id, CheckId.GATEWAY))
+            checks.append(_skip(check_id, CheckId.GATEWAY, request))
             continue
         if check_id in {CheckId.KALSHI, CheckId.DAEMON_RUNTIME} and not tokens_passed:
-            checks.append(_skip(check_id, CheckId.TOKENS))
+            checks.append(_skip(check_id, CheckId.TOKENS, request))
             continue
         started = monotonic()
         try:
@@ -102,9 +115,9 @@ async def run_verification(
                 tokens_passed = probe.status is CheckStatus.PASS and token is not None
             else:
                 probe = await ports.probe(check_id, token)
-            check = _result(check_id, probe, started)
+            check = _result(check_id, probe, started, request)
         except _ORDINARY_EXCEPTIONS:
-            check = _exception_result(check_id, started)
+            check = _exception_result(check_id, started, request)
             if check_id is CheckId.TOKENS:
                 token = None
                 tokens_passed = False
