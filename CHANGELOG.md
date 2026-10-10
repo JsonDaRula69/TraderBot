@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a107] — 2026-10-10
+
+### Fixed
+
+- Deploy wizard step 8 is now required-aware: it completes when no required check fails, embedding advisory divergences (preserved sandbox/heartbeat posture, daemon liveness) and required-but-degraded state (sanctioned encrypted fallback) visibly in its result, while any required failure still fails the deployment.
+
+## [2.0.0a106] — 2026-10-10
+
+### Fixed
+
+- Verification now requires exactly the postconditions a deployment wrote instead of a fresh-install posture: `VerificationRequest` carries `heartbeat_policy` (dormancy required only when the deploy approved `0m`), `created_agents` (sandbox required only for agents the deploy created), and `daemon_required` (strict standalone default; the wizard path reports daemon liveness as advisory since no wizard step owns the daemon lifecycle). The OpenClaw probes report preserved posture as advisory divergence with actual values, and the bootstrap cron probe is lifecycle-aware — a completed retained one-shot passes with its own action, absence after a recorded firing is honest degraded state, and only a never-registered or conflicting contract fails closed.
+
 ## [2.0.0a105] — 2026-10-04
 
 ### Fixed

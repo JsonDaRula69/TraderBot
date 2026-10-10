@@ -75,7 +75,7 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - For each selected category:
   - For missing selected agents only: `openclaw agents add <category> --workspace <approved-absolute-path> --non-interactive --json`
   - Inject category workspace files (`AGENTS.md`, `SOUL.md`, and `IDENTITY.md`); exact-five-tool guidance is in `AGENTS.md ## Tools`
-  - Preserve user heartbeat cadence by default; an explicitly approved dormant state writes `heartbeat.every: "0m"` through OpenClaw config only
+  - Preserve user heartbeat cadence by default; an explicitly approved dormant state writes `heartbeat.every: "0m"` through OpenClaw config only. Step 8 requires dormancy only when this approval wrote it; a preserved cadence is reported there as advisory divergence, never required
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category>`
   - Preserve an exact profile-token SecretRef, atomically create an absent mapping, and fail closed on any mismatch
 - Do not invoke doctor implicitly; repair or migration of user-owned OpenClaw state requires a separate explicit operator action
@@ -132,14 +132,17 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 ### Step 8: Verification
 
 - `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph.
-- Gateway health uses `gateway status --json --require-rpc`; selected inventory, workspaces, config, exact bootstrap cron, and persisted heartbeat `0m` state reuse the typed OpenClaw read seams.
+- **Required checks assert exactly the postconditions a deployment wrote.** The deploy's own postconditions are the authoritative required set: agent presence, config readability, exact SecretRefs, sandbox mode for agents the deploy created, heartbeat cadence the deploy approved, five-field token documents, the bootstrap cron contract, and the provisioned databases. Preserved posture the deployment never wrote is reported as advisory divergence that states actual values (`unset`/`30m`/...), never as required failure.
+- Sandbox posture is required only for agents the deploy created (`created_agents`); `main` always pre-exists, is never created, and is only reported. Heartbeat dormancy (`0m`) is required only under `heartbeat_policy: require_0m` — set exclusively by an approved `heartbeat_every: "0m"` in the deploy request; a preserved fleet's cadence (unset or active) is advisory.
+- The bootstrap cron probe is lifecycle-aware: an exact pending managed one-shot passes; a completed retained one-shot passes with its own action; absence with recorded registration in deploy state is honest degraded state (the job fired); absence without recorded registration fails closed; conflicts or unreadable inventory fail.
+- Gateway health uses `gateway status --json --require-rpc`; selected inventory, workspaces, and config reuse the typed OpenClaw read seams.
 - Exact real-auth mode and selected five-field token documents are read from the currently selected durable SecretsStore without installing adapters or revealing token values.
 - Kalshi authentication uses signed `GET /portfolio/balance`; public market data is not authentication proof.
 - Global and current-mode category databases use no-follow owner checks, SQLite URI `mode=ro`, `query_only`, `quick_check`, and exact schema/table/index manifests. A SysAdmin decisions database is forbidden; writability is never probed.
-- Active daemon health requires a bounded loopback streamable-http MCP handshake and actual `health` call. Daemon-owned Chroma is proved from this health response and is never opened by the verifier.
-- Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host.
+- Daemon liveness is required on the standalone graph (`daemon_required` defaults strict): a healthy daemon is the fleet-health bar, and standalone exit 1 is the signal that surfaces a degraded or fail-open daemon. The probe remains a bounded loopback streamable-http MCP handshake with an actual `health` call; daemon-owned Chroma is proved from that health response and is never opened by the verifier. Because no wizard step installs, starts, or restarts the daemon, the wizard-embedded graph reports daemon liveness — including an absent daemon — as advisory divergence naming the actionable state (`daemon_absent`/`daemon_unreachable`/`daemon_components_degraded`); upgrading or restarting the daemon is a separate operator action confirmed by a standalone verify. A daemon predating the release under deploy is judged by its actual health response, never by a version comparison.
+- Infisical status and both non-value project-root access checks share one owned selection; encrypted local fallback is reported as degraded. Production loopback is macpro-linux-local, not the development host. Standalone exit stays 1, but a deployment that legitimately selected the encrypted fallback in Step 4 is not failed by its own sanctioned degraded state on the wizard path.
 - JSON output is exactly one stdout line; the Rich table is stderr-only. Exit codes are 0 for OK, 1 for failed/degraded, and 2 for invalid input.
-- The deploy wizard composes the same `VerificationRequest` and read-only graph, embeds every typed check in its one JSON result, and still runs safe verification after a partial backfill.
+- The deploy wizard composes the same `VerificationRequest` carrying its own posture (`heartbeat_policy`, `created_agents`, advisory daemon) and embeds every typed check in its one JSON result; it still runs safe verification after a partial backfill. **Step 8 is COMPLETED iff no required check failed**: advisory divergences and required-but-degraded state embed in the result instead of blocking, while any required failure fails the deployment.
 - The explicit data root is shared unchanged across database creation, backfill, verification, and deploy state; Kalshi reads are canonical read-only production requests.
 
 ---
