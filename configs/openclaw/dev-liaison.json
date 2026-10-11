@@ -5,7 +5,6 @@
   },
   "tools": {
     "allow": [
-      "traderbot__reference",
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",

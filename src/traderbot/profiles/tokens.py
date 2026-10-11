@@ -26,6 +26,8 @@ from typing import ClassVar, TypedDict, override
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from traderbot.paths import get_data_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,9 +108,9 @@ class LocalTokenStore(TokenStore):
     """
 
     def __init__(self, base_path: Path | None = None) -> None:
-        """Initialize the store rooted at ``base_path`` (default ``~/.traderbot``)."""
+        """Initialize the store rooted at ``base_path`` (default TraderBot data dir)."""
         if base_path is None:
-            base_path = Path.home() / ".traderbot"
+            base_path = get_data_dir()
         self.base_path: Path = Path(base_path)
         self.token_file: Path = self.base_path / "tokens.json"
 

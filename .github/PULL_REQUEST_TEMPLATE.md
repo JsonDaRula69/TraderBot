@@ -10,7 +10,7 @@
 - [ ] VERSION bumped (patch unless this is a milestone)
 - [ ] CHANGELOG.md updated
 - [ ] If code change: regression test written (RED before GREEN)
-- [ ] If cron/heartbeat change: `traderbot cron setup-heartbeat-tasks --replace` verified
+- [ ] If agent cron/heartbeat changes: OpenClaw Gateway ownership, explicit activation, and conflict-safe inventory verified
 - [ ] If config change: `openclaw config set` used (not direct json edit)
 - [ ] Deployed to macpro-linux and verified
 

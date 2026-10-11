@@ -40,7 +40,7 @@ The agent *decides* what to do with this information. TraderBot's job is to ensu
 
 TraderBot is designed to be fully autonomous in operation, development, and self-learning:
 
-- **Operational autonomy**: TraderBot runs as an always-on service (DD-016). Data collection, WebSocket streams, health checks, and cron management run without human intervention.
+- **Operational autonomy**: TraderBot runs as an always-on service (DD-016). Data collection, WebSocket streams, and daemon-internal health and rotation workers run without human intervention. OpenClaw Gateway exclusively owns agent cron/heartbeat scheduling; TraderBot may only request approved bootstrap automation through Gateway.
 - **Development autonomy**: SysAdmin can file GitHub issues for code-level improvements. The autonomous dev team (Layer 3, DD-018) picks up issues, investigates, and deploys fixes.
 - **Self-learning autonomy**: The three-layer self-improvement architecture (DD-018) enables continuous improvement without human approval for each cycle.
 
@@ -94,7 +94,7 @@ Any REST call for data that the WebSocket already provides is a bug (DD-016).
 
 ## 8. Prebuilt Agents, No Customization
 
-Agents are shipped prebuilt with immutable workspace files (DD-008). Users cannot modify core agent files (AGENTS.md, TOOLS.md, SOUL.md, IDENTITY.md). This minimizes variability and user error, and enables us to fine-tune agent behavior across the fleet.
+Agents are shipped with TraderBot-managed blocks in AGENTS.md, SOUL.md, and IDENTITY.md (DD-008). Users retain all bytes outside those blocks, including legacy OpenClaw/user TOOLS.md and HEARTBEAT.md files that TraderBot never manages. This minimizes behavioral variability without claiming ownership of the whole workspace.
 
 ---
 
@@ -106,7 +106,7 @@ MCP tools are profile-aware and mode-aware. The same tool call returns different
 
 ## 10. SysAdmin Manages Lifecycle Transitions
 
-Phase transitions (backtest → paper → live → suspended) are driven by SysAdmin, not automated. SysAdmin follows a predefined activation protocol but can deviate when circumstances require. Cron/heartbeat jobs are not registered at deploy time — SysAdmin activates them phase by phase (DD-023).
+Phase transitions (backtest → paper → live → suspended) are driven by SysAdmin, not automated. Deploy requests exactly one Gateway-owned, self-deleting bootstrap prompt; all recurring agent cron/heartbeat schedules remain dormant until approved activation through OpenClaw Gateway (DD-023).
 
 ---
 
@@ -116,6 +116,7 @@ Phase transitions (backtest → paper → live → suspended) are driven by SysA
 - The installer shows relevant messages for the detected OS. No keyring questions on headless Linux (DD-006).
 - Data collection begins for all sources at install time (for backtesting availability), but only enabled categories have active trading agents (DD-027).
 - Kalshi WebSocket minimizes REST API calls and respects rate limits (DD-016).
+- Deploy collects only credentials consumed by current production code. Keyless and inactive providers do not gain prompts or storage paths.
 
 ---
 
@@ -127,7 +128,7 @@ OpenClaw is the agent runtime, not a security boundary. Authentication and acces
 
 ## 13. Idempotency and Safety
 
-All setup, deploy, and registration operations must be idempotent (AGENTS.md). Before creating a resource, check if it exists. Use `--replace` semantics for cron job registration. Every resource must have a corresponding cleanup path in uninstall.
+All setup, deploy, and registration operations must be idempotent (AGENTS.md). Inventory and validate complete resource contracts before mutation, reuse exact state, and fail closed on ownership conflicts. Partial durable state reconciles forward rather than being deleted. Resource shutdown follows reverse ownership order; an existing Chroma lock is never removed or bypassed.
 
 ---
 
