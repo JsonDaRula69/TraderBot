@@ -36,16 +36,8 @@ updates; Phase 1 callers serialize access externally (same caveat as
 
 from __future__ import annotations
 
-import base64
-import getpass
 import hashlib
 import json
-import logging
-import os
-import socket
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 from typing import ClassVar
 
@@ -53,9 +45,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from traderbot.paths import get_data_dir
+from traderbot.secrets.local_security import SecretPathError, SecureSecretPaths
+from traderbot.secrets.machine_key import derive_key, machine_identity
 from traderbot.secrets.store import SecretNotFoundError
-
-logger = logging.getLogger(__name__)
 
 _INTEGRITY_SUFFIX = ".sha256"
 
@@ -81,84 +73,6 @@ class SecretsPayload(BaseModel):
     secrets: dict[str, dict[str, dict[str, str]]]
 
 
-def derive_key(hostname: str, username: str, machine_id: str) -> Fernet:
-    """Derive the machine-bound Fernet key from the host identity (DD-037 §9).
-
-    Args:
-        hostname: The machine hostname.
-        username: The OS account running TraderBot.
-        machine_id: The stable platform machine ID, or ``""`` if unavailable.
-
-    Returns:
-        A :class:`Fernet` instance whose key is the SHA-256 of
-        ``hostname:username:machine_id``, base64-encoded (exactly 32 bytes of
-        key material, the Fernet requirement).
-    """
-    digest = hashlib.sha256(f"{hostname}:{username}:{machine_id}".encode()).digest()
-    return Fernet(base64.urlsafe_b64encode(digest))
-
-
-def _machine_identity() -> tuple[str, str, str]:
-    """Return the current machine's ``(hostname, username, machine_id)``."""
-    machine_id = _read_machine_id()
-    if machine_id == "":
-        logger.warning(
-            "Could not determine a machine ID; encryption key degrades to hostname+username"
-        )
-    return socket.gethostname(), getpass.getuser(), machine_id
-
-
-def _read_machine_id() -> str:
-    """Return the stable machine ID, or ``""`` if the platform lookup fails.
-
-    Linux reads ``/etc/machine-id``. macOS queries the IOPlatformUUID via
-    ``ioreg`` — the field is double-quoted, so the value is extracted by
-    splitting on ``"`` (the DD-037 command's single-quote awk yields nothing
-    on real hardware).
-    """
-    if sys.platform == "linux":
-        machine_id_file = Path("/etc/machine-id")
-        try:
-            return machine_id_file.read_text(encoding="ascii").strip()
-        except OSError:
-            return ""
-    if sys.platform == "darwin":
-        try:
-            result = subprocess.run(
-                ["ioreg", "-d2", "-c", "IOPlatformExpertDevice"],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return ""
-        for line in result.stdout.splitlines():
-            if "IOPlatformUUID" in line:
-                parts = line.split('"')
-                if len(parts) >= 4 and parts[3] != "":
-                    return parts[3]
-        return ""
-    if sys.platform == "win32":
-        try:
-            result = subprocess.run(
-                ["wmic", "csproduct", "get", "UUID"],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10,
-            )
-            for line in result.stdout.splitlines():
-                stripped = line.strip()
-                if stripped and stripped != "UUID":
-                    return stripped
-        except (OSError, subprocess.SubprocessError):
-            pass
-        return ""
-    logger.warning("Unsupported platform %r for machine ID lookup", sys.platform)
-    return ""
-
-
 class LocalEncryptedStore:
     """Machine-bound encrypted :class:`LocalStore` (see module docstring).
 
@@ -167,13 +81,29 @@ class LocalEncryptedStore:
             (default ``~/.traderbot/secrets``).
     """
 
-    def __init__(self, base_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        base_path: Path | None = None,
+        *,
+        data_root: Path | None = None,
+    ) -> None:
         if base_path is None:
-            base_path = get_data_dir() / "secrets"
+            configured_root = get_data_dir()
+            base_path = configured_root / "secrets"
+        else:
+            configured_root = base_path.parent if data_root is None else data_root
         self.secrets_dir: Path = Path(base_path)
         self.secrets_file: Path = self.secrets_dir / "secrets.json"
         self.integrity_file: Path = self.secrets_dir / f"secrets.json{_INTEGRITY_SUFFIX}"
-        self._fernet: Fernet = derive_key(*_machine_identity())
+        try:
+            self._secure_paths: SecureSecretPaths = SecureSecretPaths.parse(
+                self.secrets_dir,
+                Path(configured_root),
+                (self.secrets_file, self.integrity_file),
+            )
+        except SecretPathError as exc:
+            raise SecretIntegrityError(str(exc)) from exc
+        self._fernet: Fernet = derive_key(*machine_identity())
 
     # LocalStore protocol ----------------------------------------------------
 
@@ -221,6 +151,10 @@ class LocalEncryptedStore:
             SecretIntegrityError: on any integrity or decryption failure
                 (tampered file, missing integrity file, foreign machine key).
         """
+        try:
+            self._secure_paths.prepare(create=False)
+        except SecretPathError as exc:
+            raise SecretIntegrityError(str(exc)) from exc
         if not self.secrets_file.exists():
             if self.integrity_file.exists():
                 raise SecretIntegrityError(
@@ -283,23 +217,10 @@ class LocalEncryptedStore:
 
         Uses binary mode to avoid platform-specific line-ending translation.
         """
-        self.secrets_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="wb",
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=self.secrets_dir,
-            delete=False,
-        )
-        tmp = Path(temp_file.name)
         try:
-            with temp_file as fh:
-                _ = fh.write(contents)
-            os.chmod(tmp, 0o600)
-            os.replace(tmp, path)
-        except OSError:
-            tmp.unlink(missing_ok=True)
-            raise
+            self._secure_paths.atomic_write(path, contents)
+        except SecretPathError as exc:
+            raise SecretIntegrityError(str(exc)) from exc
 
     def _atomic_write(self, path: Path, contents: str) -> None:
         """Write ``contents`` to ``path`` atomically with mode 0600 (POSIX).

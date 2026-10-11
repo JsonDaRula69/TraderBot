@@ -11,7 +11,7 @@
 ├── traderbot.db                    # Global DB: schema version, profiles, config, market data,
 │                                   # weather forecasts, NWS forecasts, settlement cache
 ├── secrets/                        # Encrypted secrets (outside DB scope)
-├── tokens.enc                      # Profile token registry (Fernet-encrypted)
+│   └── secrets.json                # Machine-bound encrypted fallback; Infisical is primary
 ├── chromadb/                       # Embedded PersistentClient root (daemon-owned, owner-only).
 │                                   # Collections (news, data_points, market_patterns,
 │                                   # news_signals, market_conditions) are logical objects
@@ -32,6 +32,7 @@ Key design choices:
 - A profile in `live` mode can read its own backtest and paper databases for reference, but MCP tools log new trading data to the database matching the active mode.
 - Category agents cannot access other category agents' databases. SysAdmin reads across agents through MCP, not through direct filesystem access.
 - The ChromaDB root is an embedded `PersistentClient` path owned by the daemon process; no HTTP server is started.
+- Deploy creates decisions databases only for selected category profiles through `DatabaseAccess`; canonical SysAdmin enumerates them read-only and has no per-profile `decisions.db`.
 
 ---
 
@@ -47,6 +48,7 @@ Phase 3 Tasks 0-9 are implemented and merged to `v2-main` via PR #197 (merge com
 - A daemon-owned `SQLiteConnectionPool` with WAL and the PRAGMAs documented below. `DatabaseAccess` enforces resolved profile identity, active-mode writes, read-only access to authorized earlier modes, path containment, and SysAdmin-only enumeration.
 - One embedded `chromadb.PersistentClient` with the Rust bindings backend pinned, telemetry disabled, explicit caller-supplied vectors, five shared logical collections, mode-qualified per-agent collections, category-prefixed IDs, and mandatory category filters.
 - Daemon startup and shutdown integration with database, ChromaDB, and Chroma ownership-lock health reporting. Reads never create a per-agent database; explicit deployment/promotion or the first authorized write initializes it.
+- Standalone deployment verification performs no-follow ownership checks, opens exact expected databases with SQLite URI `mode=ro`, enables connection-local `query_only`, runs `quick_check`, and requires the latest schema/table/index manifests without creating WAL, journal, or missing database files. Canonical SysAdmin must have no decisions database.
 
 ### ChromaDB accepted risk: GHSA-f4j7-r4q5-qw2c
 
@@ -216,6 +218,19 @@ CREATE TABLE IF NOT EXISTS settlement_cache (
     settled_at TEXT NOT NULL
 );
 ```
+
+### Global migration v2 historical tables
+
+Migration v2 appends four global tables without changing migration v1:
+
+- `weather_observations` keeps the collector-compatible `date`, `city`, coordinates, `variable`, and `value` columns with `(date, city, variable)` identity.
+- `kalshi_markets` stores official lifecycle metadata, optional series/category discovery context, fixed-point volume/open-interest strings, and Unix-second timestamps indexed for event, series, category/status, and status/close queries.
+- `kalshi_candlesticks` flattens the distinct live and historical response shapes into lossless TEXT fields. Its `source` discriminator and `(ticker, period_interval, end_period_ts, source)` key prevent either source from silently replacing the other.
+- `kalshi_forecast_history` stores each event/series/period/percentile point separately. Raw and normalized numerical forecasts use TEXT so decimal values can be persisted without binary-float coercion.
+
+Only migration v2 is reversible. Rolling it back drops these four tables and their indexes while migration v1 tables and data remain intact.
+
+The standalone backfill command applies the current migration registry before writing and reuses one owner-thread `SQLiteConnectionPool`. Collector rows use their natural keys with `INSERT OR IGNORE` in independent 1,000-row commits. Each Kalshi market/candle/forecast write also uses fixed statements and natural keys, so reruns report duplicates without replacing prior data. Fixed-point strings and forecast decimal text never pass through binary float conversion.
 
 ---
 
@@ -406,7 +421,7 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
 
 <!-- schema-manifest:start -->
 {
-  "version": "phase3-task0",
+  "version": "phase4-task7",
   "scopes": {
     "global": {
       "db_file": "traderbot.db",
@@ -419,11 +434,15 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
         "orderbook",
         "weather_forecasts",
         "nws_forecasts",
-        "settlement_cache"
+        "settlement_cache",
+        "weather_observations",
+        "kalshi_markets",
+        "kalshi_candlesticks",
+        "kalshi_forecast_history"
       ]
     },
     "per_agent": {
-      "db_file": "{mode}-{profile}/db/decisions.db",
+      "db_file": "{mode}-{name}/db/decisions.db",
       "created_by": "init_decisions_db()",
       "tables": [
         "decisions",
@@ -854,6 +873,80 @@ The block below is strict JSON that can be extracted and parsed by tooling. It c
       ],
       "foreign_keys": [],
       "indexes": []
+    },
+    "weather_observations": {
+      "scope": "global",
+      "columns": [
+        {"name": "date", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "city", "type": "TEXT", "nullable": false, "pk_ordinal": 2},
+        {"name": "latitude", "type": "REAL", "nullable": false, "pk_ordinal": 0},
+        {"name": "longitude", "type": "REAL", "nullable": false, "pk_ordinal": 0},
+        {"name": "variable", "type": "TEXT", "nullable": false, "pk_ordinal": 3},
+        {"name": "value", "type": "REAL", "nullable": false, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_markets": {
+      "scope": "global",
+      "columns": [
+        {"name": "ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "event_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "series_ticker", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "category", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "status", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "result", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "title", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "subtitle", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "yes_sub_title", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "no_sub_title", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "market_type", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "volume_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_interest_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "created_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "updated_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "close_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 0},
+        {"name": "settled_ts", "type": "INTEGER", "nullable": true, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_candlesticks": {
+      "scope": "global",
+      "columns": [
+        {"name": "ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "period_interval", "type": "INTEGER", "nullable": false, "pk_ordinal": 2},
+        {"name": "end_period_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 3},
+        {"name": "source", "type": "TEXT", "nullable": false, "pk_ordinal": 4},
+        {"name": "yes_bid_open", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_low", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_high", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_bid_close", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_open", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_low", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_high", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "yes_ask_close", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "price_open", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_low", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_high", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_close", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_mean", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_previous", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_min", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "price_max", "type": "TEXT", "nullable": true, "pk_ordinal": 0},
+        {"name": "volume_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "open_interest_fp", "type": "TEXT", "nullable": false, "pk_ordinal": 0}
+      ]
+    },
+    "kalshi_forecast_history": {
+      "scope": "global",
+      "columns": [
+        {"name": "event_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 1},
+        {"name": "series_ticker", "type": "TEXT", "nullable": false, "pk_ordinal": 2},
+        {"name": "end_period_ts", "type": "INTEGER", "nullable": false, "pk_ordinal": 3},
+        {"name": "period_interval", "type": "INTEGER", "nullable": false, "pk_ordinal": 4},
+        {"name": "percentile", "type": "INTEGER", "nullable": false, "pk_ordinal": 5},
+        {"name": "raw_numerical_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "numerical_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0},
+        {"name": "formatted_forecast", "type": "TEXT", "nullable": false, "pk_ordinal": 0}
+      ]
     },
     "decisions": {
       "scope": "per_agent",
@@ -1651,6 +1744,8 @@ Use this checklist when comparing this document to production code or when onboa
 ## ChromaDB collections (embedded)
 
 ChromaDB uses an embedded `PersistentClient` at `~/.traderbot/chromadb/` owned by the daemon. No HTTP server or external embedding-function configuration is used. Callers supply explicit vectors.
+
+Deploy step 5 provisions and health-checks the root and ownership lock but does not create collections. The five names below are a validated manifest, not an eager creation list. Collection creation remains lazy because metadata requires a real caller-supplied embedding dimension and the production system defines no default dimension or model.
 
 ### Shared collections
 

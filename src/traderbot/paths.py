@@ -8,6 +8,7 @@ store (DD-037) land in later phases.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def get_data_dir() -> Path:
     """Return the TraderBot data directory (default: ~/.traderbot)."""
-    return Path.home() / ".traderbot"
+    return Path(os.environ.get("TRADERBOT_DATA_DIR", Path.home() / ".traderbot"))
 
 
 def get_db_path() -> Path:

@@ -27,8 +27,11 @@
 > by default. `LocalEncryptedStore` provides the offline fallback;
 > `LocalTokenStore` is preserved as a read-only migration source. Token
 > rotation, the scheduler, the `openclaw-infisical-resolver` exec provider,
-> and the migration script are all committed and tested. API credential
-> validation and the full deploy wizard integration remain future work.
+> and the migration script are all committed and tested. Deploy step 4 now
+> validates and provisions the canonical Kalshi pair locally without exposing
+> values or making a live Kalshi request. Deploy Steps 6 and 8 reuse independently
+> owned backfill and read-only verification runtimes; the Step 7 Phase 5 stub
+> performs only a strict Gateway cron inventory and exposes no secret values.
 
 ---
 
@@ -91,9 +94,11 @@ offline fallback.
 - `TRADERBOT_USE_HARDCODED_AUTH=0` selects real auth through `TokenStore`.
 - By default `SecretsResolver` installs a `TokenStoreAdapter` backed by
   `SecretsStore` (Infisical primary, `LocalEncryptedStore` fallback). The
-  resolver reads `~/.traderbot/infisical-credentials.json` and falls back to
-  the local encrypted store when credentials are missing or Infisical is
-  unreachable.
+  resolver reads `~/.traderbot/infisical-credentials.json`, requiring only
+  `host` and `machineIdentity.{clientId,clientSecret}` while ignoring unrelated
+  routing metadata keys owned by the `openclaw-infisical-resolver` script,
+  including extra nested identity fields. It falls back to the local encrypted
+  store when required credentials are missing or Infisical is unusable.
 - `LocalTokenStore` at `~/.traderbot/tokens.json` is still readable for
   one-way migration to Infisical via `traderbot secrets migrate`.
 
@@ -109,22 +114,11 @@ Infisical environment slug `prod`, matching the deployed instance):
 global/
   kalshi.api_key
   kalshi.private_key_pem
-  voyage.api_key
-  newsapi.api_key
-  twitter.bearer_token
-  reddit.client_id
-  reddit.client_secret
-weather/
-  openweathermap.api_key
-economics/
-  fred.api_key
-crypto/
-  coingecko.api_key
-sports/
-  thesportsdb.api_key
 ```
 
-Common keys (NewsAPI, Twitter, Reddit) are in the `global` namespace. Category-specific keys are in their own namespace. The MCP server selects the correct key based on the calling agent's profile, but initially all profiles point to the same global Kalshi key.
+Deploy currently collects only the canonical Kalshi pair consumed by the daemon. NewsProvider is a stub, OpenMeteo and NWS are keyless, and no production consumer exists for the previously planned provider credentials, so deploy exposes no prompt or storage path for them.
+
+Config documents contain environment variable names only (`kalshi_api_key_env` and `kalshi_private_key_pem_env`). Interactive collection uses hidden prompts. A complete existing pair is reused without writes; replacement values are validated together before mutation, including strict local RSA PEM parsing. Output and reconciliation errors contain secret names and backend state only, never values.
 
 **Project 2: "TraderBot Agent Tokens"** — Profile tokens (one per agent)
 
@@ -316,7 +310,7 @@ Agent (model) → OpenClaw tool dispatch → before_tool_call hook
 The hook runs host-side in the OpenClaw gateway, so the model never sees or
 controls the injected token. `ctx.agentId` is host-derived from the caller's
 OpenClaw agent session, not from anything the model supplies. The hook resolves
-the agent's token from a Vault-backed SecretRef using OpenClaw's
+the agent's token from an Infisical-backed SecretRef using OpenClaw's
 `resolveSecretRefValues` helper, then returns the full params object with the
 extra `token` field. Unrecognized agents fail closed.
 
@@ -354,7 +348,7 @@ The verified config is in `configs/openclaw/with-plugin.json`. It registers:
 - `mcp.servers.traderbot.env.TRADERBOT_USE_HARDCODED_AUTH: "0"` so the MCP
   subprocess runs in real-auth mode
 
-This replaces the earlier Vault-based `secrets.providers.vault` example.
+This replaces the retired Vault-based `secrets.providers.vault` example.
 
 ### References
 
@@ -371,7 +365,7 @@ This replaces the earlier Vault-based `secrets.providers.vault` example.
 
 The target architecture requires all category agents to run in Docker containers with the properties below. A separate OpenClaw remediation hardens agent tool policies only; it does not encode these bind mounts and has not been deployed or tested on target hardware:
 - Base image: `python:3.12-slim-bookworm`
-- Agent data dir bind-mounted RW: `~/.traderbot/paper-{category}/`
+- Agent data dir bind-mounted RW from the active `{mode}-{name}/` data-root path
 - Workspace files bind-mounted RO: `~/.openclaw/workspace/{category}/`
 - No blanket `~/.traderbot/` mount — each agent only sees its own data
 - No profile token is injected by the remediation fragments
@@ -393,18 +387,8 @@ allowlist. Sandboxed agents also use a second sandbox-tool gate for
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",
-      "traderbot__weather_forecast_prob",
-      "traderbot__weather_accuracy",
-      "traderbot__weather_seasonal_context",
-      "traderbot__weather_decision_brief",
       "traderbot__market_edge",
       "traderbot__market_prices",
-      "traderbot__trade",
-      "traderbot__positions",
-      "traderbot__heartbeat",
-      "traderbot__performance",
-      "traderbot__audit",
-      "traderbot__learnings",
     ],
     deny: ["group:runtime", "group:fs"],
     sandbox: {
@@ -414,8 +398,8 @@ allowlist. Sandboxed agents also use a second sandbox-tool gate for
 }
 ```
 
-Only `health`, `auth_check`, `profile_list`, and `market_edge` currently exist;
-the remaining names in the full design are planned. SysAdmin stays unsandboxed
+Only `health`, `auth_check`, `profile_list`, `market_edge`, and `market_prices`
+currently exist; planned names are excluded from live allowlists. SysAdmin stays unsandboxed
 per DD-036 and its deny list explicitly blocks trading and category-specific
 tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the remediation agent fragments omit invalid nested `mcp` and per-agent `env` fields.
 
@@ -428,17 +412,24 @@ tools. The gateway artifact registers TraderBot once at root `mcp.servers`; the 
 
 ---
 
-## Planned Division of Secrets Responsibility (Phase 1.5)
+## Division of Secrets Responsibility
 
 | Secret Type | Manager | Storage | Access |
 |---|---|---|---|
 | OpenClaw LLM keys, gateway auth, channel tokens | OpenClaw SecretRef | Infisical project "OpenClaw" (or OpenClaw's own provider) | OpenClaw gateway on host only |
-| TraderBot API keys (Kalshi, Voyage, NewsAPI, etc.) | Infisical | Infisical project "TraderBot" | TraderBot service on host only |
+| TraderBot API keys (canonical Kalshi API key + RSA private key only) | Infisical or machine-bound encrypted local fallback | Infisical project "TraderBot" or owner-only local ciphertext | TraderBot service on host only |
 | Agent profile tokens | Infisical | Infisical project "TraderBot Agent Tokens" | TraderBot service (resolution) + OpenClaw SecretRef (injection) |
 | Infisical machine identity token | OpenClaw SecretRef | OpenClaw config (env provider) | TraderBot service only |
 | TraderBot service auth token | Infisical | Infisical project "TraderBot" | TraderBot service only |
 
 **Target principle**: Agents never see API tokens. They interact with TraderBot
 through MCP tools only, and TraderBot handles API communication on the backend.
-This table is planned architecture, not a claim that Infisical, provider
-credential validation, token injection, rotation, or deployment is complete.
+Infisical-backed profile-token injection and rotation are implemented. Phase 4
+deploy collects only the canonical Kalshi pair and uses machine-bound encrypted
+local storage when Infisical is unavailable or unusable.
+
+### Deployment verification
+
+`traderbot verify` requires the exact environment value `TRADERBOT_USE_HARDCODED_AUTH=0`. It reads only selected durable five-field profile-token documents through the active SecretsStore, validates profile, agent, category, permission, and nonempty opaque-token contracts, and never calls the hardcoded resolver or installs a global adapter. Values, hashes, lengths, prefixes, backend exceptions, and request material are absent from typed results and reporters.
+
+Kalshi credential proof is a signed, read-only `GET /portfolio/balance`. Infisical proof is target-local `/api/status` plus non-value access to both project roots with cache disabled and proxy-aware backend selection. Development tests use MockTransport and isolated stores; real macpro-linux service exercise remains Final-Wave verification.

@@ -13,8 +13,8 @@ Public API surface for the Phase 2 REST client:
 * Data models (``traderbot.kalshi.models``): MarketCategory, Market, Order,
   Fill, OrderBook, Ticker, and friends.
 
-Credentials come from :class:`traderbot.secrets.store.SecretsStore` — the
-client never reads env files or keyring.
+Credentials are supplied through :class:`traderbot.secrets.store.SecretsStore`;
+the client never loads them from process environment files.
 """
 
 from traderbot.kalshi.client import (
@@ -35,7 +35,6 @@ from traderbot.kalshi.models import (
     Fill,
     Market,
     MarketCategory,
-    MarketListResponse,
     Order,
     OrderBook,
     OrderBookLevel,
@@ -58,6 +57,15 @@ from traderbot.kalshi.models import (
 )
 from traderbot.kalshi.pinning import CertPinningError, create_pinned_ssl_context
 from traderbot.kalshi.rate_limit import RateLimiter, TokenBucketRateLimiter
+from traderbot.kalshi.rest_models import (
+    ForecastHistoryResponse,
+    HistoricalCandlestickResponse,
+    KalshiMarket,
+    LiveCandlestickResponse,
+    MarketListResponse,
+    Series,
+    SeriesListResponse,
+)
 from traderbot.kalshi.signing import auth_headers, clear_key_cache, sign_request
 
 __all__ = [
@@ -71,9 +79,13 @@ __all__ = [
     "Event",
     "ExchangeStatus",
     "Fill",
+    "ForecastHistoryResponse",
+    "HistoricalCandlestickResponse",
     "KalshiAPIError",
     "KalshiClient",
     "KalshiError",
+    "KalshiMarket",
+    "LiveCandlestickResponse",
     "Market",
     "MarketCategory",
     "MarketListResponse",
@@ -93,6 +105,8 @@ __all__ = [
     "RateLimiter",
     "RiskCheckResult",
     "Settlement",
+    "Series",
+    "SeriesListResponse",
     "Ticker",
     "TokenBucketRateLimiter",
     "Trade",
