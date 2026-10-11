@@ -1,0 +1,15 @@
+{
+  "id": "entertainment",
+  "sandbox": { "mode": "all" },
+  "tools": {
+    "allow": [
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
+      "traderbot__market_edge",
+      "traderbot__market_prices"
+    ],
+    "deny": ["group:runtime", "group:fs"],
+    "sandbox": { "tools": { "allow": ["bundle-mcp"] } }
+  }
+}
