@@ -7,18 +7,7 @@
     "allow": [
       "traderbot__health",
       "traderbot__auth_check",
-      "traderbot__profile_list",
-      "traderbot__profile_update",
-      "traderbot__performance",
-      "traderbot__audit",
-      "traderbot__learnings",
-      "traderbot__cron_setup",
-      "traderbot__session_send",
-      "traderbot__experiment",
-      "traderbot__data_status",
-      "traderbot__ws_status",
-      "traderbot__backfill",
-      "traderbot__reference"
+      "traderbot__profile_list"
     ],
     "deny": [
       "traderbot__trade",

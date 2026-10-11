@@ -21,7 +21,7 @@ def test_cli_status_reports_not_installed() -> None:
 
 def test_cli_unknown_command_errors() -> None:
     try:
-        main(["service", "frobnicate"])
+        _ = main(["service", "frobnicate"])
         raised = False
     except SystemExit:
         raised = True
@@ -74,7 +74,7 @@ def test_deploy_writes_template_to_destination(tmp_path: Path) -> None:
     with (
         mock.patch("traderbot.services.deploy.detect_service_manager", return_value="systemd"),
         mock.patch(
-            "traderbot.services.deploy._destination",
+            "traderbot.services.deploy.service_destination",
             return_value=tmp_path / "traderbot.service",
         ),
     ):

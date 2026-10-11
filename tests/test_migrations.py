@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from traderbot.db import migrations
+import traderbot.db.migration_backup as migration_backup
 from traderbot.db.migrations import (
     GLOBAL_MIGRATIONS,
     IrreversibleMigrationError,
@@ -38,7 +38,7 @@ def test_migration_is_immutable() -> None:
     migration = Migration(1, "immutable", ("SELECT 1",), None)
 
     with pytest.raises(FrozenInstanceError):
-        migration.version = 2
+        setattr(migration, "version", 2)
 
 
 def test_apply_orders_migrations_and_skips_applied(tmp_path: Path) -> None:
@@ -148,7 +148,7 @@ def test_init_schema_is_idempotent_and_creates_global_manifest(tmp_path: Path) -
     init_schema(db_path)
     init_schema(db_path)
 
-    assert _versions(db_path) == [1]
+    assert _versions(db_path) == [1, 2]
     assert _table_names(db_path).issuperset(
         {
             "schema_version",
@@ -159,6 +159,10 @@ def test_init_schema_is_idempotent_and_creates_global_manifest(tmp_path: Path) -
             "weather_forecasts",
             "nws_forecasts",
             "settlement_cache",
+            "weather_observations",
+            "kalshi_markets",
+            "kalshi_candlesticks",
+            "kalshi_forecast_history",
         }
     )
     assert GLOBAL_MIGRATIONS[0].version == 1
@@ -208,8 +212,8 @@ def test_backup_collision_preserves_existing_backup(
     old_backup = tmp_path / "collision.db.bak.20000101T000000Z-collision"
     old_backup.write_text("old", encoding="utf-8")
     tokens = iter(("collision", "fresh"))
-    monkeypatch.setattr(migrations, "_backup_timestamp", lambda: "20000101T000000Z")
-    monkeypatch.setattr(migrations.secrets, "token_hex", lambda _size: next(tokens))
+    monkeypatch.setattr(migration_backup, "_backup_timestamp", lambda: "20000101T000000Z")
+    monkeypatch.setattr(migration_backup.secrets, "token_hex", lambda _size: next(tokens))
 
     apply_migrations(db_path, (Migration(1, "new", ("CREATE TABLE new (id INTEGER)",), None),))
 
@@ -224,19 +228,19 @@ def test_backup_fsyncs_file_before_publish_and_directory_after(
     with sqlite3.connect(db_path) as connection:
         connection.execute("CREATE TABLE custom_legacy (value TEXT)")
     events: list[str] = []
-    real_replace = migrations.os.replace
+    real_replace = migration_backup.os.replace
 
     def record_fsync(path: Path, *, best_effort: bool) -> None:
         del best_effort
         events.append("directory" if path.is_dir() else "file")
 
-    monkeypatch.setattr(migrations, "_fsync_path", record_fsync)
+    monkeypatch.setattr(migration_backup, "_fsync_path", record_fsync)
 
     def record_replace(source: Path, target: Path) -> None:
         events.append("replace")
         real_replace(source, target)
 
-    monkeypatch.setattr(migrations.os, "replace", record_replace)
+    monkeypatch.setattr(migration_backup.os, "replace", record_replace)
     apply_migrations(
         db_path, (Migration(1, "durable", ("CREATE TABLE durable (id INTEGER)",), None),)
     )
@@ -256,7 +260,7 @@ def test_backup_failure_cleans_temp_and_runs_no_migration_sql(
     def fail_replace(_source: Path, _target: Path) -> None:
         raise PermissionError
 
-    monkeypatch.setattr(migrations.os, "replace", fail_replace)
+    monkeypatch.setattr(migration_backup.os, "replace", fail_replace)
     with pytest.raises(PermissionError):
         apply_migrations(
             db_path, (Migration(1, "blocked", ("CREATE TABLE forbidden (id INTEGER)",), None),)

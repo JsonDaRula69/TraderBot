@@ -31,7 +31,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --all-extras --dev
-      - run: uv run pytest tests/ -v --tb=short
+      # The injection publication guard rejects group-writable workspace
+      # ancestors (sticky does not exempt), so real-CLI deploy E2Es cannot
+      # pass under the default /tmp basetemp on POSIX runners.
+      - run: uv run pytest tests/ -v --tb=short --basetemp="$HOME/pytest-tmp"
 
   security:
     name: Dependency security audit

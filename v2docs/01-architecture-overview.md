@@ -1,6 +1,6 @@
 # TraderBot v2 — Architecture Overview
 
-> This document describes the complete system architecture emerging from the 38 design decisions in v2roadmap.md.
+> This document describes the complete system architecture emerging from the 39 design decisions in v2roadmap.md.
 
 ---
 
@@ -130,10 +130,10 @@ The AutoDev team is responsible for all engineering and development of TraderBot
 ### Infisical
 
 Self-hosted secrets vault (free, open source, MIT license). Two projects:
-1. **"TraderBot"** — API keys (Kalshi, VoyageAI, NewsAPI, etc.), namespace-organized (global + per-category)
+1. **"TraderBot"** — the canonical Kalshi API key and RSA private key used by the daemon
 2. **"TraderBot Agent Tokens"** — Profile tokens, one per agent
 
-Machine identity `traderbot-service` has read/write access. Each agent's machine identity has read access only to its own token. The `INFISICAL_TOKEN` bootstrap secret is stored via OpenClaw SecretRef.
+An existing machine identity `traderbot-service` has read/write access. Deploy validates its non-value project access but never creates a machine identity. The `INFISICAL_TOKEN` bootstrap secret is stored via OpenClaw SecretRef.
 
 Fallback: local encrypted `secrets.json` with machine-derived encryption for air-gapped systems.
 
@@ -143,22 +143,15 @@ Fallback: local encrypted `secrets.json` with machine-derived encryption for air
 ```
 ~/.traderbot/
 ├── traderbot.db                         # Global (schema version, config, profile registry)
-├── sysadmin/db/decisions.db             # SysAdmin oversight decisions
-├── paper-weather/db/decisions.db        # Weather agent paper trades
+├── backtest-weather/db/decisions.db     # Selected Weather agent decisions
 ├── live-weather/db/decisions.db         # Weather agent live trades (created on promotion)
-├── paper-economics/db/decisions.db      # Economics agent paper trades
+├── backtest-economics/db/decisions.db   # Selected Economics agent decisions
 └── ...
 ```
 
-**ChromaDB** (shared with category metadata filtering):
-```
-~/.traderbot/chromadb/
-├── news/                  # News embeddings (category metadata)
-├── data_points/           # Quantitative data (category metadata)
-├── market_patterns/       # Pattern signatures (category metadata)
-├── news_signals/          # Processed signals (category metadata)
-└── market_conditions/     # Market resolution conditions
-```
+SysAdmin has no per-profile decisions database. It enumerates selected category databases read-only through `DatabaseAccess`.
+
+**ChromaDB** uses one hardened embedded root at `~/.traderbot/chromadb/`. The five logical shared names are `news`, `data_points`, `market_patterns`, `news_signals`, and `market_conditions`; deploy validates this manifest but creates no collection until a real embedding write supplies an explicit dimension.
 
 ### Docker Sandbox
 

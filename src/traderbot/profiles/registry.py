@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from traderbot.kalshi.models import MarketCategory
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
+from traderbot.profiles.generic import create_category_profile
 from traderbot.profiles.models import TradingProfile
 from traderbot.profiles.sysadmin import create_sysadmin_profile
-from traderbot.profiles.weather import create_weather_profile
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,16 @@ class ProfileRegistry:
     """
 
     def __init__(self) -> None:
+        categories = tuple(
+            create_category_profile(category.value, "backtest", (category,))
+            for category in MarketCategory
+        )
         self._profiles: dict[str, TradingProfile] = {
             p.name: p
             for p in (
                 create_sysadmin_profile(),
                 create_dev_liaison_profile(),
-                create_weather_profile(),
+                *categories,
             )
         }
 
