@@ -3,8 +3,13 @@ from typing import ClassVar, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.kalshi.models import MarketCategory
+
 CONFIG_PATH: Final = Path(__file__).parents[1] / "configs" / "openclaw" / "with-plugin.json"
 INFISICAL_COMMAND: Final = "/usr/local/bin/openclaw-infisical-resolver"
+EXPECTED_TOKEN_AGENTS: Final = frozenset(
+    {"sysadmin", "dev-liaison", *(category.value for category in MarketCategory)}
+)
 
 
 class StrictConfigModel(BaseModel):
@@ -100,7 +105,7 @@ def test_agent_token_map_uses_exec_source_with_infisical_provider() -> None:
     entries = load_with_plugin_config().plugins.entries
     token_map = entries.traderbot_token_injector.config.agentTokenMap
 
-    assert set(token_map) == {"weather", "sysadmin", "dev-liaison"}
+    assert set(token_map) == EXPECTED_TOKEN_AGENTS
     for agent_id, secret_ref in token_map.items():
         assert secret_ref.source == "exec"
         assert secret_ref.provider == "infisical"
