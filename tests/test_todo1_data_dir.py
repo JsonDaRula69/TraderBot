@@ -74,5 +74,16 @@ def test_infisical_credentials_path_uses_data_dir(
     ) as read_text:
         _ = build_secrets_store()
 
-    # Then: credentials are resolved beneath the override
-    assert read_text.call_args.args[0] == expected / "infisical-credentials.json"
+    # Then: credentials are resolved beneath the override.
+    # OS-aware: on Linux the machine-identity derivation reads /etc/machine-id
+    # first, so the credentials read is not necessarily read_text's first call.
+    # The proven property is unchanged: build_secrets_store() reads the
+    # Infisical credentials file at exactly <override>/infisical-credentials.json
+    # and nowhere else.
+    expected_path = expected / "infisical-credentials.json"
+    read_paths = [c.args[0] for c in read_text.call_args_list]
+    assert expected_path in read_paths
+    assert not any(
+        p != expected_path and Path(p).name == "infisical-credentials.json"
+        for p in read_paths
+    )
