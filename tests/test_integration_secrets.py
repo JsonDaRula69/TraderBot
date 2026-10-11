@@ -23,7 +23,7 @@ import pytest
 from tests.test_infisical_resolver_script import FakeClientFactory
 from tests.test_secrets_resolver import _FakeAuth
 from tests.test_secrets_store import FakeInfisicalClient, FakeSecretsClient
-from tests.test_with_plugin_config import load_with_plugin_config
+from tests.test_with_plugin_config import EXPECTED_TOKEN_AGENTS, load_with_plugin_config
 from traderbot.mcp.resolver import _SUSPENDED_PROFILES, resolve_token_adapter
 from traderbot.profiles.tokens import LocalTokenStore, get_store, set_store
 from traderbot.secrets.adapter import TokenStoreAdapter
@@ -186,6 +186,8 @@ class TestRotationE2E:
         assert store.resolve_profile_token("old-sys") is None
         assert store.resolve_profile_token(rotated["weather"]) == ("weather", "weather")
         assert store.resolve_profile_token(rotated["sysadmin"]) == ("sysadmin", "sysadmin")
+        client.close()
+        assert client.close_calls == 1
 
     def test_mock_time_advances_staleness(self) -> None:
         client = FakeInfisicalClient()
@@ -206,6 +208,8 @@ class TestRotationE2E:
             staleness = manager.get_staleness()
 
         assert staleness["weather"] == pytest.approx(2.0, abs=0.01)
+        client.close()
+        assert client.close_calls == 1
 
 
 class TestPluginExecProtocol:
@@ -264,6 +268,8 @@ class TestMigrationE2E:
         assert entry["token"] == "tok-weather"
         assert entry["profile"] == "weather"
         assert entry["agent_id"] == "weather"
+        client.close()
+        assert client.close_calls == 1
 
     def test_original_file_preserved(self, tmp_path: Path) -> None:
         client = FakeInfisicalClient()
@@ -279,6 +285,8 @@ class TestMigrationE2E:
 
         assert tokens_path.exists()
         assert tokens_path.read_bytes() == original
+        client.close()
+        assert client.close_calls == 1
 
 
 class TestSuspendedProfiles:
@@ -311,7 +319,7 @@ class TestWithPluginConfig:
             load_with_plugin_config().plugins.entries.traderbot_token_injector.config.agentTokenMap
         )
 
-        assert set(token_map) == {"weather", "sysadmin", "dev-liaison"}
+        assert set(token_map) == EXPECTED_TOKEN_AGENTS
         for agent_id, secret_ref in token_map.items():
             assert secret_ref.source == "exec"
             assert secret_ref.provider == "infisical"

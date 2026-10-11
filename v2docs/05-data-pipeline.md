@@ -37,7 +37,7 @@ TraderBot Service (always-on)
 │   └── Rotates all agent profile tokens via Infisical
 │
 └── Local Databases
-    ├── SQLite: global ~/.traderbot/traderbot.db (market_data, orderbook, weather_forecasts, nws_forecasts, settlement_cache)
+    ├── SQLite: global ~/.traderbot/traderbot.db (real-time cache, forecasts, observations, Kalshi history, settlements)
     ├── ChromaDB: shared collections with category metadata (Phase 3)
     └── WebSocket cache: real-time Kalshi prices, orderbooks, fills
 ```
@@ -53,6 +53,10 @@ The Kalshi WebSocket is the **sole source for all real-time Kalshi data**. REST 
 3. Fetching historical data (settled markets, candlesticks, historical trades)
 
 No REST polling for current market data — the WebSocket provides a continuous stream, and any REST call for data that the WebSocket already provides is a bug.
+
+The current typed historical REST surface follows the official v2 contracts: lowercase category discovery uses public `GET /series`; one public `GET /historical/cutoff` partitions settled markets; current metadata uses public filtered `GET /markets`; archive metadata uses public selector-only `GET /historical/markets` and client-side bounds; live-window candles use public `GET /series/{series_ticker}/markets/{ticker}/candlesticks`; archived candles use public `GET /historical/markets/{ticker}/candlesticks`; and forecast percentiles use signed `GET /series/{series_ticker}/events/{event_ticker}/forecast_percentile_history`. Dollar and contract-count fixed points remain validated strings, and live/historical candle wire fields are modeled separately.
+
+Deploy Step 6 invokes this same typed backfill orchestration through its standalone dependency boundary. It does not duplicate discovery, API, collector, SQL, or reporting logic, and a partial result preserves committed forward progress while allowing independent read-only verification to run.
 
 **Channels subscribed**:
 - `market_lifecycle_v2`: detects new markets as they appear — no REST scan needed
@@ -110,7 +114,7 @@ All data sources begin collection at install, not just enabled categories. This 
 - The 6-month backfill populates data for all categories
 - The user doesn't need to wait for data collection before enabling a new category
 
-The `--categories` flag for backfill becomes less critical since all categories are always backfilled, but may still be useful for re-backfilling a single category.
+The backfill command has no category filter. Its Kalshi phase currently discovers all weather series, while the collector import copies all three available weather tables.
 
 ---
 
@@ -122,7 +126,7 @@ The `--categories` flag for backfill becomes less critical since all categories 
 |---|---|---|---|
 | Historical NWS forecasts | NWS API | JSON | Ready to use (day-0 only) |
 | Open-Meteo Historical Forecast | Open-Meteo Archive API | JSON | Ready to use (day-0 only) |
-| Kalshi historical market data | HistoryService | JSON | Ready to use |
+| Kalshi historical market data | Typed KalshiClient v2 methods | JSON | Ready to use |
 | Kalshi historical orderbooks | Candlestick API (bid/ask OHLC + trade prices) | JSON | 1min/1hr/1day granularity |
 | Kalshi forecast percentiles | `forecast_percentile_history` API | JSON | Up to 5-second granularity |
 | Historical news with timestamps | ChromaDB with published_at | Vector | Verify metadata integrity |
@@ -203,7 +207,7 @@ traderbot__market_prices    — Current and historical price data from Kalshi We
 
 ### Future Toolkits (Design Pending)
 
-- Election toolkit: `traderbot__election_poll_aggregate`, `traderbot__election_demographic`, `traderbot__election_accuracy`, `traderbot__election_decision_brief`
+- Politics toolkit: design pending under the `politics` category
 - Crypto toolkit: `traderbot__crypto_volatility`, `traderbot__crypto_onchain`, `traderbot__crypto_accuracy`, `traderbot__crypto_decision_brief`
 - Other categories follow the same pattern, designed from scratch for each domain
 

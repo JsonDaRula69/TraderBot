@@ -145,6 +145,10 @@ class FakeInfisicalClient:
 
     def __init__(self) -> None:
         self.secrets: FakeSecretsClient = FakeSecretsClient()
+        self.close_calls: int = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 def test_local_roundtrip_set_then_get() -> None:

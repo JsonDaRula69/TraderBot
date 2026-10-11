@@ -119,9 +119,13 @@ def migration_check(data_root: Path) -> CheckEvidence:
         "weather_forecasts",
         "nws_forecasts",
         "settlement_cache",
+        "weather_observations",
+        "kalshi_markets",
+        "kalshi_candlesticks",
+        "kalshi_forecast_history",
     }
     return {
-        "passed": versions == [(1,)] and tables == expected and reapplied == [],
+        "passed": versions == [(1,), (2,)] and tables == expected and reapplied == [],
         "details": {"versions": [row[0] for row in versions], "tables": sorted(tables)},
     }
 

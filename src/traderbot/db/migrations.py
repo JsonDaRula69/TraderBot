@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import logging
-import os
-import secrets
 import sqlite3
-import sys
-import tempfile
 from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass
@@ -15,7 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Protocol
 
-logger = logging.getLogger(__name__)
+from traderbot.db.global_v2 import GLOBAL_V2_DOWN_SQL, GLOBAL_V2_UP_SQL
+from traderbot.db.migration_backup import backup_legacy_database
 
 _SCHEMA_VERSION_SQL: Final = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)"  # noqa: E501
 
@@ -85,7 +81,10 @@ _GLOBAL_V1_SQL: Final = (
     "CREATE TABLE IF NOT EXISTS settlement_cache (ticker TEXT PRIMARY KEY, outcome INTEGER NOT NULL, settled_at TEXT NOT NULL)",  # noqa: E501
 )
 
-GLOBAL_MIGRATIONS: Final = (Migration(1, "Create global TraderBot schema", _GLOBAL_V1_SQL, None),)
+GLOBAL_MIGRATIONS: Final = (
+    Migration(1, "Create global TraderBot schema", _GLOBAL_V1_SQL, None),
+    Migration(2, "Add historical data schema", GLOBAL_V2_UP_SQL, GLOBAL_V2_DOWN_SQL),
+)
 
 
 def _ordered_migrations(migrations: Sequence[Migration]) -> tuple[Migration, ...]:
@@ -136,82 +135,6 @@ def _validate_global_tables(connection: sqlite3.Connection, *, existing_only: bo
             raise LegacySchemaMismatchError(table, signature, actual)
 
 
-def _backup_timestamp() -> str:
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _reserve_backup_path(db_path: Path) -> Path:
-    for _attempt in range(100):
-        candidate = db_path.with_name(
-            f"{db_path.name}.bak.{_backup_timestamp()}-{secrets.token_hex(4)}"
-        )
-        try:
-            descriptor = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            continue
-        os.close(descriptor)
-        return candidate
-    raise MigrationError(f"could not reserve a backup name for {db_path}")
-
-
-def _fsync_path(path: Path, *, best_effort: bool) -> None:
-    flags = os.O_RDWR if sys.platform == "win32" else os.O_RDONLY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        if not best_effort:
-            raise
-        logger.warning(
-            "migration.backup_directory_fsync_best_effort",
-            extra={"directory": str(path), "error": str(exc)},
-        )
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError as exc:
-        if not best_effort:
-            raise
-        logger.warning(
-            "migration.backup_directory_fsync_best_effort",
-            extra={"directory": str(path), "error": str(exc)},
-        )
-    finally:
-        try:
-            os.close(descriptor)
-        except OSError as exc:
-            if not best_effort:
-                raise
-            logger.warning(
-                "migration.backup_directory_fsync_best_effort",
-                extra={"directory": str(path), "error": str(exc)},
-            )
-
-
-def _backup_legacy_database(db_path: Path) -> Path:
-    descriptor, temp_name = tempfile.mkstemp(prefix=f".{db_path.name}.backup-", dir=db_path.parent)
-    os.close(descriptor)
-    temp_path = Path(temp_name)
-    backup_path: Path | None = None
-    published = False
-    try:
-        with (
-            closing(sqlite3.connect(db_path)) as source,
-            closing(sqlite3.connect(temp_path)) as target,
-        ):
-            source.backup(target)
-        _fsync_path(temp_path, best_effort=False)
-        backup_path = _reserve_backup_path(db_path)
-        os.replace(temp_path, backup_path)
-        published = True
-        _fsync_path(db_path.parent, best_effort=sys.platform == "win32")
-        return backup_path
-    finally:
-        if not published:
-            _ = temp_path.unlink(missing_ok=True)
-            if backup_path is not None:
-                _ = backup_path.unlink(missing_ok=True)
-
-
 def _prepare_database(db_path: Path, ordered: tuple[Migration, ...]) -> None:
     _ = db_path.parent.mkdir(parents=True, exist_ok=True)
     if not db_path.exists() or db_path.stat().st_size == 0:
@@ -220,7 +143,7 @@ def _prepare_database(db_path: Path, ordered: tuple[Migration, ...]) -> None:
         tables = _table_names(connection)
     if not tables or "schema_version" in tables:
         return
-    _ = _backup_legacy_database(db_path)
+    _ = backup_legacy_database(db_path)
     if ordered == GLOBAL_MIGRATIONS:
         with closing(sqlite3.connect(db_path)) as connection:
             _validate_global_tables(connection, existing_only=True)
