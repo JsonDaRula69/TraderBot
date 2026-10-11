@@ -18,7 +18,7 @@ dependencies = [
     "onnxruntime==1.23.2",
     "pydantic>=2.13.5",
     "rich>=13.0",
-    "uvicorn>=0.34.0",
+    "uvicorn>=0.54.0",
     "websockets>=17.1",
 ]
 
