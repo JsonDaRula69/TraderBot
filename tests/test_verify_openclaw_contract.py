@@ -59,13 +59,16 @@ def _job(state: dict[str, JsonValue], **overrides: JsonValue) -> CronJob:
     return job
 
 
-def _inventory(*ids: str) -> AgentInventory:
+def _inventory(root: Path, *ids: str) -> AgentInventory:
+    # Inventory workspaces must be absolute on every platform: a literal
+    # "/deploy/<id>" fails AgentSummary's absolute-path validation on Windows,
+    # where a drive-less path is not absolute. tmp_path is absolute on all OSes.
     return AgentInventory(
         root=[
             AgentSummary(
                 id=agent_id,
-                workspace=f"/deploy/{agent_id}",
-                agentDir=f"/deploy/{agent_id}",
+                workspace=str(root / "deploy" / agent_id),
+                agentDir=str(root / "deploy" / agent_id),
                 bindings=0,
                 isDefault=agent_id == "main",
             )
@@ -119,11 +122,14 @@ def _wire(
     monkeypatch: pytest.MonkeyPatch,
     snapshot: OpenClawConfigSnapshot,
     *,
+    root: Path,
     inventory: AgentInventory | None = None,
     jobs: list[CronJob] | None = None,
 ) -> None:
     monkeypatch.setattr(
-        openclaw, "inspect_agents", lambda: _inventory(*_IDS) if inventory is None else inventory
+        openclaw,
+        "inspect_agents",
+        lambda: _inventory(root, *_IDS) if inventory is None else inventory,
     )
     monkeypatch.setattr(openclaw, "inspect_crons", lambda: jobs if jobs is not None else [])
 
@@ -148,7 +154,7 @@ def test_preserved_agents_with_divergent_sandbox_report_advisory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: a preserved fleet whose sandbox posture the deploy never wrote
-    _wire(monkeypatch, _snapshot(sandbox={"main": None, "weather": None}))
+    _wire(monkeypatch, _snapshot(sandbox={"main": None, "weather": None}), root=tmp_path)
 
     # When: the agents probe inspects posture the deployment does not own
     probe = OpenClawVerifier(_request(tmp_path)).agents()
@@ -164,7 +170,7 @@ def test_preserved_agents_with_converged_posture_pass_exact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: a preserved fleet that already converged to the canonical posture
-    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": "all"}))
+    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": "all"}), root=tmp_path)
 
     # When: no required or advisory divergence exists
     probe = OpenClawVerifier(_request(tmp_path)).agents()
@@ -178,7 +184,7 @@ def test_created_agents_must_match_the_written_sandbox(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: the deploy created weather and wrote the canonical sandbox mode
-    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": None}))
+    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": None}), root=tmp_path)
 
     # When: a created agent's sandbox postcondition diverges
     probe = OpenClawVerifier(_request(tmp_path, created_agents=("weather",))).agents()
@@ -192,7 +198,7 @@ def test_created_agents_with_written_sandbox_pass_exact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: the deploy created weather with the canonical sandbox written
-    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": "all"}))
+    _wire(monkeypatch, _snapshot(sandbox={"main": "off", "weather": "all"}), root=tmp_path)
 
     # When: the created agent's postcondition is verified
     probe = OpenClawVerifier(_request(tmp_path, created_agents=("weather",))).agents()
@@ -209,6 +215,7 @@ def test_secret_ref_mismatch_stays_a_required_failure(
     _wire(
         monkeypatch,
         _snapshot(sandbox={"main": "off", "weather": "all"}, missing_ref=("weather",)),
+        root=tmp_path,
     )
 
     # When: the agents probe reads the injector mapping
@@ -223,7 +230,7 @@ def test_missing_selected_agent_stays_a_required_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: the selected weather agent is absent from the inventory
-    _wire(monkeypatch, _snapshot(), inventory=_inventory("main"))
+    _wire(monkeypatch, _snapshot(), inventory=_inventory(tmp_path, "main"), root=tmp_path)
 
     # When: target resolution reconciles the selected fleet
     probe = OpenClawVerifier(_request(tmp_path)).agents()
@@ -240,7 +247,7 @@ def test_preserve_policy_reports_divergent_cadence_as_advisory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: a preserved fleet with active and unset heartbeat cadences
-    _wire(monkeypatch, _snapshot(heartbeat={"main": "30m", "weather": None}))
+    _wire(monkeypatch, _snapshot(heartbeat={"main": "30m", "weather": None}), root=tmp_path)
 
     # When: the default preserve policy inspects cadence the deploy did not set
     probe = OpenClawVerifier(_request(tmp_path)).heartbeat()
@@ -256,7 +263,7 @@ def test_preserve_policy_dormant_fleet_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: every selected agent happens to be dormant
-    _wire(monkeypatch, _snapshot(heartbeat={"main": "0m", "weather": "0m"}))
+    _wire(monkeypatch, _snapshot(heartbeat={"main": "0m", "weather": "0m"}), root=tmp_path)
 
     # When: the preserve policy reports cadence
     probe = OpenClawVerifier(_request(tmp_path)).heartbeat()
@@ -270,7 +277,7 @@ def test_require_0m_policy_fails_non_dormant_cadence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: the deploy approved dormancy for the whole selected fleet
-    _wire(monkeypatch, _snapshot(heartbeat={"main": "30m", "weather": "0m"}))
+    _wire(monkeypatch, _snapshot(heartbeat={"main": "30m", "weather": "0m"}), root=tmp_path)
 
     # When: the approved postcondition is required
     probe = OpenClawVerifier(_request(tmp_path, heartbeat_policy="require_0m")).heartbeat()
@@ -284,7 +291,7 @@ def test_require_0m_policy_passes_dormant_fleet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: the approved dormant postcondition holds everywhere
-    _wire(monkeypatch, _snapshot(heartbeat={"main": "0m", "weather": "0m"}))
+    _wire(monkeypatch, _snapshot(heartbeat={"main": "0m", "weather": "0m"}), root=tmp_path)
 
     # When: the approved postcondition is required
     probe = OpenClawVerifier(_request(tmp_path, heartbeat_policy="require_0m")).heartbeat()
