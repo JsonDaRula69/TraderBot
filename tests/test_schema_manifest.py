@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
@@ -12,6 +11,14 @@ from pydantic import BaseModel, ConfigDict
 
 from traderbot.db.decisions import DECISIONS_MIGRATIONS
 from traderbot.db.migrations import GLOBAL_MIGRATIONS, Migration
+from traderbot.deploy.verify_schema import (
+    DECISIONS_INDEXES,
+    DECISIONS_SCHEMA_VERSION,
+    DECISIONS_TABLES,
+    GLOBAL_INDEXES,
+    GLOBAL_SCHEMA_VERSION,
+    GLOBAL_TABLES,
+)
 
 _MANIFEST_START = "<!-- schema-manifest:start -->"
 _MANIFEST_END = "<!-- schema-manifest:end -->"
@@ -51,7 +58,6 @@ def _manifest() -> _Manifest:
         encoding="utf-8"
     )
     payload = document.split(_MANIFEST_START, maxsplit=1)[1].split(_MANIFEST_END, maxsplit=1)[0]
-    _ = json.loads(payload)
     return _Manifest.model_validate_json(payload)
 
 
@@ -108,3 +114,31 @@ def test_manifest_json_scopes_match_migration_constants() -> None:
     assert set(per_agent_tables) == set(per_agent_schema)
     for table_name, columns in global_schema.items():
         assert _manifest_columns(manifest.tables[table_name]) == columns
+
+
+def test_verifier_static_contract_matches_deliberate_schema_authorities() -> None:
+    global_schema = _migration_schema(GLOBAL_MIGRATIONS)
+    decisions_schema = _migration_schema(DECISIONS_MIGRATIONS)
+
+    assert GLOBAL_SCHEMA_VERSION == max(item.version for item in GLOBAL_MIGRATIONS)
+    assert DECISIONS_SCHEMA_VERSION == max(item.version for item in DECISIONS_MIGRATIONS)
+    assert GLOBAL_TABLES == frozenset(global_schema) | {"schema_version"}
+    assert DECISIONS_TABLES == frozenset(decisions_schema) | {"schema_version"}
+    with sqlite3.connect(":memory:") as connection:
+        for migration in GLOBAL_MIGRATIONS:
+            for statement in migration.up_sql:
+                _ = connection.execute(statement)
+        global_rows: list[tuple[str]] = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        global_indexes = {row[0] for row in global_rows}
+    with sqlite3.connect(":memory:") as connection:
+        for migration in DECISIONS_MIGRATIONS:
+            for statement in migration.up_sql:
+                _ = connection.execute(statement)
+        decision_rows: list[tuple[str]] = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        decision_indexes = {row[0] for row in decision_rows}
+    assert GLOBAL_INDEXES == frozenset(global_indexes)
+    assert DECISIONS_INDEXES == frozenset(decision_indexes)

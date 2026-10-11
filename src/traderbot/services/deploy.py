@@ -21,6 +21,11 @@ from traderbot.services.paths import BinPaths, resolve_bin_paths
 
 logger = logging.getLogger(__name__)
 
+
+class ServiceDeploymentError(RuntimeError):
+    pass
+
+
 # Template name per service manager (package data in traderbot.services).
 _TEMPLATES: dict[str, str] = {
     "systemd": "traderbot.service.in",
@@ -67,7 +72,7 @@ def _render(template_name: str, paths: BinPaths, profile_token: str) -> str:
     )
 
 
-def _destination(manager: str, paths: BinPaths) -> Path:
+def service_destination(manager: str, paths: BinPaths) -> Path:
     """Return the destination path for the given service manager."""
     if manager == "windows":
         return paths.home / ".traderbot" / "traderbot-daemon.xml"
@@ -90,10 +95,10 @@ def _write_unit(destination: Path, rendered: str) -> None:
     """Write a rendered service unit, elevating via sudo when required."""
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(rendered, encoding="utf-8")
+        _ = destination.write_text(rendered, encoding="utf-8")
         return
-    except PermissionError:
-        pass
+    except PermissionError as error:
+        logger.debug("Direct service write denied; using privileged writer", exc_info=error)
 
     proc = subprocess.run(
         [*_sudo_prefix(), "tee", str(destination)],
@@ -104,7 +109,9 @@ def _write_unit(destination: Path, rendered: str) -> None:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"Failed to write service unit {destination}: {proc.stderr.strip()}")
+        raise ServiceDeploymentError(
+            f"Failed to write service unit {destination}: {proc.stderr.strip()}"
+        )
 
 
 def _systemctl(*args: str) -> subprocess.CompletedProcess[str]:
@@ -125,9 +132,9 @@ def enable_and_start_service() -> bool:
     """
     if detect_service_manager() != "systemd":
         return False
-    _systemctl("daemon-reload")
-    _systemctl("enable", "traderbot.service")
-    _systemctl("start", "traderbot.service")
+    _ = _systemctl("daemon-reload")
+    _ = _systemctl("enable", "traderbot.service")
+    _ = _systemctl("start", "traderbot.service")
     return _systemctl("is-active", "traderbot.service").returncode == 0
 
 
@@ -155,7 +162,7 @@ def service_status(paths: BinPaths | None = None) -> str:
     if manager == "none":
         return "not installed"
 
-    destination = _destination(manager, paths)
+    destination = service_destination(manager, paths)
     if not destination.exists():
         return "not installed"
 
@@ -207,12 +214,12 @@ def deploy_service(profile_token: str = "", paths: BinPaths | None = None) -> Pa
     paths = paths or resolve_bin_paths()
     manager = detect_service_manager()
     if manager == "none":
-        raise RuntimeError(
+        raise ServiceDeploymentError(
             f"No supported service manager detected for platform {platform.system()!r}"
         )
 
     rendered = _render(_TEMPLATES[manager], paths, profile_token)
-    destination = _destination(manager, paths)
+    destination = service_destination(manager, paths)
     _write_unit(destination, rendered)
     logger.info("Deployed %s service to %s", manager, destination)
     return destination
@@ -232,7 +239,7 @@ def remove_service(paths: BinPaths | None = None) -> bool:
     if manager == "none":
         return False
 
-    destination = _destination(manager, paths)
+    destination = service_destination(manager, paths)
     try:
         destination.unlink(missing_ok=True)
     except OSError as exc:

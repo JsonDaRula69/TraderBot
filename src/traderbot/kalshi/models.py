@@ -7,100 +7,69 @@ adds the market/order/fill data models ported from the retired v1 client
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime
-from enum import StrEnum
-from typing import Annotated, Any, Literal
-from uuid import uuid4
+from datetime import UTC, datetime
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
-logger = logging.getLogger(__name__)
-
-
-class MarketCategory(StrEnum):
-    """Kalshi market categories.
-
-    Used by TradingProfile.enabled_categories for per-agent
-    category isolation (DD-011).
-    """
-
-    WEATHER = "weather"
-    ECONOMICS = "economics"
-    CRYPTO = "crypto"
-    SPORTS = "sports"
-    POLITICS = "politics"
-    ENTERTAINMENT = "entertainment"
-    FINANCIAL = "financial"
-    WORLD = "world"
-    OTHER = "other"
-
-
-class OrderSide(StrEnum):
-    """Internal yes/no side representation."""
-
-    yes = "yes"
-    no = "no"
-
-
-class OrderSideV2(StrEnum):
-    """V2 API-facing side values. bid → OrderSide.yes, ask → OrderSide.no."""
-
-    bid = "bid"
-    ask = "ask"
-
-
-class OrderType(StrEnum):
-    """Order type: limit (default) or market."""
-
-    limit = "limit"
-    market = "market"
-
-
-class OrderStatus(StrEnum):
-    """Order status values.
-
-    V2: 'filled' replaces the legacy 'matched' status.
-    """
-
-    live = "live"
-    resting = "resting"
-    matched = "matched"
-    filled = "filled"
-    cancelled = "cancelled"
-    expired = "expired"
-
-
-class OrderRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    ticker: str
-    side: OrderSideV2
-    count: str
-    price: str
-    client_order_id: str | None = None
-    time_in_force: str = "good_till_canceled"
-    self_trade_prevention_type: str = "taker_at_cross"
-
-    def to_v2_body(self) -> dict[str, str]:
-        """Serialize to V2 API request body."""
-        body: dict[str, str] = {
-            "ticker": self.ticker,
-            "side": self.side.value,
-            "count": self.count,
-            "price": self.price,
-            "client_order_id": self.client_order_id or str(uuid4()),
-            "time_in_force": self.time_in_force,
-            "self_trade_prevention_type": self.self_trade_prevention_type,
-        }
-        return body
-
-
-class OrderBookLevel(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    price: Annotated[int, Field(ge=0, description="Price in cents")]
-    size: Annotated[int, Field(ge=0)]
+from traderbot.kalshi.order_models import (
+    CancelResponse as CancelResponse,
+)
+from traderbot.kalshi.order_models import (
+    ExchangeStatus as ExchangeStatus,
+)
+from traderbot.kalshi.order_models import (
+    Fill as Fill,
+)
+from traderbot.kalshi.order_models import (
+    MarketCategory,
+    Trade,
+)
+from traderbot.kalshi.order_models import (
+    Order as Order,
+)
+from traderbot.kalshi.order_models import (
+    OrderBook as OrderBook,
+)
+from traderbot.kalshi.order_models import (
+    OrderBookLevel as OrderBookLevel,
+)
+from traderbot.kalshi.order_models import (
+    OrderRequest as OrderRequest,
+)
+from traderbot.kalshi.order_models import (
+    OrderResponse as OrderResponse,
+)
+from traderbot.kalshi.order_models import (
+    OrderResult as OrderResult,
+)
+from traderbot.kalshi.order_models import (
+    OrderSide as OrderSide,
+)
+from traderbot.kalshi.order_models import (
+    OrderSideV2 as OrderSideV2,
+)
+from traderbot.kalshi.order_models import (
+    OrderStatus as OrderStatus,
+)
+from traderbot.kalshi.order_models import (
+    OrderType as OrderType,
+)
+from traderbot.kalshi.order_models import (
+    PortfolioState as PortfolioState,
+)
+from traderbot.kalshi.order_models import (
+    Position as Position,
+)
+from traderbot.kalshi.order_models import (
+    RiskCheckResult as RiskCheckResult,
+)
+from traderbot.kalshi.order_models import (
+    TradeRequest as TradeRequest,
+)
+from traderbot.kalshi.order_models import (
+    TradingOrder as TradingOrder,
+)
 
 
 class Market(BaseModel):
@@ -125,7 +94,7 @@ class Market(BaseModel):
 
     @field_validator("category", mode="before")
     @classmethod
-    def _normalize_category(cls, v: object) -> str | None:
+    def _normalize_category(cls, v: str | None) -> str | None:
         if not isinstance(v, str):
             return None
         return v
@@ -154,7 +123,7 @@ class Ticker(BaseModel):
 
     @field_validator("category", mode="before")
     @classmethod
-    def _normalize_category(cls, v: object) -> str | None:
+    def _normalize_category(cls, v: str | None) -> str | None:
         if not isinstance(v, str):
             return None
         return v
@@ -167,56 +136,6 @@ class Ticker(BaseModel):
             return int(float(self.volume_fp))
         except (ValueError, TypeError):
             return 0
-
-
-class OrderBook(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    yes_bids: list[OrderBookLevel]
-    no_bids: list[OrderBookLevel]
-
-
-class Trade(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    ticker: str
-    price: Annotated[int, Field(ge=0, description="Price in cents")]
-    quantity: Annotated[int, Field(ge=0)]
-    side: Literal["yes", "no"]
-    timestamp: datetime
-
-
-class Order(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    id: str
-    ticker: str
-    side: Literal["yes", "no"]
-    price: Annotated[int, Field(ge=0, description="Price in cents")]
-    quantity: Annotated[int, Field(ge=0)]
-    status: Literal["resting", "filled", "cancelled"]
-    created_time: datetime
-
-
-class Position(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    ticker: str
-    side: str = "yes"
-    quantity: Annotated[int, Field(ge=0)]
-    avg_price: Annotated[int, Field(ge=0, description="Average price in cents")]
-    settlement_result: bool | None = None
-
-
-class Fill(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    order_id: str
-    ticker: str
-    side: Literal["yes", "no"]
-    price: Annotated[int, Field(ge=0, description="Price in cents")]
-    quantity: Annotated[int, Field(ge=0)]
-    timestamp: datetime
 
 
 class Decision(BaseModel):
@@ -236,12 +155,33 @@ class Decision(BaseModel):
     actual_result: bool | None = None
 
 
-class CutoffTimestamps(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
+class CutoffDatetimeError(ValueError):
+    pass
 
-    market_settled_ts: datetime | None = None
-    trade_cutoff_ts: datetime | None = None
-    order_cutoff_ts: datetime | None = None
+
+class CutoffTimestamps(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    market_settled_ts: datetime
+    trades_created_ts: datetime
+    orders_updated_ts: datetime
+    market_positions_last_updated_ts: datetime | None = None
+
+    @field_validator("*")
+    @classmethod
+    def _normalize_aware_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        try:
+            offset = value.utcoffset()
+        except (OverflowError, ValueError) as exc:
+            raise CutoffDatetimeError("cutoff datetime must have an available UTC offset") from exc
+        if offset is None:
+            raise CutoffDatetimeError("cutoff datetime must be timezone-aware")
+        try:
+            return value.astimezone(UTC)
+        except (OverflowError, ValueError) as exc:
+            raise CutoffDatetimeError("cutoff datetime cannot be normalized to UTC") from exc
 
 
 class Event(BaseModel):
@@ -285,109 +225,3 @@ class TradeListResponse(BaseModel):
 
     trades: list[Trade]
     cursor: str | None = None
-
-
-class RiskCheckResult(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    passed: bool
-    limit_name: str
-    current_value: float | int
-    limit_value: float | int
-    rejection_reason: str | None = None
-
-
-class PortfolioState(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    portfolio_value_cents: Annotated[int, Field(gt=0)]
-    peak_value_cents: Annotated[int, Field(gt=0)]
-    current_positions_value_cents: Annotated[int, Field(ge=0)]
-    today_realized_loss_cents: Annotated[int, Field(ge=0)]
-    today_unrealized_loss_cents: Annotated[int, Field(ge=0)]
-    open_positions_count: Annotated[int, Field(ge=0)]
-
-    @computed_field
-    @property
-    def portfolio_value_dollars(self) -> float:
-        return self.portfolio_value_cents / 100.0
-
-
-class TradeRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    ticker: str
-    direction: Literal["yes", "no"]
-    quantity: Annotated[int, Field(gt=0)]
-    price_cents: Annotated[int, Field(gt=0, description="Limit price in cents")]
-    estimated_prob: Annotated[float, Field(ge=0, le=1)]
-    confidence: Annotated[float, Field(ge=0, le=1)]
-    edge_estimate: float
-    market_price_cents: Annotated[int, Field(gt=0, description="Current market price in cents")]
-    market_open_interest: Annotated[int, Field(ge=0)]
-    market_category: MarketCategory | None = None
-
-    @computed_field
-    @property
-    def price_dollars(self) -> float:
-        return self.price_cents / 100.0
-
-    def model_post_init(self, __context: Any, /) -> None:
-        logger.debug(
-            "TradeRequest: ticker=%s dir=%s qty=%s price=%s",
-            self.ticker,
-            self.direction,
-            self.quantity,
-            self.price_cents,
-        )
-
-
-class TradingOrder(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    order_id: str
-    ticker: str
-    side: OrderSide
-    order_type: OrderType
-    quantity: Annotated[int, Field(ge=0)]
-    price: Annotated[int, Field(ge=1, le=99, description="Price in cents")]
-    status: OrderStatus
-    created_time: datetime
-    filled_quantity: Annotated[int, Field(ge=0)] = 0
-
-
-class OrderResponse(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    order: TradingOrder
-
-
-class OrderResult(BaseModel):
-    """V2 CreateOrderV2Response shape."""
-
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    order_id: str
-    client_order_id: str | None = None
-    fill_count: str = "0"
-    remaining_count: str = "0"
-    average_fill_price: str | None = None
-    ts_ms: int | None = None
-
-
-class CancelResponse(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    order_id: str
-    status: OrderStatus | None = None
-    reduced_by: str | None = None
-
-
-class ExchangeStatus(BaseModel):
-    """Current status of the Kalshi exchange."""
-
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    is_open: bool
-    description: str = ""
-    active_markets: Annotated[int, Field(ge=0)] = 0

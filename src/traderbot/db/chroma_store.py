@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 from contextlib import ExitStack
-from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import BinaryIO, ClassVar, Protocol, Self, override, runtime_checkable
+from typing import ClassVar, Protocol, Self, runtime_checkable
 
 import chromadb
 from chromadb import Collection
@@ -17,6 +15,7 @@ from chromadb.config import Settings
 
 from traderbot.kalshi.models import MarketCategory
 
+from .chroma_ownership import ChromaCleanupError, ChromaOwnershipError, ChromaOwnershipLock
 from .models import (
     EXPLICIT_EMBEDDING_MODEL,
     SHARED_CHROMA_COLLECTIONS,
@@ -29,9 +28,7 @@ from .models import (
 )
 from .security import (
     ChromaBackendError,
-    InvalidChromaRootError,
     assert_embedded_backend,
-    validate_chroma_lock_file,
     validate_chroma_root,
 )
 
@@ -42,78 +39,6 @@ type ChromaQueryResult = QueryResult
 @runtime_checkable
 class _ClosableClient(Protocol):
     def close(self) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ChromaOwnershipError(RuntimeError):
-    """Raised when another process owns the embedded Chroma root."""
-
-    lock_path: Path
-    reason: str
-
-    @override
-    def __str__(self) -> str:
-        return f"cannot own Chroma lock {self.lock_path}: {self.reason}"
-
-
-class ChromaOwnershipLock:
-    """Mutable lifetime guard for exclusive Chroma root ownership."""
-
-    def __init__(self, data_root: Path) -> None:
-        self._lock_path: Path = data_root / "chromadb.lock"
-        self._file: BinaryIO | None = None
-
-    def acquire(self) -> None:
-        validate_chroma_root(self._lock_path.parent)
-        validate_chroma_lock_file(self._lock_path)
-        lock_file = self._lock_path.open("r+b", buffering=0)
-        try:
-            if sys.platform == "win32":
-                import msvcrt
-
-                _ = lock_file.seek(0)
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            lock_file.close()
-            raise ChromaOwnershipError(self._lock_path, "already locked or unavailable") from exc
-        try:
-            validate_chroma_root(self._lock_path.parent)
-            validate_chroma_lock_file(self._lock_path)
-        except InvalidChromaRootError:
-            lock_file.close()
-            raise
-        self._file = lock_file
-
-    def release(self) -> None:
-        if self._file is None:
-            return
-        if sys.platform == "win32":
-            import msvcrt
-
-            _ = self._file.seek(0)
-            msvcrt.locking(self._file.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
-        self._file.close()
-        self._file = None
-
-    def __enter__(self) -> Self:
-        self.acquire()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.release()
 
 
 class ChromaStore:
@@ -271,8 +196,19 @@ class ChromaStore:
         """Close Chroma before releasing exclusive path ownership."""
         if self._closed:
             return
-        self._closer.close()
-        self._lock.release()
+        errors: list[Exception] = []
+        try:
+            try:
+                self._closer.close()
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                errors.append(exc)
+        finally:
+            try:
+                self._lock.release()
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                errors.append(exc)
+        if errors:
+            raise ChromaCleanupError("Chroma cleanup failed", errors)
         self._closed = True
 
     def __enter__(self) -> Self:
