@@ -12,7 +12,7 @@
 - **Trigger**: Discovered by category agents during normal operations
 - **Mechanism**: Category agents document findings in their `.learnings/` folder. After 3+ recurrences, the finding is flagged for promotion
 - **Examples**: Kalshi markets that don't auto-settle when results go public (creating a narrow 0%-risk trading window); climate/weather markets misassigned to wrong categories
-- **Resolution**: SysAdmin investigates, verifies root cause, and files a GitHub issue. Most repeated-learnings issues are resolved by updating parameters in `AGENTS.md` or `TOOLS.md`
+- **Resolution**: SysAdmin investigates, verifies root cause, and files a GitHub issue. Most repeated-learnings issues are resolved by updating the managed guidance in `AGENTS.md`
 
 ### Layer 2: Proactive Pipeline Improvement (Primary Focus)
 
@@ -158,7 +158,7 @@ SysAdmin selects the top proposal. Implementation path determined by root cause 
 | Root Cause | Implementation Path |
 |---|---|
 | TraderBot code issue (broken auth, bug, insufficient analysis model) | GitHub issue for Layer 3 dev team |
-| Agent behavior issue (missing/vague instructions, insufficient operating procedure) | Workspace file update (AGENTS.md, TOOLS.md) |
+| Agent behavior issue (missing/vague instructions, insufficient operating procedure) | Managed AGENTS.md update |
 | Both (new module added → agent needs instructions, SysAdmin needs to know) | Coordinated: GitHub issue + workspace update |
 
 ---

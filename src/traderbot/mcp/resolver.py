@@ -7,9 +7,9 @@ Phase 1: Swaps to real auth via tokens.resolve_token() + ProfileRegistry.get_pro
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from traderbot.paths import get_data_dir
 from traderbot.profiles.dev_liaison import create_dev_liaison_profile
 from traderbot.profiles.sysadmin import create_sysadmin_profile
 from traderbot.profiles.weather import create_weather_profile
@@ -86,7 +86,7 @@ def resolve_token_adapter(token: str) -> tuple[TradingProfile | None, str | None
     )
 
     _active = _get_store()
-    if isinstance(_active, _LocalTokenStore) and _active.base_path == Path.home() / ".traderbot":
+    if isinstance(_active, _LocalTokenStore) and _active.base_path == get_data_dir():
         from traderbot.secrets.resolver import get_resolver as _get_resolver
 
         _ = _get_resolver()

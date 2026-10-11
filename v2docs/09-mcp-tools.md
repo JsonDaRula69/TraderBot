@@ -8,7 +8,7 @@
 > implementation, deployment, CI, or on-target verification. Per-agent token
 > injection is architecturally resolved in issue #187 and **deployment-verified
 > on macpro-linux** (2026-08-03, commits `5b5088e`/`f8b5065`/`f1aa518`/`0dbc981`).
-> Issue #187 tracks the remaining Vault provider integration (Phase 1.5).
+> Infisical-backed SecretRef integration is implemented; Vault is retired.
 
 ---
 
@@ -45,6 +45,8 @@ All tools accept a `token` parameter for authentication and identity
 resolution. The MCP server resolves `token → profile`, checks the tool
 permission, then checks the category for category-bearing tools. The profile
 also supplies mode and access context.
+
+The deployment verifier proves daemon runtime through the same streamable-http boundary: initialize one bounded loopback MCP session, call `health` with one already validated selected profile token, and strictly require resolved auth plus running MCP/data-pipeline/WebSocket and initialized database/Chroma/ownership-lock components. A TCP connection, HTTP status, `405`, or CLI-local state snapshot is not runtime health.
 
 ---
 
@@ -104,8 +106,9 @@ category skip the final check.
 | `traderbot__market_edge` | Authenticates, checks `market_edge` permission, enforces DD-011 category access, validates strict input, and returns a stub response. |
 | `traderbot__market_prices` | Authenticates, checks `market_prices` permission, and returns current price data (last/bid/ask/spread/volume) for a ticker read from the daemon's in-memory `MarketCache` — **zero REST calls** (WS-first). |
 
-External API credential validation is deferred to the secrets, provider, and
-deploy phases. Infisical and automatic rotation remain Phase 1.5 plans.
+`auth_check` intentionally does not validate external provider credentials.
+Phase 4 verification performs the separate signed Kalshi and secrets-backend
+checks; Infisical-backed token resolution and automatic rotation are implemented.
 
 ## Planned Tool Surface
 
@@ -391,7 +394,7 @@ Assembled analytical brief combining forecast probability, accuracy, market edge
 
 ## SysAdmin Tools
 
-SysAdmin has a restricted toolset focused on oversight and management, with no trading tools:
+SysAdmin's shipped live allowlist is restricted to implemented inspection tools. Planned management tools remain design-only until they enter `TOOL_DEFINITIONS`:
 
 ### Management Tools
 
@@ -400,17 +403,6 @@ SysAdmin has a restricted toolset focused on oversight and management, with no t
 | `traderbot__health` | Combined health check: service, WS, data, auth, circuit breakers |
 | `traderbot__auth_check` | Validate the profile token and report its access context; does not validate provider credentials |
 | `traderbot__profile_list` | List all profiles and their modes |
-| `traderbot__profile_update` | Update profile mode (backtest → paper → live), risk parameters |
-| `traderbot__performance` | View any agent's performance metrics |
-| `traderbot__audit` | View any agent's audit trail |
-| `traderbot__learnings` | View and manage learnings across all agents |
-| `traderbot__cron_setup` | Manage cron job templates |
-| `traderbot__session_send` | Send messages to agents |
-| `traderbot__experiment` | Design and run experiments |
-| `traderbot__data_status` | Check data freshness per category |
-| `traderbot__ws_status` | Check WebSocket connection status |
-| `traderbot__backfill` | Trigger data backfill |
-| `traderbot__reference` | Access TraderBot documentation and code |
 
 ### Explicitly Denied
 
@@ -425,14 +417,13 @@ SysAdmin has a restricted toolset focused on oversight and management, with no t
 
 ## Dev-Liaison Tools
 
-The Dev-Liaison agent has a focused toolset for architecture expertise, experiment management, and AutoDev coordination:
+The Dev-Liaison shipped live allowlist combines three implemented TraderBot inspection tools with OpenClaw session tools. `traderbot__reference` and `traderbot__experiment` remain planned and are not allowlisted:
 
 | Tool | Purpose |
 |---|---|
-| `traderbot__reference` | Knowledge retrieval (searches indexed source code, docs, and design decisions) |
-| `traderbot__experiment` | Experiment harness tools (create, run, verify treatments) |
 | `traderbot__auth_check` | Profile-token validation and access-context reporting |
 | `traderbot__health` | System health checks |
+| `traderbot__profile_list` | List registered profiles and modes |
 | `sessions_spawn` | Spawn sub-agents for debate coordination |
 | `sessions_send` | Send messages to agents |
 | `sessions_yield` | Wait for sub-agent results |
@@ -469,7 +460,7 @@ The Dev-Liaison sends wake signals to AutoDev via a shared Discord channel: `aut
 
 The separate configuration remediation is split into one gateway artifact and strict agent fragments. Since Phase 2, `configs/openclaw/gateway.json` registers the TraderBot MCP server over **streamable-http** at `http://127.0.0.1:8765/mcp` (daemon-hosted) once at root `mcp.servers`; its agent entries contain only `id`, `sandbox`, and `tools`. The pinned OpenClaw schema rejects per-agent `env`, nested `mcp`, and annotation fields.
 
-Remediation weather policy excerpt:
+Current category policy excerpt:
 
 ```json5
 {
@@ -477,31 +468,15 @@ Remediation weather policy excerpt:
   sandbox: { mode: "all" },  // Mandatory Docker sandbox (DD-010)
   tools: {
     allow: [
-      // Weather toolkit
-      "traderbot__weather_forecast_prob",
-      "traderbot__weather_accuracy",
-      "traderbot__weather_seasonal_context",
-      "traderbot__weather_decision_brief",
-      // General tools
       "traderbot__health",
       "traderbot__auth_check",
       "traderbot__profile_list",
       "traderbot__market_edge",
       "traderbot__market_prices",
-      "traderbot__trade",
-      "traderbot__positions",
-      "traderbot__heartbeat",
-      "traderbot__performance",
-      "traderbot__audit",
-      "traderbot__learnings",
-      "traderbot__news_context",
-      "traderbot__data_points",
-      // Session tools (for debate subs)
-      "sessions_send",
     ],
     deny: ["group:runtime", "group:fs"],
     sandbox: {
-      tools: { allow: ["bundle-mcp", "sessions_send"] },
+      tools: { allow: ["bundle-mcp"] },
     },
   }
 }
@@ -512,6 +487,8 @@ additive to an implicit wildcard in OpenClaw. `bundle-mcp` appears only in the
 sandbox gate; exact `traderbot__*` names are used in the normal agent allowlist.
 TraderBot then validates `token → tool permission → category` server-side.
 
+The same exact five implemented TraderBot tools are documented once in every managed `AGENTS.md ## Tools` section. The host-side token injector resolves each agent's SecretRef and injects the raw value immediately before dispatch; agents do not handle that value. TraderBot does not package or manage legacy `TOOLS.md` or `HEARTBEAT.md` files.
+
 The remediation fragments do **not** inject `TRADERBOT_PROFILE_TOKEN`. Root
 `env.vars` is global and `mcp.servers.*.env` applies to the shared MCP process,
 so neither the legacy nor remediation config can securely deliver distinct
@@ -520,4 +497,4 @@ agent tokens. Secure per-agent token injection is implemented with a Phase
 SecretRefs and rewrites tool call params (see `04-security-and-auth.md` and
 `.omo/plans/phase1-1-token-injector.md`). The plugin is complete and
 deployment-verified on macpro-linux (commits `5b5088e`, `f8b5065`, `f1aa518`,
-`0dbc981`); Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
+`0dbc981`); Infisical SecretRef integration is implemented and Vault is retired.
