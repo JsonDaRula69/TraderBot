@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a110] — 2026-10-10
+
+- Minted DD-039 (verification requiredness) as a numbered design decision in the roadmap twins and decision index: required checks assert exactly the deploy-written postconditions carried on the verification request, preserved posture and wizard-path daemon liveness report as advisory divergence, and standalone `traderbot verify` keeps daemon health required; cross-referenced from the v2docs/02 Step 8 contract.
+
 ## [2.0.0a109] — 2026-10-10
 
 - Real-CLI deploy E2E fixtures now own a clean workspace root (`clean_workspace_root`) so the suite passes under any default basetemp, and the CI test matrix pins `--basetemp` under `$HOME` as a stopgap — the injection publication guard rejects group-writable workspace ancestors, which the sticky bit does not exempt.
