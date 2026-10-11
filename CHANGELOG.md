@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a116] — 2026-10-11
+
+- Cleared the strict dependency-audit gate on `v2-main`: the audit job now waives the last three chromadb 1.5.9 advisories — PYSEC-2026-3813 / 3814 / 3815 (GHSAs `2wm9-hf6c-p5cr` / `36p7-vc44-83pf` / `xph7-9rjv-w5fr`, CVE-2026-45830 / 45833 / 45831). All three have no fixed upstream version (1.5.9 is the newest published release and the last affected version of each) and all three are reachable only through chromadb's HTTP/FastAPI server, its SimpleRBAC authorization provider, or a CloudClient — paths the embedded-only design forbids and guards (`src/traderbot/db/security.py` settings assertion, `tests/test_chroma_security.py` AST import guard). Same accepted-risk governance as `GHSA-f4j7-r4q5-qw2c` (#196); every other finding still fails the build.
+
 ## [2.0.0a115] — 2026-10-10
 
 - Consolidated the Windows quarantine for the 82 pre-existing portability-debt test failures (issue #222) into a single registry module (`tests/windows_quarantine.py`) keyed by exact node ids from CI run 38108188505, applied by one `pytest_collection_modifyitems` hook that skips only on win32; `TRADERBOT_WINDOWS_QUARANTINE=off` re-enables them all; quarantined test files carry zero diff.

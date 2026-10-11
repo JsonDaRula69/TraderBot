@@ -47,7 +47,23 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen --all-extras --dev
       - run: uv export --frozen --no-hashes --no-emit-project -o requirements-audit.txt
-      - run: uvx pip-audit --strict --aliases -r requirements-audit.txt --ignore-vuln GHSA-f4j7-r4q5-qw2c
+      # chromadb 1.5.9 is the newest published release on PyPI and the last
+      # affected version of PYSEC-2026-3813/3814/3815 (GHSAs 2wm9-hf6c-p5cr /
+      # 36p7-vc44-83pf / xph7-9rjv-w5fr, CVE-2026-45830 / 45833 / 45831); OSV
+      # reports no fixed version for any of the three. Each is reachable only
+      # through chromadb's HTTP/FastAPI server, its SimpleRBAC authorization
+      # provider, or a CloudClient — paths TraderBot's embedded-only design
+      # forbids and actively guards (settings assertion in
+      # src/traderbot/db/security.py, AST import guard in
+      # tests/test_chroma_security.py). Same accepted-risk rationale as
+      # GHSA-f4j7-r4q5-qw2c (#196); waived under the same
+      # CHROMADB_WAIVER_OWNER / CHROMADB_WAIVER_REMOVAL governance.
+      - run: |-
+          uvx pip-audit --strict --aliases -r requirements-audit.txt \
+            --ignore-vuln GHSA-f4j7-r4q5-qw2c \
+            --ignore-vuln PYSEC-2026-3813 \
+            --ignore-vuln PYSEC-2026-3814 \
+            --ignore-vuln PYSEC-2026-3815
 
   build:
     name: Build wheel

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -286,3 +287,24 @@ def test_exact_audit_waiver_does_not_hide_other_advisories(tmp_path: Path) -> No
     )
     assert result.returncode != 0
     assert "urllib3" in f"{result.stdout}\n{result.stderr}"
+
+
+# The audit job waives advisories by exact ID, never by package. This list is the
+# complete set: adding, widening, or silently dropping a waiver must be a deliberate
+# edit here and in .github/workflows/ci.yml together (governance: #196).
+EXPECTED_AUDIT_WAIVERS = {
+    "GHSA-f4j7-r4q5-qw2c",
+    "PYSEC-2026-3813",
+    "PYSEC-2026-3814",
+    "PYSEC-2026-3815",
+}
+
+
+def test_audit_waiver_set_is_exact() -> None:
+    ci_yml = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+    workflow = ci_yml.read_text()
+    waived = set(re.findall(r"--ignore-vuln[=\s]+(\S+)", workflow))
+    assert waived == EXPECTED_AUDIT_WAIVERS
+    # No package-wide or unfixed-version suppression anywhere in the job.
+    assert "--ignore-package" not in workflow
+    assert "--vulnerability-service" not in workflow
