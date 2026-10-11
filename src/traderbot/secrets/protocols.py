@@ -40,7 +40,7 @@ class SecretsResource(Protocol):
         secret_name: str,
         environment_slug: str,
         secret_path: str,
-        project_slug: str | None = None,
+        project_slug: str,
         view_secret_value: bool = True,
     ) -> SecretResult: ...
 
@@ -50,8 +50,8 @@ class SecretsResource(Protocol):
         secret_name: str,
         secret_path: str,
         environment_slug: str,
-        project_slug: str | None = None,
-        secret_value: str | None = None,
+        project_slug: str,
+        secret_value: str,
     ) -> SecretResult: ...
 
     def update_secret_by_name(
@@ -60,8 +60,8 @@ class SecretsResource(Protocol):
         current_secret_name: str,
         secret_path: str,
         environment_slug: str,
-        project_slug: str | None = None,
-        secret_value: str | None = None,
+        project_slug: str,
+        secret_value: str,
     ) -> SecretResult: ...
 
     def delete_secret_by_name(
@@ -70,7 +70,7 @@ class SecretsResource(Protocol):
         secret_name: str,
         secret_path: str,
         environment_slug: str,
-        project_slug: str | None = None,
+        project_slug: str,
     ) -> SecretResult: ...
 
     def list_secrets(
@@ -78,7 +78,7 @@ class SecretsResource(Protocol):
         *,
         environment_slug: str,
         secret_path: str,
-        project_slug: str | None = None,
+        project_slug: str,
         view_secret_value: bool = True,
     ) -> SecretListResult: ...
 
@@ -88,6 +88,8 @@ class InfisicalClient(Protocol):
 
     @property
     def secrets(self) -> SecretsResource: ...
+
+    def close(self) -> None: ...
 
 
 class LocalStore(Protocol):

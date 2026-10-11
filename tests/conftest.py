@@ -1,8 +1,11 @@
+import shutil
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from tests.windows_quarantine import apply_windows_quarantine
 from traderbot.profiles.tokens import LocalTokenStore, set_store
 
 
@@ -26,6 +29,31 @@ def real_auth(
 
 
 @pytest.fixture
+def clean_workspace_root() -> Iterator[Path]:
+    """Private workspace root whose ancestor chain passes the injection guard.
+
+    The POSIX publication walk (``_injection_posix._validate_control``) rejects
+    any group-writable ancestor directory - the sticky bit does not exempt it -
+    so real-CLI deploy E2Es whose workspaces live under a default pytest
+    basetemp (``/tmp``, or a ``TMPDIR`` with a group-writable ancestor) fail
+    injection for environmental reasons. This root lives under the real user
+    home, whose ancestor chain is not group-writable on supported hosts, and
+    is removed after the test.
+    """
+    base = Path.home() / ".tb-e2e-workspaces"
+    root = base / uuid.uuid4().hex
+    root.mkdir(parents=True, mode=0o700)
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        try:
+            base.rmdir()
+        except OSError:
+            pass
+
+
+@pytest.fixture
 def secrets_resolver_reset(tmp_path: Path) -> Iterator[None]:
     """Reset the secrets resolver singleton, active store, and suspended set.
 
@@ -45,3 +73,8 @@ def secrets_resolver_reset(tmp_path: Path) -> Iterator[None]:
     finally:
         _SUSPENDED_PROFILES.clear()
         set_resolver(None)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Delegate win32-only quarantining to the shared registry module."""
+    apply_windows_quarantine(config, items)
