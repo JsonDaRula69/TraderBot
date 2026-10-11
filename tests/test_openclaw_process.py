@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack
 
@@ -77,16 +78,49 @@ def _wait_for_path(path: Path, timeout: float) -> bool:
     return True
 
 
-def _assert_reaped(pid: int) -> None:
+def _wait_until(predicate: Callable[[], bool], timeout: float, interval: float = 0.01) -> bool:
+    deadline = time.monotonic() + timeout
+    while True:
+        if predicate():
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        _ = threading.Event().wait(min(remaining, interval))
+
+
+def _pid_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _assert_reaped(pid: int, *, within: float = 2.0) -> None:
+    # Reaping is asynchronous: a killed descendant is reparented to init and only
+    # then reaped, so it can linger as a zombie for a scheduling interval after the
+    # kill. Assert the outcome within a bounded window instead of at one instant;
+    # the strictness is that the process MUST be gone, not that it is gone at the
+    # first observation.
+    if _wait_until(lambda: not _pid_exists(pid), timeout=within):
         return
-    raise AssertionError(f"child process {pid} remains alive")
+    raise AssertionError(f"child process {pid} remains alive after {within}s")
 
 
-def _assert_no_readers() -> None:
-    assert not [thread for thread in threading.enumerate() if thread.name.startswith("openclaw-")]
+def _leaked_reader_threads() -> list[threading.Thread]:
+    return [thread for thread in threading.enumerate() if thread.name.startswith("openclaw-")]
+
+
+def _assert_no_readers(*, within: float = 2.0) -> None:
+    # Reader threads finish asynchronously with respect to the caller, so give them
+    # a bounded window to exit; leaking one beyond it is still a failure.
+    if _wait_until(lambda: not _leaked_reader_threads(), timeout=within):
+        return
+    names = [thread.name for thread in _leaked_reader_threads()]
+    raise AssertionError(f"openclaw reader threads survived: {names}")
 
 
 def test_run_bounded_terminates_and_reaps_output_overflow_child(tmp_path: Path) -> None:
@@ -189,22 +223,30 @@ def test_run_bounded_kills_pipe_inheriting_descendant_by_deadline(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    # Given: the fixture parent records its descendant and signals readiness
+    # Given: the fixture parent signals that it started, then blocks on a gate the
+    # test opens explicitly - setup ordering is synchronised, never timed
     launched = _capture_processes(monkeypatch)
     descendant_pid = tmp_path / "descendant.pid"
     startup_started = tmp_path / "descendant.starting"
+    spawn_gate = tmp_path / "spawn.go"
     ready = tmp_path / "descendant.ready"
     marker = tmp_path / "descendant-finished"
     descendant = (
         f"import time; from pathlib import Path; time.sleep(2); Path({str(marker)!r}).touch()"
     )
     parent = (
-        "import subprocess,sys,time; from pathlib import Path; "
-        f"Path({str(startup_started)!r}).touch(); time.sleep(0.3); "
-        f"child=subprocess.Popen([sys.executable, '-c', {descendant!r}], "
-        "stdout=sys.stdout, stderr=sys.stderr); "
-        f"Path({str(descendant_pid)!r}).write_text(str(child.pid)); "
-        f"Path({str(ready)!r}).touch()"
+        "import subprocess, sys, time\n"
+        "from pathlib import Path\n"
+        f"Path({str(startup_started)!r}).touch()\n"
+        f"gate = Path({str(spawn_gate)!r})\n"
+        "gate_deadline = time.monotonic() + 10.0\n"
+        "while not gate.exists() and time.monotonic() < gate_deadline:\n"
+        "    time.sleep(0.005)\n"
+        "assert gate.exists(), 'spawn gate never opened'\n"
+        f"child = subprocess.Popen([sys.executable, '-c', {descendant!r}],\n"
+        "                          stdout=sys.stdout, stderr=sys.stderr)\n"
+        f"Path({str(descendant_pid)!r}).write_text(str(child.pid))\n"
+        f"Path({str(ready)!r}).touch()\n"
     )
     clock = _ControlledMonotonicClock()
     monkeypatch.setattr(openclaw_process, "time", clock)
@@ -216,28 +258,39 @@ def test_run_bounded_kills_pipe_inheriting_descendant_by_deadline(
     runner = threading.Thread(target=run, name="openclaw-fixture-runner")
     runner.start()
 
-    # When: setup becomes ready and the separately measured deadline is released
-    startup_observed = _wait_for_path(startup_started, timeout=2.0)
-    runner.join(timeout=0.25)
-    assert startup_observed
-    assert not ready.exists()
-    assert runner.is_alive()
-    assert results == []
-    fixture_ready = _wait_for_path(ready, timeout=2.0)
-    started = time.monotonic()
-    clock.release()
-    runner.join(timeout=1.0)
-    elapsed = time.monotonic() - started
+    try:
+        # When: the child is still gated while the frozen deadline cannot expire
+        assert _wait_for_path(startup_started, timeout=2.0)
+        assert len(launched) == 1
+        # Deterministic: the parent cannot reach the descendant without the gate,
+        # so `ready` cannot exist yet, regardless of scheduler load.
+        assert not ready.exists()
+        assert runner.is_alive()
+        assert results == []
 
-    # Then: the whole process group is gone within a strict bounded tolerance
-    assert fixture_ready
-    assert not runner.is_alive()
-    assert results == [None]
-    assert elapsed < 0.8
-    _assert_reaped(launched[0].pid)
-    _assert_reaped(int(descendant_pid.read_text()))
-    assert not marker.exists()
-    _assert_no_readers()
+        # And: the pipe-inheriting descendant exists before the deadline is released
+        spawn_gate.touch()
+        fixture_ready = _wait_for_path(ready, timeout=2.0)
+        started = time.monotonic()
+        clock.release()
+        runner.join(timeout=1.0)
+        elapsed = time.monotonic() - started
+
+        # Then: the whole process group is gone within a strict bounded tolerance
+        assert fixture_ready
+        assert not runner.is_alive()
+        assert results == [None]
+        assert elapsed < 0.8
+        _assert_reaped(launched[0].pid)
+        _assert_reaped(int(descendant_pid.read_text()))
+        assert not marker.exists()
+        _assert_no_readers()
+    finally:
+        # A failed assertion above must not poison later tests with a live gated
+        # child and its pipe readers: open the gate, expire the deadline, join.
+        spawn_gate.touch()
+        clock.release()
+        _ = runner.join(timeout=5.0)
 
 
 def test_run_bounded_cleans_up_when_second_reader_fails_to_start(
