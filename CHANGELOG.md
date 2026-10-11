@@ -5,6 +5,175 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a115] — 2026-10-10
+
+- Consolidated the Windows quarantine for the 82 pre-existing portability-debt test failures (issue #222) into a single registry module (`tests/windows_quarantine.py`) keyed by exact node ids from CI run 38108188505, applied by one `pytest_collection_modifyitems` hook that skips only on win32; `TRADERBOT_WINDOWS_QUARANTINE=off` re-enables them all; quarantined test files carry zero diff.
+
+## [2.0.0a114] — 2026-10-10
+
+- Upgraded the transitive `pyjwt` (mcp crypto extra) lock entry from 2.13.0 to 2.15.1, clearing PYSEC-2026-4142 and PYSEC-2026-4183; the Kalshi signing path (RSA-PSS over `cryptography`, not JWT) verified unaffected by the Kalshi client and MCP auth E2E suites.
+
+## [2.0.0a113] — 2026-10-10
+
+- Made the `test_verify_openclaw_contract` inventory fixtures platform-neutral (workspace paths rooted at the test's absolute temp dir instead of POSIX-only `/deploy/<id>` literals), fixing the 11 Windows AgentSummary validation failures without touching any required/advisory assertion.
+
+## [2.0.0a112] — 2026-10-10
+
+- Made `test_infisical_credentials_path_uses_data_dir`'s mock-read assertion set-based rather than order-based, so machine-key reads (`/etc/machine-id`) no longer break the credentials-path check on Linux.
+
+## [2.0.0a110] — 2026-10-10
+
+- Minted DD-039 (verification requiredness) as a numbered design decision in the roadmap twins and decision index: required checks assert exactly the deploy-written postconditions carried on the verification request, preserved posture and wizard-path daemon liveness report as advisory divergence, and standalone `traderbot verify` keeps daemon health required; cross-referenced from the v2docs/02 Step 8 contract.
+
+## [2.0.0a109] — 2026-10-10
+
+- Real-CLI deploy E2E fixtures now own a clean workspace root (`clean_workspace_root`) so the suite passes under any default basetemp, and the CI test matrix pins `--basetemp` under `$HOME` as a stopgap — the injection publication guard rejects group-writable workspace ancestors, which the sticky bit does not exempt.
+
+## [2.0.0a108] — 2026-10-10
+
+- Deploy-wizard Step 8 now requires only deploy-asserted postconditions: wizard step 8 completes when no required check fails, embedding preserved-posture and daemon advisories; sandbox posture is required only for created agents and heartbeat `0m` only under approved policy; the bootstrap cron probe is lifecycle-aware against deploy state; standalone `traderbot verify` keeps daemon health required.
+
+## [2.0.0a107] — 2026-10-10
+
+### Fixed
+
+- Deploy wizard step 8 is now required-aware: it completes when no required check fails, embedding advisory divergences (preserved sandbox/heartbeat posture, daemon liveness) and required-but-degraded state (sanctioned encrypted fallback) visibly in its result, while any required failure still fails the deployment.
+
+## [2.0.0a106] — 2026-10-10
+
+### Fixed
+
+- Verification now requires exactly the postconditions a deployment wrote instead of a fresh-install posture: `VerificationRequest` carries `heartbeat_policy` (dormancy required only when the deploy approved `0m`), `created_agents` (sandbox required only for agents the deploy created), and `daemon_required` (strict standalone default; the wizard path reports daemon liveness as advisory since no wizard step owns the daemon lifecycle). The OpenClaw probes report preserved posture as advisory divergence with actual values, and the bootstrap cron probe is lifecycle-aware — a completed retained one-shot passes with its own action, absence after a recorded firing is honest degraded state, and only a never-registered or conflicting contract fails closed.
+
+## [2.0.0a105] — 2026-10-04
+
+### Fixed
+
+- Deploy and verify bootstrap-cron readback now accepts the deployed pending one-shot envelope instead of fail-closing a successful registration as a conflict: OpenClaw 2026.7.1-2 populates `state: {"nextRunAtMs": <positive int>}` plus top-level `nextRunAtMs` and `status: "idle"` the moment a job is scheduled (recorded on-target in `.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json`). A pending one-shot is exact whether `state` is `{}` or exactly `{"nextRunAtMs": <positive int>}`, and unrelated deployed top-level extras are ignored. Identity fields stay strict fail-closed: job name, agent, schedule, session, wake mode, payload message, and delete-after-run; garbage `nextRunAtMs` values (non-int, non-positive, bool) and state shapes indicating an already-run or errored job still classify as conflict. This repairs both wizard step 3's post-registration verification (C1, "bootstrap cron final verification failed") and the standalone verify cron probe (C5, `bootstrap_cron_mismatch`), which share the same classifier.
+
+## [2.0.0a104] — 2026-10-03
+
+### Fixed
+
+- Deploy and verify OpenClaw config reads now classify a missing config path from the deployed CLI's plain-text STDERR error (empty STDOUT) as well as the legacy STDOUT JSON error envelope, so the `agents.list[index]` fallback is reachable against the deployed `agents.list[]` config shape and wizard step 1 no longer fails with "config inventory is unreadable" on OpenClaw 2026.7.1-2.
+- Kalshi series discovery tolerates production's observed empty-series encoding — HTTP 200 `{"series": null}` for an empty or unmatched `category` query — and normalizes it to an empty list; a missing `series` key still fails validation. The request mapping is unchanged: official Get Series List schema (OpenAPI 3.32.0, re-verified 2026-10-03) declares `category` a plain string filter with exact, case-sensitive matching, so an unmatched value legally yields an empty result and only the response's observed null form required repair.
+
+## [2.0.0a103] — 2026-10-03
+
+### Fixed
+
+- Infisical selection now tolerates unrelated routing metadata in the shared credentials document instead of incorrectly falling back to encrypted local storage; required login fields remain enforced.
+
+## [2.0.0a102] — 2026-10-03
+
+### Fixed
+
+- Deploy preflight accepts OpenClaw's canonical `main`-container workspace layout, including symlink-resolved containment. Equal/same-file ownership and non-`main` containment remain rejected across selected and unselected agents.
+
+## [2.0.0a101] — 2026-10-03
+
+### Removed
+
+- Removed the Phase-4 hosted Kalshi demo surface per the 2026-08-20 contract correction: TraderBot Phase 4 demo/QA is local backtest simulation plus canonical read-only production market-data/auth reads, and TraderBot never uses Kalshi's hosted demo endpoint. Reverts the a100 standalone endpoint routing and removes the `kalshi_environment` request/config threading, the standalone backfill/verify `--environment` flags, the `kalshi_demo_*` secret-name routing, and the `KALSHI_ENVIRONMENTS` constant; deploy, backfill, and verify always read the canonical `kalshi` service (`kalshi_api_key`/`kalshi_private_key_pem`) against production. Generic `KalshiClient` environment support and the daemon `--environment` flag are unchanged.
+
+## [2.0.0a100] — 2026-08-19
+
+### Fixed
+
+- Added strict `production|demo` routing to standalone backfill and verification, including typed request propagation, exact demo REST endpoint selection, production-compatible defaults, and pre-dispatch rejection of invalid environments.
+- Routed deploy secret provisioning, standalone backfill credentials, and verification Kalshi probes by Kalshi environment: production reads/writes only `kalshi_api_key`/`kalshi_private_key_pem` (service `kalshi`), demo only `kalshi_demo_api_key`/`kalshi_demo_private_key_pem` (service `kalshi_demo`), with missing or malformed demo credentials failing closed and no cross-environment fallback.
+
+## [2.0.0a99] — 2026-08-19
+
+### Fixed
+
+- Removed the production environment-selected deploy test-provider path and packaged success fake, moved subprocess injection into a distribution-excluded test runner, and closed the final Phase 4 typing, formatting, module-documentation, and cleanup blockers.
+
+## [2.0.0a98] — 2026-08-18
+
+### Changed
+
+- Synchronized the Phase 4 deploy contract across v2docs, README, roadmaps, and issue tracking: authoritative `{mode}-{name}` storage, nine categories, pre-existing `main`, explicitly approved missing-agent creation, Phase 4b deferrals, scheduling ownership, the read-only Phase 5 sandbox stub, AGENTS-only exact-five-tool guidance, Infisical/encrypted fallback, canonical Kalshi secrets and environment routing, one data root, lazy Chroma, and no SysAdmin decisions database.
+- Recorded Todo 12 at local commit `498ddc1` / VERSION `2.0.0a97`: 917 full tests and 192 targeted deploy/backfill/verify tests passed, including isolated config-mode CLI and malformed-JSON coverage with no live/default-state mutation.
+
+## [2.0.0a96] — 2026-08-12
+
+### Fixed
+
+- Hardened workspace-write TOCTOU race, propagated configured `data_root` through all deploy phases, threaded `kalshi_environment` through backfill and verification, forced `TRADERBOT_USE_HARDCODED_AUTH=0` for `traderbot verify`, broke the deploy import cycle, fixed two stale/dependency tests, and split `wizard_command.py` via `wizard_request.py`.
+
+## [2.0.0a95] — 2026-08-11
+
+### Added
+
+- Completed deploy wizard Steps 6-8 by composing typed backfill and read-only verification runtimes with an explicit non-mutating Phase 5 sandbox stub and strict Gateway cron outcome.
+- Repaired late-step snapshot ownership, invalid-input ordering, one-shot lifecycle evidence, selective resumability, cleanup truthfulness, and actual CLI-dispatch E2E coverage.
+- Hardened pre-factory data-root and deploy-state trust checks, completed one-shot lifecycle parsing, and suppression-free typed ordinary-exception boundaries.
+- Closed persisted-false cron registration, post-open deploy-state metadata races, and cleanup-error exit classification; split bootstrap cron contracts from the wizard runtime.
+
+## [2.0.0a94] — 2026-08-11
+
+### Added
+
+- Added the read-only `traderbot verify` command with dependency-aware deployment checks, signed Kalshi balance authentication, strict storage manifests, and stable JSON/Rich results.
+
+## [2.0.0a93] — 2026-08-11
+
+### Added
+
+- Added the idempotent `traderbot backfill` command with read-only collector import, current/archive Kalshi weather history, typed partial results, and strict JSON output.
+
+## [2.0.0a92] — 2026-08-11
+
+### Added
+
+- Added global migration v2 and strict official Kalshi v2 series, market, live/historical candlestick, and signed forecast-history methods for deterministic historical backfill.
+
+## [2.0.0a91] — 2026-08-11
+
+### Added
+
+- Added deploy wizard steps 4-5 with secret-safe Kalshi credential provisioning, encrypted Infisical fallback, selected-category database initialization, read-only SysAdmin enumeration, and lazy embedded Chroma validation.
+
+## [2.0.0a90] — 2026-08-11
+
+### Fixed
+
+- Reconciled deploy wizard steps 1-3 through a global read-only OpenClaw inventory/config/workspace preflight, explicit creation and heartbeat approvals, stable partial-agent adoption, atomic SecretRef preservation, and bootstrap-last Gateway ordering.
+
+## [2.0.0a89] — 2026-08-11
+
+### Fixed
+
+- Aligned workspace injection with stable/current OpenClaw by moving exact-five-tool guidance into AGENTS, preserving legacy TOOLS/HEARTBEAT files, and restricting live allowlists to implemented tools.
+
+## [2.0.0a88] — 2026-08-10
+
+### Added
+
+- Added resumable deploy wizard steps 1-3 for prompt-free OpenClaw baseline setup, SysAdmin identity/bootstrap, and explicitly selected category agents with encrypted profile-token persistence.
+
+### Fixed
+
+- Validate the complete managed SysAdmin cron contract and re-inspect newly added jobs instead of reusing same-name mismatches.
+- Accept the documented Todo-1 deploy JSON by deriving invocation-scoped OpenClaw workspaces, narrow deploy mode to backtest, and report that steps 4-8 remain incomplete.
+
+## [2.0.0a87] — 2026-08-10
+
+### Added
+
+- Added safe, idempotent workspace template restoration and restrictive OpenClaw configuration for all nine market categories.
+
+### Fixed
+
+- Rejected symlinked workspace ancestors, preserved existing permission bits through update and rollback, closed failed descriptor handoffs, and documented `market_edge` as a current stub.
+
+## [2.0.0a86] — 2026-08-10
+
+### Added
+
+- Added bounded, noninteractive OpenClaw CLI wrappers for deployment setup, agents, cron jobs, health checks, and strict JSON configuration.
+
 ## [2.0.0a83] — 2026-08-10
 
 ### Fixed

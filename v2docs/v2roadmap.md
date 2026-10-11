@@ -49,6 +49,7 @@
 | DD-036 | SysAdmin sandbox — unsandboxed with principled restrictions | Decided |
 | DD-037 | Secrets management — Infisical as primary vault | Decided |
 | DD-038 | Agent-debate integration, sub-agent configuration, TEMPLATE.md | Decided |
+| DD-039 | Verification requiredness — required means deploy-asserted | Decided (implemented, fix/verify-deploy-contract) |
 
 
 ### Progress Tracking
@@ -66,14 +67,14 @@
 - [x] Database efficiency: indexes, PRAGMA optimization, connection pooling, settlement cache consolidation, circuit breaker to DB, retention policy, ChromaDB model migration
 - [x] ROADMAP_PROGRESS.md removed from tracking
 - [x] Phase 0 review fixes (2026-08-01): `traderbot.paths` restored (H1), `profile_list` derived from registry (H3), MCP error-result semantics (H2), real JSON-RPC e2e tests (H2), hatchling reads `VERSION` (M1), `uv.lock` (M3), CI entry-point smoke (M5)
-- [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and explicit-token workspace instructions
+- [x] Phase 1 core auth development (issue #164): `TokenStore` + hardened `LocalTokenStore`, `ProfileRegistry`, real-auth resolver swap, strict MCP inputs, tool permissions, DD-011 category enforcement, and host-side token injection guidance
 - [x] Phase 1 local verification: real-auth MCP transport round trips cover an allowed weather call and an out-of-category denial
 - [x] Phase 1.1 implementation: `before_tool_call` token injector plugin code complete and locally tested (commit 5b5088e, issue #187); 113 Python tests + 11 TypeScript plugin tests pass; macpro-linux on-target verification complete (see next line)
 - [x] Phase 1.1 deployment verification (2026-08-03): E2E injection verified on macpro-linux — plugin loads, hook fires at priority 100, token resolved from env provider, injected into MCP call params, server resolves weather profile. Three fixes required: manifest metadata + configSchema (f8b5065), token optional in schemas (f1aa518), and MCP server env must explicitly set TRADERBOT_USE_HARDCODED_AUTH=0 (0dbc981) — the subprocess does not inherit the gateway's systemd drop-in. Fail-closed verified for unmapped agents (main). Token never enters model context (agent confirms it passed no token). 113 Python + 11 TypeScript tests pass on-target.
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
-- [ ] ~~Workspace template source and category templates~~ (shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first)
+- [x] Workspace template source and all category templates — canonical exact-five-tool guidance in `AGENTS.md`; legacy `TOOLS.md`/`HEARTBEAT.md` excluded and preserved
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)
 - [x] Secrets management (Infisical) — DD-037
 - [x] Phase 1.5 deployment verified (2026-08-04, issue #165): 233 Python + 11 TS pass on macpro-linux. Server-side Infisical integration verified — wrapper resolves all 3 agent tokens, migration converts to 5-field format, `resolve_token` works via TokenStoreAdapter, token rotation verified, MCP stdio E2E resolves weather via Infisical. Live agent-driven E2E verified: weather agent → plugin hook (priority 100) → Infisical exec provider → wrapper resolves `weather_token` → plugin extracts raw token from 5-field JSON doc → injects into params → MCP server resolves via Infisical-backed SecretsStore → `{"status":"ok","auth":"resolved"}`. Fail-closed: unknown agent (main) blocked. Token never enters model context (agent confirmed "No"). Four deployment-discovered fixes: wrapper `extra="ignore"` (6419dc5), plugin JSON-doc token extraction (6419dc5), with-plugin.json `source` vs `type` schema fix (6b6772e), exec provider command ownership requirement (wrapper must be owned by gateway user, not root).
@@ -83,6 +84,19 @@
 - [x] Phase 3 security review: `chromadb==1.5.9` is embedded-only with a pinned Rust backend, telemetry disabled, owner-only application-created storage, explicit vectors, no HTTP server/client imports, and an exact GHSA-f4j7-r4q5-qw2c scanner waiver. Review tracker [#195](https://github.com/JsonDaRula69/TraderBot/issues/195) closed (findings preserved); permanent accepted-risk tracking in [#196](https://github.com/JsonDaRula69/TraderBot/issues/196). Remove the waiver on the first official release containing upstream [#7237](https://github.com/chroma-core/chroma/pull/7237).
 - [x] Phase 3 Task 10: on-target macpro-linux QA passed via dev-liaison agent (13/13 probes green); PR #197 merged to v2-main (merge commit 8cce1b9). All CI green (ubuntu, macOS, Windows, build, security audit, Snyk).
 - [x] Phase 3 Final Wave remediation: secure Chroma root creation preserves pre-existing targets; the QA runner is consolidated into the sole allowed script; MCP storage-health fields are retained as the Task 7 response surface; and basedpyright warnings remain reported while warnings-only runs exit successfully. The cleaned remote `/tmp/phase3-qa-evidence.json` is recorded in the plan as expected ephemeral cleanup, with a local replay retained under workspace `.omo/evidence/`.
+- [x] Phase 4 deploy wizard steps 4-5: secret-safe environment references or hidden Kalshi input, strict local RSA validation, explicit Infisical status probing with encrypted fallback, current global/schema initialization, selected-category decisions databases through `DatabaseAccess`, canonical read-only SysAdmin enumeration, and lazy locked embedded Chroma provisioning.
+- [x] Phase 4 global migration v2 and Kalshi historical client: four lossless indexed historical tables, strict official-v2 typed envelopes, cursor-explicit market listing, distinct public live/archive candles, and signed forecast percentile history while retaining WebSocket-first real-time data.
+- [x] Phase 4 standalone backfill command: read-only snapshot collector import, current/archive Kalshi weather discovery around one cutoff, idempotent lossless persistence, redacted typed partial results, and strict human/JSON exit surfaces.
+- [x] Phase 4 deploy wizard Steps 6-8: typed standalone backfill and verification composition, one-line deploy JSON embedding, and an explicit read-only Phase 5 sandbox stub with strict Gateway cron outcomes.
+- [x] Phase 4 stabilization wave (2026-08-12, commit 9f938d6, VERSION 2.0.0a96): workspace-write TOCTOU race fixed with no-follow descriptor traversal + fd-relative atomic replace + post-publish inode/owner/mode revalidation; configured `data_root` propagated through all deploy phases (Step 5 DB/Chroma, Step 6 backfill, Step 8 verify, deploy state); production Kalshi endpoint selection carried through `WizardRequest` → backfill → verification; `traderbot verify` forces `TRADERBOT_USE_HARDCODED_AUTH=0` like deploy/backfill; deploy import cycle broken; two previously-failing tests fixed (stale 2-arg assert, external `.omo/evidence` dependency removed); `wizard_command.py` split via new `wizard_request.py` (249 pure LOC). Todo 11 cleanup landed: removed unused `TradingProfile.env_file`, removed keyring wording from Kalshi package docstring, added `tests/test_legacy_cleanup.py`. Clean full suite: 907 passed, 0 failed. Decision A: Phase 4 uses the original-plan contract: approved missing selected category agents may be created with approved absolute paths; existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b (#168). Decision B: F2 requires zero errors on the changed/Phase-4 surface plus no new full-tree regressions; it is not a historical full-tree-zero claim.
+- [x] Phase 4 Todo 12 (2026-08-18, local commit `498ddc1`, VERSION `2.0.0a97`): 917 full tests and 192 targeted deploy/backfill/verify tests passed; isolated config-mode CLI happy/rerun and malformed-JSON paths proved no live-service or default-state mutation.
+- [x] Phase 4 Todo 13 documentation synchronization (VERSION `2.0.0a98`): active v2docs, README/status, deploy guide, both roadmaps, CHANGELOG, and issue #168 now use one Phase 4 contract. Todos 1-13 implementation is locally complete subject to Atlas acceptance; Final Wave F1-F4 remains, including pending on-target F3. The branch is local-only and unpushed.
+- [x] Phase 4 hosted-demo surface removal (VERSION `2.0.0a101`): per the 2026-08-20 contract correction, Phase 4 demo/QA is local backtest simulation plus canonical read-only production market-data/auth reads and never uses Kalshi's hosted demo endpoint; the a100 standalone Kalshi-environment endpoint/credential routing, request/config threading, and environment-scoped secret names were removed, and standalone backfill/verify always resolve the canonical production pair. Generic `KalshiClient` environment support and the daemon environment flag are unchanged. F3 on-target QA and F1/F2/F4 re-review remain pending for a101.
+- [x] Phase 4 workspace ownership preflight fix (VERSION `2.0.0a102`): preflight rejected OpenClaw's canonical nested workspace layout; the resolver now permits containment only where `main`'s workspace is the ancestor container of other agents' distinct workspaces (symlink-resolved, same-file-exact), while equal roots and all non-`main` containment remain conflicts. Proven on-target: the installed resolver selects exactly {main, weather}.
+- [x] Phase 4 Infisical credentials tolerance (VERSION `2.0.0a103`): the selector rejected the deployed `infisical-credentials.json` routing metadata (projectId/agentTokensProjectId owned by openclaw-infisical-resolver) and silently fell back to local-encrypted storage; the shared reader now ignores unrelated fields while requiring the login pair. Proven on-target: backend=infisical via authorized projection.
+- [x] Phase 4 deployed config-get and Kalshi series tolerance (VERSION `2.0.0a104`): OpenClaw 2026.7.1-2 prints `config get <missing>` errors to STDERR with empty STDOUT, so step-1 inventory misclassified every missing path as unreadable; missing-path classification now reads either stream and reaches the deployed `agents.list[]` config shape. Kalshi `GET /series` returns HTTP 200 `{"series": null}` for an empty match, which failed the required list and aborted the backfill Kalshi phase; the null form is normalized to an empty list at the typed boundary. Proven on-target: config inventory readable and backfill exit 0 with an honest 0-series.
+- [x] Phase 4 bootstrap-cron pending readback tolerance (VERSION `2.0.0a105`): deployed OpenClaw 2026.7.1-2 populates a pending one-shot with `state: {"nextRunAtMs": <positive int>}` plus top-level `nextRunAtMs` and `status "idle"` at scheduling time, so the frozen empty-state classifier turned every successful registration into a CONFLICT — wizard step 3 fail-closed deterministically at `ensure_bootstrap_cron` (C1) and the standalone verify cron probe reported `bootstrap_cron_mismatch` (C5), both through the same classifier. A pending one-shot is now exact with either state shape; identity fields (name, agent, schedule, session, wake mode, payload message, delete-after-run) stay strict, and garbage or already-run/errored state shapes still conflict. Red→green regression replays the recorded deployed job (`.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json`); on-target confirmation is reserved for the next F3 rerun.
+- [x] Phase 4 F3 on-target QA summary (2026-10-03/04, five reruns on macpro-linux at a101→a104; evidence `.omo/evidence/f3-phase4-a104-r5.json` and `.omo/evidence/f3-a104-r5-receipts/`): F3 found six genuine code defects — a102 workspace ownership, a103 Infisical credentials tolerance, a104 config-get stderr classification, a104 Kalshi null-series tolerance, and the a105 pair C1 (wizard step-3 post-registration readback) + C5 (verify cron probe) — plus three live-state divergences (C2/C3/C4) that are correct fail-closed behavior, not defects. The a102–a104 fixes were proven fixed on-target by rerun #4; C1/C5 were found on-target at rerun #5, reproduced by offline replay of the recorded deployed job, and repaired in a105 with red→green regression proof. The operator sanctioned one live-state reconciliation (weather_token metadata, value-preserving main_token secret ref, legacy TRADERBOT markers removed from three managed files), after which the read-only preflight finalized fully clean and the wizard advanced through steps 1-2 plus step-3 agent work, failing only at the C1 readback. C2/C3/C4 were resolved by the deploy-vs-verify ownership contract (VERSION `2.0.0a106`/`a107`): required checks assert only the postconditions the deploy wrote (`created_agents` sandbox, approved-`0m` heartbeat policy), preserved posture is advisory divergence with actual values, the wizard never requires daemon liveness (no step owns the daemon lifecycle) while standalone verify stays strict, and the bootstrap cron probe is lifecycle-aware with a deploy-state cross-read. On-target F3 rerun #6 pending.
 
 ### Dev-Liaison Testing Protocols
 
@@ -94,7 +108,7 @@ Each development phase has a detailed testing protocol designed for partnership 
 | 1.5 | #165 | Infisical secrets resolution, token rotation, fallback chain | Rotation < 15min, fallback chain works, 0 plaintext secrets |
 | 2 | #166 | Always-on service, WebSocket, data pipeline resilience | Service uptime 24h, WS reconnect < 5s, 0 REST polling |
 | 3 | #167 | Database isolation, per-agent SQLite, ChromaDB filtering | 0 cross-agent reads, migration exit 0, < 10ms cached read |
-| 4 | #168 | pipx install, deploy wizard, service registration | pipx install succeeds, all 8 steps complete, services registered |
+| 4 | #168 | deploy, backfill, read-only verification | isolated commands pass; on-target F3 QA remains pending |
 | 5 | #169 | Docker sandbox builds, isolation, bind mounts | Sandbox builds, no host file access, bind mounts correct |
 | 6 | #170 | Weather toolkit tools, category isolation enforcement | Weather tools respond, non-weather tools denied, category filter works |
 | 7a | #171 | Backtesting engine, SimulationClock, edge filtering | Backtest completes, clock advances, edge filter reduces runtime |
@@ -119,7 +133,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 - [x] **CLI circular imports**: DD-030 — extract DB code from helpers.py
 - [ ] ~~**Docs/code drift**~~: Deferred until roadmap is complete
 - [ ] ~~**Workspace template source**~~: Shelved — focusing on SysAdmin, Dev-Liaison, Weather agent first
-- [ ] **Category workspace templates**: Only weather exists currently; need to create templates for all 9 categories
+- [x] **Category workspace templates**: all 9 categories retain AGENTS/SOUL/IDENTITY templates with canonical AGENTS-only tool guidance
 - [x] **ChromaDB category metadata**: DD-032 — shared collections use category metadata filtering; per-agent collections for decisions and learnings
 - [ ] ~~**Backfill command category filtering**~~: Less critical per DD-027 (all categories backfilled)
 - [x] **SysAdmin sandbox decision**: DD-036 — unsandboxed with principled restrictions (MCP tool allowlist, workspace file immutability, lifecycle confirmation)
@@ -175,7 +189,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Decision**: `traderbot setup` includes service/cron registration as a setup step.
 **Consequences**:
 - Service templates (systemd units, launchd plists, Task Scheduler tasks) remain as package data files but are deployed by Python code inside `traderbot setup`
-- `traderbot cron setup` is called internally by setup; user doesn't need to run it separately
+- TraderBot setup registers its daemon service only; OpenClaw Gateway owns all agent cron/heartbeat scheduling
 - Data pipeline timer installation is part of setup
 
 ### DD-005: Retire `traderbot bootstrap` without `--full`
@@ -209,12 +223,12 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 ### DD-008: Prebuilt agent workspaces — no user customization
 **Date**: 2025-06-08
 **Status**: Decided
-**Context**: TraderBot previously allowed users to customize agent behavior. The shift is toward shipping prebuilt workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, etc.) that define agent behavior. This minimizes variability and user error, and enables fine-tuning of agent behavior by the TraderBot team.
-**Decision**: Agent workspace files are immutable templates shipped with the package. Users do not customize them. `traderbot setup` injects them into the correct OpenClaw workspace directories during deploy.
+**Context**: TraderBot needs consistent agent behavior without overwriting OpenClaw- or user-owned workspace content. Stable/current executable proof establishes `AGENTS.md` as the cross-version tool-guidance surface; legacy `TOOLS.md` and `HEARTBEAT.md` have version-specific behavior.
+**Decision**: TraderBot ships managed blocks for AGENTS/SOUL/IDENTITY and optional full-workspace conventions. Tool guidance lives once in `AGENTS.md ## Tools`; deploy preserves all bytes outside managed blocks and never creates, updates, or deletes legacy `TOOLS.md`/`HEARTBEAT.md`.
 **Consequences**:
-- Workspace templates live in `src/traderbot/workspace/` (or similar) as package data
-- The existing `.openclaw/workspace/` directory is the development source for these templates
-- Injection logic (`profiles/injection.py`) is simplified — no user customization, just template deployment
+- Workspace templates live in `workspace/` and are force-included as package data
+- Existing selected workspace paths remain user-owned; no real workspace is a template source
+- Injection logic (`profiles/injection.py`) uses fenced byte-preserving merge, preflight, atomic replace, and rollback
 - Category-specific variants (weather/AGENTS.md, etc.) are selected based on the agent's assigned categories
 
 ### DD-009: Deploy flow definition
@@ -223,15 +237,16 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Context**: The deploy process needs a clear sequential flow that ensures each step's prerequisites are met before proceeding.
 **Decision**: Deploy follows this exact order:
 
-1. **OpenClaw config** — Configure LLM model/provider, web search, gateway, daemon, comms channels. Create the `main` agent with all config choices.
-2. **SysAdmin setup** — Choose whether to use the pre-existing `main` agent as sysadmin or create a new one. Then: inject workspace files, register sysadmin cron/heartbeat jobs via OpenClaw gateway, authenticate sysAdmin with TraderBot.
-3. **Category selection** — For each selected category: create OpenClaw agent (`openclaw agents add <category>`), inject category workspace files, register heartbeat/cron jobs, authenticate agent with TraderBot. After all agents: run `openclaw doctor`.
-4. **API tokens** — Prompt for tokens relevant to selected categories. Kalshi, VoyageAI, NewsAPI, Twitter, Reddit are common to all. Category-specific keys only prompted if the category is enabled.
-5. **Database creation** — Create per-agent databases with isolation. Shared ChromaDB with category-scoped queries. Sysadmin gets cross-agent access.
-6. **Backfill** — Populate enabled datasource databases with 6 months of historical data, filtered by enabled categories.
-7. **Simulation start** — All agents begin by backtesting on already-settled markets using historical data (DD-017, DD-019). Mechanism to promote to paper trading and live trading exists (DD-017).
+1. **OpenClaw config** — Detect OpenClaw and inventory all configured agents, workspaces, selected config, SecretRefs, heartbeat state, and bootstrap cron before mutation. Existing `main` is required and never created.
+2. **SysAdmin setup** — Adopt the pre-existing `main` workspace, inject managed guidance, request one self-deleting bootstrap prompt through OpenClaw Gateway only after selected postconditions pass, and authenticate SysAdmin with TraderBot. No recurring agent schedules are registered at deploy time.
+3. **Category selection** — Existing selected agents retain inventory workspaces. A missing selected category agent may be created only with an explicitly approved absolute path. Inject managed guidance and authenticate selected agents; recurring cron/heartbeat schedules remain dormant until approved activation through Gateway, and deploy never invokes doctor implicitly.
+4. **API tokens** — Reuse or securely collect only the canonical Kalshi API key and RSA private key consumed by the daemon. Inactive and keyless providers have no deploy prompt or storage path.
+5. **Database creation** — Under the explicit shared data root, create selected category databases at `{mode}-{name}/db/decisions.db`, leave Chroma collections lazy, and give SysAdmin read-only enumeration without a decisions database.
+6. **Backfill** — Reuse the standalone typed collector/Kalshi backfill boundary with the same data root and canonical production Kalshi reads.
+7. **Phase 5 sandbox stub** — Read the exact Gateway bootstrap contract only. Phase 4 starts no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat.
+8. **Verification** — Reuse the standalone dependency-aware read-only graph with the same data root and environment.
 
-**Additional note**: SysAdmin should always use the `main` agent. Creating a separate sysadmin agent adds complexity without benefit, since the sysadmin's workspace files already assume it IS the main agent. Recommendation: make step 2 non-optional — sysadmin is always `main`.
+**Additional note**: SysAdmin always uses the pre-existing `main` agent. The original Phase 4 plan permits explicitly approved creation of missing selected category agents; stricter existing-agents-only and per-agent paper/live/channel/Telegram requirements are Phase 4b.
 
 ### DD-010: Docker isolation is mandatory (not optional)
 **Date**: 2025-06-08
@@ -337,7 +352,7 @@ openclaw config set secrets.providers.vaultfile \
 - Any credential that OpenClaw needs to route messages or run agents
 
 **What OpenClaw SecretRef does NOT solve:**
-- **TraderBot-specific API keys** (Kalshi, VoyageAI, NewsAPI, category-specific keys) — OpenClaw doesn't know about these
+- **TraderBot-specific API keys** (the canonical Kalshi pair) — OpenClaw doesn't know about these
 - **Per-agent access control** — SecretRef has no concept of "this token is only for the weather agent." Any agent that can read the OpenClaw config can read any SecretRef value
 - **TraderBot profile tokens** — these are TraderBot's mechanism for identifying which agent is calling
 - **Docker container access** — an exec provider needs the binary inside the container; a file provider needs the file bind-mounted; an env provider needs the var injected
@@ -355,13 +370,6 @@ TraderBot Encrypted Vault (manages):
   +-- Global namespace:
   |   +-- kalshi.api_key
   |   +-- kalshi.private_key_pem
-  |   +-- voyage.api_key
-  |   +-- newsapi.api_key (shared across all agents)
-  +-- Per-agent namespaces:
-  |   +-- weather.openweathermap_api_key
-  |   +-- economics.fred_api_key
-  |   +-- crypto.coingecko_api_key
-  |   +-- (common keys fall back to global namespace)
   +-- Agent tokens:
       +-- (existing tokens.enc, already Fernet-encrypted, with per-agent scoping)
 ```
@@ -440,7 +448,7 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 2. **Restructure Docker bind mounts** (per-agent, not blanket)
    - Remove: `$HOME/.traderbot:/home/traderbot/.traderbot:rw` (blanket mount)
    - Add per-agent selective mounts:
-     - `~/.traderbot/paper-{category}/:/home/traderbot/.traderbot/paper-{category}/:rw` (agent's own data)
+     - `~/.traderbot/{mode}-{name}/:/home/traderbot/.traderbot/{mode}-{name}/:rw` (agent's own data)
      - `~/.traderbot/chroma/:/home/traderbot/.traderbot/chroma/:ro` (shared ChromaDB, read-only)
      - `$HOME/traderbot:/traderbot:ro` (source code, unchanged)
    - **NOT mounted**: `.env`, `tokens.enc`, `keys/`, `secrets/`, `profiles.enc`, `.master_key`
@@ -535,13 +543,13 @@ Recommendation: Option 1 for simplicity and isolation. The LLM key is a single v
 > An OpenClaw plugin registers a `before_tool_call` hook that:
 > 1. Matches `traderbot__*` tool names
 > 2. Reads `ctx.agentId` (host-derived, trusted, not model-controllable)
-> 3. Resolves the agent's token from a Vault-backed SecretRef via `resolveSecretRefValues` from `openclaw/plugin-sdk/secret-ref-runtime`
+> 3. Resolves the agent's token from an Infisical-backed SecretRef via `resolveSecretRefValues` from `openclaw/plugin-sdk/secret-ref-runtime`
 > 4. Returns `{ params: { ...event.params, token: resolvedToken } }` to inject the token
 > 5. Blocks unrecognized agents (`{ block: true }`)
 >
 > The model never sees or controls the token. TraderBot's existing `resolver.py` → `TradingProfile` → `auth.py` pipeline still validates the injected token server-side.
 
-**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery is handled by an OpenClaw `before_tool_call` plugin hook (issue #187, Phase 1.1), not by static configuration. Implementation plan: `.omo/plans/phase1-1-token-injector.md`. The plugin code is complete and **deployment-verified on macpro-linux** (2026-08-03): E2E injection works — the hook fires, resolves the agent's token from the env provider, injects it into the MCP call, and the server resolves the weather profile. Three fixes were required during deployment testing: manifest metadata + `configSchema` (`f8b5065`), token optional in MCP tool schemas (`f1aa518`), and MCP server env must explicitly set `TRADERBOT_USE_HARDCODED_AUTH=0` (`0dbc981`). 113 Python + 11 TypeScript tests pass on-target. Vault SecretRef integration is deferred to Phase 1.5.
+**Decision**: TraderBot will register as an MCP server with OpenClaw. This provides the tool transport and lets TraderBot enforce explicit-token authorization and category isolation server-side. Secure per-agent token delivery is handled by an OpenClaw `before_tool_call` plugin hook (issue #187, Phase 1.1), not by static configuration. Implementation plan: `.omo/plans/phase1-1-token-injector.md`. The plugin code is complete and **deployment-verified on macpro-linux** (2026-08-03): E2E injection works — the hook fires, resolves the agent's token from the env provider, injects it into the MCP call, and the server resolves the weather profile. Three fixes were required during deployment testing: manifest metadata + `configSchema` (`f8b5065`), token optional in MCP tool schemas (`f1aa518`), and MCP server env must explicitly set `TRADERBOT_USE_HARDCODED_AUTH=0` (`0dbc981`). 113 Python + 11 TypeScript tests pass on-target. Infisical SecretRef integration is implemented; Vault is retired.
 
 **Architecture:**
 
@@ -619,7 +627,7 @@ The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this 
 - **New**: MCP tool definitions for all current CLI commands
 - **New**: Per-agent OpenClaw configuration with tool allowlists
 - **Changed**: Docker bind mounts become minimal (only agent data + workspace, no secrets)
-- **Changed**: Agent workspace TOOLS.md describes MCP tool calls, not CLI commands
+- **Changed**: Agent workspace `AGENTS.md ## Tools` describes implemented MCP calls once across stable/current OpenClaw
 - **Changed**: `~/.traderbot/secrets/secrets.json` replaces `.env` + keyring (DD-014 Phase 1)
 - **Changed**: Agent profile tokens injected via OpenClaw SecretRef env provider, not bind-mounted files
 - **Removed**: TraderBot CLI bind mount from Docker container (`/traderbot/.venv/bin`)
@@ -657,7 +665,7 @@ The authoritative, complete tool reference is `v2docs/09-mcp-tools.md` — this 
 - Removes the need for API tokens inside containers
 - Removes the need for keyring (MCP server reads from `secrets.json` on host)
 - Requires building `traderbot-mcp-server` as a new CLI entry point
-- Requires updating workspace templates from CLI commands to MCP tool descriptions
+- Requires keeping canonical `AGENTS.md ## Tools` sections synchronized with `TOOL_DEFINITIONS`
 - Requires updating `traderbot setup` to configure OpenClaw MCP and per-agent tool policies
 - TraderBot CLI inside containers is no longer needed (but still exists for host-side use)
 
@@ -1099,7 +1107,7 @@ Some problems require modification on both sides: new TraderBot module = new age
 | ECMWF on AWS S3 | Raw GRIB2 model output with full lead times (0h-144h+) | **Yes** — "forecast issued on date X for date X+N hours" | Free, public S3 bucket | GRIB2 processing required |
 | NWS Digital Forecast API | Current point forecasts for US locations | No (current only) | Free, no API key | REST API, XML/JSON |
 | Iowa Environmental Mesonet (IEM) | Archived NWS text forecasts | Possibly (API limited/changed) | Free | Uncertain API access |
-| Kalshi Historical Candlesticks | OHLC bid/ask + trade prices for settled markets | N/A (market data, not forecasts) | Requires API key | REST API, `GET /historical/markets/{ticker}/candlesticks` |
+| Kalshi Historical Candlesticks | OHLC bid/ask + trade prices for settled markets | N/A (market data, not forecasts) | Public | REST API, `GET /historical/markets/{ticker}/candlesticks` |
 | Kalshi Forecast Percentile History | Historical raw/formatted forecast percentiles for events | N/A (market consensus data) | Requires API key | REST API, up to 5-second granularity |
 | Kalshi Historical Trades | Historical trade data for settled markets | N/A (market data) | Requires API key | REST API, `GET /historical/trades` |
 
@@ -1328,11 +1336,13 @@ from pathlib import Path
 import shutil
 import sys
 
+
 @dataclass(frozen=True)
 class BinPaths:
-    traderbot: Path      # Resolved absolute path to traderbot binary
-    python: Path         # Resolved absolute path to python in the same venv
-    home: Path           # User's home directory
+    traderbot: Path  # Resolved absolute path to traderbot binary
+    python: Path  # Resolved absolute path to python in the same venv
+    home: Path  # User's home directory
+
 
 def resolve_bin_paths() -> BinPaths:
     """Resolve binary paths for service template substitution.
@@ -1496,29 +1506,29 @@ Note: this is a single `traderbot.service` unit (not a template unit `@.service`
 > (Phase 1.1, issue #187 closed); external provider credentials are deferred
 > to Phase 1.5 (issue #165).
 
-**Context**: The current `traderbot cron setup` registers all cron jobs for an agent immediately during deploy, regardless of the agent's lifecycle phase. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and the cron jobs they need differ by phase. Additionally, SysAdmin orchestrates when each category agent is activated — the first agent doesn't start until SysAdmin has verified data streams and its own health checks pass.
+**Context**: An earlier design assigned agent schedule registration to TraderBot during deploy. Verified stable/current OpenClaw contracts instead make Gateway the sole owner of agent cron/heartbeat scheduling. Under DD-017, agents progress through BACKTESTING → PAPER → LIVE → SUSPENDED states, and any approved schedules differ by phase.
 
 Under DD-016, TraderBot's always-on service handles data collection proactively. Several current cron jobs (`forecast-check`, `news-scan`, `pipeline-health`) exist because agents had to trigger data fetching themselves. These are no longer needed.
 
-**Decision**: Cron and heartbeat registration does NOT happen at deploy time. Job definitions are designed and shipped as templates within the TraderBot package, but they remain dormant until SysAdmin activates them. SysAdmin follows a predefined protocol for phase transitions but can also create custom jobs when circumstances require it.
+**Decision**: Deploy requests exactly one self-deleting bootstrap prompt through OpenClaw Gateway. No recurring agent cron or heartbeat schedule is registered or enabled at deploy time. Definitions remain dormant until explicit approval; Gateway owns registration, execution, and removal. TraderBot owns only daemon-internal workers.
 
 **Bootstrap job:**
 
-SysAdmin is deployed with exactly one cron job: a one-shot activation prompt that fires after deploy. This job triggers SysAdmin's startup protocol, after which SysAdmin removes the bootstrap job and registers its own essential jobs as it progresses through the activation sequence.
+Deploy requests exactly one Gateway-owned cron job: a one-shot activation prompt that fires after deploy. It triggers SysAdmin's startup protocol and deletes itself after execution. Any recurring schedules require separate explicit approval.
 
 The bootstrap job is registered during deploy (Step 2) as an isolated cron job with `--at "5m"` (fires 5 minutes after deploy, giving services time to initialize):
 
 ```bash
 openclaw cron add \
-  --name "sysadmin-bootstrap" \
+  --name "traderbot-main-at-5m" \
   --at "5m" \
   --session isolated \
   --agent main \
   --delete-after-run \
-  --message "You have been deployed. Follow your activation protocol in AGENTS.md: verify TraderBot service health, register your essential cron jobs, then activate the first category agent for backtesting."
+  --message "TraderBot deployment bootstrap: inspect service, authentication, and profile state; keep recurring schedules dormant until explicitly approved."
 ```
 
-The `--delete-after-run` flag ensures this job removes itself after the first execution. No other cron or heartbeat jobs exist at deploy time — SysAdmin activates everything from this single starting point.
+The `--delete-after-run` flag ensures Gateway removes this job after the first execution. No other agent schedule is requested at deploy time.
 
 **Phase-aware job lifecycle:**
 
@@ -1526,8 +1536,8 @@ SysAdmin activates agents one at a time, verifying each step before proceeding. 
 
 1. Deploy completes (OpenClaw configured, agents created, databases created, backfill running)
 2. SysAdmin verifies data streams are functioning (checks TraderBot service health, WebSocket connection, data freshness)
-3. SysAdmin registers its own essential cron jobs: `health-check` (1h) and `error-logger` (15m)
-4. SysAdmin enables its own heartbeat (`heartbeat.every: "30m"`)
+3. SysAdmin proposes essential schedules such as `health-check` and `error-logger`; they remain dormant until approved
+4. After approval, SysAdmin requests the schedules through OpenClaw Gateway
 5. SysAdmin activates the first category agent for backtesting:
    - Registers backtesting-specific jobs for itself and the category agent
    - Enables the category agent's heartbeat
@@ -1583,25 +1593,15 @@ message: |
 
 **SysAdmin's activation protocol (in AGENTS.md):**
 
-SysAdmin's workspace files (AGENTS.md, HEARTBEAT.md) include the activation protocol. This protocol is triggered by the bootstrap job registered at deploy time. The predefined sequence SysAdmin follows:
+SysAdmin's `AGENTS.md` includes the activation protocol. This protocol is triggered by the Gateway-owned bootstrap job requested at deploy time. The predefined sequence SysAdmin follows:
 
-1. Remove the bootstrap job that triggered this session (it has `--delete-after-run` but confirm removal)
-2. Verify TraderBot service is running: `traderbot health --json`
-2. Verify data streams are fresh: `traderbot data-points weather --count --json`
-3. Register essential self-jobs: `traderbot cron activate --role sysadmin --phase essential`
-4. Enable own heartbeat
-5. For each enabled category (one at a time):
-   a. Verify category data is available: `traderbot data-points <category> --count --json`
-   b. Activate category agent: `traderbot profile update <agent> --mode backtest`
-   c. Register backtesting jobs: `traderbot cron activate --agent <agent> --role trader --phase backtest`
-   d. Register self oversight jobs: `traderbot cron activate --role sysadmin --phase oversight-backtest`
-   e. Monitor backtesting progress via heartbeat
-   f. When backtesting passes deployment bar:
-      - `traderbot cron deactivate --agent <agent> --phase backtest`
-      - `traderbot cron activate --agent <agent> --role trader --phase paper`
-      - `traderbot cron activate --role sysadmin --phase oversight-paper`
-      - `traderbot profile update <agent> --mode paper`
-   g. When paper trading meets breakeven threshold for 2+ days, proceed to next category
+1. Confirm Gateway deleted the one-shot bootstrap after execution
+2. Inspect service, authentication, and profile state with implemented TraderBot tools
+3. Keep all recurring schedules dormant
+4. For each enabled category, propose the minimum phase-specific schedules
+5. Wait for explicit activation approval
+6. Request approved registration or removal through OpenClaw Gateway
+7. Update profile mode only after its promotion criteria are met
 
 **Custom job creation:**
 
@@ -1656,34 +1656,24 @@ Note: Backtesting phase has no category agent cron jobs — the backtesting engi
 
 SysAdmin's heartbeat is NOT isolated — it runs in the main session so SysAdmin maintains awareness of ongoing conversations, agent status, and context from previous oversight cycles.
 
-**`traderbot cron activate` / `traderbot cron deactivate` commands:**
+**Gateway scheduling interface:**
 
-New CLI commands that read phase-specific job templates and register/remove them:
+Approved agent schedules are registered, listed, and removed through OpenClaw Gateway:
 
 ```bash
-# Register all jobs for a phase
-traderbot cron activate --agent weather --role trader --phase paper
-# Reads src/traderbot/cron/weather/paper.yaml templates and calls openclaw cron add for each
-
-# Remove all jobs for a phase
-traderbot cron deactivate --agent weather --phase backtest
-# Reads job names from template, finds matching cron jobs, calls openclaw cron remove
-
-# Register SysAdmin phase jobs
-traderbot cron activate --role sysadmin --phase oversight-paper
-
-# List active jobs for an agent
-traderbot cron list --agent weather --json
+openclaw cron add --agent weather --name weather-paper-decision-loop ...
+openclaw cron list --json
+openclaw cron remove <jobId>
 ```
 
-The `--replace` flag on `cron activate` removes existing jobs with matching names before adding (idempotent).
+Registration must inventory existing Gateway jobs and fail closed on conflicting names; no destructive replace is implicit.
 
 **Consequences:**
-- Deploy flow no longer registers cron jobs — SysAdmin activates them as part of its startup protocol
+- Deploy requests only the one-shot Gateway bootstrap; recurring schedules remain dormant until explicit approval
 - Job definitions are data-driven (YAML templates), not hardcoded in Python
 - SysAdmin follows a predefined activation sequence but can deviate when circumstances require
 - Phase transitions (backtest → paper → live) are driven by SysAdmin, not automated
-- `traderbot cron setup` is renamed to `traderbot cron activate` with phase-aware templates
+- OpenClaw Gateway owns all agent schedule registration and removal; TraderBot owns only daemon-internal workers
 - Several current cron jobs are retired (data fetching jobs moved to TraderBot service)
 - SysAdmin heartbeat uses main session (not isolated) for continuity of oversight
 - Category agent heartbeat is disabled during backtesting (agent managed by simulation engine)
@@ -1745,70 +1735,70 @@ This section describes the v2 architecture that emerges from the design decision
 
 #### Step 1: OpenClaw Config
 - Detect `openclaw` on PATH
-- If missing: install via `npm install -g @openclaw/cli` (requires Node.js)
-- Run `openclaw setup` — this creates the `main` agent and configures gateway, model provider, web search, comms channels
-- Verify: `openclaw gateway status`
+- Require explicit approval before install or baseline setup; never use setup as a probe
+- Inventory every configured agent/workspace plus selected config, SecretRefs, token metadata, injection plans, heartbeat desired state, and bootstrap cron before category/user-state mutation
+- Require existing `main`; after any approved prerequisite setup, restart complete preflight
+- Verify Gateway RPC read-only; never invoke doctor implicitly
 
 #### Step 2: SysAdmin Setup
-- User chooses: use `main` as sysadmin (recommended) or create a new agent
-- Inject sysadmin workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, HEARTBEAT.md, USER.md, SESSION-STATE.md, .learnings/)
-- Register bootstrap job: one-shot `openclaw cron add --at "5m" --session isolated --agent main --delete-after-run` that prompts SysAdmin to begin its activation protocol (DD-023)
-- No other cron or heartbeat jobs registered at deploy time — SysAdmin activates them during its startup protocol (DD-023)
+- Use existing `main` only, adopt its inventory workspace unchanged, and never call `agents add main`
+- Preflight then inject SysAdmin workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `SESSION-STATE.md`, `.learnings/`); preserve legacy `TOOLS.md`/`HEARTBEAT.md` exactly
+- Preflight the bootstrap contract, then request its one-shot Gateway job only after all selected agent/config postconditions pass (DD-023)
+- No other agent schedules are registered at deploy time; recurring cron/heartbeat definitions remain dormant until explicitly approved and requested through Gateway (DD-023)
 - Create sysadmin profile: `traderbot profile create sysadmin --mode paper --risk-multiplier 0.001 --all-categories`
 - Assign profile token to sysadmin agent via OpenClaw SecretRef
 - Verify: `traderbot auth check --json`
 
 #### Step 3: Category Selection
-- Present available categories: Weather, Economics, Politics, Sports, Crypto, Entertainment, Science & Technology, Health, Social
+- Present exact categories: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, `other`
 - User selects one or more
+- Existing selected agents reuse inventory workspaces; explicit mismatches fail before mutation
+- Missing selected agents require approved absolute paths; re-read inventory after every add exit and adopt only exact ID/path state
+- Existing-agents-only plus per-agent paper/live, channel binding, and same-name Telegram requirements are deferred to Phase 4b
+- Reject exact-equal, normalized-equal, realpath-equal, and same-file roots across every configured agent, including unselected agents; permit ancestor/descendant containment only when the ancestor workspace belongs to `main` (the OpenClaw-canonical container), including symlink-resolved paths; reject all non-`main` containment
 - For each selected category:
-  - `openclaw agents add <category>` (creates OpenClaw agent)
-  - Inject category workspace files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, etc.)
-  - Configure agent heartbeat: `heartbeat.every: "0m"` (dormant — SysAdmin activates during startup protocol, DD-023)
-  - No cron jobs registered at deploy time — SysAdmin activates them phase by phase (DD-023)
+  - Request `openclaw agents add <category> --workspace <approved-path> --non-interactive --json` only when missing
+  - Inject category workspace files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`); preserve any existing legacy `TOOLS.md`/`HEARTBEAT.md` exactly
+  - Preserve user heartbeat state, or write explicitly approved dormant `0m` through OpenClaw config; never create heartbeat jobs/state directly
   - Create profile: `traderbot profile create <category> --mode backtest --categories <category> --risk-multiplier <default>`
-  - Assign profile token to category agent via OpenClaw SecretRef
-- After all agents: `openclaw doctor`
+  - Preserve exact SecretRefs, atomically create absent mappings, and fail closed on conflicts
+- Do not invoke doctor implicitly; user-state repair or migration requires a separate explicit operator action
 
 #### Step 4: API Tokens
-- Global tokens (all agents): Kalshi API key + PEM, VoyageAI
-- Common optional tokens (all agents): NewsAPI, Twitter, Reddit
-- Category-specific tokens (only if category is enabled):
-  - Weather: OpenWeatherMap (Open-Meteo and NWS are free, no key needed)
-  - Economics: FRED
-  - Crypto: CoinGecko (with tier detection)
-  - Sports: TheSportsDB
-- Store in encrypted vault (DD-012)
+- Probe the configured loopback Infisical origin at `GET /api/status` with a one-second timeout and `trust_env=False`; production `localhost` is local to macpro-linux beside TraderBot, isolated development fakes do not prove integration, and Final-Wave QA validates the target host
+- Reuse a usable existing Infisical setup; otherwise report and select machine-bound encrypted local storage through `SecretsStore`
+- Reuse a valid complete stored pair, or obtain only `kalshi_api_key` and `kalshi_private_key_pem` through hidden input/environment-variable-name references
+- Require a nonempty key and locally parse the PEM as RSA before the first write; do not make a live Kalshi request
+- Preserve partial durable writes and reconcile forward by canonical secret name; never delete user secrets as rollback
+- Do not prompt or store credentials for inactive, planned, or keyless providers
 
 #### Step 5: Database Creation
-- Create `~/.traderbot/traderbot.db` (global, schema init)
-- Create `~/.traderbot/sysadmin/db/decisions.db` (sysadmin)
-- For each category agent: create `~/.traderbot/paper-{category}/db/decisions.db`
-- Initialize ChromaDB collections (news, data_points, market_patterns, news_signals, market_conditions)
-- Verify: all DB paths writable, ChromaDB accessible
+- Apply all current global migrations under the explicit shared data root and create one connection pool
+- Acquire and health-check the hardened embedded Chroma root before category database mutation
+- Create only selected category databases through `DatabaseAccess` at `{mode}-{name}/db/decisions.db`
+- Enumerate through canonical SysAdmin read-only access; do not create a SysAdmin decisions database
+- Validate the exact five-name shared Chroma manifest but leave collection creation lazy until a real embedding supplies its dimension
+- Close Chroma before the pool on every path; treat lock contention as a non-destructive blocker
 
 #### Step 6: Backfill
-- Run `traderbot backfill --months 6 --categories <enabled_categories> --json`
-- Only backfill data sources relevant to enabled categories
-- This populates ChromaDB `data_points` collection with historical weather, economics, and crypto data
-- Progress reporting during backfill (can take 1-3 minutes for initial seed)
+- Reuse `traderbot backfill --months 6 [--collector-db PATH] [--json]` through the typed boundary
+- Import the optional collector read-only and fetch current/archive Kalshi weather history around one cutoff
+- Carry the same explicit data root with canonical production Kalshi reads; never initialize Chroma here
 
-#### Step 7: Simulation Start
-- All agents begin in backtesting mode (`mode: backtest`), not paper trading (DD-017, DD-023)
-- SysAdmin is activated with heartbeat and essential cron jobs (DD-023)
-- SysAdmin activates the first category agent and starts its backtesting phase
-- Docker sandbox is started for each category agent (mandatory, DD-010)
-- SysAdmin manages phase transitions: backtest → paper → live, one category at a time
+#### Step 7: Phase 5 Sandbox Stub
+- Inspect the exact Gateway-owned bootstrap one-shot read-only
+- Start no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat in Phase 4
+- Record executed/deleted one-shots as action-required partial state without recreation
 
 #### Step 8: Verification
-- OpenClaw gateway reachable
-- All agent tokens resolve correctly
-- Kalshi credentials valid (`traderbot auth check --json`)
-- All cron jobs registered (`openclaw cron list`)
-- All DB paths writable
-- ChromaDB accessible and collections initialized
-- Docker sandbox running (if Docker available)
-- Print summary with agent names, profiles, tokens, and status
+- Run `traderbot verify --categories ...` as a fixed dependency-aware read-only graph.
+- Require exactly the deploy's asserted postconditions: Gateway RPC, selected OpenClaw inventory/workspace/config, exact bootstrap cron lifecycle state, five-field token documents, created-agent sandbox modes, and heartbeat cadence only when the deploy approved dormancy; report preserved posture as advisory divergence with actual values.
+- Require exact real-auth mode, durable selected token-document metadata, and signed Kalshi `GET /portfolio/balance` without exposing credentials.
+- Verify global/current-mode databases with no-follow owner checks, `mode=ro`, `query_only`, `quick_check`, and exact latest manifests; SysAdmin decisions DB is forbidden.
+- Require bounded actual daemon MCP `health` standalone (the wizard path reports it as advisory because no wizard step owns the daemon lifecycle); derive daemon-owned Chroma state from MCP rather than opening embedded storage.
+- Report Infisical primary or encrypted fallback state; production loopback is macpro-linux-local and real-service replay remains Final Wave.
+- Reuse the same explicit data root carried by database creation and backfill; Kalshi reads are canonical production.
+- Emit one JSON stdout line or a Rich stderr table with stable IDs/status/action/timing; exit 0/1/2. Wizard step 8 completes iff no required check failed, embedding advisory divergences and required-degraded state visibly.
 
 ---
 
@@ -1893,19 +1883,7 @@ The `news` and `data_points` collections already have `category` metadata fields
 
 ### Category → Workspace Template Mapping
 
-Phase 1 `HEAD` includes workspace files for weather, SysAdmin, and Dev-Liaison. Category-specific templates beyond weather remain future work:
-
-| Category | IDENTITY.md Name | SOUL.md Theme | Data Sources |
-|---|---|---|---|
-| Weather | Vane 🌪️ | Atmospheric chaos, ensemble models | NWS, Open-Meteo, OpenWeatherMap |
-| Economics | Mint 💰 | Data-driven macro, leading indicators | FRED, BLS |
-| Politics | Gavel ⚖️ | Polling aggregation, institutional analysis | NewsAPI |
-| Sports | Edge 🏟️ | Statistical edge, situational spotting | TheSportsDB |
-| Crypto | Flux ₿ | Volatility regimes, on-chain analysis | CoinGecko |
-| Entertainment | Spotlight 🎬 | Box office, cultural trend momentum | NewsAPI |
-| Science & Technology | Circuit ⚡ | Innovation cycles, breakthrough detection | NewsAPI |
-| Health | Pulse ❤️ | Epidemiological modeling, regulatory analysis | NewsAPI |
-| Social | Signal 📢 | Virality dynamics, sentiment momentum | Twitter, Reddit |
+Phase 4 ships `AGENTS.md`, `SOUL.md`, and `IDENTITY.md` templates for every exact `MarketCategory`: `weather`, `economics`, `crypto`, `sports`, `politics`, `entertainment`, `financial`, `world`, and `other`. Canonical exact-five-tool guidance appears only in managed `AGENTS.md ## Tools`; TraderBot does not package or manage legacy `TOOLS.md` or `HEARTBEAT.md`.
 
 ---
 
@@ -2063,9 +2041,9 @@ Single JSON file with 0600 permissions, structured by namespace:
 ```
 
 Namespace rules:
-- `global`: credentials shared across all agents (Kalshi, VoyageAI, NewsAPI, Twitter, Reddit)
-- `<category>`: credentials specific to that category (only loaded if that category is enabled)
-- The MCP server reads the `global` namespace plus the calling agent's category namespace
+- `global`: the canonical Kalshi API key and RSA private key shared by the daemon
+- Deploy does not create category API-secret namespaces for inactive or keyless providers
+- The MCP server reads the `global` namespace for current API credentials
 - SysAdmin profile can read all namespaces (oversight role)
 
 No encryption at rest — the threat model is honest: TraderBot is always-on and needs these credentials continuously. Fernet encryption for an always-unlocked vault is security theater. POSIX file permissions (0600, owner-only) provide the actual access control on the host. Inside Docker containers, the file is not mounted at all (agents never see it).
@@ -2112,8 +2090,8 @@ Current (insecure):
 
 New (per-agent, minimal):
 ```
--v $HOME/.traderbot/paper-{category}/db:/home/traderbot/.traderbot/paper-{category}/db:rw
--v $HOME/.traderbot/paper-{category}/audit:/home/traderbot/.traderbot/paper-{category}/audit:rw
+-v $HOME/.traderbot/{mode}-{name}/db:/home/traderbot/.traderbot/{mode}-{name}/db:rw
+-v $HOME/.traderbot/{mode}-{name}/audit:/home/traderbot/.traderbot/{mode}-{name}/audit:rw
 -v $HOME/.traderbot/chroma:/home/traderbot/.traderbot/chroma:ro
 -v $HOME/.openclaw/workspace/{category}/:/workspace:rw
 # NOT mounted: secrets/, keys/, tokens.enc, profiles.enc, .env, .master_key
@@ -2236,10 +2214,19 @@ class TradingProfile(BaseModel):
     mode: Literal["backtest", "paper", "live"]  # Added "backtest"
     description: str
     enabled_categories: list[MarketCategory] = Field(default_factory=list)
-    permissions: list[str] = Field(default_factory=lambda: [
-        "scan", "analyze", "trade", "data-points", "news-context",
-        "heartbeat", "performance", "audit", "learnings",
-    ])
+    permissions: list[str] = Field(
+        default_factory=lambda: [
+            "scan",
+            "analyze",
+            "trade",
+            "data-points",
+            "news-context",
+            "heartbeat",
+            "performance",
+            "audit",
+            "learnings",
+        ]
+    )
     risk_multiplier: Annotated[float, Field(gt=0, le=1.0)]
     max_position_per_market_pct: Annotated[float, Field(gt=0)]
     max_daily_loss_pct: Annotated[float, Field(gt=0)]
@@ -2355,7 +2342,7 @@ Your deployment must provide the token securely; current local tests pass it exp
   params before the MCP server receives them (commit `5b5088e`, verified
   on macpro-linux).
 - The config artifacts are now deployable with the plugin active.
-- Vault SecretRef integration is deferred to Phase 1.5 (issue #165).
+- Infisical SecretRef integration is implemented; Vault is retired.
 
 **MCP server configuration (OpenClaw)**
 
@@ -2514,15 +2501,6 @@ All TraderBot secrets are stored in 1Password vaults, accessed via 1Password Con
   ├── TraderBot API keys vault
   │   ├── kalshi.api_key
   │   ├── kalshi.private_key_pem
-  │   ├── voyage.api_key
-  │   ├── newsapi.api_key
-  │   ├── twitter.api_key / api_secret / bearer_token
-  │   └── reddit.client_id / client_secret
-  ├── Category-specific API keys vault
-  │   ├── weather.openweathermap_api_key
-  │   ├── economics.fred_api_key
-  │   ├── crypto.coingecko_api_key / tier
-  │   └── sports.thesportsdb_api_key
   └── Agent profile tokens vault
       ├── weather.profile_token
       ├── economics.profile_token
@@ -2533,7 +2511,7 @@ All TraderBot secrets are stored in 1Password vaults, accessed via 1Password Con
 
 ```
 1Password Connect (Docker, runs alongside TraderBot)
-  ├── Provides REST API at http://localhost:8080
+  ├── Provides target-local REST API at http://localhost:8080 on macpro-linux
   ├── Authenticated via 1Password Connect token
   └── Accessible only from localhost (no external exposure)
 
@@ -2652,7 +2630,7 @@ services:
       - OP_SESSION=  # 1Password Connect token
 ```
 
-The TraderBot service connects to `http://localhost:8080` to retrieve secrets. The Connect token is stored in OpenClaw SecretRef (env provider) and injected into the TraderBot service's environment.
+When co-located on macpro-linux, the TraderBot service connects to target-local `http://localhost:8080` to retrieve secrets. The Connect token is stored in OpenClaw SecretRef (env provider) and injected into the TraderBot service's environment.
 
 **10. Container exploit surface mitigation**
 
@@ -3101,7 +3079,7 @@ Issues:
 - `vectors.py` manages ChromaDB collections — already has category filtering but needs audit (pending item)
 - `reconciliation.py` is for paper-vs-live reconciliation — solid for v2
 - No per-mode DB naming convention exists yet
-- Under v2 (DD-019/021), each agent gets 3 databases: `backtesting-{name}/db/`, `paper-{name}/db/`, `live-{name}/db/`
+- Under v2 (DD-019/021), each agent gets 3 databases: `backtest-{name}/db/`, `paper-{name}/db/`, `live-{name}/db/`
 
 Actions:
 - Implement per-agent per-mode DB isolation (backtesting/paper/live)
@@ -3636,33 +3614,32 @@ The Dev-Liaison runs as an OpenClaw agent with the following configuration:
 
 ```
 Agent ID: dev-liaison
-Sandbox mode: off (runs on host, like SysAdmin — needs access to source and logs)
-Skills: github, traderbot-reference (custom skill for knowledge retrieval)
-Heartbeat: 30m, isolated session, light context
+Sandbox mode: all (host runtime and filesystem groups denied)
+TraderBot tools: health, auth_check, profile_list
+Recurring heartbeat: dormant until explicitly approved through OpenClaw Gateway
 ```
 
-The Dev-Liaison runs unsandboxed (like SysAdmin) because it needs access to the TraderBot source tree for test module authoring, system logs for error diagnosis, and the experiment database for validation. It does NOT need access to trading credentials or the Kalshi API.
+The shipped Dev-Liaison is sandboxed and has no host runtime or filesystem access. External operators and the AutoDev team perform source edits and host-side validation; the agent coordinates through implemented inspection tools and OpenClaw session capabilities.
 
 **OpenClaw tool allowlist:**
 
-The Dev-Liaison is unsandboxed in this target design, so the sandbox
-`bundle-mcp` gate does not apply. Its normal policy uses one explicit
-restrictive `allow` list; planned TraderBot tools remain names in the target
-policy, not claims that they are currently implemented.
+The shipped policy uses one explicit restrictive `allow` list plus the sandbox
+`bundle-mcp` gate. Allow-only omission is authoritative: TraderBot tools not
+listed are unavailable, while `group:runtime` and `group:fs` are explicitly denied.
 
 ```json5
 {
   tools: {
     allow: [
-      "read", "write", "exec", "github",
-      "traderbot__reference",     // Knowledge retrieval (DD-034 §4)
-      "traderbot__experiment",    // Experiment harness tools
-      "traderbot__auth_check",    // Profile-token validation and access context
+      "traderbot__health",
+      "traderbot__auth_check",
+      "traderbot__profile_list",
+      "sessions_spawn", "sessions_send", "sessions_yield",
+      "sessions_list", "sessions_history", "subagents",
     ],
     deny: [
-      "traderbot__trade",         // No trading
-      "traderbot__scan",          // No market scanning
-      "traderbot__analyze",       // No analysis
+      "group:runtime",
+      "group:fs",
     ],
   },
 }
@@ -4027,7 +4004,7 @@ GITHUB_REPOSITORY=<owner/repo>                # Shared repo
 
 Each category agent receives a bespoke set of MCP tools reflecting its domain's analytical needs. Tools are namespaced by category, and the OpenClaw `alsoAllow` mechanism (DD-025) ensures each agent only sees its own toolkit.
 
-This is not a generic framework with pluggable modules — each toolkit is **custom-designed** for its category. Weather needs calibrated probability estimates from forecast distributions. Elections need polling aggregates and demographic modeling. Crypto needs volatility analysis and order flow metrics. The analysis pipeline, data sources, statistical models, and tool outputs are all category-specific.
+This is not a generic framework with pluggable modules — each toolkit is **custom-designed** for its category. Weather needs calibrated probability estimates from forecast distributions. Politics needs polling aggregates and demographic modeling. Crypto needs volatility analysis and order flow metrics. The analysis pipeline, data sources, statistical models, and tool outputs are all category-specific.
 
 The `AnalysisRegistry` pattern is preserved as an internal dispatch mechanism — each toolkit calls into its category's registered analyzer. But the agent never sees the analyzer directly. It only sees MCP tool responses.
 
@@ -4045,12 +4022,12 @@ traderbot__weather_seasonal_context — Historical temperature distributions and
 traderbot__weather_decision_brief   — Assembled analytical brief for a specific market/ticker
 ```
 
-**Election toolkit** (election agent only, design pending):
+**Politics toolkit** (`politics` agent only, design pending):
 ```
-traderbot__election_poll_aggregate  — Polling averages with methodology weighting
-traderbot__election_demographic     — Demographic composition and voting pattern data
-traderbot__election_accuracy        — Historical polling accuracy by type, lead time, source
-traderbot__election_decision_brief  — Assembled analytical brief for an election market
+traderbot__politics_poll_aggregate  — Polling averages with methodology weighting
+traderbot__politics_demographic     — Demographic composition and voting pattern data
+traderbot__politics_accuracy        — Historical polling accuracy by type, lead time, source
+traderbot__politics_decision_brief  — Assembled analytical brief for a politics market
 ```
 
 **Crypto toolkit** (crypto agent only, design pending):
@@ -4486,7 +4463,7 @@ Infisical's architecture maps naturally to our vault structure:
 - **Infisical projects** = our vaults ("TraderBot" for API keys, "TraderBot Agent Tokens" for profile tokens)
 - **Infisical environments** = our namespaces ("global", "weather", "economics", etc.)
 - **Infisical machine identities** = our service tokens (TraderBot service, each agent)
-- **`site_url` SDK parameter** = self-hosted instance URL (default `http://localhost:8080`)
+- **`site_url` SDK parameter** = self-hosted instance URL (target-local `http://localhost:8080` on macpro-linux)
 
 **Decision:**
 
@@ -4521,7 +4498,7 @@ services:
     restart: unless-stopped
 ```
 
-The TraderBot service connects to `http://localhost:8080` to retrieve secrets. No external cloud dependency.
+The TraderBot service connects to target-local `http://localhost:8080` on macpro-linux to retrieve secrets. No external cloud dependency.
 
 **Platform compatibility:**
 - **Linux (including headless):** Infisical Docker image supports linux/amd64 and linux/arm64. The Python SDK is OS-independent. The CLI is available via pip, npm, or binary download. Headless Linux is fully supported — all interaction is via API/SDK/CLI, no GUI required.
@@ -4550,9 +4527,8 @@ class SecretsStore:
     def _local_delete(self, service: str, key: str, namespace: str) -> None: ...
 ```
 
-The `SecretsStore` interface is identical regardless of backend. The Infisical backend maps:
+The `SecretsStore` interface is identical regardless of backend. The implemented Infisical backend maps:
 - `namespace="global"` → Infisical project "TraderBot", environment "prod"
-- `namespace="weather"` → Infisical project "TraderBot", environment "weather"
 - `namespace="tokens"` → Infisical project "TraderBot Agent Tokens", environment "prod"
 
 #### 4. Vault structure
@@ -4561,21 +4537,7 @@ The `SecretsStore` interface is identical regardless of backend. The Infisical b
 Infisical Project: "TraderBot"
   Environment: "prod" (global keys)
     ├── kalshi_api_key
-    ├── kalshi_private_key_pem
-    ├── voyage_api_key
-    ├── newsapi_key
-    ├── twitter_api_key
-    ├── twitter_api_secret
-    ├── twitter_bearer_token
-    ├── reddit_client_id
-    └── reddit_client_secret
-  Environment: "weather"
-    ├── openweathermap_api_key
-    └── (Open-Meteo: free, no key)
-  Environment: "economics"
-    └── fred_api_key
-  Environment: "crypto"
-    └── coingecko_api_key
+    └── kalshi_private_key_pem
 
 Infisical Project: "TraderBot Agent Tokens"
   Environment: "prod"
@@ -4584,73 +4546,21 @@ Infisical Project: "TraderBot Agent Tokens"
     └── dev-liaison_token (field: token, profile, agent, categories, permissions)
 ```
 
-The two-project structure separates API keys from agent tokens, enabling granular access control. The TraderBot service authenticates with a machine identity that has read/write access to both projects. Each agent's machine identity has read access only to its own token.
+The two-project structure separates API keys from agent tokens, enabling granular access control. Deploy currently provisions only the canonical Kalshi pair consumed by production. Previously planned provider keys have no deploy prompt or storage path. The TraderBot service authenticates with an existing machine identity that has read/write access to both projects. Each agent's machine identity has read access only to its own token.
 
 #### 5. Deploy flow — Infisical setup
 
 **Step 4a: Infisical health check**
-```
-traderbot deploy Step 4a: Checking Infisical...
 
-  ✓ Infisical server is running at http://localhost:8080
-  ✓ Machine identity authenticated
-  ✓ Project access confirmed
-```
-
-If Infisical isn't running:
-```
-traderbot deploy Step 4a: Checking Infisical...
-  ✗ Infisical server not found at http://localhost:8080
-
-  Would you like to:
-    1) Start Infisical (requires Docker) — recommended
-    2) Configure an existing Infisical server
-    3) Use local encrypted storage (no Infisical, no audit logging, no automatic rotation)
-```
-
-Option 1 starts the Infisical Docker container using `docker compose -f docker-compose.infisical.yml up -d`, creates the projects and machine identity, and configures the TraderBot service to connect.
-
-Option 2 connects to an existing Infisical instance (for users who already run Infisical).
-
-Option 3 falls back to local encrypted storage (see §9).
+Deploy accepts a loopback HTTP(S) origin and probes its canonical `/api/status` endpoint with a one-second timeout and `trust_env=False`. HTTP 200 plus usable existing credentials selects Infisical. Any unavailable or unusable result automatically selects the machine-bound encrypted `LocalEncryptedStore` through `SecretsStore`. Deploy reports the selected backend and never starts Docker or creates an Infisical identity.
 
 **Step 4b: API token entry**
 
-API tokens are prompted per category and stored directly in Infisical:
-```
-traderbot deploy Step 4b: API tokens
+Only `kalshi_api_key` and `kalshi_private_key_pem` are eligible. Config mode contains environment variable names rather than values; interactive mode uses hidden prompts. A complete valid stored pair is reused without mutation. A replacement pair is validated before the first write: the key is nonempty and the PEM parses locally as an RSA private key. No live provider request is made, and output contains no values.
 
-  Common tokens (required for all agents):
-    Kalshi API key: ************************************
-    Kalshi private key: (paste PEM or path) ************************************
-    VoyageAI API key: ************************************
-    NewsAPI key: ************************************
-    Twitter bearer token: ************************************
-    Reddit client ID: ************************************
-    Reddit client secret: ************************************
+**Step 4c: Forward reconciliation**
 
-  Weather-specific tokens (weather category enabled):
-    Open-Meteo: (free, no key required) — skipping
-    OpenWeatherMap API key: ************************************
-
-  Each token is validated against the service before storing.
-  ✓ All tokens stored in Infisical project "TraderBot"
-```
-
-Validation happens immediately — if a Kalshi key doesn't authenticate, deploy pauses and asks for a corrected key.
-
-**Step 4c: Machine identity configuration**
-
-The TraderBot service authenticates with Infisical using a machine identity (service token):
-```
-traderbot deploy Step 4c: Configuring Infisical machine identity...
-
-  ✓ Created machine identity "traderbot-service" with read/write access
-  ✓ Service token stored in OpenClaw SecretRef (env: INFISICAL_TOKEN)
-  ✓ TraderBot service will authenticate with Infisical on startup
-```
-
-This is the single bootstrap secret: `INFISICAL_TOKEN` → TraderBot authenticates with Infisical → retrieves all other secrets.
+The pair is prevalidated as one decision. If a backend unexpectedly fails after writing `kalshi_api_key`, deploy reports that exact written boundary and `kalshi_private_key_pem` as pending. It leaves the verified forward state intact and retries safely on rerun; it never deletes user secrets.
 
 #### 6. Agent profile token provisioning (unchanged from DD-026/037)
 
@@ -4705,7 +4615,7 @@ traderbot token rotate --force             # Force immediate rotation
 When the TraderBot service (MCP server + always-on daemon) starts:
 
 1. Read `INFISICAL_TOKEN` from environment (provided by OpenClaw SecretRef)
-2. Authenticate with Infisical at `http://localhost:8080` (or configured URL)
+2. Authenticate with Infisical at target-local `http://localhost:8080` on macpro-linux (or configured loopback URL)
 3. Load all secrets from the "TraderBot" project into memory
 4. Load all profile tokens from the "TraderBot Agent Tokens" project into memory
 5. Start the MCP server
@@ -4790,7 +4700,7 @@ After deploy completes:
 ```
 traderbot deploy: Verifying Infisical integration...
 
-  ✓ Infisical server is healthy (http://localhost:8080)
+  ✓ Infisical server is healthy (target-local http://localhost:8080 on macpro-linux; verified during Final-Wave target-host QA)
   ✓ TraderBot project is accessible (9 items)
   ✓ TraderBot Agent Tokens project is accessible (3 items)
   ✓ All API keys validated against their services
@@ -5269,3 +5179,21 @@ sessions_spawn({
 4. **Ephemeral sessions**: Debate sub-agents are created for a single cycle and terminated after convergence. OpenClaw's sub-agent lifecycle supports this — `sessions_spawn` creates isolated sessions, and they can be terminated via the `subagents` tool when the cycle completes.
 
 5. **No recursive spawning**: Debate sub-agents are leaf agents (depth 1). They cannot spawn further children. This prevents debate sub-agents from spawning their own sub-agents, which maintains the orchestrated debate structure.
+
+---
+
+### DD-039: Verification requiredness — required means deploy-asserted
+
+**Date**: 2026-10-10
+**Status**: Decided
+
+**Context**: Step 8 verification originally encoded a fresh-install posture as required state — sandbox `"off"` for main, `"all"` for each category agent, heartbeat `0m`, and a connected daemon — while the deploy preserves a pre-existing fleet's posture by default and owns no daemon lifecycle (DD-009, DD-023; no wizard step installs, starts, or restarts the daemon). On any host with a pre-existing OpenClaw fleet — every real deployment target — the two contracts contradict: no product code path writes main's sandbox mode (main always pre-exists and adopts its inventory config) and no deploy step starts a daemon, so the strict posture was never satisfiable anywhere. Every local seam that could have caught this was stubbed (the fake CLI E2E stubs step 8), which is why the contradiction survived to the first on-target F3 run (a104 rerun #5 REJECT; defects C2/C3/C4).
+
+**Decision**: A required verification check asserts exactly a postcondition the deployment itself wrote; everything else is advisory divergence reporting, and the required set is carried on the verification request — `heartbeat_policy` ("preserve" default; "require_0m" only from an explicitly approved heartbeat change), `created_agents` (the agents this deploy created), `daemon_required` (True) — never inferred from the operator's inventory. Required: agents exist, configs readable, SecretRefs exact, sandbox `"all"` for created agents only, heartbeat cadence equal to the approved value when `heartbeat_policy` is `require_0m` (a preserved baseline is reported, never required), the bootstrap cron classified against deploy state, token documents, auth mode, signed Kalshi balance, Infisical selection, databases, and schema pin. Advisory: preserved agents' sandbox/heartbeat posture (reported with actual values, never required) and daemon liveness on the wizard path. Standalone `traderbot verify` keeps daemon health required — that tool's job is fleet health. Wizard step 8 completes iff no required check failed; advisory divergences embed visibly and degrade the standalone exit but never block the deployment, and sanctioned required-degraded state (the encrypted local fallback selected in Step 4) no longer fails the deployment it belongs to.
+
+**Consequences:**
+
+- C2/C3/C4 resolved: a preserve-mode deployment with unset sandbox/heartbeat posture and a foreign-age daemon now completes step 8 with three embedded advisories instead of failing.
+- main's `"off"` sandbox requirement is deleted; preserved agents including main are reported, never required.
+- The lifecycle-aware cron check classifies the deleteAfterRun one-shot against deploy state (EXACT passes; completed-retained passes with its own action; registered-but-absent degrades as fired; unregistered-absent fails; conflicts fail) — this is also the on-target proof of the a105 C1/C5 classifier fix.
+- Standalone verify semantics are unchanged: exit 1 on any failure or degradation, daemon health still required.

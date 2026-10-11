@@ -14,6 +14,46 @@
               "provider": "infisical",
               "id": "weather_token"
             },
+            "economics": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "economics_token"
+            },
+            "crypto": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "crypto_token"
+            },
+            "sports": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "sports_token"
+            },
+            "politics": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "politics_token"
+            },
+            "entertainment": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "entertainment_token"
+            },
+            "financial": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "financial_token"
+            },
+            "world": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "world_token"
+            },
+            "other": {
+              "source": "exec",
+              "provider": "infisical",
+              "id": "other_token"
+            },
             "sysadmin": {
               "source": "exec",
               "provider": "infisical",
