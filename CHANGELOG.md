@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a115] — 2026-10-10
+
+- Consolidated the Windows quarantine for the 82 pre-existing portability-debt test failures (issue #222) into a single registry module (`tests/windows_quarantine.py`) keyed by exact node ids from CI run 38108188505, applied by one `pytest_collection_modifyitems` hook that skips only on win32; `TRADERBOT_WINDOWS_QUARANTINE=off` re-enables them all; quarantined test files carry zero diff.
+
+## [2.0.0a114] — 2026-10-10
+
+- Upgraded the transitive `pyjwt` (mcp crypto extra) lock entry from 2.13.0 to 2.15.1, clearing PYSEC-2026-4142 and PYSEC-2026-4183; the Kalshi signing path (RSA-PSS over `cryptography`, not JWT) verified unaffected by the Kalshi client and MCP auth E2E suites.
+
+## [2.0.0a113] — 2026-10-10
+
+- Made the `test_verify_openclaw_contract` inventory fixtures platform-neutral (workspace paths rooted at the test's absolute temp dir instead of POSIX-only `/deploy/<id>` literals), fixing the 11 Windows AgentSummary validation failures without touching any required/advisory assertion.
+
+## [2.0.0a112] — 2026-10-10
+
+- Made `test_infisical_credentials_path_uses_data_dir`'s mock-read assertion set-based rather than order-based, so machine-key reads (`/etc/machine-id`) no longer break the credentials-path check on Linux.
+
 ## [2.0.0a110] — 2026-10-10
 
 - Minted DD-039 (verification requiredness) as a numbered design decision in the roadmap twins and decision index: required checks assert exactly the deploy-written postconditions carried on the verification request, preserved posture and wizard-path daemon liveness report as advisory divergence, and standalone `traderbot verify` keeps daemon health required; cross-referenced from the v2docs/02 Step 8 contract.

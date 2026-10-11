@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.windows_quarantine import apply_windows_quarantine
 from traderbot.profiles.tokens import LocalTokenStore, set_store
 
 
@@ -72,3 +73,8 @@ def secrets_resolver_reset(tmp_path: Path) -> Iterator[None]:
     finally:
         _SUSPENDED_PROFILES.clear()
         set_resolver(None)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Delegate win32-only quarantining to the shared registry module."""
+    apply_windows_quarantine(config, items)
