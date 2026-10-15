@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import json
+import re
+from copy import deepcopy
 from pathlib import Path
-from typing import Never
+from typing import Any, Never
 
 from traderbot.deploy.backfill_models import BackfillResult
 from traderbot.deploy.deploy_state import load_deploy_state, save_deploy_state
-from traderbot.deploy.openclaw_models import AgentInventory, AgentSummary
+from traderbot.deploy.openclaw_models import (
+    AgentInventory,
+    AgentSummary,
+    ConfigReadState,
+    ConfigValueRead,
+)
+from traderbot.deploy.sandbox_build import resolve_sandbox_dockerfile
 from traderbot.deploy.verify_models import OverallStatus, VerificationResult
 from traderbot.deploy.wizard import DeployWizard
 from traderbot.deploy.wizard_contracts import (
@@ -26,6 +35,7 @@ from traderbot.deploy.wizard_state import (
 )
 from traderbot.profiles.injection import WorkspaceTemplate
 from traderbot.profiles.models import TradingProfile
+from traderbot.sandbox import sandbox_image_tag
 
 
 class LateStepCanaryError(RuntimeError):
@@ -44,6 +54,7 @@ class FakeOpenClaw:
         setup_succeeds: bool = True,
         gateway_succeeds: bool = True,
         agents: dict[str, Path] | None = None,
+        agent_configs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.installed: bool = installed
         self.install_succeeds: bool = install_succeeds
@@ -61,6 +72,31 @@ class FakeOpenClaw:
         self.bootstrap_state: BootstrapCronState | None = None
         self.install_calls: int = 0
         self.setup_calls: int = 0
+        # Todo-8 step-7 world: a live deployed-shape config tree keyed by agent
+        # id, read/written ONLY through the agents.list[i] bracket grammar
+        # (insertion order of `agents` is the canonical index order, matching
+        # inventory_agents()).
+        self.config: dict[str, dict[str, Any]] = {
+            agent_id: deepcopy(subtree) for agent_id, subtree in (agent_configs or {}).items()
+        }
+        for agent_id in self.agents:
+            self.config.setdefault(agent_id, {})
+        self.config_events: list[str] = []
+        self.inventory_fails: bool = False
+        # Budget knob: after N successful inventory calls the seam turns
+        # unreadable (models the live inventory failing between preflight and
+        # the approved step-7 apply).
+        self.inventory_calls: int = 0
+        self.inventory_budget: int | None = None
+        self.fail_set_keys: set[str] = set()
+        self.fail_unset_keys: set[str] = set()
+        self.fail_read_keys: set[str] = set()
+        # Induced-mismatch seam: a key re-read is corrupted EXACTLY ONCE (the
+        # first read that finds it present), modeling a postcondition read
+        # that disagrees with the written value. Pre-write backup reads hit
+        # ABSENT and never consume the corruption.
+        self.corrupt_on_read: set[str] = set()
+        self.corrupt_value: Any = {"tampered": True}
 
     def detect(self) -> str | None:
         return "/fake/openclaw" if self.installed else None
@@ -81,6 +117,11 @@ class FakeOpenClaw:
         return self.gateway_succeeds
 
     def inventory_agents(self) -> AgentInventory | None:
+        self.inventory_calls += 1
+        if self.inventory_fails:
+            return None
+        if self.inventory_budget is not None and self.inventory_calls > self.inventory_budget:
+            return None
         return AgentInventory(
             root=[
                 AgentSummary(
@@ -131,6 +172,7 @@ class FakeOpenClaw:
     def create_agent(self, agent_id: str, workspace: Path) -> bool:
         self.created_agents.add(agent_id)
         self.agents[agent_id] = workspace
+        self.config.setdefault(agent_id, {})
         return True
 
     def set_secret_ref(self, agent_id: str, secret_ref: SecretRefConfig) -> bool:
@@ -157,6 +199,93 @@ class FakeOpenClaw:
         if state is not BootstrapCronState.MISSING:
             return False
         self.cron_identities.add(("traderbot-main-at-5m", "main"))
+        return True
+
+    _LIST_KEY: re.Pattern[str] = re.compile(r"^agents\.list\[(\d+)\](?:\.([A-Za-z0-9_.\-]+))?$")
+
+    def _list_target(self, key: str) -> tuple[str, list[str]] | None:
+        match = self._LIST_KEY.fullmatch(key)
+        if match is None:
+            return None
+        index = int(match.group(1))
+        ids = list(self.agents)
+        if index >= len(ids):
+            return None
+        segments = match.group(2).split(".") if match.group(2) else []
+        return ids[index], segments
+
+    def read_config_value(self, key: str) -> ConfigValueRead:
+        """Raw tri-state read mirroring openclaw_config.read_config_value."""
+        self.config_events.append(f"get:{key}")
+        if key in self.fail_read_keys:
+            return ConfigValueRead(ConfigReadState.FAILED)
+        target = self._list_target(key)
+        if target is None:
+            return ConfigValueRead(ConfigReadState.FAILED)
+        agent_id, segments = target
+        if segments == ["id"]:
+            return ConfigValueRead(ConfigReadState.FOUND, agent_id)
+        if segments and segments[0] == "id":
+            return ConfigValueRead(ConfigReadState.FAILED)
+        current: Any = self.config.get(agent_id, {})
+        for segment in segments:
+            if not isinstance(current, dict) or segment not in current:
+                return ConfigValueRead(ConfigReadState.ABSENT)
+            current = current[segment]
+        if key in self.corrupt_on_read:
+            self.corrupt_on_read.discard(key)  # exactly-once induced mismatch
+            return ConfigValueRead(ConfigReadState.FOUND, deepcopy(self.corrupt_value))
+        # Faithful to the subprocess roundtrip: every read is an independent
+        # snapshot (never an alias into the live tree — otherwise step-7
+        # backups would silently track writes, hiding D8 restore fidelity).
+        return ConfigValueRead(ConfigReadState.FOUND, deepcopy(current))
+
+    def set_config_json(self, key: str, json_value: str) -> bool:
+        """Strict-JSON leaf write on the deployed list-shape bracket grammar."""
+        target = self._list_target(key)
+        if key in self.fail_set_keys or target is None or not target[1] or target[1][0] == "id":
+            self.config_events.append(f"set-fail:{key}")
+            return False
+        try:
+            value = json.loads(json_value)
+        except json.JSONDecodeError:
+            self.config_events.append(f"set-fail:{key}")
+            return False
+        agent_id, segments = target
+        current: Any = self.config.setdefault(agent_id, {})
+        for segment in segments[:-1]:
+            child = current.get(segment)
+            if not isinstance(child, dict):
+                child = {}
+                current[segment] = child
+            current = child
+        current[segments[-1]] = deepcopy(value)
+        self.config_events.append(f"set:{key}")
+        return True
+
+    def unset_config(self, key: str) -> bool:
+        """Leaf deletion without parent pruning (mirrors the deployed CLI's
+        unsetAtPath semantics — T1 receipt: unset leaves empty parents)."""
+        if key in self.fail_unset_keys:
+            self.config_events.append(f"unset-fail:{key}")
+            return False
+        target = self._list_target(key)
+        if target is None or not target[1]:
+            self.config_events.append(f"unset-fail:{key}")
+            return False
+        agent_id, segments = target
+        current: Any = self.config.get(agent_id, {})
+        for segment in segments[:-1]:
+            if not isinstance(current, dict) or segment not in current:
+                self.config_events.append(f"unset-fail:{key}")
+                return False
+            current = current[segment]
+        leaf = segments[-1]
+        if not isinstance(current, dict) or leaf not in current:
+            self.config_events.append(f"unset-fail:{key}")
+            return False
+        del current[leaf]
+        self.config_events.append(f"unset:{key}")
         return True
 
     def doctor(self) -> Never:
@@ -224,6 +353,10 @@ class FakePhase678:
         self,
         backfill: BackfillResult | None = None,
         verification: VerificationResult | None = None,
+        *,
+        docker_ready: bool = True,
+        build_succeeds: bool = True,
+        built_tag: str | None = None,
     ) -> None:
         self.backfill: BackfillResult = backfill or BackfillResult(status="complete")
         self.verification: VerificationResult = verification or VerificationResult(
@@ -240,6 +373,30 @@ class FakePhase678:
         )
         self.preflight_calls: int = 0
         self.state: DeployState | None = None
+        # Todo-8 step-7 seams (ensure gate + build-before-write).
+        self.docker_ready: bool = docker_ready
+        self.build_succeeds: bool = build_succeeds
+        self.built_tag: str | None = built_tag  # override -> image-drift path
+        self.openclaw: FakeOpenClaw | None = None  # wired by tests for ordering
+        self.docker_checks: int = 0
+        self.build_calls: int = 0
+        self.config_events_at_build: int | None = None
+
+    def ensure_docker_available(self) -> bool:
+        self.docker_checks += 1
+        return self.docker_ready
+
+    def build_sandbox_image(self) -> str | None:
+        self.build_calls += 1
+        if self.openclaw is not None:
+            self.config_events_at_build = len(self.openclaw.config_events)
+        if not self.build_succeeds:
+            return None
+        if self.built_tag is not None:
+            return self.built_tag
+        # Same deterministic tag the wizard computes from the pinned
+        # install/docker/Dockerfile (never a default_factory image).
+        return sandbox_image_tag(resolve_sandbox_dockerfile())
 
     def preflight(self, request: WizardRequest) -> LatePreflightResult:
         del request
@@ -256,11 +413,11 @@ class FakePhase678:
     def run_verification(
         self,
         request: WizardRequest,
-        created_agents: tuple[str, ...] = (),
+        selected_agents: tuple[str, ...] = (),
     ) -> VerificationResult:
         del request
         self.calls.append(8)
-        self.verification_agents = created_agents
+        self.verification_agents = selected_agents
         if self.raise_verification:
             raise LateStepCanaryError("SECRET-VERIFY-CANARY")
         return self.verification

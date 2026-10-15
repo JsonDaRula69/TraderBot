@@ -9,6 +9,10 @@
         "<agent-workspace>:/workspace:ro",
         "<traderbot-data-root>/{mode}-entertainment:/data:rw"
       ],
+      "readOnlyRoot": true,
+      "network": "none",
+      "user": "1000:1000",
+      "capDrop": ["ALL"],
       "dangerouslyAllowExternalBindSources": true,
       "dangerouslyAllowReservedContainerTargets": true
     }

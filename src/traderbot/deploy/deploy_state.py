@@ -10,11 +10,12 @@ import stat
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+from typing import Final, override
 
 from pydantic import ValidationError
 
 from traderbot.deploy.wizard_contracts import DeployState, WizardRequest
+from traderbot.deploy.wizard_state import SandboxTarget
 
 _MAX_STATE_BYTES = 1_048_576
 
@@ -81,6 +82,46 @@ def step_fingerprint(request: WizardRequest, step: int) -> str:
         },
     }
     encoded = json.dumps(payloads[step], sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+# D9 pinned exactly-two (unchanged): the only dangerous-* keys step 7 ever writes.
+_STEP7_DANGEROUS_KEYS: Final = (
+    "dangerouslyAllowExternalBindSources",
+    "dangerouslyAllowReservedContainerTargets",
+)
+
+
+def step7_docker_fingerprint(
+    request: WizardRequest,
+    targets: tuple[SandboxTarget, ...],
+    image: str,
+) -> str:
+    """Todo-8 step-7 posture fingerprint (deploy_state.py:65 seam): image tag
+    + per-agent mount table + ladder modes + the dangerous-* set. Persisted
+    as ``DeployState.step7_docker_fingerprint``; a re-run skips step 7 ONLY
+    on an exact match of the CURRENT posture (any selection/workspace/root/
+    image drift mismatches and re-applies)."""
+    payload = {
+        "image": image,
+        "mode": request.mode,
+        "data_root": str(request.data_root),
+        "dangerous": list(_STEP7_DANGEROUS_KEYS),
+        "agents": [
+            {
+                "id": target.agent_id,
+                "mode": target.mode,
+                "workspace": str(target.workspace),
+                "data_dir": f"{target.mode}-{target.agent_id}",
+                "binds": [
+                    str(target.workspace),
+                    str(request.data_root / f"{target.mode}-{target.agent_id}"),
+                ],
+            }
+            for target in targets
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -158,6 +199,7 @@ __all__ = [
     "DeployStateError",
     "load_deploy_state",
     "save_deploy_state",
+    "step7_docker_fingerprint",
     "step_fingerprint",
     "validate_data_root",
 ]

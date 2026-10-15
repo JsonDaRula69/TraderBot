@@ -27,7 +27,7 @@ from traderbot.deploy.validation import SecretReconciliationApprovals
 from traderbot.deploy.verify_reporter import RichReporter as VerificationRichReporter
 from traderbot.deploy.wizard import DeployWizard
 from traderbot.deploy.wizard_contracts import DeployResult, WizardPorts, WizardRequest
-from traderbot.deploy.wizard_late_steps import STUB_MESSAGE
+from traderbot.deploy.wizard_late_steps import sandbox_notice
 from traderbot.deploy.wizard_request import request_from_config
 from traderbot.deploy.wizard_runtime import build_wizard_ports
 from traderbot.deploy.wizard_state import DeployApprovals
@@ -201,8 +201,8 @@ def _render_result(result: DeployResult, console: Console) -> None:
     for step in result.steps:
         if step.backfill is not None:
             BackfillRichReporter(console).render(step.backfill)
-        if step.step == 7:
-            console.print(STUB_MESSAGE, soft_wrap=True)
+        if step.step == 7 and sandbox_notice(step) is not None:
+            console.print(sandbox_notice(step), soft_wrap=True)
         if step.verification is not None:
             VerificationRichReporter(console).render(step.verification)
     if result.deployment_complete:

@@ -102,11 +102,18 @@ class StrictConfigModel(BaseModel):
 
 class SandboxDockerConfig(StrictConfigModel):
     # Pinned schema key names verbatim (SandboxDockerSchema, strict): extra="forbid" here
-    # mechanically rejects any dangerous-* key outside the D9 set.
+    # mechanically rejects any dangerous-* key outside the D9 set. The four
+    # A-DCFG-KEYS hardening keys are optional-WITHOUT-defaults in the schema, so
+    # omission silently yields Docker defaults; the deploy writer always emits
+    # them, and this require-present model makes every fragment carry the pins.
     image: str
     binds: list[str]
     dangerouslyAllowExternalBindSources: bool
     dangerouslyAllowReservedContainerTargets: bool
+    readOnlyRoot: Literal[True]
+    network: Literal["none"]
+    user: Literal["1000:1000"]
+    capDrop: list[Literal["ALL"]] = Field(min_length=1, max_length=1)
 
 
 class SandboxConfig(StrictConfigModel):
@@ -334,8 +341,20 @@ def test_sandboxed_fragments_carry_full_sandbox_contract() -> None:
 
         docker = sandbox.docker
         assert docker is not None
-        assert docker.model_fields_set == {"image", "binds", *D9_DANGEROUS_KEYS}
+        assert docker.model_fields_set == {
+            "image",
+            "binds",
+            "readOnlyRoot",
+            "network",
+            "user",
+            "capDrop",
+            *D9_DANGEROUS_KEYS,
+        }
         assert docker.image == IMAGE_PLACEHOLDER
+        assert docker.readOnlyRoot is True
+        assert docker.network == "none"
+        assert docker.user == "1000:1000"
+        assert docker.capDrop == ["ALL"]
         assert docker.dangerouslyAllowExternalBindSources is True
         assert docker.dangerouslyAllowReservedContainerTargets is True
 

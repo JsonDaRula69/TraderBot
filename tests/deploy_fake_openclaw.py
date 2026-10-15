@@ -88,6 +88,10 @@ def write_fake_openclaw(path: Path) -> None:
                 missing(key)
             agent_id, segments = resolve_list(key)
             config = agent_config(agent_id)
+            if segments == ["id"]:
+                # agents.list[i].id is a materialized field of the deployed
+                # entry; step 7's identity probe reads exactly this leaf.
+                return agent_id
             if not segments:
                 return {**config, "id": agent_id}
             found, value = walk(config, segments)

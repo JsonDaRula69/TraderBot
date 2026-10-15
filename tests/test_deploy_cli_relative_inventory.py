@@ -48,6 +48,7 @@ def _write_existing_weather_config(config_path: Path) -> None:
             "setup_openclaw": False,
             "create_agents": False,
             "heartbeat_change": False,
+            "sandbox_apply": False,
         },
         "heartbeat_every": "preserve",
     }

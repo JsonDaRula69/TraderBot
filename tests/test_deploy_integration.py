@@ -52,7 +52,15 @@ def test_full_deploy_mocked(tmp_path: Path, clean_workspace_root: Path) -> None:
     assert default_root.exists() is False
     assert docker_log.exists() is False
     ledger = FakeLedger.model_validate_json(state_path.read_text(encoding="utf-8"))
-    assert not [event for event in ledger.events if "docker" in event.lower()]
+    # The docker CLI canary above proves the daemon was never invoked (the fake
+    # exits 97 if called); step 7's sanctioned sandbox.docker writes reach the
+    # fake gateway ONLY via the deployed list-first bracket grammar with
+    # --strict-json (todo-8 lane).
+    docker_events = [event for event in ledger.events if "sandbox.docker" in event]
+    assert docker_events
+    assert all(event.startswith("config set agents.list[") for event in docker_events)
+    assert all("--strict-json" in event for event in docker_events)
+    assert not [event for event in ledger.events if event.split(" ", 1)[0] == "docker"]
 
 
 def test_invalid_json_exits_2(tmp_path: Path, clean_workspace_root: Path) -> None:

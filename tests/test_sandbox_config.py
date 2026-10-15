@@ -257,3 +257,56 @@ def test_sandbox_config_for_dev_liaison_binds(tmp_path: Path) -> None:
         f"{workspace}:/workspace:ro",
         f"{data_root}/{config.mode}-dev-liaison:/data:rw",
     )
+
+
+def test_to_openclaw_keys_emits_exact_eight_key_docker_surface(tmp_path: Path) -> None:
+    # Test-map: A-DCFG-KEYS (todo-8 standing ruling) / D9 / D5 — the emitted
+    # OpenClaw payload carries EXACTLY the 8-key docker surface: image, binds,
+    # the four pinned hardening keys (readOnlyRoot/network/user/capDrop —
+    # optional WITHOUT defaults in the pinned 2026.7.1-2 SandboxDockerSchema,
+    # so omission would silently yield Docker defaults) plus the exact D9
+    # two-flag dangerous-* set. Nothing more, nothing less.
+    sandbox = _sandbox()
+    config = sandbox.sandbox_config_for(
+        "weather", tmp_path / "data", tmp_path / "workspace" / "weather"
+    )
+    keys = config.to_openclaw_keys()
+    assert set(keys) == {"mode", "workspaceAccess", "docker"}
+    assert keys["mode"] == "all"
+    assert keys["workspaceAccess"] == "none"
+    docker = keys["docker"]
+    assert set(docker) == {
+        "image",
+        "binds",
+        "readOnlyRoot",
+        "network",
+        "user",
+        "capDrop",
+        "dangerouslyAllowExternalBindSources",
+        "dangerouslyAllowReservedContainerTargets",
+    }
+    assert docker["image"] == config.image
+    assert list(docker["binds"]) == list(config.binds)
+    assert docker["readOnlyRoot"] is True
+    assert docker["network"] == "none"
+    assert docker["user"] == "1000:1000"
+    assert docker["capDrop"] == ["ALL"]
+    assert docker["dangerouslyAllowExternalBindSources"] is True
+    assert docker["dangerouslyAllowReservedContainerTargets"] is True
+
+
+def test_sandbox_config_for_writer_supplies_explicit_d10_image(tmp_path: Path) -> None:
+    # Test-map: D10 + todo-8 — the deploy writer passes the image tag
+    # EXPLICITLY (sandbox_image_tag(resolve_sandbox_dockerfile())), never
+    # relying on the default_factory, so the written config always carries
+    # the tag the build step just proved.
+    sandbox = _sandbox()
+    explicit = "traderbot-sandbox:d0000000a"
+    config = sandbox.sandbox_config_for(
+        "weather",
+        tmp_path / "data",
+        tmp_path / "workspace" / "weather",
+        image=explicit,
+    )
+    assert config.image == explicit
+    assert config.to_openclaw_keys()["docker"]["image"] == explicit

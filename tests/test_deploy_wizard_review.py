@@ -38,6 +38,7 @@ def _documented_payload(
             "setup_openclaw": False,
             "create_agents": True,
             "heartbeat_change": True,
+            "sandbox_apply": False,
         },
         "heartbeat_every": "0m",
     }

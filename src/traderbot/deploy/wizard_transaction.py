@@ -13,6 +13,7 @@ from traderbot.deploy.wizard_contracts import (
 )
 from traderbot.deploy.wizard_preflight import resolve_agent_targets
 from traderbot.deploy.wizard_state import (
+    DEV_LIAISON_AGENT_ID,
     DeploymentPreflight,
     DeploymentPreflightError,
     PlannedAgent,
@@ -61,6 +62,11 @@ class DeploymentTransaction:
     def apply_categories(self) -> tuple[AgentDeployResult, ...]:
         results: list[AgentDeployResult] = []
         for agent in self._preflight.agents[1:]:
+            # GAP-13: the adopted dev-liaison's identity/injection lanes are
+            # Phase-6 runtime work (#356); step 3 makes zero writes for it,
+            # and step 7 (todo-8) is its only deploy-time mutation.
+            if agent.agent_id == DEV_LIAISON_AGENT_ID:
+                continue
             result = self._apply(agent)
             results.append(result)
             if result.status is StepStatus.FAILED:
@@ -130,6 +136,10 @@ class DeploymentTransaction:
         if config is None:
             return "post-read config failed"
         for agent in self._preflight.agents:
+            # The adopted dev-liaison was never written by step 3 (see
+            # apply_categories), so its config postconditions do not apply.
+            if agent.agent_id == DEV_LIAISON_AGENT_ID:
+                continue
             state = config.agent(agent.agent_id)
             if state is None or config.secret_ref(agent.agent_id) != SecretRefConfig(
                 id=f"{agent.agent_id}_token"

@@ -15,6 +15,9 @@ from traderbot.deploy.openclaw_models import (
     AgentRuntimeConfig,
     ConfigDryRun,
     ConfigGetError,
+    ConfigReadState,
+    ConfigValueRead,
+    JsonValue,
 )
 from traderbot.deploy.openclaw_process import run_bounded
 from traderbot.deploy.wizard_state import (
@@ -79,6 +82,29 @@ def _read_config[ValueT: BaseModel](key: str, model: type[ValueT]) -> _ConfigRea
     if _missing_path_evidence(result.stdout) or _missing_path_evidence(result.stderr):
         return _ConfigRead(_ConfigReadStatus.MISSING)
     return _ConfigRead(_ConfigReadStatus.FAILED)
+
+
+def read_config_value(key: str) -> ConfigValueRead:
+    """Read one config key as raw JSON with explicit ABSENT evidence (T8).
+
+    Step 7's backup→write→re-read loop needs byte-level (canonical JSON)
+    fidelity on arbitrary leaf values — scalars, arrays, and objects — that
+    the typed read models deliberately narrow. ABSENT is only reported on the
+    CLI's documented missing-path evidence, never as a guess; anything else
+    nonzero is FAILED (fail closed).
+    """
+    result = _run(["openclaw", "config", "get", key, "--json"], timeout=30.0)
+    if result is None:
+        return ConfigValueRead(ConfigReadState.FAILED)
+    if result.returncode == 0:
+        try:
+            parsed: JsonValue = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return ConfigValueRead(ConfigReadState.FAILED)
+        return ConfigValueRead(ConfigReadState.FOUND, parsed)
+    if _missing_path_evidence(result.stdout) or _missing_path_evidence(result.stderr):
+        return ConfigValueRead(ConfigReadState.ABSENT)
+    return ConfigValueRead(ConfigReadState.FAILED)
 
 
 def _state(agent_id: str, path: str, value: AgentRuntimeConfig) -> AgentConfigState:

@@ -17,7 +17,16 @@ from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.order_models import MarketCategory
 
 _REQUIRED_APPROVALS: Final[frozenset[str]] = frozenset(
-    {"install_openclaw", "setup_openclaw", "create_agents", "heartbeat_change"}
+    {
+        "install_openclaw",
+        "setup_openclaw",
+        "create_agents",
+        "heartbeat_change",
+        # Todo-8: the step-7 docker-sandbox apply requires the SAME explicit
+        # operator approval discipline as the other write lanes (ONE approval
+        # mirroring the existing config-mode approval plumbing).
+        "sandbox_apply",
+    }
 )
 
 

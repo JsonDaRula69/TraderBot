@@ -72,6 +72,7 @@ def write_config(
             "setup_openclaw": False,
             "create_agents": True,
             "heartbeat_change": True,
+            "sandbox_apply": True,
         },
         "heartbeat_every": "0m",
     }
@@ -101,11 +102,15 @@ def test_real_cli_reconciles_selected_agents_and_reruns_without_duplicates(
     second_state_text = state_path.read_text(encoding="utf-8")
     second_state = FakeLedger.model_validate_json(second_state_text)
 
-    # Then: one selected agent is added and Gateway bootstrap is the final mutation
+    # Then: one selected agent is added; the Gateway bootstrap (cron:add)
+    # precedes the step-7 sandbox apply lane, whose final target write (crypto
+    # is the last plan target) is the last mutation.
     assert first.returncode == 0, first.stdout + first.stderr
     assert second.returncode == 0, second.stderr
     assert first_state.mutations.count("add:crypto") == 1
-    assert first_state.mutations[-1] == "cron:add"
+    assert "cron:add" in first_state.mutations
+    assert first_state.mutations.index("cron:add") < first_state.mutations.index("sandbox:weather")
+    assert first_state.mutations[-1] == "sandbox:crypto"
     assert second_state.mutations == first_state.mutations
     assert not [event for event in second_state.mutations if "sports" in event]
     assert not [event for event in second_state.mutations if event.startswith("forbidden:")]

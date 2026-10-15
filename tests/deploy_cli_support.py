@@ -61,6 +61,7 @@ def build_fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "TRADERBOT_DATA_DIR": str(data),
             "FAKE_OC_STATE": str(state),
             "TRADERBOT_USE_HARDCODED_AUTH": "1",
+            "TRADERBOT_PHASE5_SANDBOX": "1",
             "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
             "TRADERBOT_TEST_KALSHI_KEY": secrets.token_urlsafe(),
             "TRADERBOT_TEST_KALSHI_PEM": private_key_pem,

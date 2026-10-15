@@ -8,6 +8,7 @@ from typing import Never
 
 from traderbot.deploy.openclaw_models import AgentInventory, AgentSummary
 from traderbot.deploy.wizard_state import (
+    DEV_LIAISON_AGENT_ID,
     AgentConfigState,
     AgentReadiness,
     BootstrapCronState,
@@ -18,6 +19,8 @@ from traderbot.deploy.wizard_state import (
     PreflightInputs,
     ReconcileAction,
     ResolvedAgent,
+    SandboxLadderMode,
+    SandboxTarget,
     SecretRefConfig,
     TokenMetadataState,
     WizardRequestState,
@@ -127,6 +130,11 @@ def resolve_agent_targets(
                 f"missing agent {category.value} needs an approved absolute workspace",
             )
         targets.append(ResolvedAgent(category.value, category, asserted, False))
+    # GAP-13/#356: dev-liaison is ADOPTED, never created — it enters the
+    # resolved surface only when already present in the inventory.
+    dev_liaison = indexed.get(DEV_LIAISON_AGENT_ID)
+    if dev_liaison is not None:
+        targets.append(ResolvedAgent(DEV_LIAISON_AGENT_ID, None, Path(dev_liaison.workspace), True))
     for target in targets:
         for owner in inventory.root:
             if (
@@ -153,6 +161,26 @@ def resolve_agent_targets(
                     PreflightErrorCode.WORKSPACE_OWNERSHIP,
                     f"selected agents {target.agent_id} and {other.agent_id} overlap",
                 )
+    return tuple(targets)
+
+
+def resolve_sandbox_targets(
+    plan: DeploymentPreflight,
+    *,
+    mode: SandboxLadderMode,
+) -> tuple[SandboxTarget, ...]:
+    """Todo-8 step-7 apply surface: every selected created-or-adopted
+    category agent (ladder data mode) plus the ADOPTED dev-liaison (GAP-13:
+    its profile mode is ``paper`` -> data dir ``paper-dev-liaison``, evidence
+    #356). ``main``/``sysadmin`` keep sandbox mode ``off`` and are never
+    written (D2 note 2); absent dev-liaison inventories yield no target
+    (dev-liaison is adopted-only, never created by the deploy)."""
+    targets: list[SandboxTarget] = []
+    for agent in plan.agents:
+        if agent.agent_id == DEV_LIAISON_AGENT_ID:
+            targets.append(SandboxTarget(agent.agent_id, agent.workspace, "paper"))
+        elif agent.category is not None:
+            targets.append(SandboxTarget(agent.agent_id, agent.workspace, mode))
     return tuple(targets)
 
 

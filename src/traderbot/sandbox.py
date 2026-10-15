@@ -44,7 +44,10 @@ import re
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
+
+if TYPE_CHECKING:
+    from traderbot.deploy.openclaw_models import JsonValue
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -70,6 +73,15 @@ _WORKSPACE_TARGET = "/workspace"
 _DATA_TARGET = "/data"
 _SANDBOX_USER = "1000:1000"
 _SANDBOX_NETWORK = "none"
+# A-DCFG-KEYS pinned hardening emission (todo-8 standing ruling): the
+# deployed 2026.7.1-2 SandboxDockerSchema defines readOnlyRoot/network/user/
+# capDrop as OPTIONAL WITHOUT defaults (``default: <undefined>`` per key) and
+# the gateway runtime emits --read-only/--network/--user/--cap-drop ONLY when
+# the key is truthy — omitting any of them silently yields Docker defaults
+# (writable rootfs, bridge network, root user, full capabilities). The writer
+# therefore ALWAYS emits all four with these pinned values.
+_DOCKER_READ_ONLY_ROOT = True
+_DOCKER_CAP_DROP: tuple[str, ...] = ("ALL",)
 _IMAGE_REPOSITORY = "traderbot-sandbox"
 
 # D1/Must-NOT: host paths a generated bind must never expose. Kept as literal
@@ -225,12 +237,16 @@ class DockerSandboxConfig(BaseModel):
             f"{self.data_root}/{self.mode}-{self.name}:{_DATA_TARGET}:rw",
         )
 
-    def to_openclaw_keys(self) -> dict[str, object]:
+    def to_openclaw_keys(self) -> dict[str, JsonValue]:
         """Render the camelCase OpenClaw sandbox object (pinned 2026.7.1-2 schema).
 
         Nested and JSON-able (D5 strict-json writes): the ``sandbox`` keys with
-        the D9 exact two-flag dangerous-* set under ``docker`` — and nothing else
-        containing ``dangerously`` anywhere in the structure.
+        the D9 exact two-flag dangerous-* set under ``docker`` — and nothing
+        else containing ``dangerously`` anywhere in the structure — plus the
+        four A-DCFG-KEYS hardening keys (``readOnlyRoot``, ``network``,
+        ``user``, ``capDrop``), always emitted with pinned values because the
+        schema marks all four optional WITHOUT defaults and omission silently
+        yields Docker defaults.
         """
         return {
             "mode": _OPENCLAW_SANDBOX_MODE,
@@ -238,6 +254,10 @@ class DockerSandboxConfig(BaseModel):
             "docker": {
                 "image": self.image,
                 "binds": list(self.binds),
+                "readOnlyRoot": _DOCKER_READ_ONLY_ROOT,
+                "network": _SANDBOX_NETWORK,
+                "user": _SANDBOX_USER,
+                "capDrop": list(_DOCKER_CAP_DROP),
                 "dangerouslyAllowExternalBindSources": True,
                 "dangerouslyAllowReservedContainerTargets": True,
             },
@@ -250,6 +270,7 @@ def sandbox_config_for(
     workspace: Path,
     *,
     mode: Literal["backtest", "paper", "live"] = "backtest",
+    image: str | None = None,
 ) -> DockerSandboxConfig:
     """Build a :class:`DockerSandboxConfig` for a sandboxable agent.
 
@@ -260,6 +281,12 @@ def sandbox_config_for(
 
     ``mode`` defaults to ``"backtest"`` and is the trading ladder value used in
     the ``{mode}-{name}`` data-dir bind segment.
+
+    ``image`` is the deploy writer's explicit D10 tag
+    (``sandbox_image_tag(resolve_sandbox_dockerfile())``); T8 never relies on
+    the ``default_factory`` so the written config always carries the tag the
+    build just (re)proven. Omitted (tests/one-off renders), the factory
+    derives the same tag from the checked-in Dockerfile.
     """
     if agent in _REFUSED_AGENTS:
         raise SandboxRefusalError(
@@ -270,6 +297,15 @@ def sandbox_config_for(
         category: MarketCategory | None = MarketCategory(agent)
     except ValueError:
         category = None
+    if image is not None:
+        return DockerSandboxConfig(
+            name=agent,
+            mode=mode,
+            category=category,
+            data_root=data_root,
+            workspace=workspace,
+            image=image,
+        )
     return DockerSandboxConfig(
         name=agent,
         mode=mode,

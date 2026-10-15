@@ -84,6 +84,7 @@ def _request(**updates: Unpack[_RequestUpdates]) -> WizardRequest:
             "setup_openclaw": False,
             "create_agents": False,
             "heartbeat_change": False,
+            "sandbox_apply": False,
         },
     }
     if "kalshi_api_key_env" in updates:

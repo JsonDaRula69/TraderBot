@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, Literal, override
+from typing import ClassVar, Final, Literal, override
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from traderbot.deploy.openclaw_models import JsonValue
 from traderbot.kalshi.order_models import MarketCategory
 
 
@@ -79,6 +80,9 @@ class DeployApprovals(FrozenModel):
     setup_openclaw: bool = False
     create_agents: bool = False
     heartbeat_change: bool = False
+    # Todo-8: ONE operator approval gates the entire step-7 docker-sandbox
+    # apply (the approval prompt lists every exact per-agent write first).
+    sandbox_apply: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +91,24 @@ class ResolvedAgent:
     category: MarketCategory | None
     workspace: Path
     existed: bool
+
+
+# GAP-13 / evidence #356: the dev-liaison agent is adopted, never created.
+DEV_LIAISON_AGENT_ID: Final = "dev-liaison"
+
+# Mirrors traderbot.sandbox.sandbox_config_for's mode literal exactly
+# (ladder data-dir modes; OpenClaw's sandbox "mode" key is the posture ladder
+# off|non-main|all, a different axis).
+SandboxLadderMode = Literal["backtest", "paper", "live"]
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxTarget:
+    """One step-7 apply target: agent id + workspace + ladder data mode."""
+
+    agent_id: str
+    workspace: Path
+    mode: SandboxLadderMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +159,61 @@ class PreflightErrorCode(StrEnum):
     TOKEN_CONFLICT = "token_conflict"
     INJECTION_FAILED = "injection_failed"
     CRON_CONFLICT = "cron_conflict"
+    # Step-7 (todo-8) typed failures — every unexpected state is one of these,
+    # never a guessed recovery (no doctor, no heuristics).
+    DOCKER_UNAVAILABLE = "docker_unavailable"
+    DOCKERFILE_MISSING = "dockerfile_missing"
+    SANDBOX_BUILD_FAILED = "sandbox_build_failed"
+    SANDBOX_APPROVAL_REQUIRED = "sandbox_approval_required"
+    SANDBOX_TARGET_MISSING = "sandbox_target_missing"
+    SANDBOX_WRITE_FAILED = "sandbox_write_failed"
+    SANDBOX_POSTCONDITION_FAILED = "sandbox_postcondition_failed"
+    SANDBOX_ROLLBACK_FAILED = "sandbox_rollback_failed"
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxKeyBackup:
+    """One backed-up config leaf: full bracket path + recorded value
+    (``None`` records explicit PRE-WRITE ABSENCE for D8 rollback)."""
+
+    key: str
+    before: JsonValue | None
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxWriteRecord:
+    """Auditable write record: agent, path, before value, after value."""
+
+    agent_id: str
+    key: str
+    action: Literal["set", "rollback_set", "rollback_unset"]
+    before: JsonValue | None
+    after: JsonValue | None
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxAgentResult:
+    """Per-agent step-7 outcome with its backup and write evidence."""
+
+    agent_id: str
+    data_dir: str
+    status: Literal["completed", "failed"]
+    backups: tuple[SandboxKeyBackup, ...] = ()
+    writes: tuple[SandboxWriteRecord, ...] = ()
+    message: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxApplyReport:
+    """Step-7 evidence bundle: the apply plan recorded BEFORE any write, the
+    per-agent results, the D8 rollback records (when an abort restored prior
+    agents), and whether a rollback ran."""
+
+    image: str
+    plan: tuple[SandboxWriteRecord, ...]
+    agents: tuple[SandboxAgentResult, ...]
+    rolled_back: bool = False
+    rollback: tuple[SandboxWriteRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

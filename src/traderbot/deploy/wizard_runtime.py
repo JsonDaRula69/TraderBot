@@ -17,6 +17,7 @@ from traderbot.deploy.bootstrap_cron import (
 )
 from traderbot.deploy.openclaw_models import (
     AgentInventory,
+    ConfigValueRead,
 )
 from traderbot.deploy.wizard_contracts import (
     Phase45Port,
@@ -93,6 +94,15 @@ class OpenClawAdapter:
 
     def set_sandbox(self, agent: AgentConfigState, value: str) -> bool:
         return openclaw.set_config(f"{agent.path_prefix}.sandbox.mode", value)
+
+    def read_config_value(self, key: str) -> ConfigValueRead:
+        return openclaw.read_config_value(key)
+
+    def set_config_json(self, key: str, json_value: str) -> bool:
+        return openclaw.set_config_json(key, json_value)
+
+    def unset_config(self, key: str) -> bool:
+        return openclaw.unset_config(key)
 
     def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool:
         if state is BootstrapCronState.EXACT:
