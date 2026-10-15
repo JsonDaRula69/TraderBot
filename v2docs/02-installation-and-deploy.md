@@ -32,7 +32,7 @@ This command:
 
 | Feature | macOS | Linux (GUI) | Linux (headless) | Windows |
 |---|---|---|---|---|
-| Phase 5 Docker sandbox | Deferred; no Phase 4 operation | Same | Same | Same |
+| Phase 5 Docker sandbox | Deploy step 7 opt-in apply (`TRADERBOT_PHASE5_SANDBOX=1`); typed skip when Docker is absent | Same | Same | Same |
 | Infisical | Existing loopback instance or encrypted fallback | Same | Same | Same |
 | Service manager detection | launchd | systemd | systemd | Task Scheduler |
 | Service template resolution | `shutil.which('traderbot')` + `.resolve()` | Same | Same | Same |
@@ -118,22 +118,23 @@ The first-time configuration process is called **"deploy"** (not "bootstrap") to
 - The deploy wizard invokes the same typed `run_backfill` request/dependency boundary and embeds the result without a second JSON stream
 - Explicit collector input is prepared once before secrets/runtime construction, consumed from the immutable snapshot, and never reopened by Step 6
 
-### Step 7: Phase 5 Sandbox Stub
+### Step 7: Docker Sandbox Apply
 
-- Step 7 is a read-only Phase 5 sandbox stub. Phase 4 starts no Docker sandbox, simulation, backtest, trading lifecycle, or agent schedule.
-- Agent backtesting activation and the SysAdmin lifecycle protocol are future behavior, not Phase 4 execution.
-- The stub performs one read-only strict inventory of the exact Gateway-owned bootstrap job. It never adds, updates, deletes, runs, or recreates a cron.
-- A persisted exact job passes. Post-execution absence from `deleteAfterRun: true` is recorded as an action-required partial state, not silently passed or recreated.
-- Owner-only deploy state records prior registration and per-step fingerprints; unchanged completed late steps are reused, while incomplete or affected downstream steps rerun.
-- Before factories, the selected data root is checked without creation for absolute containment, linked ancestors, directory type, current owner, and exact `0700`; resumability state additionally requires a no-follow owner-owned regular `0600` file no larger than 1 MiB.
-- Retained completed and authoritatively deleted one-shots are distinct lifecycle states that reach the read-only Step 7 partial outcome without recreation; unknown absence and disabled/error/conflicting inventory fail closed.
-- Persisted `bootstrap_registered: false` plus missing inventory is unknown absence, not a fresh install. Descriptor metadata is revalidated after no-follow open before any resumability state is trusted.
+- Step 7 is the Phase 5 Docker sandbox apply, opt-in for this phase: it writes only when `TRADERBOT_PHASE5_SANDBOX=1` is set in the environment; any other value records a typed skip (`sandbox_apply_disabled`) with zero config writes. When enabled but Docker is absent, the step records a typed skip (`docker_unavailable`) with the install/start remedy and again writes nothing.
+- When enabled, the step builds the sandbox image BEFORE any config write, on every run that writes. The build runs `install/docker/build-sandbox.sh` (the repo's only build entry-point, provenance-pinned against the Dockerfile bytes) against the digest-pinned, network-free `install/docker/Dockerfile` base `python:3.12-slim-bookworm`. The image tag is content-addressed: `traderbot-sandbox:d` plus the first 8 hex of the Dockerfile's sha256, derived only by `traderbot.sandbox.sandbox_image_tag()`; a build mismatch against the pinned Dockerfile aborts with zero writes.
+- The apply plan covers every selected created-or-adopted category agent plus the adopted dev-liaison. main and sysadmin are never written: the config builder refuses them by design (mode `off` only).
+- ONE operator approval (`approvals.sandbox_apply`) gates every write. The recorded plan lists the exact per-agent keys: `sandbox.mode: "all"`, `sandbox.workspaceAccess: "none"`, and the eight `sandbox.docker` leaves (image, binds, `readOnlyRoot: true`, `network: "none"`, `user: "1000:1000"`, `capDrop: ["ALL"]`, and exactly the two `dangerouslyAllow*` bind flags, `dangerouslyAllowExternalBindSources` and `dangerouslyAllowReservedContainerTargets`).
+- Each agent gets exactly two binds: its own workspace read-only at `/workspace:ro`, and its own `{mode}-{name}` data dir read-write at `/data:rw`. Blanket `~/.traderbot`, credentials, GnuPG, docker socket, and host-root mounts are forbidden by the contract module and rejected at render time.
+- Per agent, in order: back up the current sandbox keys (recording absence explicitly), write through the deployed-shape `agents.list[i]` bracket-path config seam, then re-read and compare byte-exact. On any write failure or postcondition mismatch, step 7 restores every previously-written key per key (set the recorded value, unset keys that were absent pre-write, unset leftover empty parents) in reverse order and aborts with a blocker; no partial posture survives, and a failed restore is named in the blocker.
+- On success the step persists a posture fingerprint (image tag, per-agent mount table, ladder modes, dangerous-* set) in owner-only deploy state. A re-run skips step 7 only on an exact fingerprint match plus intact live postconditions; drift re-applies.
+- Late-step deploy state is trusted only when the data root validates without creation (absolute, traversal-free, no linked or non-directory ancestor, existing root owner-owned mode `0700`) and the state file is a no-follow owner-owned regular `0600` file of at most 1 MiB.
+- Step 8 verification is skipped (not failed) when step 7 does not complete, and an aborted apply persists no deploy state. The bootstrap cron lifecycle is not touched by step 7; its classification lives in steps 2-3 registration and the step-8 probe.
 
 ### Step 8: Verification
 
 - `traderbot verify --categories ...` runs a stable, dependency-aware read-only graph. The requiredness contract is formalized as DD-039: required means deploy-asserted.
-- **Required checks assert exactly the postconditions a deployment wrote.** The deploy's own postconditions are the authoritative required set: agent presence, config readability, exact SecretRefs, sandbox mode for agents the deploy created, heartbeat cadence the deploy approved, five-field token documents, the bootstrap cron contract, and the provisioned databases. Preserved posture the deployment never wrote is reported as advisory divergence that states actual values (`unset`/`30m`/...), never as required failure.
-- Sandbox posture is required only for agents the deploy created (`created_agents`); `main` always pre-exists, is never created, and is only reported. Heartbeat dormancy (`0m`) is required only under `heartbeat_policy: require_0m` — set exclusively by an approved `heartbeat_every: "0m"` in the deploy request; a preserved fleet's cadence (unset or active) is advisory.
+- **Required checks assert exactly the postconditions a deployment wrote.** The deploy's own postconditions are the authoritative required set: agent presence, config readability, exact SecretRefs, sandbox posture for the selected set the deploy sandboxed, heartbeat cadence the deploy approved, five-field token documents, the bootstrap cron contract, and the provisioned databases. Preserved posture the deployment never wrote is reported as advisory divergence that states actual values (`unset`/`30m`/...), never as required failure.
+- Sandbox posture is required for the wizard's selected set (created and adopted category agents plus the adopted dev-liaison) once a step-7 apply is recorded; the probes report the exact per-agent posture (mode, image, binds, `workspaceAccess`, the four hardening keys, and the exactly-two dangerous-* flags), assert main/sysadmin unsandboxed, and dependency-skip with a typed reason when no apply is recorded. `main` always pre-exists, is never created, and is only reported. Heartbeat dormancy (`0m`) is required only under `heartbeat_policy: require_0m` — set exclusively by an approved `heartbeat_every: "0m"` in the deploy request; a preserved fleet's cadence (unset or active) is advisory.
 - The bootstrap cron probe is lifecycle-aware: an exact pending managed one-shot passes; a completed retained one-shot passes with its own action; absence with recorded registration in deploy state is honest degraded state (the job fired); absence without recorded registration fails closed; conflicts or unreadable inventory fail.
 - Gateway health uses `gateway status --json --require-rpc`; selected inventory, workspaces, and config reuse the typed OpenClaw read seams.
 - Exact real-auth mode and selected five-field token documents are read from the currently selected durable SecretsStore without installing adapters or revealing token values.

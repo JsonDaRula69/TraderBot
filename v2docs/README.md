@@ -28,7 +28,7 @@ The following inconsistencies were found during the v2 roadmap review and have b
 
 | Topic | DD-009 (original) | Superseding DD | Resolution |
 |---|---|---|---|
-| Step 7: Simulation start | "Paper trading mode" | DD-017, DD-019 | Phase 4 implements a read-only Phase 5 sandbox stub; no simulation or trading |
+| Step 7: Simulation start | "Paper trading mode" | DD-017, DD-019 | Phase 4 shipped a read-only stub; Phase 5 implements the opt-in Docker sandbox apply; no simulation or trading |
 | Step 4: API tokens | "Prompt for tokens" | DD-037 | Infisical primary, encrypted fallback, canonical Kalshi pair only |
 | Step 2: SysAdmin setup | "Choose whether to use pre-existing main agent" | DD-036 | Existing `main` is required and never created |
 | Step 6: Backfill | "Filtered by enabled categories" | DD-027 | All data sources begin collection at install |

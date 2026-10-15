@@ -144,10 +144,12 @@ The unified `data/` module handles all data fetching. Key constraints for any ch
 
 ## Sandbox Architecture (DD-010, DD-036)
 
-- **Category agents**: Mandatory Docker sandbox (DD-010). No opt-out.
-- **SysAdmin**: Unsandboxed (`sandbox.mode: off`), but denied all trading tools (DD-036)
-- **Base image**: `python:3.12-slim-bookworm`
-- **Bind mounts**: set via `agents.defaults.sandbox.docker.binds`
+- **Category agents**: Mandatory Docker sandbox (DD-010). No per-agent opt-out.
+- **Dev-liaison**: sandboxed with the same per-agent contract (adopted-only target)
+- **SysAdmin**: Unsandboxed (`sandbox.mode: off`), but denied all trading tools (DD-036); `main` is never sandboxed either
+- **Base image**: `python:3.12-slim-bookworm`, digest-pinned in `install/docker/Dockerfile`; tag content-addressed by `traderbot.sandbox.sandbox_image_tag()` (`traderbot-sandbox:d<8hex>`)
+- **Bind mounts**: written per agent (`agents.list[i].sandbox.docker.binds`, never `agents.defaults`): own workspace read-only at `/workspace`, own `{mode}-{name}` data dir read-write at `/data`
+- **Apply**: deploy step 7, opt-in this phase via `TRADERBOT_PHASE5_SANDBOX=1`, gated by one `sandbox_apply` operator approval with key-level rollback
 - **Agent data** is preserved across image rebuilds — data lives on host, not in the container image
 - **Profile tokens** injected via OpenClaw SecretRef — NOT in files inside containers
 

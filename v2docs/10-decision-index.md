@@ -10,14 +10,14 @@
 |---|---|---|---|
 | DD-001 | pipx as sole installation method | Remove installer script, plain pip, venv. pipx-only. | — |
 | DD-002 | OpenClaw is a hard dependency | TraderBot requires OpenClaw. Not for standalone human use. | — |
-| DD-003 | Docker sandbox target | Mandatory category sandbox is deferred to Phase 5; Phase 4 Step 7 is read-only. | DD-010 |
+| DD-003 | Docker sandbox target | Phase 5 implements the mandatory sandbox in deploy step 7 (opt-in this phase); Phase 4 Step 7 was read-only. | DD-010 |
 | DD-004 | Service registration | Platform service commands/templates are separate; Phase 4 deploy does not mutate service state. | DD-007, DD-022 |
 | DD-005 | Retire bootstrap, rename to deploy | Remove `traderbot bootstrap`. First-time config is "deploy". | — |
 | DD-006 | OS-aware capability detection | Detect OS, adjust prompts (no keyring on headless Linux). | DD-037 |
 | DD-007 | Service templates as package data | Templates in `src/traderbot/services/`, read via `importlib.resources`. | DD-001, DD-022 |
 | DD-008 | Prebuilt agent workspaces | No user customization. Shipped by TraderBot. | — |
-| DD-009 | 8-step deploy flow | OpenClaw config → SysAdmin → Categories → API tokens → DB → Backfill → Phase 5 stub → Verify | DD-001–DD-008, DD-023, DD-037 |
-| DD-010 | Mandatory Docker sandbox | All category agents run in Docker. No opt-out. | DD-002 |
+| DD-009 | 8-step deploy flow | OpenClaw config → SysAdmin → Categories → API tokens → DB → Backfill → Docker sandbox → Verify | DD-001–DD-008, DD-023, DD-037 |
+| DD-010 | Mandatory Docker sandbox | All category agents plus dev-liaison run in Docker (sandbox mode `all`; `docker` is the backend, not a mode). No per-agent opt-out; main/sysadmin are never sandboxed. | DD-002 |
 | DD-011 | Per-agent data source access control | Category filtering at CLI/MCP level. `enabled_categories` enforcement. | DD-015, DD-025 |
 | DD-013 | Three-mode trading | Backtest → Paper → Live → (Suspended). Profile-aware MCP routing. | DD-017, DD-019, DD-021 |
 | DD-015 | TraderBot as MCP server | TraderBot registers as MCP server via OpenClaw gateway. Agents call tools through MCP. | DD-002 |
@@ -60,7 +60,7 @@
 
 | Topic | Original (DD-009) | Current | Reference |
 |---|---|---|---|
-| Step 7: Simulation start | "paper trading mode" | Phase 4 implements a read-only Phase 5 sandbox stub; no simulation or trading | DD-017, DD-019 |
+| Step 7: Simulation start | "paper trading mode" | Phase 4 shipped a read-only stub; Phase 5 implements the opt-in Docker sandbox apply; no simulation or trading | DD-017, DD-019 |
 | Step 4: API tokens | "prompt for tokens" | Infisical primary, encrypted fallback, canonical Kalshi pair only | DD-037 |
 | Step 2: SysAdmin setup | "choose whether to use pre-existing main agent" | Existing `main` is required and never created | DD-036 |
 | Step 6: Backfill | "filtered by enabled categories" | All data sources collect at install | DD-027 |
@@ -76,7 +76,7 @@
 |---|---|---|
 | Update pipeline | Deferred | `traderbot update` for pipx, to be designed after roadmap completes |
 | Category workspace templates | Implemented | AGENTS/SOUL/IDENTITY for all nine categories; exact-five-tool guidance in AGENTS only |
-| Docs/code drift | Current | Phase 4 contract synchronized in VERSION 2.0.0a98 |
+| Docs/code drift | Current | Phase 4 contract synchronized in VERSION 2.0.0a98; Phase 5 contract synchronized in 2.0.0a126 |
 | Exact promotion metrics | TBD | Deployment bar thresholds (Sharpe, win rate, sample size) to be determined |
 | Politics toolkit | Design pending | Will follow the category-specific toolkit pattern |
 | Crypto toolkit | Design pending | Will follow same pattern as weather toolkit |
@@ -105,7 +105,8 @@ Implemented in Phase 2 (PR on `feat/v2-data-pipeline` → `v2-main`):
   in-memory `MarketCache` with zero REST calls.
 
 Deferred to later phases: GRIB2 multi-day forecasts (DD-033), crypto/sports
-workers, full news NLP/sentiment, Docker sandbox (Phase 5), three-mode trading
-engine (Phase 7), and category toolkits (Phase 6). Phase 3 database isolation
-and Phase 4 deploy/backfill/verification implementation are present; Phase 4
-still awaits Final Wave F1-F4 and on-target F3 acceptance.
+workers, full news NLP/sentiment, three-mode trading engine (Phase 7), and
+category toolkits (Phase 6). Phase 3 database isolation, Phase 4
+deploy/backfill/verification, and the Phase 5 Docker sandbox are implemented;
+Phase 4 still awaits Final Wave F1-F4 re-review, and the on-target F3 QA on
+macpro-linux remains pending for Phase 4 and Phase 5.

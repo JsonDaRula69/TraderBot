@@ -97,6 +97,7 @@
 - [x] Phase 4 deployed config-get and Kalshi series tolerance (VERSION `2.0.0a104`): OpenClaw 2026.7.1-2 prints `config get <missing>` errors to STDERR with empty STDOUT, so step-1 inventory misclassified every missing path as unreadable; missing-path classification now reads either stream and reaches the deployed `agents.list[]` config shape. Kalshi `GET /series` returns HTTP 200 `{"series": null}` for an empty match, which failed the required list and aborted the backfill Kalshi phase; the null form is normalized to an empty list at the typed boundary. Proven on-target: config inventory readable and backfill exit 0 with an honest 0-series.
 - [x] Phase 4 bootstrap-cron pending readback tolerance (VERSION `2.0.0a105`): deployed OpenClaw 2026.7.1-2 populates a pending one-shot with `state: {"nextRunAtMs": <positive int>}` plus top-level `nextRunAtMs` and `status "idle"` at scheduling time, so the frozen empty-state classifier turned every successful registration into a CONFLICT — wizard step 3 fail-closed deterministically at `ensure_bootstrap_cron` (C1) and the standalone verify cron probe reported `bootstrap_cron_mismatch` (C5), both through the same classifier. A pending one-shot is now exact with either state shape; identity fields (name, agent, schedule, session, wake mode, payload message, delete-after-run) stay strict, and garbage or already-run/errored state shapes still conflict. Red→green regression replays the recorded deployed job (`.omo/evidence/f3-a104-r5-receipts/recorded-cron-job.json`); on-target confirmation is reserved for the next F3 rerun.
 - [x] Phase 4 F3 on-target QA summary (2026-10-03/04, five reruns on macpro-linux at a101→a104; evidence `.omo/evidence/f3-phase4-a104-r5.json` and `.omo/evidence/f3-a104-r5-receipts/`): F3 found six genuine code defects — a102 workspace ownership, a103 Infisical credentials tolerance, a104 config-get stderr classification, a104 Kalshi null-series tolerance, and the a105 pair C1 (wizard step-3 post-registration readback) + C5 (verify cron probe) — plus three live-state divergences (C2/C3/C4) that are correct fail-closed behavior, not defects. The a102–a104 fixes were proven fixed on-target by rerun #4; C1/C5 were found on-target at rerun #5, reproduced by offline replay of the recorded deployed job, and repaired in a105 with red→green regression proof. The operator sanctioned one live-state reconciliation (weather_token metadata, value-preserving main_token secret ref, legacy TRADERBOT markers removed from three managed files), after which the read-only preflight finalized fully clean and the wizard advanced through steps 1-2 plus step-3 agent work, failing only at the C1 readback. C2/C3/C4 were resolved by the deploy-vs-verify ownership contract (VERSION `2.0.0a106`/`a107`): required checks assert only the postconditions the deploy wrote (`created_agents` sandbox, approved-`0m` heartbeat policy), preserved posture is advisory divergence with actual values, the wizard never requires daemon liveness (no step owns the daemon lifecycle) while standalone verify stays strict, and the bootstrap cron probe is lifecycle-aware with a deploy-state cross-read. On-target F3 rerun #6 pending.
+- [x] Phase 5 Docker sandbox implementation (issue #169, branch `feat/v2-docker-sandbox`, local commits a77f603..2345968, VERSION 2.0.0a118 through 2.0.0a125): the `traderbot.sandbox` containment contract module (`DockerSandboxConfig`, content-addressed `sandbox_image_tag()`, `generate_docker_run_command()`, forbidden-mount guard); `install/docker/Dockerfile` (digest-pinned `python:3.12-slim-bookworm`, network-free, USER 1000:1000) with the provenance-pinned `install/docker/build-sandbox.sh` as the only build entry-point; all 11 agent fragments extended to the full sandbox desired state (9 categories plus dev-liaison sandboxed; sysadmin explicitly `off` with no docker block); the JSON-value OpenClaw config write path on the deployed `agents.list[i]` shape; the single sanctioned docker build seam; deploy step 7 as a real opt-in apply (`TRADERBOT_PHASE5_SANDBOX=1`) with build-before-write ordering, one operator approval, per-agent backup, byte-exact postcondition re-reads, key-level rollback, and a posture fingerprint in deploy state; and `traderbot verify` sandbox posture probes (mode readback, exact posture with the pinned dangerous-* set, off-negative for main/sysadmin, image presence) with dependency skips. On-target F3 QA on macpro-linux remains pending; issue #169 stays open.
 
 ### Dev-Liaison Testing Protocols
 
@@ -179,6 +180,14 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 **Date**: 2025-06-08
 **Status**: Decided
 **Decision**: `traderbot setup` includes Docker sandbox configuration as a setup step.
+
+> **Phase 5 implementation update:** shipped as deploy wizard step 7. The
+> Python orchestration runs `install/docker/build-sandbox.sh` (the repo's
+> only build entry-point) against `install/docker/Dockerfile` and applies
+> per-agent sandbox config through `openclaw config set`, exactly as this
+> decision requires; the apply lane is opt-in for this phase via
+> `TRADERBOT_PHASE5_SANDBOX=1`.
+
 **Consequences**:
 - `install/docker/Dockerfile` and `install/docker/build-sandbox.sh` remain as build artifacts, but orchestration moves into `traderbot setup` (Python CLI calls `docker build`)
 - OpenClaw sandbox config (binds, dangerouslyAllowExternalBindSources, mode) is applied by Python code, not shell scripts
@@ -243,7 +252,7 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 4. **API tokens** — Reuse or securely collect only the canonical Kalshi API key and RSA private key consumed by the daemon. Inactive and keyless providers have no deploy prompt or storage path.
 5. **Database creation** — Under the explicit shared data root, create selected category databases at `{mode}-{name}/db/decisions.db`, leave Chroma collections lazy, and give SysAdmin read-only enumeration without a decisions database.
 6. **Backfill** — Reuse the standalone typed collector/Kalshi backfill boundary with the same data root and canonical production Kalshi reads.
-7. **Phase 5 sandbox stub** — Read the exact Gateway bootstrap contract only. Phase 4 starts no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat.
+7. **Docker sandbox** — Opt-in Phase 5 apply (`TRADERBOT_PHASE5_SANDBOX=1`): build the content-addressed sandbox image before any config write, then apply the exact per-agent sandbox contract to selected category agents plus dev-liaison behind one operator approval, with per-agent backup, byte-exact postcondition re-reads, and key-level rollback. Step 7 starts no simulation, backtest, trading lifecycle, cron, or heartbeat.
 8. **Verification** — Reuse the standalone dependency-aware read-only graph with the same data root and environment.
 
 **Additional note**: SysAdmin always uses the pre-existing `main` agent. The original Phase 4 plan permits explicitly approved creation of missing selected category agents; stricter existing-agents-only and per-agent paper/live/channel/Telegram requirements are Phase 4b.
@@ -251,13 +260,24 @@ Dev-liaison runs tests via `exec` on macpro-linux and reports results to Sisyphu
 ### DD-010: Docker isolation is mandatory (not optional)
 **Date**: 2025-06-08
 **Status**: Decided
+
+> **Phase 5 implementation update:** on the pinned OpenClaw 2026.7.1-2 the
+> sandbox-mode ladder is `off | non-main | all`; `docker` is the container
+> backend, not a mode. The nine category agents and dev-liaison run
+> `sandbox.mode: "all"` with a per-agent `sandbox.docker` object
+> (content-addressed image, exactly two binds, the four hardening keys
+> `readOnlyRoot`/`network`/`user`/`capDrop`, and exactly the two
+> `dangerouslyAllow*` bind flags); main/sysadmin are never written and stay
+> `mode: off`. The deploy apply lane is opt-in for this phase via
+> `TRADERBOT_PHASE5_SANDBOX=1`; that is a phase rollout gate, not a
+> per-agent opt-out.
 **Context**: Previously, Docker sandbox configuration was optional — agents could run on the host. The sysadmin agent always ran without a sandbox (`mode: off`), while category agents ran in Docker containers. This creates a security gap: agents running on the host can modify TraderBot source code, access other agents' data, and bypass risk limits.
 **Decision**: Docker isolation is mandatory for all category agents. The sysadmin agent runs on the host (as before, `mode: off`). Every category agent runs inside a Docker sandbox with read-only TraderBot source and isolated filesystem.
 **Consequences**:
 - `traderbot setup` requires Docker to be installed and running (step in DD-006 capability detection)
 - Docker sandbox setup is no longer a "would you like to configure Docker?" prompt — it's a required step
-- The Dockerfile in `install/docker/` is always built during setup
-- OpenClaw sandbox config (`agents.defaults.sandbox.mode: docker`, `dangerouslyAllowExternalBindSources: true`) is always applied
+- The Dockerfile in `install/docker/` is built by deploy wizard step 7 (opt-in for this phase)
+- OpenClaw sandbox config is applied per agent (`agents.list[i].sandbox`): mode `all` with a `docker` backend object; never at `agents.defaults`, which would sandbox `main` (#375)
 - This closes the security gap where agents could modify source code or access other agents' data
 
 ### DD-011: Per-agent data source access control
@@ -1785,14 +1805,17 @@ This section describes the v2 architecture that emerges from the design decision
 - Import the optional collector read-only and fetch current/archive Kalshi weather history around one cutoff
 - Carry the same explicit data root with canonical production Kalshi reads; never initialize Chroma here
 
-#### Step 7: Phase 5 Sandbox Stub
-- Inspect the exact Gateway-owned bootstrap one-shot read-only
-- Start no Docker, simulation, backtest, trading lifecycle, cron, or heartbeat in Phase 4
-- Record executed/deleted one-shots as action-required partial state without recreation
+#### Step 7: Docker Sandbox Apply
+- Opt-in for this phase via `TRADERBOT_PHASE5_SANDBOX=1`; any other value records a typed skip with zero config writes
+- Build the content-addressed sandbox image (`traderbot-sandbox:d<8hex>`) through the repo's only build entry-point before any config write; absent Docker records a typed skip and a build failure aborts, both with zero writes
+- Apply the exact per-agent sandbox contract (mode `all`, `workspaceAccess: none`, the eight `sandbox.docker` keys incl. the two dangerous-* flags) to every selected category agent plus the adopted dev-liaison behind one `sandbox_apply` operator approval; main/sysadmin are never written
+- Per agent: key-level backup, write via the `agents.list[i]` bracket-path seam, byte-exact re-read; on any mismatch restore all previously-written keys (recorded values, absence, empty parents) and abort with a blocker
+- Persist the posture fingerprint in deploy state; a re-run skips only on exact fingerprint plus intact postconditions
+- Start no simulation, backtest, trading lifecycle, cron, or heartbeat
 
 #### Step 8: Verification
 - Run `traderbot verify --categories ...` as a fixed dependency-aware read-only graph.
-- Require exactly the deploy's asserted postconditions: Gateway RPC, selected OpenClaw inventory/workspace/config, exact bootstrap cron lifecycle state, five-field token documents, created-agent sandbox modes, and heartbeat cadence only when the deploy approved dormancy; report preserved posture as advisory divergence with actual values.
+- Require exactly the deploy's asserted postconditions: Gateway RPC, selected OpenClaw inventory/workspace/config, exact bootstrap cron lifecycle state, five-field token documents, sandbox posture for the selected sandboxed set (created and adopted category agents plus dev-liaison) once a step-7 apply is recorded, and heartbeat cadence only when the deploy approved dormancy; report preserved posture as advisory divergence with actual values.
 - Require exact real-auth mode, durable selected token-document metadata, and signed Kalshi `GET /portfolio/balance` without exposing credentials.
 - Verify global/current-mode databases with no-follow owner checks, `mode=ro`, `query_only`, `quick_check`, and exact latest manifests; SysAdmin decisions DB is forbidden.
 - Require bounded actual daemon MCP `health` standalone (the wizard path reports it as advisory because no wizard step owns the daemon lifecycle); derive daemon-owned Chroma state from MCP rather than opening embedded storage.
@@ -1903,8 +1926,8 @@ Phase 4 ships `AGENTS.md`, `SOUL.md`, and `IDENTITY.md` templates for every exac
 | `Install-TraderBot.ps1` | 1,303 | PowerShell installer (Windows) | **Retire** |
 | `traderbot-update.py` | 338 | Standalone update script | **Discuss separately** |
 | `README.md` | 141 | Installer documentation | **Rewrite** |
-| `docker/Dockerfile` | 29 | Sandbox base image | **Keep** (build artifact) |
-| `docker/build-sandbox.sh` | 38 | Sandbox build script | **Keep** (build artifact, orchestration moves to Python) |
+| `docker/Dockerfile` | 29 | Sandbox base image | **Keep** — Phase 5 update: shipped at `install/docker/Dockerfile` (digest-pinned `python:3.12-slim-bookworm`, network-free, USER 1000:1000) |
+| `docker/build-sandbox.sh` | 38 | Sandbox build script | **Keep** — Phase 5 update: shipped at `install/docker/build-sandbox.sh` as the repo's only build entry-point, run by the deploy seam |
 | `services/traderbot-agent@.service` | 49 | Systemd agent daemon template | **Move** to `src/traderbot/services/` |
 | `services/traderbot-news-ingest@.service` | 38 | Systemd news ingest service | **Move** to `src/traderbot/services/` |
 | `services/traderbot-news-ingest@.timer` | 24 | Systemd news ingest timer | **Move** to `src/traderbot/services/` |
@@ -3892,6 +3915,11 @@ and `tools`. Because this role is unsandboxed, no sandbox `bundle-mcp` gate is
 required. Workspace/name details remain role documentation rather than fields
 in this config object.
 
+> **Phase 5 update:** superseded. The shipped dev-liaison is sandboxed
+> (`sandbox.mode: "all"` with the full docker posture; adopted-only step-7
+> target per GAP-13) with a restrictive allowlist — see
+> `configs/openclaw/dev-liaison.json` and DD-034 §3 above.
+
 ```json5
 {
   id: "dev-liaison",
@@ -4392,6 +4420,11 @@ The most powerful actions SysAdmin can take are lifecycle transitions: promoting
 This prevents a compromised SysAdmin from unilaterally moving an agent to live trading without evidence that it meets the deployment bar.
 
 #### 4. SysAdmin vs. Dev-Liaison sandbox comparison
+
+> **Phase 5 update:** the Dev-Liaison column below reflects the DD-034-era
+> posture. Since Phase 5 the shipped dev-liaison is sandboxed
+> (`sandbox.mode: "all"`, full docker posture, GAP-13); the SysAdmin column
+> is unchanged.
 
 | Dimension | SysAdmin | Dev-Liaison |
 |---|---|---|
@@ -5185,6 +5218,13 @@ sessions_spawn({
 ### DD-039: Verification requiredness — required means deploy-asserted
 
 **Date**: 2026-10-10
+
+> **Phase 5 update:** with the step-7 apply landed, the wizard threads the
+> selected sandboxed set (created and adopted category agents plus
+> dev-liaison) into `created_agents`, and the sandbox posture family asserts
+> that set field-by-field once an apply is recorded, dependency-skipping with
+> a typed reason otherwise. The decision's preserve/require discipline is
+> unchanged.
 **Status**: Decided
 
 **Context**: Step 8 verification originally encoded a fresh-install posture as required state — sandbox `"off"` for main, `"all"` for each category agent, heartbeat `0m`, and a connected daemon — while the deploy preserves a pre-existing fleet's posture by default and owns no daemon lifecycle (DD-009, DD-023; no wizard step installs, starts, or restarts the daemon). On any host with a pre-existing OpenClaw fleet — every real deployment target — the two contracts contradict: no product code path writes main's sandbox mode (main always pre-exists and adopts its inventory config) and no deploy step starts a daemon, so the strict posture was never satisfiable anywhere. Every local seam that could have caught this was stubbed (the fake CLI E2E stubs step 8), which is why the contradiction survived to the first on-target F3 run (a104 rerun #5 REJECT; defects C2/C3/C4).
