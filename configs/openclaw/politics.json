@@ -1,6 +1,18 @@
 {
   "id": "politics",
-  "sandbox": { "mode": "all" },
+  "sandbox": {
+    "mode": "all",
+    "workspaceAccess": "none",
+    "docker": {
+      "image": "traderbot-sandbox:DEPLOY_DERIVED",
+      "binds": [
+        "<agent-workspace>:/workspace:ro",
+        "<traderbot-data-root>/{mode}-politics:/data:rw"
+      ],
+      "dangerouslyAllowExternalBindSources": true,
+      "dangerouslyAllowReservedContainerTargets": true
+    }
+  },
   "tools": {
     "allow": [
       "traderbot__health",

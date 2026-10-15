@@ -1,7 +1,17 @@
 {
   "id": "dev-liaison",
   "sandbox": {
-    "mode": "all"
+    "mode": "all",
+    "workspaceAccess": "none",
+    "docker": {
+      "image": "traderbot-sandbox:DEPLOY_DERIVED",
+      "binds": [
+        "<agent-workspace>:/workspace:ro",
+        "<traderbot-data-root>/{mode}-dev-liaison:/data:rw"
+      ],
+      "dangerouslyAllowExternalBindSources": true,
+      "dangerouslyAllowReservedContainerTargets": true
+    }
   },
   "tools": {
     "allow": [

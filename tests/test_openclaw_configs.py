@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import ClassVar, Final, Literal
 
@@ -13,6 +14,42 @@ AGENT_CONFIG_PATHS: Final = {
 }
 GATEWAY_CONFIG_PATH: Final = CONFIG_DIR / "gateway.json"
 STRICT_AGENT_FIELDS: Final = frozenset({"id", "sandbox", "tools"})
+
+# T4 (D1/D9): the full sandbox desired-state contract carried by the 11 agent fragments.
+# The 10 sandboxed agents (9 MarketCategory agents + dev-liaison) get a docker block;
+# sysadmin is explicitly mode "off" with NO docker block. `gateway.json` (top keys: mcp)
+# and `with-plugin.json` (top keys: plugins, secrets, mcp) have no agent/sandbox block and
+# are structurally OUT of the agent-fragment set — the set below is enumerated by NAME,
+# never a blind glob, so a new file cannot silently join the contract.
+SANDBOXED_AGENT_NAMES: Final = ("dev-liaison", *CATEGORY_NAMES)
+AGENT_FRAGMENT_NAMES: Final = ("sysadmin", *SANDBOXED_AGENT_NAMES)
+NON_AGENT_CONFIG_STEMS: Final = frozenset({"gateway", "with-plugin"})
+
+# D10: the image tag is derived at deploy time from the Dockerfile bytes; a fragment cannot
+# know those bytes, so the fragment documents the placeholder below and deploy substitutes
+# the real `traderbot-sandbox:d<8hex>` tag. The sync test asserts the placeholder, never a
+# literal hex tag.
+IMAGE_PLACEHOLDER: Final = "traderbot-sandbox:DEPLOY_DERIVED"
+
+# D9: the owner-approved exact dangerous-* set. No other dangerous-* key may appear anywhere.
+D9_DANGEROUS_KEYS: Final = frozenset(
+    {
+        "dangerouslyAllowExternalBindSources",
+        "dangerouslyAllowReservedContainerTargets",
+    }
+)
+
+# D1 / Must-NOT-have: absolute forbidden bind sources. A bind to any of these would expose
+# host secrets, the Docker socket, or system roots to a container.
+FORBIDDEN_BIND_SUBSTRINGS: Final = (
+    "~/.traderbot",
+    "~/.openclaw/config",
+    "~/.gnupg",
+    "docker.sock",
+)
+FORBIDDEN_BIND_SOURCE_PREFIXES: Final = ("/etc", "/root")
+FORBIDDEN_BIND_ROOT_SOURCES: Final = frozenset({"", "/", "//"})
+
 ROLE_TRADERBOT_TOOLS: Final[dict[str, frozenset[str]]] = {
     "dev-liaison": frozenset(
         {
@@ -63,8 +100,19 @@ class StrictConfigModel(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
 
+class SandboxDockerConfig(StrictConfigModel):
+    # Pinned schema key names verbatim (SandboxDockerSchema, strict): extra="forbid" here
+    # mechanically rejects any dangerous-* key outside the D9 set.
+    image: str
+    binds: list[str]
+    dangerouslyAllowExternalBindSources: bool
+    dangerouslyAllowReservedContainerTargets: bool
+
+
 class SandboxConfig(StrictConfigModel):
     mode: Literal["off", "non-main", "all"]
+    workspaceAccess: Literal["none"] | None = None
+    docker: SandboxDockerConfig | None = None
 
 
 class SandboxToolPolicy(StrictConfigModel):
@@ -134,6 +182,39 @@ class PluginConfig(BaseModel):
 
 def load_agent(path: Path) -> AgentConfig:
     return AgentConfig.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def _load_raw(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _iter_dict_keys(node: object) -> list[str]:
+    keys: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            keys.append(key)
+            keys.extend(_iter_dict_keys(value))
+    elif isinstance(node, list):
+        for item in node:
+            keys.extend(_iter_dict_keys(item))
+    return keys
+
+
+def _iter_bind_strings(node: object) -> list[str]:
+    binds: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "binds" and isinstance(value, list):
+                binds.extend(item for item in value if isinstance(item, str))
+            binds.extend(_iter_bind_strings(value))
+    elif isinstance(node, list):
+        for item in node:
+            binds.extend(_iter_bind_strings(item))
+    return binds
+
+
+def _bind_source(bind: str) -> str:
+    return bind.split(":", 1)[0]
 
 
 def test_agent_fragments_reject_nested_mcp_and_other_unknown_fields() -> None:
@@ -228,3 +309,86 @@ def test_plugin_token_map_preserves_existing_roles_and_maps_all_categories() -> 
     assert set(token_map) == {"sysadmin", "dev-liaison", *CATEGORY_NAMES}
     for category in CATEGORY_NAMES:
         assert token_map[category].id == f"{category}_token"
+
+
+def test_agent_fragment_set_is_exactly_the_eleven_named_agents() -> None:
+    # T4: enumerate EXACTLY the 11 agent fragments by name; the non-agent configs
+    # (gateway.json, with-plugin.json) must NOT be in the set, and no other file may exist.
+    assert len(AGENT_FRAGMENT_NAMES) == 11
+    assert len(set(AGENT_FRAGMENT_NAMES)) == 11
+    assert "gateway" not in AGENT_FRAGMENT_NAMES
+    assert "with-plugin" not in AGENT_FRAGMENT_NAMES
+    assert set(AGENT_CONFIG_PATHS) == set(AGENT_FRAGMENT_NAMES)
+
+    on_disk = {path.stem for path in CONFIG_DIR.glob("*.json")}
+    assert on_disk == set(AGENT_FRAGMENT_NAMES) | NON_AGENT_CONFIG_STEMS
+
+
+def test_sandboxed_fragments_carry_full_sandbox_contract() -> None:
+    for agent in SANDBOXED_AGENT_NAMES:
+        sandbox = load_agent(AGENT_CONFIG_PATHS[agent]).sandbox
+
+        assert sandbox.mode == "all"
+        assert sandbox.workspaceAccess == "none"
+        assert sandbox.model_fields_set == {"mode", "workspaceAccess", "docker"}
+
+        docker = sandbox.docker
+        assert docker is not None
+        assert docker.model_fields_set == {"image", "binds", *D9_DANGEROUS_KEYS}
+        assert docker.image == IMAGE_PLACEHOLDER
+        assert docker.dangerouslyAllowExternalBindSources is True
+        assert docker.dangerouslyAllowReservedContainerTargets is True
+
+        # Exactly two bind slots: workspace read-only at /workspace, data read-write at /data.
+        assert len(docker.binds) == 2
+        workspace_bind, data_bind = docker.binds
+        ws_source, ws_target, ws_mode = workspace_bind.split(":")
+        assert (ws_source, ws_target, ws_mode) == ("<agent-workspace>", "/workspace", "ro")
+        data_source, data_target, data_mode = data_bind.split(":")
+        assert data_target == "/data"
+        assert data_mode == "rw"
+        assert data_source.startswith("<traderbot-data-root>/{mode}-")
+        assert data_source.endswith(agent)
+
+
+def test_sysadmin_fragment_is_explicitly_off_with_no_docker_block() -> None:
+    sandbox = load_agent(AGENT_CONFIG_PATHS["sysadmin"]).sandbox
+
+    assert sandbox.mode == "off"
+    assert sandbox.docker is None
+    assert sandbox.workspaceAccess is None
+    assert sandbox.model_fields_set == {"mode"}
+
+    raw = _load_raw(AGENT_CONFIG_PATHS["sysadmin"])
+    assert isinstance(raw, dict)
+    assert raw["sandbox"] == {"mode": "off"}
+
+
+def test_no_dangerous_keys_outside_the_d9_set_across_all_fragments() -> None:
+    # T4/D9: scan ALL 13 files (including the two non-agent configs) for any dangerous-* key.
+    all_dangerous: set[str] = set()
+    for path in sorted(CONFIG_DIR.glob("*.json")):
+        dangerous = {
+            key for key in _iter_dict_keys(_load_raw(path)) if key.startswith("dangerously")
+        }
+        all_dangerous |= dangerous
+
+        if path.stem in SANDBOXED_AGENT_NAMES:
+            assert dangerous == D9_DANGEROUS_KEYS, path.name
+        else:
+            assert dangerous == set(), path.name
+
+    assert all_dangerous == D9_DANGEROUS_KEYS
+
+
+def test_no_forbidden_bind_sources_anywhere() -> None:
+    # T4/D1: no fragment may bind a host secret root, the Docker socket, or host root.
+    for path in sorted(CONFIG_DIR.glob("*.json")):
+        for bind in _iter_bind_strings(_load_raw(path)):
+            source = _bind_source(bind)
+            for forbidden in FORBIDDEN_BIND_SUBSTRINGS:
+                assert forbidden not in bind, f"{path.name}: {bind}"
+            for prefix in FORBIDDEN_BIND_SOURCE_PREFIXES:
+                assert not source.startswith(prefix), f"{path.name}: {bind}"
+            assert source not in FORBIDDEN_BIND_ROOT_SOURCES, f"{path.name}: {bind}"
+            assert bind.endswith((":ro", ":rw")), f"{path.name}: {bind}"
