@@ -11,7 +11,14 @@ from typing import Final
 
 from pydantic import BaseModel, ValidationError
 
-from traderbot.deploy.openclaw_config import inspect_config, set_config, set_secret_ref
+from traderbot.deploy.openclaw_config import (
+    agent_config_path,
+    inspect_config,
+    set_config,
+    set_config_json,
+    set_secret_ref,
+    unset_config,
+)
 from traderbot.deploy.openclaw_models import (
     AgentCreated,
     AgentInventory,
@@ -25,9 +32,12 @@ from traderbot.deploy.openclaw_models import (
 from traderbot.deploy.openclaw_process import run_bounded
 
 __all__ = (
+    "agent_config_path",
     "inspect_config",
     "set_config",
+    "set_config_json",
     "set_secret_ref",
+    "unset_config",
 )
 
 _AGENT_ID_PATTERN: Final = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")

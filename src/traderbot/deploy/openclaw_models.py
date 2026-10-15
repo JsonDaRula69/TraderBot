@@ -74,8 +74,28 @@ class HeartbeatConfig(StrictModel):
     every: str | None = None
 
 
+class SandboxDockerConfig(BaseModel):
+    """Pinned ``SandboxDockerSchema`` subset: strict and extra-forbid (D4/D9).
+
+    Property names are the pinned schema's verbatim; only the owner-approved D9
+    dangerous-* pair exists here, so parsing a config carrying any extra docker
+    key (including ``dangerouslyAllowContainerNamespaceJoin``) fails closed.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    image: str
+    binds: list[str]
+    dangerouslyAllowExternalBindSources: bool
+    dangerouslyAllowReservedContainerTargets: bool
+
+
 class SandboxConfig(StrictModel):
+    """Pinned ``AgentSandboxSchema`` read model; ``workspaceAccess`` is deploy-narrowed to none."""
+
     mode: str | None = None
+    workspaceAccess: Literal["none"] | None = None
+    docker: SandboxDockerConfig | None = None
 
 
 class AgentRuntimeConfig(StrictModel):

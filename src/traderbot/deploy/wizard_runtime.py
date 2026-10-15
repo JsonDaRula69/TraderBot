@@ -43,6 +43,20 @@ from traderbot.secrets.local_encrypted import SecretIntegrityError
 from traderbot.secrets.store import ProfileTokenEntry, SecretsStore
 
 
+def resolve_agent_config_path(agent_id: str) -> str | None:
+    """Resolve the deployed write prefix (``agents.list[i]`` or legacy entries)
+    for a configured agent id from OBSERVED current gateway state — never cached.
+
+    Composition of the bounded wrappers: a fresh inventory plus the entries-first
+    + list-fallback read in ``openclaw_config._agent_config``. Returns None
+    (fail-closed) when the agent is unconfigured or any read fails.
+    """
+    inventory = openclaw.inspect_agents()
+    if inventory is None:
+        return None
+    return openclaw.agent_config_path(agent_id, inventory)
+
+
 class OpenClawAdapter:
     """Map wizard operations to the bounded Todo-3 OpenClaw wrappers."""
 

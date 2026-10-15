@@ -326,3 +326,17 @@ def test_run_bounded_cleans_up_when_second_reader_fails_to_start(
     assert result is None
     _assert_reaped(int(pid_path.read_text()))
     _assert_no_readers()
+
+
+def test_run_bounded_passes_json_value_atom_byte_exact() -> None:
+    # Given: a JSON-array config value carrying whitespace and shell metacharacters
+    payload = '["/srv/a ws:/workspace:ro", "/srv/$(touch pwned):/data:rw"]'
+    script = "import sys; sys.stdout.write(sys.argv[1])"
+
+    # When: the value crosses the bounded argv boundary
+    result = run_bounded([sys.executable, "-c", script, payload], timeout=5.0)
+
+    # Then: the atom arrives byte-exactly — argv is never shelled or reformatted
+    assert result is not None
+    assert result.returncode == 0
+    assert result.stdout == payload

@@ -24,7 +24,18 @@ from traderbot.deploy.wizard_state import (
     SecretRefState,
 )
 
-_CONFIG_KEY_PATTERN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$")
+# Deployed-shape write grammar: dotted segments, each optionally suffixed with
+# numeric brackets (``agents.list[0].sandbox.docker.binds``). The pinned CLI's
+# parsePath accepts dot/bracket notation; this pattern is its conservative
+# subset — no escapes, no empty brackets, no non-numeric indexes.
+_CONFIG_KEY_PATTERN: Final = re.compile(
+    r"^[A-Za-z][A-Za-z0-9_-]*(?:\[\d+\])*(?:\.[A-Za-z0-9_-]+(?:\[\d+\])*)*$"
+)
+# Paths the pinned CLI refuses to replace wholesale (config-cli:558-560). The
+# seam fails closed on them before any subprocess call (#526 asymmetry trap).
+_PROTECTED_CONFIG_PATHS: Final = frozenset(
+    {"agents.list", "plugins.entries", "agents.defaults.models", "models.providers"}
+)
 _MISSING_PATH_PREFIX: Final = "Config path not found:"
 _run = run_bounded
 
@@ -127,8 +138,12 @@ def inspect_config(
     return OpenClawConfigSnapshot(agents=tuple(agents), secret_refs=tuple(secret_refs))
 
 
+def _valid_write_key(key: str) -> bool:
+    return bool(_CONFIG_KEY_PATTERN.fullmatch(key)) and key not in _PROTECTED_CONFIG_PATHS
+
+
 def _set_config(key: str, encoded: str) -> bool:
-    if not _CONFIG_KEY_PATTERN.fullmatch(key):
+    if not _valid_write_key(key):
         return False
     validated = _run(
         [
@@ -158,6 +173,53 @@ def _set_config(key: str, encoded: str) -> bool:
 
 def set_config(key: str, value: str) -> bool:
     return _set_config(key, json.dumps(value))
+
+
+def set_config_json(key: str, json_value: str) -> bool:
+    """Write one pre-encoded JSON value (array/object/bool) at a bracket path.
+
+    The value string is validated as JSON, then passed to the CLI byte-exactly
+    (never reformatted), so a re-read through the same seam round-trips.
+    """
+    try:
+        json.loads(json_value)
+    except json.JSONDecodeError:
+        return False
+    return _set_config(key, json_value)
+
+
+def unset_config(key: str) -> bool:
+    """Remove one config key via ``config unset``; object leaves are deleted
+    entirely (the key is absent after re-read, never null), matching the pinned
+    CLI's ``unsetAtPath`` semantics that D8 rollback depends on.
+    """
+    if not _valid_write_key(key):
+        return False
+    validated = _run(
+        ["openclaw", "config", "unset", key, "--dry-run", "--json"],
+        timeout=60.0,
+    )
+    if validated is None or validated.returncode != 0:
+        return False
+    try:
+        _ = ConfigDryRun.model_validate_json(validated.stdout)
+    except ValidationError:
+        return False
+    result = _run(["openclaw", "config", "unset", key], timeout=60.0)
+    return result is not None and result.returncode == 0
+
+
+def agent_config_path(agent_id: str, inventory: AgentInventory) -> str | None:
+    """Resolve the write-path prefix for a configured agent from CURRENT state.
+
+    Reuses the entries-first + ``agents.list[i]`` fallback read (`_agent_config`)
+    so the returned prefix names the shape the gateway actually serves; only
+    configured (inventoried) agents resolve, and any read failure closes to None.
+    """
+    if agent_id not in {agent.id for agent in inventory.root}:
+        return None
+    state = _agent_config(agent_id, inventory)
+    return None if state is None else state.path_prefix
 
 
 def set_secret_ref(agent_id: str, value: SecretRefConfig) -> bool:
