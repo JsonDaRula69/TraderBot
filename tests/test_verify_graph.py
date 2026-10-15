@@ -146,3 +146,48 @@ async def test_stable_order_and_optional_degraded_overall() -> None:
     assert tuple(check.id for check in result.checks) == tuple(CheckId)
     assert result.overall == "degraded"
     assert all(check.elapsed_ms >= 0 for check in result.checks)
+
+
+@pytest.mark.asyncio
+async def test_agents_failure_dependency_skips_sandbox_config_probes() -> None:
+    # Todo 9: the sandbox config-reading probes are children of the agents
+    # check. A missing selected agent (agents check FAIL) must dependency-skip
+    # them with the DIRECT dependency named — no double-reporting.
+    ports = FakePorts(
+        outcomes={CheckId.AGENTS_WORKSPACES: ProbeResult.failed("agents_fail", "Agents missing")}
+    )
+    request = VerificationRequest(categories=(MarketCategory.WEATHER,))
+    result = await run_verification(request, ports)
+    by_id = {check.id: check for check in result.checks}
+    expected = (
+        CheckId.SANDBOX_MODE_READBACK,
+        CheckId.SANDBOX_POSTURE_CONFIG,
+        CheckId.SANDBOX_OFF_NEGATIVE,
+    )
+    for check_id in expected:
+        assert by_id[check_id].status is CheckStatus.SKIP
+        assert by_id[check_id].dependency is CheckId.AGENTS_WORKSPACES
+        assert check_id not in ports.calls
+    # The image-presence probe is host-local (docker image inspect): it has no
+    # OpenClaw dependency and must still run under an agents failure.
+    assert CheckId.SANDBOX_IMAGE_PRESENCE in ports.calls
+    assert by_id[CheckId.SANDBOX_IMAGE_PRESENCE].status is CheckStatus.PASS
+
+
+@pytest.mark.asyncio
+async def test_gateway_failure_cascades_to_sandbox_probes() -> None:
+    # The sandbox config probes chain gateway -> agents -> posture: a gateway
+    # failure surfaces as a single dependency skip rooted at the agents check.
+    ports = FakePorts(
+        outcomes={CheckId.GATEWAY: ProbeResult.failed("gateway_down", "Gateway is down")}
+    )
+    request = VerificationRequest(categories=(MarketCategory.WEATHER,))
+    result = await run_verification(request, ports)
+    by_id = {check.id: check for check in result.checks}
+    assert by_id[CheckId.AGENTS_WORKSPACES].dependency is CheckId.GATEWAY
+    assert by_id[CheckId.SANDBOX_MODE_READBACK].dependency is CheckId.AGENTS_WORKSPACES
+    assert by_id[CheckId.SANDBOX_POSTURE_CONFIG].dependency is CheckId.AGENTS_WORKSPACES
+    assert by_id[CheckId.SANDBOX_OFF_NEGATIVE].dependency is CheckId.AGENTS_WORKSPACES
+    # Host-local probe unaffected by the gateway outage.
+    assert by_id[CheckId.SANDBOX_IMAGE_PRESENCE].status is CheckStatus.PASS
+    assert result.overall == "failed"

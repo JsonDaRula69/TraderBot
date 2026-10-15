@@ -194,3 +194,85 @@ def test_schema_authority_ignores_mutated_runtime_registries(
     # When / Then
     assert global_database(_request(tmp_path)).status is CheckStatus.PASS
     assert decisions_databases(_request(tmp_path)).status is CheckStatus.PASS
+
+
+# --- todo 9 (GAP-6): sandbox posture family required-vs-advisory boundaries ---
+
+
+class _OutcomePorts(RaisingPorts):
+    """RaisingPorts sibling: returns outcomes instead of raising canaries."""
+
+    def __init__(self, outcomes: dict[CheckId, ProbeResult]) -> None:
+        super().__init__(CheckId.GATEWAY)
+        self.outcomes: dict[CheckId, ProbeResult] = outcomes
+
+    @override
+    async def probe(self, check_id: CheckId, token: SecretStr | None = None) -> ProbeResult:
+        _ = token
+        self.calls.append(check_id)
+        return self.outcomes.get(check_id, ProbeResult.passed("healthy"))
+
+
+@pytest.mark.asyncio
+async def test_sandbox_mode_failure_is_required_and_fails_overall(tmp_path: Path) -> None:
+    # R2 class: an unsandboxed selected agent is a REQUIRED failure with an
+    # actionable remedy — never an advisory blur into DEGRADED.
+    ports = _OutcomePorts(
+        {
+            CheckId.SANDBOX_MODE_READBACK: ProbeResult.failed(
+                "sandbox_mode_mismatch",
+                "sandboxed agents must run mode all: weather=unset. Remedy: re-run "
+                "traderbot deploy with the step-7 sandbox apply approval "
+                "(TRADERBOT_PHASE5_SANDBOX=1)",
+            )
+        }
+    )
+    result = await run_verification(_request(tmp_path), ports)
+    indexed = {check.id: check for check in result.checks}
+    check = indexed[CheckId.SANDBOX_MODE_READBACK]
+    assert check.required is True
+    assert check.status is CheckStatus.FAIL
+    assert "TRADERBOT_PHASE5_SANDBOX=1" in check.message
+    assert result.overall == "failed"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_apply_absent_is_a_probe_level_typed_skip(tmp_path: Path) -> None:
+    # Dependency skip with an explicit typed reason (probe-level, not
+    # graph-level): with no step-7 apply recorded, the posture was never
+    # asserted — SKIP degrades overall but NEVER blurs into a required failure.
+    ports = _OutcomePorts(
+        {
+            CheckId.SANDBOX_POSTURE_CONFIG: ProbeResult.skipped(
+                "sandbox_apply_absent",
+                "no Phase 5 sandbox apply is recorded for this selection",
+            )
+        }
+    )
+    result = await run_verification(_request(tmp_path), ports)
+    indexed = {check.id: check for check in result.checks}
+    check = indexed[CheckId.SANDBOX_POSTURE_CONFIG]
+    assert check.required is True
+    assert check.status is CheckStatus.SKIP
+    assert check.action == "sandbox_apply_absent"
+    assert result.overall == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_docker_absent_image_skip_is_typed_not_failed(tmp_path: Path) -> None:
+    # docker CLI absent is an environment state, not a posture breach: the
+    # image probe carries the typed "docker_unavailable" skip reason.
+    ports = _OutcomePorts(
+        {
+            CheckId.SANDBOX_IMAGE_PRESENCE: ProbeResult.skipped(
+                "docker_unavailable",
+                "docker CLI is not on PATH; image presence skipped",
+            )
+        }
+    )
+    result = await run_verification(_request(tmp_path), ports)
+    indexed = {check.id: check for check in result.checks}
+    check = indexed[CheckId.SANDBOX_IMAGE_PRESENCE]
+    assert check.status is CheckStatus.SKIP
+    assert check.action == "docker_unavailable"
+    assert result.overall == "degraded"
