@@ -31,8 +31,9 @@ uv run traderbot daemon      # start the always-on daemon (WS + workers + MCP)
 The daemon serves MCP over streamable-http at `http://127.0.0.1:8765/mcp`
 (loopback only). OpenClaw connects with `transport: "streamable-http"`; the
 legacy stdio entry point (`uv run traderbot-mcp-server`) remains available as a
-development fallback. For an installed background service on Linux/macOS/Windows
-use the `traderbot` CLI:
+development fallback. For an installed background service use the `traderbot` CLI —
+**Linux is the only platform verified today** (macOS and Windows support is deferred; their
+service managers and templates remain in the codebase and resume without a rewrite):
 
 ```bash
 traderbot service install   # write the unit + enable + start (sudo on systemd)

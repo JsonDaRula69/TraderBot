@@ -37,6 +37,8 @@ This command:
 | Service manager detection | launchd | systemd | systemd | Task Scheduler |
 | Service template resolution | `shutil.which('traderbot')` + `.resolve()` | Same | Same | Same |
 
+> **Platform status (owner decision, 2026-10-16):** the table above is the design contract. Only **Linux** is verified in CI and supported today; macOS and Windows are deferred — their columns, service managers and templates stay in the repo untouched so support can resume without a rewrite.
+
 Service template paths use `{placeholder}` syntax resolved at install time via `shutil.which('traderbot')` + `.resolve()` (DD-007). This handles pipx virtualenv backend variations (venv vs uv) and user-customizable `PIPX_BIN_DIR` locations. Templates are stored as package data in `src/traderbot/services/` and read via `importlib.resources`.
 
 ---

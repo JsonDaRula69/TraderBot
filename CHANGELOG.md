@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0a132] — 2026-10-16
+
+- **Scope change (owner decision): macOS and Windows support is deferred.** CI verification is now Ubuntu-only — the `Test (ubuntu-latest|macos-latest|windows-latest)` matrix collapses to `Test (ubuntu-latest)`, with the resume instructions written beside it. The deferral is deliberate and reversible, not a removal: the platform-guarded code paths in `src/`, the per-OS service templates, and the `tests/windows_quarantine.py` registry (inert on Linux) with its base-attribution receipt are all kept intact, so support resumes by restoring the matrix rows rather than by a rewrite. Recorded in `AGENTS.md` (the merge gate list + the portability rule), `README.md`, `v2docs/00-principles.md` §14, `v2docs/README.md`, `v2docs/02-installation-and-deploy.md` and the roadmap pair; the pre-existing Windows portability debt stays tracked in #222.
+
 ## [2.0.0a126] — 2026-10-15
 
 - Deploy step 7 is now the real Phase 5 Docker sandbox apply, opt-in via `TRADERBOT_PHASE5_SANDBOX=1` (any other value records a typed skip with zero config writes): it builds the sandbox image before any config write, applies the exact per-agent sandbox contract to every selected category agent plus dev-liaison behind one `sandbox_apply` operator approval, backs up the current keys and restores them per key on any write failure or postcondition mismatch (no partial posture survives), re-reads every write byte-exact, and persists a posture fingerprint for resume; main/sysadmin are never written.
