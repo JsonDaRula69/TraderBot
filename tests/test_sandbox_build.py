@@ -12,6 +12,7 @@ Each test carries a short test-map comment naming the decision it enforces.
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -143,12 +144,12 @@ def test_ensure_docker_available_is_presence_gate(
     with pytest.raises(DockerUnavailableError):
         ensure_docker_available()
 
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    docker = bin_dir / "docker"
-    docker.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    docker.chmod(0o755)
-    monkeypatch.setenv("PATH", str(bin_dir))
+    # Portable presence: patch the ``shutil.which`` the production code calls
+    # (a POSIX sh shim named ``docker`` is not executable on win32, and an
+    # executable shim would be executed — violating the no-daemon-call intent).
+    monkeypatch.setattr(
+        "shutil.which", lambda name: "/fake/bin/docker" if name == "docker" else None
+    )
     ensure_docker_available()  # must not raise and must not execute docker
 
 
@@ -176,7 +177,7 @@ def test_build_invokes_script_with_filtered_env_and_bounded_timeout() -> None:
     assert timeout == BUILD_TIMEOUT_SECONDS
     assert child_env["PATH"] == "/usr/bin"
     assert child_env["HOME"] == "/home/tester"
-    assert child_env["PYTHONPATH"] == f"{_REPO_ROOT / 'src'}:/pre-existing"
+    assert child_env["PYTHONPATH"] == os.pathsep.join((str(_REPO_ROOT / "src"), "/pre-existing"))
     assert "TRADERBOT_TEST_KALSHI_KEY" not in child_env
     assert "KALSHI_PRIVATE_KEY_PEM" not in child_env
     assert outcome.image == "traderbot-sandbox:da1a64821"

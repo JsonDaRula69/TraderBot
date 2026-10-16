@@ -137,6 +137,17 @@ QUARANTINED_NODE_IDS: dict[str, str] = {  # noqa: E501 (exact node ids are data,
     "tests/test_secrets_resolver.py::TestSecretsResolver::test_with_credentials_constructs_infisical_client": "secret_acl_hardening",  # noqa: E501
     "tests/test_secrets_resolver.py::TestSuspendedProfiles::test_lazy_init_installs_adapter_on_default_store": "secret_acl_hardening",  # noqa: E501
     "tests/test_verify_openclaw_contract.py::test_fired_one_shot_absent_with_recorded_registration_degrades": "deploy_state_o_directory",  # noqa: E501
+    # Phase 5 sandbox step-7 tests reach _save_late_state -> save_deploy_state,
+    # the same win32 PermissionError seam (root family 2, issue #222; product
+    # code unchanged from f085f77).
+    "tests/test_deploy_late_cli.py::test_human_output_uses_stderr_and_prints_sandbox_summary_once": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_completed_retained_bootstrap_completes_docker_sandbox": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_applies_byte_exact_posture_and_persists_fingerprint": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_build_failure_on_drifted_posture_preserves_prior_state": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_dev_liaison_adopted_gets_paper_data_dir_and_selected_verification": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_never_writes_main_or_sysadmin": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_requires_operator_approval_and_records_exact_plan": "deploy_state_o_directory",  # noqa: E501
+    "tests/test_deploy_late_steps.py::test_step7_rerun_with_intact_posture_skips_build_and_rewrites_nothing": "deploy_state_o_directory",  # noqa: E501
 }
 
 

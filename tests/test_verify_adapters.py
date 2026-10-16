@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import os
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import final
@@ -172,9 +173,7 @@ def test_probe_dispatches_each_sandbox_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sandbox = _StubSandbox(_request(tmp_path))
-    monkeypatch.setattr(
-        "traderbot.deploy.verify_ports.SandboxVerifier", lambda _request: sandbox
-    )
+    monkeypatch.setattr("traderbot.deploy.verify_ports.SandboxVerifier", lambda _request: sandbox)
     ports = ProductionVerificationPorts(_request(tmp_path))
     expected = {
         CheckId.SANDBOX_MODE_READBACK: "mode_readback",
@@ -247,9 +246,7 @@ def _inspection_for(
 
 
 def test_inspect_sandbox_image_maps_states(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert (
-        _inspection_for(monkeypatch, returncode=0).state is ImageState.PRESENT
-    )
+    assert _inspection_for(monkeypatch, returncode=0).state is ImageState.PRESENT
     # A reachable daemon with no such image: absent, with no further parsing.
     assert _inspection_for(monkeypatch, returncode=1).state is ImageState.ABSENT
     # A dead daemon is a distinct state (different remedy than a missing image).
@@ -300,6 +297,14 @@ def test_inspect_sandbox_image_skips_when_docker_absent(
     assert inspection.state is ImageState.DOCKER_ABSENT
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "fake-docker real-child harness is a POSIX sh shim; allowlisted-env "
+        "assertion runs on POSIX CI lanes and win32 coverage stays with the "
+        "recording-runner tests"
+    ),
+)
 def test_inspect_sandbox_image_real_child_gets_allowlisted_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -312,10 +317,7 @@ def test_inspect_sandbox_image_real_child_gets_allowlisted_env(
     env_log = tmp_path / "env.log"
     docker = bin_dir / "docker"
     _ = docker.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s\\n' \"$@\" > {argv_log}\n"
-        f"env > {env_log}\n"
-        "exit 0\n",
+        f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {argv_log}\nenv > {env_log}\nexit 0\n",
         encoding="utf-8",
     )
     docker.chmod(0o755)
