@@ -31,7 +31,7 @@ from traderbot.kalshi.websocket import KalshiWebSocketManager
 from traderbot.kalshi.ws_cache import MarketCache
 from traderbot.mcp.server import app
 from traderbot.paths import get_data_dir, get_db_path
-from traderbot.secrets.resolver import build_secrets_store
+from traderbot.secrets.resolver import build_secrets_store, build_secrets_store_selection
 from traderbot.secrets.rotation import start_scheduler, stop_scheduler
 from traderbot.secrets.store import SecretsStore
 from traderbot.state import (
@@ -52,6 +52,13 @@ DEFAULT_PORT: Final = 8765
 _DEFAULT_HOST: Final = "127.0.0.1"
 # A fetch/insert cycle that exceeds this counts as a stalled iteration.
 _COMPONENT_TIMEOUT: Final = 60.0
+
+# #219: when the credential pair is missing at build time the daemon re-probes the secrets
+# store on this backoff (capped) for as long as it stays degraded. The idle watch cadence
+# also covers a fail-open that starts later in the process's life.
+_CREDENTIAL_PROBE_INTERVAL_SECONDS: Final = 5.0
+_CREDENTIAL_PROBE_MAX_INTERVAL_SECONDS: Final = 60.0
+_CREDENTIAL_WATCH_INTERVAL_SECONDS: Final = 30.0
 
 # Map a WS message type to a MarketCache action. ``None`` means the message is
 # returned as-is (public market messages carry a ``msg`` event payload).
@@ -179,7 +186,8 @@ async def build_components(
         )
 
         data = DataCollectionService()
-        data.register(SettlementMonitor(client, pool, database_path))
+        settlement = SettlementMonitor(client, pool, database_path)
+        data.register(settlement)
         data.register(OpenMeteoProvider(pool, database_path))
         data.register(NwsProvider(pool, database_path))
         data.register(NewsProvider())
@@ -192,8 +200,12 @@ async def build_components(
             "client": client,
             "ws": ws,
             "data": data,
+            "settlement": settlement,
             "mcp_app": app.streamable_http_app(),
             "app": app,
+            # #219: the supervisor's trigger. ``False`` means the pair was missing at build
+            # time, so the WS manager and client were constructed fail-open.
+            "credentials_present": bool(api_key and private_key_pem),
         }
         _ = startup.pop_all()
         return components
@@ -209,6 +221,91 @@ def _message_callback(cache: MarketCache) -> Callable[[dict[str, Any]], Awaitabl
     return on_message
 
 
+class CredentialSupervisor:
+    """Heal a fail-open credential start without a daemon restart (#219).
+
+    :func:`build_components` resolves the Kalshi credential pair once. When the secrets store
+    is not yet reachable - a boot-order race between the daemon and Infisical - the resolver
+    falls back to the local store, the pair comes back empty, and the WebSocket manager and
+    client are constructed fail-open. Nothing re-reads the store afterwards, so the stream
+    never comes up: the fleet keeps serving stale cache until an operator restarts the daemon,
+    which breaks the 24/7 autonomy rule.
+
+    This supervisor watches for that degraded state - the pair missing at build time, or the
+    stream failing open at any later point - re-resolves the canonical pair and hands it to
+    ``on_recovered`` so the caller can rebuild and restart the credential-bound components in
+    place. Probing backs off while degraded but never gives up: the store may be unreachable
+    for an unbounded time, so the daemon must tolerate it and heal as soon as it returns.
+    Credential material is never logged.
+    """
+
+    def __init__(
+        self,
+        *,
+        is_degraded: Callable[[], bool],
+        resolve: Callable[[], Awaitable[tuple[str | None, str | None]]],
+        on_recovered: Callable[[str, str], Awaitable[None]],
+        probe_interval: float = _CREDENTIAL_PROBE_INTERVAL_SECONDS,
+        max_interval: float = _CREDENTIAL_PROBE_MAX_INTERVAL_SECONDS,
+        watch_interval: float = _CREDENTIAL_WATCH_INTERVAL_SECONDS,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self._is_degraded = is_degraded
+        self._resolve = resolve
+        self._on_recovered = on_recovered
+        self._probe_interval = probe_interval
+        self._max_interval = max_interval
+        self._watch_interval = watch_interval
+        self._sleep = sleep
+        self._stop = asyncio.Event()
+        self._interval = probe_interval
+        self._probes = 0
+        self._recoveries = 0
+
+    @property
+    def probes(self) -> int:
+        """Credential probes attempted so far."""
+        return self._probes
+
+    @property
+    def recoveries(self) -> int:
+        """Successful rebuilds handed to ``on_recovered``."""
+        return self._recoveries
+
+    def stop(self) -> None:
+        """Ask :meth:`run` to return at its next check."""
+        self._stop.set()
+
+    async def run(self) -> None:
+        """Watch for the degraded state until stopped."""
+        while not self._stop.is_set():
+            if self._is_degraded():
+                if await self._probe():
+                    self._interval = self._probe_interval
+                    await self._sleep(self._watch_interval)
+                    continue
+                await self._sleep(self._interval)
+                self._interval = min(self._interval * 2, self._max_interval)
+            else:
+                self._interval = self._probe_interval
+                await self._sleep(self._watch_interval)
+
+    async def _probe(self) -> bool:
+        """Re-resolve the pair and rebuild once; ``True`` when the rebuild succeeded."""
+        self._probes += 1
+        api_key, private_key_pem = await self._resolve()
+        if not api_key or not private_key_pem:
+            return False
+        try:
+            await self._on_recovered(api_key, private_key_pem)
+        except Exception:  # noqa: BLE001 - a failed rebuild must not kill the watcher
+            logger.exception("credential recovery failed; will keep retrying")
+            return False
+        self._recoveries += 1
+        logger.info("kalshi credentials recovered; credential-bound components rebuilt")
+        return True
+
+
 async def run_daemon(
     *,
     port: int = DEFAULT_PORT,
@@ -220,6 +317,53 @@ async def run_daemon(
     cache: MarketCache = components["cache"]
     ws: KalshiWebSocketManager = components["ws"]
     data: DataCollectionService = components["data"]
+    settlement: SettlementMonitor | None = components.get("settlement")
+    credentials_present = {"value": bool(components.get("credentials_present", True))}
+
+    def _credentials_degraded() -> bool:
+        """True while the credential-bound components need (re)building."""
+        if not credentials_present["value"]:
+            return True
+        current_ws: KalshiWebSocketManager = components["ws"]
+        return bool(getattr(current_ws, "fail_open_fired", False))
+
+    async def _resolve_kalshi_pair() -> tuple[str | None, str | None]:
+        """Re-resolve the canonical pair off the event loop (the SDK login blocks)."""
+        store, _backend = await asyncio.to_thread(build_secrets_store_selection)
+        return store.get("kalshi", "api_key"), store.get("kalshi", "private_key_pem")
+
+    async def _mark_ws_connected() -> None:
+        set_websocket(WEBSOCKET_CONNECTED)
+
+    async def _mark_ws_fail_open() -> None:
+        set_websocket(WEBSOCKET_FAIL_OPEN)
+
+    async def _on_credentials_recovered(api_key: str, private_key_pem: str) -> None:
+        """Rebuild the credential-bound components in place and restart the stream."""
+        previous_ws: KalshiWebSocketManager = components["ws"]
+        rebuilt_client = KalshiClient(
+            api_key=api_key,
+            private_key_pem=private_key_pem,
+            environment=environment,
+        )
+        rebuilt_ws = KalshiWebSocketManager(
+            api_key=api_key,
+            private_key_pem=private_key_pem,
+            environment=environment,
+            on_message=_message_callback(cache),
+            on_reconnect=_mark_ws_connected,
+            on_fail_open=_mark_ws_fail_open,
+        )
+        # Retire the fail-open manager first: left running, its own callback would keep
+        # overwriting the websocket state with ``fail_open`` after the stream is healthy.
+        if previous_ws is not rebuilt_ws:
+            await previous_ws.stop()
+        components["client"] = rebuilt_client
+        components["ws"] = rebuilt_ws
+        credentials_present["value"] = True
+        if settlement is not None:
+            settlement.set_client(rebuilt_client)
+        await rebuilt_ws.start()
 
     # Shutdown bookkeeping.
     stop = asyncio.Event()
@@ -233,12 +377,23 @@ async def run_daemon(
         loop.add_signal_handler(sig, _request_stop, sig, None)
 
     mcp_task: asyncio.Task[None] | None = None
+    supervisor_task: asyncio.Task[None] | None = None
     try:
         await cache.start_persist_task()
         await start_scheduler()
         await ws.start()
         await data.start()
         set_data_pipeline(DATA_PIPELINE_RUNNING)
+
+        # #219: heal a fail-open credential start (and any later fail-open) in place.
+        supervisor = CredentialSupervisor(
+            is_degraded=_credentials_degraded,
+            resolve=_resolve_kalshi_pair,
+            on_recovered=_on_credentials_recovered,
+        )
+        supervisor_task = asyncio.create_task(
+            supervisor.run(), name="traderbot-credential-supervisor"
+        )
 
         config = uvicorn.Config(
             components["mcp_app"],
@@ -253,12 +408,17 @@ async def run_daemon(
         await stop.wait()
     finally:
         logger.info("stopping daemon components (reverse order)")
+        if supervisor_task is not None:
+            supervisor.stop()
+            _ = supervisor_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await supervisor_task
         if mcp_task is not None:
             _ = mcp_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await mcp_task
         await data.stop()
-        await ws.stop()
+        await components["ws"].stop()
         await stop_scheduler()
         await cache.stop_persist_task()
         await components["client"].close()
@@ -295,4 +455,4 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger.info("interrupted")
 
 
-__all__ = ["DEFAULT_PORT", "run_daemon"]
+__all__ = ["DEFAULT_PORT", "CredentialSupervisor", "run_daemon"]

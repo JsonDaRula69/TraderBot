@@ -74,6 +74,7 @@
 - [ ] ~~Update pipeline~~ (deferred until roadmap is complete)
 - [x] GRIB2 processing pipeline (DD-033) — design retained; Stage 1 folded into Phase 7a backtesting, Stage 2 post-Phase 7a follow-up ([#194](https://github.com/JsonDaRula69/TraderBot/issues/194))
 - [x] macOS and Windows support deferred (owner decision, 2026-10-16) — CI verification is Ubuntu-only until further notice. Deliberate and reversible, not a removal: the platform-guarded code paths, service templates and the Windows quarantine registry are kept intact, and support resumes by restoring the CI matrix rows. Portability debt stays tracked in [#222](https://github.com/JsonDaRula69/TraderBot/issues/222)
+- [x] Daemon credential recovery (#219): a fail-open credential start is now healed in place — `CredentialSupervisor` re-resolves the Kalshi pair and rebuilds the client, WebSocket manager and settlement-monitor binding without an operator restart; probing backs off while degraded and covers a fail-open later in the process's life
 - [ ] ~~Docs/code drift~~ (deferred until roadmap is complete)
 - [x] Workspace template source and all category templates — canonical exact-five-tool guidance in `AGENTS.md`; legacy `TOOLS.md`/`HEARTBEAT.md` excluded and preserved
 - [x] SysAdmin sandbox decision — DD-036 (unsandboxed with principled restrictions)

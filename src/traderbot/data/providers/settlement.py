@@ -56,6 +56,20 @@ class SettlementMonitor(BaseDataProvider):
         self._db_path: Path = db_path or get_db_path()
 
     @property
+    def client(self) -> KalshiClient:
+        """The client currently used for settled-market queries."""
+        return self._client
+
+    def set_client(self, client: KalshiClient) -> None:
+        """Rebind to a rebuilt client after credential recovery (#219).
+
+        The daemon constructs this monitor with the client that existed at build time; when
+        the credential pair only resolves later, the monitor has to be pointed at the
+        rebuilt client or its settled-market queries keep failing on empty credentials.
+        """
+        self._client = client
+
+    @property
     @override
     def name(self) -> str:
         return "settlement-monitor"
