@@ -188,14 +188,31 @@ def assert_docker_available() -> None:
         )
 
 
+def _lf_normalized_sha256(content: bytes) -> str:
+    """sha256 hexdigest of ``content`` with line endings normalized to LF.
+
+    CI checkout portability: GitHub Windows runners check out with
+    ``core.autocrlf=true``, rewriting LF to CRLF on disk, so hashing raw bytes
+    would drift from the committed LF digest (the D10 tag and the D10
+    provenance pin both derive from it). Normalizing CRLF/CR to LF before
+    hashing keeps the digest stable across checkout EOL config. This stays
+    fail-closed: only the line-ending bytes are normalized, so any real
+    content change still yields a different digest and trips the pin.
+    """
+    normalized = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(normalized).hexdigest()
+
+
 def sandbox_image_tag(dockerfile_path: Path) -> str:
     """Return the D10 content-addressed tag for a Dockerfile.
 
     The tag is ``traderbot-sandbox:d`` followed by the first 8 lowercase hex
-    characters of the sha256 digest of the Dockerfile bytes. Identical bytes
-    always yield the identical tag; any byte change yields a different one.
+    characters of the sha256 digest of the Dockerfile bytes with line endings
+    normalized to LF (CI autocrlf checkouts and LF checkouts tag identically).
+    Identical content always yields the identical tag; any byte change beyond
+    EOL style yields a different one.
     """
-    digest = hashlib.sha256(dockerfile_path.read_bytes()).hexdigest()
+    digest = _lf_normalized_sha256(dockerfile_path.read_bytes())
     return f"{_IMAGE_REPOSITORY}:d{digest[:8]}"
 
 

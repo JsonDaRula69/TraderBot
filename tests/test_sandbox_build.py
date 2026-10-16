@@ -267,3 +267,79 @@ def test_real_dockerfile_matches_committed_pin() -> None:
     # Test-map: D10/stubbed-artifact — the checked-in Dockerfile still hashes to
     # the digest recorded in the plan, so the artifact was not silently swapped.
     assert hashlib.sha256(_REAL_DOCKERFILE.read_bytes()).hexdigest() == _PINNED_DIGEST
+
+
+def _lf_normalized(data: bytes) -> bytes:
+    """Collapse CRLF/CR line endings to LF, mirroring sandbox._lf_normalized_sha256."""
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def _crlf_variant(data: bytes) -> bytes:
+    """Return the bytes a Windows ``core.autocrlf=true`` checkout would produce."""
+    return _lf_normalized(data).replace(b"\n", b"\r\n")
+
+
+def test_real_dockerfile_pin_holds_under_crlf_checkout() -> None:
+    # Test-map: D10 + CI-autocrlf — a Windows checkout stores CRLF bytes on
+    # disk; LF normalization must still match the exact pinned digest, while
+    # the raw CRLF hash would have drifted (proves the exercise is real).
+    content = _REAL_DOCKERFILE.read_bytes()
+    crlf = _crlf_variant(content)
+    assert crlf != content
+    assert hashlib.sha256(crlf).hexdigest() != _PINNED_DIGEST
+    assert hashlib.sha256(_lf_normalized(crlf)).hexdigest() == _PINNED_DIGEST
+    assert hashlib.sha256(_lf_normalized(content)).hexdigest() == _PINNED_DIGEST
+
+
+def test_resolve_and_tag_are_stable_for_lf_and_crlf_copies(tmp_path: Path) -> None:
+    # Test-map: D10 + CI-autocrlf — provenance resolution succeeds on BOTH the
+    # LF and CRLF disk copies of the same Dockerfile, and both derive the
+    # identical content-addressed tag.
+    content = _REAL_DOCKERFILE.read_bytes()
+    script = (_REPO_ROOT / "install" / "docker" / "build-sandbox.sh").read_bytes()
+    resolved: dict[str, Path] = {}
+    for label, payload in (("lf", _lf_normalized(content)), ("crlf", _crlf_variant(content))):
+        install = tmp_path / label / "install" / "docker"
+        install.mkdir(parents=True)
+        (install / "Dockerfile").write_bytes(payload)
+        (install / "build-sandbox.sh").write_bytes(script)
+        resolved[label] = resolve_sandbox_dockerfile(repo_root=tmp_path / label)
+    assert sandbox_image_tag(resolved["lf"]) == "traderbot-sandbox:da1a64821"
+    assert sandbox_image_tag(resolved["crlf"]) == "traderbot-sandbox:da1a64821"
+
+
+def test_resolve_fails_closed_on_content_change_despite_normalization(
+    tmp_path: Path,
+) -> None:
+    # Test-map: D10 fail-closed — EOL normalization never masks a real content
+    # change: one added line still trips the pinned digest.
+    install = tmp_path / "install" / "docker"
+    install.mkdir(parents=True)
+    changed = _crlf_variant(_REAL_DOCKERFILE.read_bytes()) + b"# drifted\r\n"
+    (install / "Dockerfile").write_bytes(changed)
+    (install / "build-sandbox.sh").write_bytes(
+        (_REPO_ROOT / "install" / "docker" / "build-sandbox.sh").read_bytes()
+    )
+    with pytest.raises(SandboxProvenanceError):
+        resolve_sandbox_dockerfile(repo_root=tmp_path)
+
+
+def test_build_with_injected_runner_needs_no_docker_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Test-map: D7 + CI-no-docker — with an injected runner the host docker CLI
+    # is irrelevant: an EMPTY PATH must not stop the build (the macOS CI host).
+    monkeypatch.setenv("PATH", str(tmp_path))
+    runner = _RecordingRunner(result=subprocess.CompletedProcess([], 0, "ok\n", ""))
+    outcome = build_sandbox_image(runner=runner)
+    assert outcome.image == "traderbot-sandbox:da1a64821"
+
+
+def test_default_runner_fails_closed_without_docker_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Test-map: D7 fail-closed — the DEFAULT runner still gates on the docker
+    # CLI; only an injected runner skips the host toolchain.
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(DockerUnavailableError):
+        build_sandbox_image()

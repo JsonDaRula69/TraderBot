@@ -40,7 +40,6 @@ wheel install).
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import subprocess
@@ -51,6 +50,7 @@ from typing import Final, Literal, Protocol
 
 from traderbot.sandbox import (
     DockerUnavailableError,
+    _lf_normalized_sha256,  # pyright: ignore[reportPrivateUsage]  # single source (D10)
     assert_docker_available,
     sandbox_image_tag,
 )
@@ -215,7 +215,9 @@ def _assert_provenance(dockerfile: Path, script: Path) -> None:
             f"build script {script} carries no DOCKERFILE_SHA256=<64-hex> provenance "
             + "pin; refusing to build a Dockerfile whose bytes cannot be verified (D10)."
         )
-    actual = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
+    # LF-normalized so an autocrlf (CRLF) CI checkout still matches the
+    # committed pin; any real content change drifts and fails closed (D10).
+    actual = _lf_normalized_sha256(dockerfile.read_bytes())
     if actual != match.group(1):
         raise SandboxProvenanceError(
             f"sandbox Dockerfile provenance drift: {dockerfile} hashes to {actual} "
@@ -279,6 +281,15 @@ def _default_runner(
     cwd: Path,
     timeout: float,
 ) -> subprocess.CompletedProcess[str]:
+    """Production runner: gate on the docker CLI, then exec the build script.
+
+    The D7 presence gate (``shutil.which`` only — no daemon call) lives HERE,
+    in the default runner, not in :func:`build_sandbox_image`: an injected test
+    runner must be hermetic on hosts without Docker (CI), while the production
+    path still fails closed with :class:`DockerUnavailableError` when the CLI
+    is absent — the same failure as before, raised before any exec.
+    """
+    assert_docker_available()
     return subprocess.run(
         list(argv),
         check=False,
@@ -315,12 +326,16 @@ def build_sandbox_image(
     typed result that step 7 (T8) orders *before* any config write (D7). Raises
     :class:`SandboxImageBuildError` (with the cause classified and docker stderr
     attached) on a non-zero exit, a timeout, or an exec failure.
+
+    The D7 docker-on-PATH presence gate runs inside the DEFAULT runner only
+    (:func:`_default_runner`): an injected ``runner`` is fully hermetic and
+    never touches the host toolchain, while the default production path fails
+    closed with :class:`DockerUnavailableError` exactly as before.
     """
     root = _default_repo_root() if repo_root is None else repo_root
     dockerfile = resolve_sandbox_dockerfile(repo_root=root)
     script = root.joinpath(*_INSTALL_DOCKER_DIR, _BUILD_SCRIPT_NAME)
     context = root.joinpath(*_INSTALL_DOCKER_DIR)
-    ensure_docker_available()
     image = sandbox_image_tag(dockerfile)
     run = _default_runner if runner is None else runner
     child_env = _build_env(env, root)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,10 @@ def _write_recording_docker(
     path.chmod(0o755)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="recording emulator uses POSIX sh; the production build seam is POSIX-only",
+)
 def test_sandbox_build_recording_emulator_single_sanctioned_invocation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

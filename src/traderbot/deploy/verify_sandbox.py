@@ -269,9 +269,7 @@ class SandboxVerifier:
                 self._image = None
         return self._image
 
-    def _targets(
-        self, inventory: AgentInventory
-    ) -> tuple[_ProbeTarget, ...] | ProbeResult | None:
+    def _targets(self, inventory: AgentInventory) -> tuple[_ProbeTarget, ...] | ProbeResult | None:
         """The selected SANDBOXED agents with list-shaped read prefixes.
 
         None means no apply is recorded (the caller dependency-skips); a
@@ -532,9 +530,7 @@ class SandboxVerifier:
                 "systemctl start docker) and re-run traderbot verify",
             )
         if inspection.state is ImageState.PRESENT:
-            return ProbeResult.passed(
-                "sandbox_image_present", f"sandbox image {image} is present"
-            )
+            return ProbeResult.passed("sandbox_image_present", f"sandbox image {image} is present")
         if inspection.state is ImageState.ABSENT:
             return ProbeResult.failed(
                 "sandbox_image_absent",

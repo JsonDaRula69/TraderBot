@@ -310,3 +310,20 @@ def test_sandbox_config_for_writer_supplies_explicit_d10_image(tmp_path: Path) -
     )
     assert config.image == explicit
     assert config.to_openclaw_keys()["docker"]["image"] == explicit
+
+
+def test_sandbox_image_tag_stable_under_crlf_checkout(tmp_path: Path) -> None:
+    # Test-map: D10 + CI-autocrlf — a Windows ``core.autocrlf=true`` checkout
+    # stores CRLF bytes on disk; the derived tag must still equal the committed
+    # LF-checkout value.
+    sandbox = _sandbox()
+    source = Path(__file__).resolve().parents[1] / "install" / "docker" / "Dockerfile"
+    lf_bytes = source.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    crlf_bytes = lf_bytes.replace(b"\n", b"\r\n")
+    lf_copy = tmp_path / "Dockerfile.lf"
+    crlf_copy = tmp_path / "Dockerfile.crlf"
+    lf_copy.write_bytes(lf_bytes)
+    crlf_copy.write_bytes(crlf_bytes)
+    lf_tag = sandbox.sandbox_image_tag(lf_copy)
+    assert lf_tag == "traderbot-sandbox:da1a64821"
+    assert sandbox.sandbox_image_tag(crlf_copy) == lf_tag
