@@ -829,38 +829,68 @@ the network is unavailable — scope it out of the local-only path.
 
 ## Phase 5 — Docker Sandbox for Category Agents
 
-> **Status at writing**: designed (DD-003, DD-010, DD-036). Protocol becomes
-> executable when `feat/v2-docker-sandbox` lands.
+> **Status at writing**: implemented on `feat/v2-docker-sandbox` (local
+> commits a77f603..2345968, VERSION 2.0.0a118 through 2.0.0a125).
+> Executing this protocol on macpro-linux is the pending Final-Wave F3 gate;
+> no on-target claim is made yet.
 
-**Issue**: #169 · **Design**: `v2docs/02-installation-and-deploy.md`,
-`v2docs/04-security-and-auth.md` ("Per-Agent Isolation") · **PR**: `feat/v2-docker-sandbox`
+**Issue**: #169 · **Design**: `v2docs/02-installation-and-deploy.md` (Step 7),
+`v2docs/04-security-and-auth.md` ("Docker Sandbox Contract") · **PR**: `feat/v2-docker-sandbox`
 
 ### Testing objectives
 
-1. Verify the sandbox image builds from the shipped Dockerfile and the
-   `generate_docker_run_command()` output runs a correct, isolated container.
+1. Verify the sandbox image builds from the shipped Dockerfile at the
+   content-addressed D10 tag and the `generate_docker_run_command()` output
+   runs a correct, isolated container.
 2. Verify bind mounts: agent data dir RW, workspace RO, **no blanket
    `~/.traderbot/` mount**, no secrets/keys/tokens mounted.
 3. Verify isolation at runtime: the container cannot reach host-only paths,
    other agents' data, or the host Docker socket.
+4. Verify the dev-liaison mirrors the category-agent posture. The dev-liaison
+   is in scope for Phase 5 beyond the issue title's "Category Agents"
+   (DD-010 rationale: every agent that trades or tests must be contained the
+   same way; GAP-13).
 
 ### Pre-conditions
 
 - Docker installed and running on macpro-linux.
-- OpenClaw sandbox configs deployed per agent (`sandbox: { mode: "all" }` for
-  category agents; SysAdmin unsandboxed per DD-036).
+- Deploy step 7 ran with `TRADERBOT_PHASE5_SANDBOX=1` and the `sandbox_apply`
+  approval, so every selected category agent plus the dev-liaison carries the
+  full posture (`sandbox.mode: "all"`, `workspaceAccess: "none"`, the
+  content-addressed image, exactly two binds, the four hardening keys
+  `readOnlyRoot`/`network`/`user`/`capDrop`, and exactly the two
+  `dangerouslyAllow*` bind flags); main and SysAdmin stay unsandboxed
+  (DD-036).
+- A working unsandboxed lane for docker operations on macpro-linux (the
+  main/sysadmin agent lane per R4-RESOLVED, or the operator shell). The
+  routing proof in procedure 0 gates the whole matrix.
 - **Pre-condition (external)**: Docker daemon; base image pull access
   (`python:3.12-slim-bookworm`).
 
 ### Test procedures
 
-1. **Image builds**:
+0. **Routing proof (blocks the matrix)** — the chosen unsandboxed lane runs
+   the read-only presence probe first:
    ```bash
-   cd ~/worktrees/TraderBot/main && docker build -f install/docker/Dockerfile -t traderbot-sandbox:test .
+   docker image inspect traderbot-sandbox:d<8hex>
    ```
-   Observe: build completes; report duration. Verify base:
-   `docker inspect traderbot-sandbox:test --format '{{.Config.Image}}'` matches
-   `python:3.12-slim-bookworm`.
+   where the tag is `traderbot-sandbox:d` plus the first 8 hex of the sha256
+   of `install/docker/Dockerfile`, printed by
+   `sh install/docker/build-sandbox.sh`. If the lane cannot run this
+   read-only probe, the routing contract fails and the entire matrix stops;
+   no later step runs.
+
+1. **Image builds** (at the content-addressed D10 tag, never a `:test`
+   placeholder):
+   ```bash
+   cd ~/worktrees/TraderBot/main && sh install/docker/build-sandbox.sh
+   ```
+   The script is the repo's only build entry-point (`--pull=false --network
+   none`, digest-pinned base, no RUN/pip/apt step); it prints the exact tag it
+   built. Observe: build completes; report duration. Verify image metadata:
+   `docker image inspect traderbot-sandbox:d<8hex> --format '{{.Config.User}}'`
+   prints `1000:1000`, and `docker history traderbot-sandbox:d<8hex>` shows no
+   build-time RUN step.
 
 2. **Generated run command is valid** — unit test the generator and print the
    command for inspection:
@@ -868,68 +898,98 @@ the network is unavailable — scope it out of the local-only path.
    cd ~/worktrees/TraderBot/main && uv run pytest tests/test_sandbox_config.py -v
    uv run python -c "from traderbot.sandbox import generate_docker_run_command; print(generate_docker_run_command('weather'))"
    ```
-   Observe: all tests pass; the printed command contains exactly:
-   `-v ~/.traderbot/paper-weather:/data` (RW), `-v ~/.openclaw/workspace/weather:/workspace:ro`
-   (RO), and **no** `-v ~/.traderbot` blanket mount, no `.env`/`keys`/`tokens.enc`
-   mounts, no `-v /var/run/docker.sock`.
+   Observe: all tests pass; the printed command contains exactly the
+   hardening set `--read-only --cap-drop ALL --user 1000:1000 --network none`,
+   `-v ~/.openclaw/workspace/weather:/workspace:ro` (RO),
+   `-v ~/.traderbot/backtest-weather:/data:rw` (RW), a deterministic
+   `openclaw-sbx-weather-<hex>` container name, and the content-addressed
+   image tag as the final argument — and **no** `-v ~/.traderbot` blanket
+   mount, no `.env`/`keys`/`tokens.enc` mounts, no `-v /var/run/docker.sock`.
 
-3. **Sandbox runtime verification** — start a weather sandbox container from the
-   generated command and verify inside it:
+3. **Sandbox runtime verification** — start a weather sandbox container from
+   the generated command and verify inside it:
    ```bash
    docker exec <container> sh -c 'ls /data && ls /workspace && echo SANDBOX_OK'
-   docker exec <container> sh -c 'cat ~/.traderbot/tokens.enc 2>&1'
-   docker exec <container> sh -c 'cat /.dockerenv 2>&1'
-   docker exec <container> sh -c 'curl -s http://host.docker.internal:8080 2>&1 || echo HOST_NET_BLOCKED'
+   docker exec <container> sh -c 'ls /.dockerenv && echo IN_CONTAINER'
+   docker exec <container> sh -c 'ls -d /var/run/docker.sock' # absent
+   docker exec <container> sh -c 'touch /workspace/write-probe' # MUST FAIL: workspace is RO
+   docker exec <container> sh -c 'touch /data/.rw-probe && ls /data/.rw-probe' # MUST succeed
+   docker exec <container> sh -c 'ls ~/.traderbot' # MUST fail: host root not mounted
+   docker exec <container> python3 -c "import urllib.request; urllib.request.urlopen('http://192.0.2.1/', timeout=3)" # MUST fail: network none
    ```
    Observe: `/data` and `/workspace` present with expected contents; the
-   second command fails (host `~/.traderbot` not mounted); Docker socket access
-   is absent; direct host network access is not available from the container.
+   in-container workspace write FAILS (write-disabled by design under the RO
+   bind — that is the boundary working, not a bug) while the `/data` write
+   succeeds; host `~/.traderbot` is not mounted and unreadable; the Docker
+   socket is absent; no egress under `--network none`.
 
-4. **Cross-agent isolation** — from the weather container, attempt to read the
-   economics agent's data dir:
+4. **Cross-agent isolation** — from the weather container, attempt to reach
+   the economics agent's data (never mounted into the weather container):
    ```bash
-   docker exec <container> sh -c 'ls /workspace/../economics 2>&1'
+   docker exec <container> sh -c 'ls /data/../economics 2>&1'
+   docker exec <container> sh -c 'ls / | grep -i economics'
    ```
-   Observe: not accessible — economics data is not mounted into the weather
-   container.
+   Observe: not accessible — the weather container carries only its own
+   `backtest-weather` bind, and no host path exposes economics data.
 
-5. **SysAdmin unsandboxed (DD-036)** — verify the sysadmin agent runs on the
-   host, not in a container:
+5. **Dev-liaison posture mirror (GAP-13)** — repeat the probe class against
+   the dev-liaison container: same image tag, same posture (`mode: "all"`),
+   its own workspace at `~/.openclaw/workspace/dev-liaison:/workspace:ro`,
+   and its `paper-dev-liaison` data dir at `/data:rw`. The write-disabled,
+   no-egress, and isolation probes from procedure 3 must behave identically.
+   The dev-liaison is adopted-only: if it is absent from the inventory, this
+   step records an honest skip, never a failure and never a creation.
+
+6. **SysAdmin and main unsandboxed (DD-036, IS-2)** — verify both run on the
+   host, not in containers:
    ```bash
    openclaw agent --agent sysadmin -m "run: echo $HOSTNAME && pwd"
    ```
-   Observe: host hostname/paths, not a container id.
+   Observe: host hostname/paths, not a container id; `traderbot verify`
+   reports the `sandbox_off_negative` check passing (no docker block, no
+   sandboxed mode on either agent).
 
-6. **Security test suite**:
+7. **Security test suite**:
    ```bash
-   cd ~/worktrees/TraderBot/main && uv run pytest tests/test_sandbox_security.py -v
+   cd ~/worktrees/TraderBot/main && uv run pytest tests/test_sandbox_security.py tests/test_sandbox_config.py -v
    ```
    Observe: all pass.
 
 ### Metrics
 
-- Image build: **succeeds**, ≤ 5 min on first build.
+- Routing proof: the read-only `docker image inspect` succeeds from the
+  chosen unsandboxed lane before any other step.
+- Image build: **succeeds**, ≤ 5 min on first build, at the content-addressed
+  D10 tag.
 - Bind mounts: **exact** — RW on agent data, RO on workspace, zero disallowed
   mounts.
-- Container escape probes: **0** successful (all `cat`/`curl`/`ls` probes fail
-  as expected).
+- In-container workspace write: **fails** (write-disabled by design);
+  `/data` write: **succeeds**.
+- Container escape probes: **0** successful (all `ls`/`touch`/network
+  probes fail as expected).
 - Cross-category mount leak: **0**.
 - Security suite pass rate: **100%**.
 
 ### Deliverables
 
-- Build log + image inspect output.
+- Routing-proof output (read-only image inspect from the unsandboxed lane).
+- Build log + image inspect output at the D10 tag.
 - Printed `docker run` command (sanitized) for audit.
-- Per-probe runtime evidence (pass/fail per command above).
+- Per-probe runtime evidence (pass/fail per command above), including the
+  write-disabled and `/data` write results.
+- Dev-liaison mirror-probe evidence (or the honest adopted-absent skip).
 - Security suite summary.
 
 ### Pass/fail criteria
 
-- **PASS** — image builds; generated command has exactly the required mounts
-  and no forbidden ones; every runtime isolation probe fails as intended.
+- **PASS** — routing proof passes; image builds at the D10 tag; generated
+  command has exactly the required mounts and no forbidden ones; every
+  runtime isolation probe fails as intended while the `/data` write
+  succeeds; the dev-liaison mirrors the posture.
 - **FAIL** — any forbidden mount present (blanket `~/.traderbot`, docker.sock,
-  secrets); any probe unexpectedly succeeds; container can read another agent's
-  data.
+  secrets); any probe unexpectedly succeeds, including an in-container
+  workspace write; container can read another agent's data; the routing
+  proof fails (and thereby blocks the whole matrix).
 
 ---
 

@@ -90,6 +90,7 @@ def test_deploy_config_accepts_only_environment_secret_references(tmp_path: Path
             "setup_openclaw": False,
             "create_agents": True,
             "heartbeat_change": False,
+            "sandbox_apply": False,
         },
         "heartbeat_every": "preserve",
     }

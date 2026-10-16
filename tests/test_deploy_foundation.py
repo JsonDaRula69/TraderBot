@@ -31,6 +31,7 @@ def test_deploy_config_parses_documented_shape() -> None:
             "setup_openclaw": False,
             "create_agents": True,
             "heartbeat_change": True,
+            "sandbox_apply": True,
         },
         "heartbeat_every": "0m",
     }
@@ -71,6 +72,7 @@ def test_deploy_config_rejects_invalid_category_or_mode(field: str, value: str |
             "setup_openclaw": False,
             "create_agents": False,
             "heartbeat_change": False,
+            "sandbox_apply": False,
         },
         "heartbeat_every": "preserve",
         field: value,

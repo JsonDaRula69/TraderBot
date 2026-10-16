@@ -24,6 +24,7 @@ from traderbot.deploy.verify_models import (
 )
 from traderbot.deploy.verify_openclaw import OpenClawVerifier
 from traderbot.deploy.verify_runtime import daemon_runtime, service_status
+from traderbot.deploy.verify_sandbox import SandboxVerifier
 from traderbot.deploy.verify_storage import chroma_offline, decisions_databases, global_database
 from traderbot.deploy.verify_tokens import TokenVerifier, auth_mode
 from traderbot.kalshi.client import KalshiClient
@@ -38,11 +39,12 @@ from traderbot.secrets.store import SecretsStore
 
 @final
 class ProductionVerificationPorts(VerificationPorts):
-    __slots__ = ("_backend", "_openclaw", "_runtime", "_store", "request")
+    __slots__ = ("_backend", "_openclaw", "_runtime", "_sandbox", "_store", "request")
 
     def __init__(self, request: VerificationRequest) -> None:
         self.request = request
         self._openclaw = OpenClawVerifier(self.request)
+        self._sandbox = SandboxVerifier(self.request)
         self._store: SecretsStore | None = None
         self._backend: SecretsBackendName | None = None
         self._runtime: ProbeResult | None = None
@@ -69,6 +71,14 @@ class ProductionVerificationPorts(VerificationPorts):
             return await self._sync(self._openclaw.cron)
         if check_id is CheckId.HEARTBEAT:
             return await self._sync(self._openclaw.heartbeat)
+        if check_id is CheckId.SANDBOX_MODE_READBACK:
+            return await self._sync(self._sandbox.mode_readback)
+        if check_id is CheckId.SANDBOX_POSTURE_CONFIG:
+            return await self._sync(self._sandbox.posture_config)
+        if check_id is CheckId.SANDBOX_OFF_NEGATIVE:
+            return await self._sync(self._sandbox.off_negative)
+        if check_id is CheckId.SANDBOX_IMAGE_PRESENCE:
+            return await self._sync(self._sandbox.image_presence)
         if check_id is CheckId.AUTH_MODE:
             return auth_mode()
         if check_id is CheckId.KALSHI:

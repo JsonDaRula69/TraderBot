@@ -70,8 +70,12 @@ through database creation, backfill, verification, and deploy state, and all
 Kalshi reads are canonical read-only production market-data/auth requests. Selected
 category databases use `{mode}-{name}/db/decisions.db`; SysAdmin receives
 read-only enumeration and no decisions database. Chroma collection creation is
-lazy. Step 7 is a read-only Phase 5 sandbox stub: Phase 4 starts no Docker,
-simulation, backtest, trading lifecycle, or scheduling mutation.
+lazy. Step 7 is the Phase 5 Docker sandbox apply, opt-in via
+`TRADERBOT_PHASE5_SANDBOX=1`: it builds the content-addressed sandbox image
+before any config write and applies the exact per-agent sandbox contract
+(two binds, hardening keys, exactly two dangerous-* flags) behind one
+operator approval, with backup, rollback, and byte-exact re-reads. Step 7
+starts no simulation, backtest, trading lifecycle, or scheduling mutation.
 
 Historical data can be populated independently with `traderbot backfill --months 6`.
 Use `--collector-db PATH` to import an explicit legacy collector and `--json` for

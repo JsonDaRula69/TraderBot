@@ -19,6 +19,7 @@ from tests.deploy_wizard_fakes import (
 from traderbot.deploy.backfill_models import BackfillResult
 from traderbot.deploy.wizard import DeployResult, StepStatus, WizardRequest
 from traderbot.deploy.wizard_command import collect_interactive_request, execute_deploy
+from traderbot.deploy.wizard_late_steps import PHASE5_SANDBOX_ENV
 from traderbot.deploy.wizard_state import DeployApprovals
 from traderbot.kalshi.order_models import MarketCategory
 
@@ -83,24 +84,38 @@ def test_steps_4_5_advance_result_and_leave_steps_6_8(tmp_path: Path) -> None:
     assert phase45.calls == [4, 5]
 
 
-def test_steps_6_8_complete(tmp_path: Path) -> None:
-    # Given: every composed deploy dependency succeeds.
+def test_steps_6_8_complete(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Given: every composed deploy dependency succeeds and the apply lane is on.
+    monkeypatch.setenv(PHASE5_SANDBOX_ENV, "1")
     environment = FakeEnvironment(phase45=FakePhase45(), phase678=FakePhase678())
 
     # When: the full wizard runs.
-    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+    result = environment.wizard().run(
+        _request(
+            tmp_path,
+            MarketCategory.WEATHER,
+            approvals=DeployApprovals(create_agents=True, sandbox_apply=True),
+        )
+    )
 
     # Then: all eight stable step identifiers complete.
     assert result.completed_steps == tuple(range(1, 9))
 
 
-def test_backfill_failure_partial(tmp_path: Path) -> None:
-    # Given: backfill commits partial progress.
+def test_backfill_failure_partial(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Given: backfill commits partial progress and the apply lane is on.
+    monkeypatch.setenv(PHASE5_SANDBOX_ENV, "1")
     phase678 = FakePhase678(backfill=BackfillResult(status="partial"))
     environment = FakeEnvironment(phase45=FakePhase45(), phase678=phase678)
 
     # When: the full wizard runs.
-    result = environment.wizard().run(_request(tmp_path, MarketCategory.WEATHER))
+    result = environment.wizard().run(
+        _request(
+            tmp_path,
+            MarketCategory.WEATHER,
+            approvals=DeployApprovals(create_agents=True, sandbox_apply=True),
+        )
+    )
 
     # Then: Step 6 is partial and independent verification still completes.
     assert result.steps[5].status is StepStatus.PARTIAL
@@ -274,6 +289,7 @@ def test_config_mode_performs_no_prompts(
                     "setup_openclaw": False,
                     "create_agents": True,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }

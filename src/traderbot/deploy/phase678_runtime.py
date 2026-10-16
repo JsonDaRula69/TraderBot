@@ -8,6 +8,7 @@ from typing import final
 import anyio
 from pydantic import ValidationError
 
+from traderbot.deploy import sandbox_build
 from traderbot.deploy.backfill import BackfillRequest, run_backfill, run_prepared_backfill
 from traderbot.deploy.backfill_collector_types import (
     CollectorPathError,
@@ -21,6 +22,7 @@ from traderbot.deploy.verify import run_verification
 from traderbot.deploy.verify_models import VerificationRequest, VerificationResult
 from traderbot.deploy.verify_ports import ProductionVerificationPorts
 from traderbot.deploy.wizard_contracts import DeployState, LatePreflightResult, WizardRequest
+from traderbot.sandbox import DockerUnavailableError
 
 
 @final
@@ -45,6 +47,33 @@ class Phase678Adapter:
             return LatePreflightResult(valid=False, action="late_request_invalid")
         return LatePreflightResult(valid=True, action="late_preflight_complete")
 
+    def ensure_docker_available(self) -> bool:
+        """Step-7 (todo-8) D7 presence gate: docker binary via the T7 lane.
+
+        The live-daemon probe happens at build time (the T7 build lane
+        classifies a dead daemon as cause="daemon-unavailable"); this seam
+        never network-tests.
+        """
+        try:
+            sandbox_build.ensure_docker_available()
+        except DockerUnavailableError:
+            return False
+        return True
+
+    def build_sandbox_image(self) -> str | None:
+        """Build the sandbox image before any config write (todo-8).
+
+        Returns the deterministic content tag on success, None on any
+        failure (missing binary/daemon, missing/drifted Dockerfile,
+        failed/partial build) - the caller fails closed with the typed
+        step-7 remedy.
+        """
+        try:
+            result = sandbox_build.build_sandbox_image()
+        except (DockerUnavailableError, sandbox_build.SandboxBuildError):
+            return None
+        return result.image
+
     def run_backfill(self, request: WizardRequest) -> BackfillResult:
         dependencies = OwnedBackfillDependencies(
             default_collector_path=Path.home() / ".data-collector" / "collector.db",
@@ -62,9 +91,9 @@ class Phase678Adapter:
     def run_verification(
         self,
         request: WizardRequest,
-        created_agents: tuple[str, ...],
+        selected_agents: tuple[str, ...],
     ) -> VerificationResult:
-        verification_request = self._verification_request(request, created_agents)
+        verification_request = self._verification_request(request, selected_agents)
 
         async def run_owned() -> VerificationResult:
             ports = ProductionVerificationPorts(verification_request)

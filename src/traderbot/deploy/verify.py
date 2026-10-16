@@ -26,6 +26,17 @@ class VerificationPorts(Protocol):
 
 _OPTIONAL = frozenset({CheckId.DAEMON_SERVICE})
 _GATEWAY_CHILDREN = frozenset({CheckId.AGENTS_WORKSPACES, CheckId.CRON, CheckId.HEARTBEAT})
+# Phase 5 (todo 9): the sandbox config-reading probes depend on the agents
+# check (it proves the selected fleet exists and its config is readable); a
+# gateway failure cascades through the agents check automatically. The image
+# probe is host-local and gated by nothing in the graph.
+_AGENTS_CHILDREN = frozenset(
+    {
+        CheckId.SANDBOX_MODE_READBACK,
+        CheckId.SANDBOX_POSTURE_CONFIG,
+        CheckId.SANDBOX_OFF_NEGATIVE,
+    }
+)
 _ORDINARY_EXCEPTIONS: tuple[type[Exception], ...] = (Exception,)
 
 
@@ -97,11 +108,15 @@ async def run_verification(
 ) -> VerificationResult:
     checks: list[CheckResult] = []
     gateway_passed = False
+    agents_passed = False
     token: SecretStr | None = None
     tokens_passed = False
     for check_id in CheckId:
         if check_id in _GATEWAY_CHILDREN and not gateway_passed:
             checks.append(_skip(check_id, CheckId.GATEWAY, request))
+            continue
+        if check_id in _AGENTS_CHILDREN and not agents_passed:
+            checks.append(_skip(check_id, CheckId.AGENTS_WORKSPACES, request))
             continue
         if check_id in {CheckId.KALSHI, CheckId.DAEMON_RUNTIME} and not tokens_passed:
             checks.append(_skip(check_id, CheckId.TOKENS, request))
@@ -124,6 +139,8 @@ async def run_verification(
         checks.append(check)
         if check_id is CheckId.GATEWAY:
             gateway_passed = check.status is CheckStatus.PASS
+        if check_id is CheckId.AGENTS_WORKSPACES:
+            agents_passed = check.status is CheckStatus.PASS
     frozen_checks = tuple(checks)
     return VerificationResult(overall=_overall(frozen_checks), checks=frozen_checks)
 

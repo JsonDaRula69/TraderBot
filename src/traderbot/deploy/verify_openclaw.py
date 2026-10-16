@@ -18,10 +18,14 @@ from traderbot.deploy.wizard_state import (
     WizardRequestState,
 )
 
+_SANDBOX_OFF_AGENTS = frozenset({"main", "sysadmin"})
+
 
 def _canonical_sandbox(agent_id: str) -> str:
-    """Sandbox mode the deploy writes for agents it creates ("off" for main)."""
-    return "off" if agent_id == "main" else "all"
+    """Sandbox mode the deploy writes/asserts (todo 9: off iff main/sysadmin;
+    category agents AND dev-liaison run "all"; a bare non-main canonical rule
+    would misrequire a sysadmin id)."""
+    return "off" if agent_id in _SANDBOX_OFF_AGENTS else "all"
 
 
 @final

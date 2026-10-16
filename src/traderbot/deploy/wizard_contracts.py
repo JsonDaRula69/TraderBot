@@ -11,7 +11,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from traderbot.deploy.backfill_models import BackfillResult
-from traderbot.deploy.openclaw_models import AgentInventory
+from traderbot.deploy.openclaw_models import AgentInventory, ConfigValueRead
 from traderbot.deploy.validation import (
     SecretReconciliationApprovals,
     validate_infisical_origin,
@@ -24,6 +24,7 @@ from traderbot.deploy.wizard_state import (
     DeployApprovals,
     FrozenModel,
     OpenClawConfigSnapshot,
+    SandboxApplyReport,
     SecretRefConfig,
     TokenMetadataState,
     WizardRequestState,
@@ -80,6 +81,9 @@ class WizardStepResult(FrozenModel):
     agents: tuple[AgentDeployResult, ...] = ()
     backfill: BackfillResult | None = None
     verification: VerificationResult | None = None
+    # Step-7 evidence bundle (todo-8): apply plan recorded BEFORE any write
+    # plus per-agent backups/writes; set on every step-7 apply attempt.
+    sandbox_report: SandboxApplyReport | None = None
 
 
 class DeployState(FrozenModel):
@@ -87,6 +91,11 @@ class DeployState(FrozenModel):
     step6_fingerprint: str
     step7_fingerprint: str
     step8_fingerprint: str
+    # Todo-8: the step-7 posture fingerprint (image tag + per-agent mount
+    # table + modes + dangerous-* set). "" means step 7 has never persisted
+    # one; the skip-check requires an exact match against the current
+    # posture, so a T7-era record (or any posture drift) never skips.
+    step7_docker_fingerprint: str = ""
     steps: tuple[WizardStepResult, ...]
     bootstrap_registered: bool = False
 
@@ -200,6 +209,13 @@ class OpenClawPort(Protocol):
     def set_secret_ref(self, agent_id: str, secret_ref: SecretRefConfig) -> bool: ...
     def set_heartbeat(self, agent: AgentConfigState, value: str) -> bool: ...
     def set_sandbox(self, agent: AgentConfigState, value: str) -> bool: ...
+    # Step-7 (todo-8) seams: raw tri-state reads for backup/postcondition
+    # evidence, and the T6 writers for the deployed list-shape bracket
+    # grammar. set_config_json takes the PRE-ENCODED JSON string, matching
+    # openclaw_config.set_config_json byte-exactly.
+    def read_config_value(self, key: str) -> ConfigValueRead: ...
+    def set_config_json(self, key: str, json_value: str) -> bool: ...
+    def unset_config(self, key: str) -> bool: ...
     def ensure_bootstrap_cron(self, state: BootstrapCronState) -> bool: ...
 
 
@@ -240,8 +256,13 @@ class LatePreflightResult(FrozenModel):
 class Phase678Port(Protocol):
     def preflight(self, request: WizardRequest) -> LatePreflightResult: ...
     def run_backfill(self, request: WizardRequest) -> BackfillResult: ...
+    # Step-7 (todo-8): docker availability gate and the build-before-write
+    # build. build_sandbox_image returns the built image tag, or None on any
+    # failure (missing daemon, missing Dockerfile, failed/partial build).
+    def ensure_docker_available(self) -> bool: ...
+    def build_sandbox_image(self) -> str | None: ...
     def run_verification(
-        self, request: WizardRequest, created_agents: tuple[str, ...]
+        self, request: WizardRequest, selected_agents: tuple[str, ...]
     ) -> VerificationResult: ...
     def load_state(self, request: WizardRequest) -> DeployState | None: ...
     def save_state(self, request: WizardRequest, state: DeployState) -> None: ...

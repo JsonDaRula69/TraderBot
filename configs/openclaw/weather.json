@@ -1,7 +1,21 @@
 {
   "id": "weather",
   "sandbox": {
-    "mode": "all"
+    "mode": "all",
+    "workspaceAccess": "none",
+    "docker": {
+      "image": "traderbot-sandbox:DEPLOY_DERIVED",
+      "binds": [
+        "<agent-workspace>:/workspace:ro",
+        "<traderbot-data-root>/{mode}-weather:/data:rw"
+      ],
+      "readOnlyRoot": true,
+      "network": "none",
+      "user": "1000:1000",
+      "capDrop": ["ALL"],
+      "dangerouslyAllowExternalBindSources": true,
+      "dangerouslyAllowReservedContainerTargets": true
+    }
   },
   "tools": {
     "allow": [

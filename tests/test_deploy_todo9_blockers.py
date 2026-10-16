@@ -97,6 +97,7 @@ def test_invalid_collector_precedes_secret_factory(
                     "setup_openclaw": False,
                     "create_agents": False,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }
@@ -140,6 +141,7 @@ def test_cleanup_failure_returns_sanitized_nonzero(
                     "setup_openclaw": False,
                     "create_agents": True,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }
@@ -201,6 +203,7 @@ def test_data_root_file_precedes_secret_factory(
                     "setup_openclaw": False,
                     "create_agents": False,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }
@@ -284,6 +287,7 @@ def test_linked_data_root_ancestor_precedes_secret_factory(
                     "setup_openclaw": False,
                     "create_agents": False,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }
@@ -352,6 +356,7 @@ def test_cleanup_oserror_is_runtime_failure(
                     "setup_openclaw": False,
                     "create_agents": True,
                     "heartbeat_change": False,
+                    "sandbox_apply": False,
                 },
                 "heartbeat_every": "preserve",
             }

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from pydantic_core import PydanticCustomError
@@ -19,6 +21,28 @@ class StrictModel(BaseModel):
 
 class JsonObject(RootModel[dict[str, JsonValue]]):
     pass
+
+
+class ConfigReadState(StrEnum):
+    """Tri-state of one raw ``config get --json`` read (T8 step-7 seam)."""
+
+    FOUND = "found"
+    ABSENT = "absent"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigValueRead:
+    """Untyped JSON value read: scalars/arrays/objects pass through verbatim.
+
+    Step 7's backup/verify loop must record and byte-compare RAW values (the
+    typed read models deliberately narrow the shape), so this result carries
+    the parsed :data:`JsonValue` without a model, plus the explicit
+    ABSENT-vs-FAILED distinction the fail-closed rules require.
+    """
+
+    state: ConfigReadState
+    value: JsonValue | None = None
 
 
 class SetupResult(StrictModel):
@@ -74,8 +98,43 @@ class HeartbeatConfig(StrictModel):
     every: str | None = None
 
 
+class SandboxDockerConfig(BaseModel):
+    """Pinned ``SandboxDockerSchema`` subset: strict and extra-forbid (D4/D9).
+
+    Property names are the pinned schema's verbatim; only the owner-approved D9
+    dangerous-* pair exists here, so parsing a config carrying any extra docker
+    key (including ``dangerouslyAllowContainerNamespaceJoin``) fails closed.
+
+    A-DCFG-KEYS (todo-8 amendment): the four hardening keys are admitted with
+    pinned values. Evidence: the pinned 2026.7.1-2 ``SandboxDockerSchema``
+    (re-read from the installed Gateway package for the standing ruling)
+    defines ``readOnlyRoot``/``network``/``user``/``capDrop`` as OPTIONAL
+    WITHOUT defaults (``default: <undefined>`` on each), and the gateway
+    sandbox runtime emits ``--read-only``/``--network``/``--user``/
+    ``--cap-drop`` ONLY when the key is truthy — omitting any of them
+    silently yields Docker defaults (writable rootfs, bridge network, root
+    user, full capabilities). The writer always emits all four pinned values;
+    this strict read model admits exactly those values, nothing else.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    image: str
+    binds: list[str]
+    dangerouslyAllowExternalBindSources: bool
+    dangerouslyAllowReservedContainerTargets: bool
+    readOnlyRoot: Literal[True] | None = None
+    network: Literal["none"] | None = None
+    user: Literal["1000:1000"] | None = None
+    capDrop: Annotated[list[Literal["ALL"]] | None, Field(min_length=1, max_length=1)] = None
+
+
 class SandboxConfig(StrictModel):
+    """Pinned ``AgentSandboxSchema`` read model; ``workspaceAccess`` is deploy-narrowed to none."""
+
     mode: str | None = None
+    workspaceAccess: Literal["none"] | None = None
+    docker: SandboxDockerConfig | None = None
 
 
 class AgentRuntimeConfig(StrictModel):

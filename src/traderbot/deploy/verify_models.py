@@ -19,6 +19,14 @@ class CheckId(StrEnum):
     AGENTS_WORKSPACES = "agents_workspaces"
     CRON = "cron"
     HEARTBEAT = "heartbeat"
+    # Phase 5 (todo 9; GAP-6): the sandbox posture family proves the deployed
+    # containment contract. Config-reading probes are children of the gateway
+    # AND agents checks; the image-presence probe is host-local (docker image
+    # inspect) and gated by nothing but the step-7 apply evidence.
+    SANDBOX_MODE_READBACK = "sandbox_mode_readback"
+    SANDBOX_POSTURE_CONFIG = "sandbox_posture_config"
+    SANDBOX_OFF_NEGATIVE = "sandbox_off_negative"
+    SANDBOX_IMAGE_PRESENCE = "sandbox_image_presence"
     AUTH_MODE = "auth_mode"
     TOKENS = "tokens"
     KALSHI = "kalshi"
@@ -129,6 +137,16 @@ class ProbeResult(FrozenModel):
     @classmethod
     def degraded(cls, action: str, message: str) -> ProbeResult:
         return cls(status=CheckStatus.DEGRADED, action=action, message=message)
+
+    @classmethod
+    def skipped(cls, action: str, message: str) -> ProbeResult:
+        """Probe-level dependency skip carrying an explicit typed reason (T9).
+
+        Graph-level skips are emitted by the orchestrator; a probe skips itself
+        only when its own evidence gate is absent (no step-7 apply recorded) or
+        its tool is missing (docker CLI absent for the image-presence probe).
+        """
+        return cls(status=CheckStatus.SKIP, action=action, message=message)
 
 
 class TokenProbe(FrozenModel):

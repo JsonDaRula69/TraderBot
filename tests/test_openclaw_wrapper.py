@@ -12,6 +12,7 @@ from unittest import mock
 import pytest
 
 import traderbot.deploy.openclaw as openclaw
+from traderbot.deploy import openclaw_config
 from traderbot.deploy.openclaw_models import JsonObject
 from traderbot.services import deploy as service_deploy
 from traderbot.services.paths import BinPaths
@@ -338,3 +339,60 @@ def test_readonly_health_wrappers_use_strict_current_flags(
     # Then: it succeeds only through the prompt-free current command
     assert result is True
     _assert_run(run, argv, 30.0)
+
+
+def _dry_run(input_mode: str) -> str:
+    return json.dumps(
+        {
+            "ok": True,
+            "operations": 1,
+            "configPath": "/state/openclaw.json",
+            "inputModes": [input_mode],
+            "checks": {"schema": True, "resolvability": True, "resolvabilityComplete": True},
+            "refsChecked": 0,
+            "skippedExecRefs": 0,
+        }
+    )
+
+
+def test_json_set_and_unset_seams_pass_values_through_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: validated dry-runs and successful mutations at the config boundary
+    responses = iter(
+        (
+            _completed(["openclaw"], stdout=_dry_run("json")),
+            _completed(["openclaw"], stdout=""),
+            _completed(["openclaw"], stdout=_dry_run("unset")),
+            _completed(["openclaw"], stdout="Removed agents.list[0].sandbox.docker.binds."),
+        )
+    )
+    calls: list[list[str]] = []
+
+    def run(argv: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+        del timeout
+        calls.append(argv)
+        return next(responses)
+
+    monkeypatch.setattr(openclaw_config, "_run", run)
+    key = "agents.list[0].sandbox.docker.binds"
+    binds = '["/srv/ws/weather:/workspace:ro", "/srv/data/paper-weather:/data:rw"]'
+
+    # When: the JSON-value set and unset seams are exercised through the wrapper
+    set_result = openclaw.set_config_json(key, binds)
+    unset_result = openclaw.unset_config(key)
+
+    # Then: the JSON atom crosses as ONE exact argv value, and unset validates
+    # through its own dry-run before the real removal — no reformatting anywhere
+    assert set_result is True
+    assert unset_result is True
+    assert calls == [
+        ["openclaw", "config", "set", key, binds, "--strict-json", "--dry-run", "--json"],
+        ["openclaw", "config", "set", key, binds, "--strict-json"],
+        ["openclaw", "config", "unset", key, "--dry-run", "--json"],
+        ["openclaw", "config", "unset", key],
+    ]
+    # And: the wrapper module re-exports the config seams themselves
+    assert openclaw.set_config_json is openclaw_config.set_config_json
+    assert openclaw.unset_config is openclaw_config.unset_config
+    assert openclaw.agent_config_path is openclaw_config.agent_config_path

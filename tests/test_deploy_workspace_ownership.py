@@ -80,10 +80,12 @@ def test_resolve_targets_accepts_main_container(tmp_path: Path, weather_exists: 
     # When: configured-owner and selected-target checks run
     targets = resolve_agent_targets(request, inventory)
 
-    # Then: inventory main and its selected child are resolved unchanged
+    # Then: inventory main, its selected child, and the adopted dev-liaison
+    # (GAP-13: sandbox-lane target adoption) are resolved, with the liaison last.
     assert tuple((target.agent_id, target.workspace, target.existed) for target in targets) == (
         ("main", main, True),
         ("weather", weather, weather_exists),
+        ("dev-liaison", main / "dev-liaison", True),
     )
 
 

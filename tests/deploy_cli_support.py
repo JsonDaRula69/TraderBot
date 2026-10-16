@@ -12,14 +12,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import BaseModel, ConfigDict, Field
 
 from tests.deploy_fake_openclaw import write_fake_openclaw
-from traderbot.deploy.openclaw_models import CronJob
+from traderbot.deploy.openclaw_models import CronJob, JsonValue
 from traderbot.deploy.wizard_state import SecretRefConfig
 
 
 class FakeAgentConfig(BaseModel):
+    # Typed JSON values (not dict[str, str]): the realigned list-first fake stores
+    # sandbox.docker.binds arrays and dangerous-* booleans structurally.
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
-    heartbeat: dict[str, str] = Field(default_factory=dict)
-    sandbox: dict[str, str] = Field(default_factory=dict)
+    heartbeat: dict[str, JsonValue] = Field(default_factory=dict)
+    sandbox: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class FakeAgentState(BaseModel):
@@ -59,6 +61,7 @@ def build_fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "TRADERBOT_DATA_DIR": str(data),
             "FAKE_OC_STATE": str(state),
             "TRADERBOT_USE_HARDCODED_AUTH": "1",
+            "TRADERBOT_PHASE5_SANDBOX": "1",
             "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
             "TRADERBOT_TEST_KALSHI_KEY": secrets.token_urlsafe(),
             "TRADERBOT_TEST_KALSHI_PEM": private_key_pem,

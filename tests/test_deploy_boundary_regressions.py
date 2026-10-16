@@ -58,7 +58,7 @@ def test_configured_data_root_is_shared_by_all_runtime_phases(
         '{"categories":["weather"],"mode":"backtest",'
         + f'"data_root":"{configured}",'
         + '"approvals":{"install_openclaw":false,"setup_openclaw":false,'
-        + '"create_agents":true,"heartbeat_change":false},'
+        + '"create_agents":true,"heartbeat_change":false,"sandbox_apply":false},'
         + '"heartbeat_every":"preserve"}',
         encoding="utf-8",
     )

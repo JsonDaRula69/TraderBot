@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from traderbot.deploy import openclaw
-from traderbot.deploy.openclaw_models import CronJob, JsonValue
+from traderbot.deploy import openclaw, openclaw_config
+from traderbot.deploy.openclaw_models import AgentInventory, AgentSummary, CronJob, JsonValue
 from traderbot.deploy.wizard import ProvisionStatus
-from traderbot.deploy.wizard_runtime import OpenClawAdapter, SecretsTokenProvisioner
+from traderbot.deploy.wizard_runtime import (
+    OpenClawAdapter,
+    SecretsTokenProvisioner,
+    resolve_agent_config_path,
+)
 from traderbot.deploy.wizard_state import BootstrapCronState, SecretRefConfig
 from traderbot.kalshi.order_models import MarketCategory
 from traderbot.mcp.resolver import resolve_token_adapter
@@ -255,3 +260,56 @@ def test_agent_workspace_is_forwarded_as_explicit_inert_data(
     # Then: the path remains one typed argument without local convention rewriting
     assert result is True
     create.assert_called_once_with("weather", workspace)
+
+
+def _weather_inventory() -> AgentInventory:
+    workspace = str(Path(Path.cwd().anchor) / "srv" / "weather")
+    return AgentInventory(
+        [
+            AgentSummary(
+                id="weather",
+                workspace=workspace,
+                agentDir="/state/weather",
+                bindings=0,
+                isDefault=False,
+            )
+        ]
+    )
+
+
+def test_resolve_agent_config_path_uses_entries_first_then_list_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the REAL read logic with only the CLI boundary mocked — entries is
+    # absent and the deployed 2026.7.1-2 shape serves the agent at list index 0
+    monkeypatch.setattr(openclaw, "inspect_agents", mock.Mock(return_value=_weather_inventory()))
+    run = mock.Mock(
+        side_effect=[
+            subprocess.CompletedProcess(
+                ["openclaw"], 1, "", "Config path not found: agents.entries.weather\n"
+            ),
+            subprocess.CompletedProcess(
+                ["openclaw"], 0, '{"id":"weather","sandbox":{"mode":"all"}}', ""
+            ),
+        ]
+    )
+    monkeypatch.setattr(openclaw_config, "_run", run)
+
+    # When: the wizard resolves the write target from observed current state
+    prefix = resolve_agent_config_path("weather")
+
+    # Then: the fallback lands on the deployed-shape bracket path, twice-read
+    assert prefix == "agents.list[0]"
+    assert run.call_count == 2
+
+
+def test_resolve_agent_config_path_fails_closed_without_observed_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: an unreadable inventory — no prefix may be guessed from stale state
+    monkeypatch.setattr(openclaw, "inspect_agents", mock.Mock(return_value=None))
+    assert resolve_agent_config_path("weather") is None
+
+    # And: an agent absent from the inventory resolves to None without any read
+    monkeypatch.setattr(openclaw, "inspect_agents", mock.Mock(return_value=_weather_inventory()))
+    assert resolve_agent_config_path("crypto") is None

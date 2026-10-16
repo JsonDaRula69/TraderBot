@@ -47,6 +47,7 @@ def test_config_replacement_approval_requires_complete_references(tmp_path: Path
             "setup_openclaw": False,
             "create_agents": False,
             "heartbeat_change": False,
+            "sandbox_apply": False,
         },
         "heartbeat_every": "preserve",
         "secret_approvals": {"replace_existing": True},

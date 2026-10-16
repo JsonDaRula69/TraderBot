@@ -1,0 +1,2 @@
+install/docker/Dockerfile text eol=lf
+install/docker/build-sandbox.sh text eol=lf

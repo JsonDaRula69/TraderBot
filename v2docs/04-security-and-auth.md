@@ -361,15 +361,17 @@ This replaces the retired Vault-based `secrets.providers.vault` example.
 
 ## Per-Agent Isolation (DD-010, DD-011)
 
-### Docker Sandbox Configuration Status
+### Docker Sandbox Contract (Phase 5, DD-010)
 
-The target architecture requires all category agents to run in Docker containers with the properties below. A separate OpenClaw remediation hardens agent tool policies only; it does not encode these bind mounts and has not been deployed or tested on target hardware:
-- Base image: `python:3.12-slim-bookworm`
-- Agent data dir bind-mounted RW from the active `{mode}-{name}/` data-root path
-- Workspace files bind-mounted RO: `~/.openclaw/workspace/{category}/`
-- No blanket `~/.traderbot/` mount — each agent only sees its own data
-- No profile token is injected by the remediation fragments
-- SysAdmin runs unsandboxed on host (DD-036)
+Phase 5 implements the mandatory sandbox in `traderbot.sandbox` (the single contract module both deploy and `traderbot verify` consume) and applies it per agent in deploy step 7, opt-in for this phase via `TRADERBOT_PHASE5_SANDBOX=1`; on-target F3 QA on macpro-linux remains pending:
+- Base image: `python:3.12-slim-bookworm`, digest-pinned in `install/docker/Dockerfile`; the build is network-free (no RUN/pip/apt step), runs as USER 1000:1000, and contains no TraderBot package (agents reach the daemon over gateway MCP). The image tag is content-addressed, `traderbot-sandbox:d` plus the first 8 hex of the Dockerfile's sha256, so the artifact QA inspects is provably the artifact deploy deployed.
+- Exactly two binds per sandboxed agent: its own workspace read-only at `/workspace:ro`, and its own `{mode}-{name}` data dir read-write at `/data:rw`. No blanket `~/.traderbot/` mount, no credentials/GnuPG/docker-socket/host-root mounts; the contract module rejects at render time any bind that would expose them.
+- Hardening keys written for every sandboxed agent: `sandbox.mode: "all"`, `workspaceAccess: "none"`, `docker.readOnlyRoot: true`, `docker.network: "none"`, `docker.user: "1000:1000"`, `docker.capDrop: ["ALL"]`. The pinned OpenClaw 2026.7.1-2 schema marks the four docker hardening keys optional without defaults, and its runtime emits the matching flags only when a key is present, so the writer always emits all four; omitting any would silently yield Docker defaults (writable rootfs, bridge network, root user, full capabilities).
+- Exactly two dangerous-* flags, no others: `dangerouslyAllowExternalBindSources: true` (the agent data dir lives outside the gateway's allowlisted workspace roots) and `dangerouslyAllowReservedContainerTargets: true` (the workspace bind shadows OpenClaw's reserved `/workspace` container target). Both are required by the pinned schema for exactly these two binds, and the security tests assert no other dangerous-* key exists anywhere in fragments, writes, or verify baselines.
+- SysAdmin runs unsandboxed on host (DD-036), and `main` is never sandboxed either: the config builder refuses both by typed error, and verify asserts they carry no docker block.
+- In-container workspace writes are disabled by design: the workspace bind is read-only and the gateway fs-bridge allows writes only through rw binds, so write/edit/apply_patch fail inside the container while exec under `/data` succeeds. Agent persistence is unchanged and host-side: MCP tools own decisions/database writes, and gateway-side session, memory, and workspace seeding never run inside the container. An in-container workspace write succeeding would be a misconfiguration, not a capability.
+- Agent fragments inject no profile token and no per-agent env; tokens resolve host-side through the `traderbot-token-injector` plugin (DD-025).
+- `traderbot verify` proves the deployed posture field-by-field (mode, image, binds, `workspaceAccess`, hardening keys, dangerous-* flags) for the selected set, asserts main/sysadmin off, and dependency-skips with a typed reason when no apply is recorded.
 
 ### Tool-Level Filtering
 
@@ -381,7 +383,7 @@ allowlist. Sandboxed agents also use a second sandbox-tool gate for
 ```json5
 {
   id: "weather",
-  sandbox: { mode: "all" },
+  sandbox: { mode: "all", /* full Phase 5 docker posture per the contract above */ },
   tools: {
     allow: [
       "traderbot__health",
