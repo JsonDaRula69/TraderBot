@@ -135,3 +135,5 @@ All setup, deploy, and registration operations must be idempotent (AGENTS.md). I
 ## 14. Cross-Platform Compatibility
 
 TraderBot supports macOS, Windows, and Linux (including headless). The user flow is identical across all three: `pipx install traderbot` → `traderbot deploy`. OS-specific behavior is detected automatically and adjusted (DD-006). Service templates use `shutil.which('traderbot')` for path resolution (DD-007). Infisical runs on all platforms including headless Linux (DD-037).
+
+> **Platform status (owner decision, 2026-10-16):** cross-platform remains the design intent, but only **Linux is verified and supported until further notice**. macOS and Windows verification is deferred, not dropped — the OS-detection paths, service templates and the Windows quarantine registry stay in place so resuming is a configuration change, not a rewrite.

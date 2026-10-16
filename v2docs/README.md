@@ -63,4 +63,4 @@ The following inconsistencies were found during the v2 roadmap review and have b
 11. **OpenClaw is not a trust boundary.** Auth and access control enforced by TraderBot MCP server.
 12. **Minimum footprint.** Only required dependencies and modules for the user's OS and categories.
 13. **Idempotency and safety.** All operations idempotent. Every resource has a cleanup path.
-14. **Cross-platform.** macOS, Windows, Linux (including headless). Identical user flow.
+14. **Cross-platform.** macOS, Windows, Linux (including headless). Identical user flow. *Verification is Linux-only until further notice — macOS and Windows deferred by owner decision, 2026-10-16.*

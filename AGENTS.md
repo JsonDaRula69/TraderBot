@@ -44,7 +44,7 @@ The update must happen BEFORE the push, not after. If documentation cannot be co
 
 - **All commits MUST be made via Pull Requests** — never push directly to main.
 - **PR flow**: create branch → commit → push → open PR → wait for CI → merge.
-- **CI must pass before merge** — every PR requires green status on: `Lint & format`, `Unit tests`, `Test (ubuntu-latest|macos-latest|windows-latest)`, and `Build wheel`.
+- **CI must pass before merge** — every PR requires green status on: `Lint & format`, `Test (ubuntu-latest)`, `Dependency security audit`, and `Build wheel`. **Ubuntu is the only verified platform** (owner decision, 2026-10-16: macOS and Windows support is deferred, not dropped). Do not spend time on mac/Windows portability, do not delete the existing OS branches or `tests/windows_quarantine.py`, and keep new code platform-neutral by default so support can resume without a rewrite.
 - **Branch protection**: `main` is protected — requires CI status checks, up-to-date branch, and enforces admins. Force pushes blocked.
 - **One concern per commit** — no mixing features, fixes, and docs in one commit
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `ci:`, `test:`, `deps:`
