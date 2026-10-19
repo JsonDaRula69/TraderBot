@@ -22,6 +22,7 @@ from traderbot.deploy.wizard_state import (
     SecretRefConfig,
     TokenMetadataState,
 )
+from traderbot.profiles.dev_liaison import create_dev_liaison_profile
 from traderbot.profiles.generic import create_category_profile
 from traderbot.profiles.injection import WorkspaceInjectionError, WorkspaceTemplate
 from traderbot.profiles.models import TradingProfile
@@ -29,6 +30,8 @@ from traderbot.profiles.sysadmin import create_sysadmin_profile
 
 
 def profile_for(agent: PlannedAgent | ResolvedAgent) -> TradingProfile:
+    if agent.agent_id == DEV_LIAISON_AGENT_ID:
+        return create_dev_liaison_profile()
     category = agent.category
     if category is None:
         return create_sysadmin_profile()
