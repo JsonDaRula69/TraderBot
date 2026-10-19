@@ -1,5 +1,10 @@
-# CODEOWNERS — required reviewers for branch protection
-# Tradebot-Liaison is the designated reviewer for all bot-submitted PRs.
-# JsonDaRula69 is also a code owner so Tradebot-Liaison's own PRs aren't blocked.
+# CODEOWNERS — required reviewers for v2-main
+#
+# The repository owner is the ONLY code owner. Every path requires an approval
+# from them, so a collaborator with write access cannot approve their own or
+# each other' PRs into the default branch.
+#
+# Previous content listed @Tradebot-Liaison as a code owner, which would have
+# let a write-access account satisfy the code-owner requirement on its own PRs.
 
-* @Tradebot-Liaison @JsonDaRula69
+*   @JsonDaRula69
