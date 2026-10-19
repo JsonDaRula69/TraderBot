@@ -113,5 +113,4 @@ uv build                                       # build wheel
 
 ## License
 
-MIT
-MIT
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 JsonDaRula69.
