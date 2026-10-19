@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -105,3 +106,119 @@ class TestMarketCacheOpenMarkets:
         mc.update_ticker("C", last_price=3.0, updated_at=300.0)
         markets = mc.get_open_markets()
         assert [m["ticker"] for m in markets][:3] == ["C", "B", "A"]
+
+
+def _market_data_tickers(db: Path) -> list[str]:
+    """All tickers in the persisted ``market_data`` table ([] if there are none)."""
+    if not db.exists():
+        return []
+    conn = sqlite3.connect(db)
+    try:
+        return [str(row[0]) for row in conn.execute("SELECT ticker FROM market_data")]
+    except sqlite3.OperationalError:
+        return []  # table never created — no rows by definition
+    finally:
+        conn.close()
+
+
+def _count_inserts(statements: list[str], table: str) -> int:
+    return sum(1 for stmt in statements if stmt.startswith(f"INSERT OR REPLACE INTO {table}"))
+
+
+class TestLifecycleKeepsPriceCacheClean:
+    """Issue #251 slice 1: lifecycle state must not pollute the price cache."""
+
+    def test_lifecycle_only_event_records_state_without_market_data_row(self):
+        mc, db = _mk_cache()
+        mc.update_lifecycle("LIFECYCLEONLY", {"category": "weather", "status": "open"})
+
+        event = mc.get_lifecycle("LIFECYCLEONLY")
+        assert event is not None
+        assert event["category"] == "weather"
+        assert event["status"] == "open"
+        assert mc.get_event_category("LIFECYCLEONLY") == "weather"
+
+        # No zero-valued placeholder was written into the price cache.
+        assert mc.get_ticker("LIFECYCLEONLY") is None
+        assert mc.get_tickers() == {}
+
+        # Lifecycle is not persisted in slice 1: the cycle must not write a row.
+        mc.persist_to_db()
+        assert _market_data_tickers(db) == []
+
+
+class TestPerEntryDirtyPersistence:
+    """Issue #251 slice 1: persistence is O(changed), not O(cache size)."""
+
+    def test_persist_cycle_writes_only_changed_tickers(self, monkeypatch):
+        db = Path(tempfile.mkdtemp()) / "test.db"
+        real_connect = sqlite3.connect
+        statements: list[str] = []
+        opens: list[int] = []
+
+        def tracing_connect(*args, **kwargs):
+            connection = real_connect(*args, **kwargs)
+            connection.set_trace_callback(statements.append)
+            opens.append(1)
+            return connection
+
+        monkeypatch.setattr(sqlite3, "connect", tracing_connect)
+
+        mc = MarketCache(db_path=db)
+        mc.update_ticker("A", last_price=1.0, updated_at=1.0)
+        mc.update_ticker("B", last_price=2.0, updated_at=1.0)
+        assert mc.get_stats()["dirty"] is True
+
+        mc.persist_to_db()  # first cycle: both rows are dirty
+        assert _count_inserts(statements, "market_data") == 2
+        assert mc.get_stats()["dirty"] is False
+
+        statements.clear()
+        mc.update_ticker("A", last_price=1.5, updated_at=2.0)  # only A changed
+        assert mc.get_stats()["dirty"] is True
+        mc.persist_to_db()
+        assert _count_inserts(statements, "market_data") == 1
+        assert _count_inserts(statements, "orderbook") == 0
+        assert mc.get_stats()["dirty"] is False
+
+        # A quiet cycle (nothing dirty) runs no SQL and opens no new handle.
+        statements.clear()
+        mc.persist_to_db()
+        assert statements == []
+        assert len(opens) == 1  # only the first persist opened a connection
+
+        conn = real_connect(db)
+        try:
+            assert conn.execute(
+                "SELECT last_price FROM market_data WHERE ticker = ?", ("A",)
+            ).fetchone() == (1.5,)
+            assert conn.execute(
+                "SELECT last_price FROM market_data WHERE ticker = ?", ("B",)
+            ).fetchone() == (2.0,)
+            assert conn.execute("SELECT COUNT(*) FROM market_data").fetchone() == (2,)
+        finally:
+            conn.close()
+
+    def test_persist_cycle_writes_only_changed_orderbooks(self, monkeypatch):
+        db = Path(tempfile.mkdtemp()) / "test.db"
+        real_connect = sqlite3.connect
+        statements: list[str] = []
+
+        def tracing_connect(*args, **kwargs):
+            connection = real_connect(*args, **kwargs)
+            connection.set_trace_callback(statements.append)
+            return connection
+
+        monkeypatch.setattr(sqlite3, "connect", tracing_connect)
+
+        mc = MarketCache(db_path=db)
+        mc.update_orderbook("A", bids=[{"price_dollars": 49, "count_fp": 2}])
+        mc.update_orderbook("B", asks=[{"price_dollars": 51, "count_fp": 3}])
+        mc.persist_to_db()  # first cycle: both rows are dirty
+        assert _count_inserts(statements, "orderbook") == 2
+
+        statements.clear()
+        mc.update_orderbook("B", asks=[{"price_dollars": 52, "count_fp": 4}])
+        mc.persist_to_db()  # only B changed
+        assert _count_inserts(statements, "orderbook") == 1
+        assert _count_inserts(statements, "market_data") == 0
