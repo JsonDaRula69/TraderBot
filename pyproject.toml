@@ -13,7 +13,7 @@ dependencies = [
     "chromadb==1.5.9",
     "cryptography>=50.0.2",
     "httpx>=0.28.1",
-    "infisicalsdk>=1.0.17",
+    "infisicalsdk>=1.0.18",
     "mcp>=2.3.0",
     "onnxruntime==1.23.2",
     "pydantic>=2.14.0",
