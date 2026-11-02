@@ -15,7 +15,7 @@ dependencies = [
     "httpx>=0.28.1",
     "infisicalsdk>=1.0.17",
     "mcp>=2.3.0",
-    "onnxruntime==1.23.2",
+    "onnxruntime==1.31.1",
     "pydantic>=2.14.0",
     "rich>=15.0.0",
     "uvicorn>=0.54.0",
