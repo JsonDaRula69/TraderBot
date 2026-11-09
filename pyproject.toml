@@ -42,7 +42,7 @@ pattern = "(?P<version>.+)"
 dev = [
     "basedpyright>=1.40.2",
     "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest-asyncio>=1.4.1.post1",
 ]
 
 [tool.uv]
