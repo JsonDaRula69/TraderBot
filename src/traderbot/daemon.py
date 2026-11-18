@@ -26,6 +26,7 @@ from traderbot.db.chroma_store import ChromaStore
 from traderbot.db.migrations import init_schema
 from traderbot.db.pool import SQLiteConnectionPool
 from traderbot.db.security import create_chroma_root
+from traderbot.kalshi._normalize import normalize_ticker_event
 from traderbot.kalshi.client import Environment, KalshiClient
 from traderbot.kalshi.websocket import KalshiWebSocketManager
 from traderbot.kalshi.ws_cache import MarketCache
@@ -88,13 +89,17 @@ async def apply_ws_message(message: dict[str, Any], cache: MarketCache) -> None:
     if action == "ticker":
         ticker = event.get("market_ticker") or event.get("ticker")
         if isinstance(ticker, str):
+            # #251: the frame carries Kalshi v2 fixed-point/dollar names; the
+            # shared normalizer accepts them with the pre-v2 names as
+            # fallbacks and returns the cache-scale (cents) floats.
+            fields = normalize_ticker_event(event)
             cache.update_ticker(
                 ticker,
-                last_price=_to_float(event.get("last_price")),
-                bid=_to_float(event.get("bid")),
-                ask=_to_float(event.get("ask")),
-                volume=_to_float(event.get("volume")),
-                open_interest=_to_float(event.get("open_interest")),
+                last_price=fields["last_price"],
+                bid=fields["bid"],
+                ask=fields["ask"],
+                volume=fields["volume"],
+                open_interest=fields["open_interest"],
             )
     elif action == "orderbook":
         # orderbook_delta carries either a full snapshot (``bids``/``asks``
@@ -119,12 +124,6 @@ async def apply_ws_message(message: dict[str, Any], cache: MarketCache) -> None:
         ticker = event.get("market_ticker") or event.get("ticker")
         if isinstance(ticker, str):
             cache.update_position(ticker, {str(k): v for k, v in event.items()})
-
-
-def _to_float(value: Any) -> float | None:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    return None
 
 
 async def build_components(

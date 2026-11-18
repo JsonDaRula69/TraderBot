@@ -30,8 +30,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 import time
+from itertools import islice
 from pathlib import Path
 from typing import Final
 
@@ -46,6 +48,40 @@ type JsonObject = dict[str, JsonValue]
 
 #: Default write-behind persistence interval in seconds.
 _DEFAULT_PERSIST_INTERVAL_S: Final = 5.0
+
+#: Cold-start / steady-state bounds (#252). ``market_data`` accumulates one row
+#: per ticker ever seen (18.4M rows on the reference host), so neither a cold
+#: start nor the live cache may hold the whole set: loading the full table cost
+#: 8-12 GiB RSS, exhausted swap and starved every other service on the host.
+#: Only a recent window is warmed; older rows stay in SQLite untouched.
+_DEFAULT_LOAD_WINDOW_HOURS: Final = 12.0
+_DEFAULT_MAX_CACHED_TICKERS: Final = 250_000
+
+#: Minimum seconds between in-memory eviction passes (memory guard, #252).
+_EVICT_INTERVAL_S: Final = 300.0
+
+
+def _env_positive(name: str, default: float) -> float:
+    """Read a positive numeric override from the environment, else ``default``."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("ignoring non-numeric %s=%r; using %s", name, raw, default)
+        return default
+    return value if value > 0 else default
+
+
+def _load_window_seconds() -> float:
+    """Seconds of history worth warming into memory on cold start."""
+    return _env_positive("TRADERBOT_CACHE_WINDOW_HOURS", _DEFAULT_LOAD_WINDOW_HOURS) * 3600.0
+
+
+def _max_cached_tickers() -> int:
+    """Hard ceiling on cached tickers/orderbooks (#252)."""
+    return int(_env_positive("TRADERBOT_CACHE_MAX_TICKERS", float(_DEFAULT_MAX_CACHED_TICKERS)))
 
 #: The ``market_data`` table schema (created on first use).
 _MARKET_DATA_SCHEMA: Final = """
@@ -138,23 +174,44 @@ class MarketCache:
         #: ticker -> position
         self._positions: dict[str, dict[str, JsonValue]] = {}
 
-        # Write-behind bookkeeping.
-        self._dirty: bool = False
+        # Write-behind bookkeeping. Dirty state is tracked per entry (#251
+        # slice 1) so a persist cycle touches only what changed; ``_dirty``
+        # stays derived from those sets.
+        self._dirty_tickers: set[str] = set()
+        self._dirty_orderbooks: set[str] = set()
         self._persist_task: asyncio.Task[None] | None = None
         self._stop_event: asyncio.Event = asyncio.Event()
         self._last_persist: float = 0.0
         self._persist_errors: int = 0
+        #: Timestamp of the last in-memory eviction pass (#252 memory guard).
+        self._last_evict: float = 0.0
 
-    # -- lifecycle -----------------------------------------------------------
+    # -- write-behind bookkeeping --------------------------------------------
+
+    @property
+    def _dirty(self) -> bool:
+        """True when any ticker or orderbook has unpersisted changes."""
+        return bool(self._dirty_tickers or self._dirty_orderbooks)
+
+    # -- persisted-state load/save -------------------------------------------
 
     def load_from_db(self) -> None:
-        """Load the last persisted state into memory (stale-then-fresh)."""
+        """Load the most recent persisted state into memory (stale-then-fresh).
+
+        Bounded on purpose (#252): the table holds one row per ticker ever
+        seen (18.4M rows here), so only a recent window is warmed, newest
+        first and capped. Older rows stay in SQLite and are untouched.
+        """
         if not self._db_path.exists():
             return
+        cutoff = time.time() - _load_window_seconds()
+        limit = _max_cached_tickers()
         with self._pool.connection(self._db_path, readonly=True) as conn:
             rows = conn.execute(
                 "SELECT ticker, last_price, bid, ask, volume, open_interest, "
-                "updated_at FROM market_data"
+                "updated_at FROM market_data WHERE updated_at >= ? "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (cutoff, limit),
             ).fetchall()
             for ticker, last_price, bid, ask, volume, oi, updated_at in rows:
                 self._tickers[ticker] = {
@@ -167,7 +224,9 @@ class MarketCache:
                 }
 
             ob_rows = conn.execute(
-                "SELECT ticker, bids_json, asks_json, updated_at FROM orderbook"
+                "SELECT ticker, bids_json, asks_json, updated_at FROM orderbook "
+                "WHERE updated_at >= ? ORDER BY updated_at DESC LIMIT ?",
+                (cutoff, limit),
             ).fetchall()
             for ticker, bids_json, asks_json, updated_at in ob_rows:
                 self._orderbooks[ticker] = {
@@ -184,50 +243,133 @@ class MarketCache:
             )
 
     def persist_to_db(self) -> None:
-        """Write the current in-memory state to SQLite (synchronous).
+        """Write the dirty entries to SQLite (synchronous, O(changed)).
 
-        Individual failures are logged and do not clear the dirty flag, so a
+        Only entries touched since the last successful cycle are written, via
+        ``executemany`` (#251 slice 1), so a quiet cycle opens no connection at
+        all instead of rewriting the whole cache every ``_persist_interval_s``.
+        Individual failures are logged and do not clear the dirty sets, so a
         later persist retries. The in-memory cache keeps serving regardless.
         """
-        if not self._tickers and not self._orderbooks:
-            self._dirty = False
+        if not self._dirty_tickers and not self._dirty_orderbooks:
             return
         try:
             with self._pool.connection(self._db_path) as conn:
-                _ = conn.execute(_MARKET_DATA_SCHEMA)
-                _ = conn.execute(_ORDERBOOK_SCHEMA)
-                for ticker, t in self._tickers.items():
-                    conn.execute(
-                        "INSERT OR REPLACE INTO market_data "
-                        "(ticker, last_price, bid, ask, volume, open_interest, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            ticker,
-                            t.get("last_price", 0.0),
-                            t.get("bid", 0.0),
-                            t.get("ask", 0.0),
-                            t.get("volume", 0.0),
-                            t.get("open_interest", 0.0),
-                            t.get("updated_at", 0.0),
-                        ),
-                    )
-                for ticker, ob in self._orderbooks.items():
-                    conn.execute(
-                        "INSERT OR REPLACE INTO orderbook "
-                        "(ticker, bids_json, asks_json, updated_at) VALUES (?, ?, ?, ?)",
-                        (
-                            ticker,
-                            _encode(ob.get("bids") or []),
-                            _encode(ob.get("asks") or []),
-                            ob.get("updated_at", 0.0),
-                        ),
-                    )
+                if self._dirty_tickers:
+                    _ = conn.execute(_MARKET_DATA_SCHEMA)
+                    ticker_rows: list[tuple[JsonValue, ...]] = []
+                    for ticker in sorted(self._dirty_tickers):
+                        t = self._tickers.get(ticker)
+                        if t is not None:
+                            ticker_rows.append(
+                                (
+                                    ticker,
+                                    t.get("last_price", 0.0),
+                                    t.get("bid", 0.0),
+                                    t.get("ask", 0.0),
+                                    t.get("volume", 0.0),
+                                    t.get("open_interest", 0.0),
+                                    t.get("updated_at", 0.0),
+                                )
+                            )
+                    if ticker_rows:
+                        _ = conn.executemany(
+                            "INSERT OR REPLACE INTO market_data "
+                            "(ticker, last_price, bid, ask, volume, open_interest, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            ticker_rows,
+                        )
+                if self._dirty_orderbooks:
+                    _ = conn.execute(_ORDERBOOK_SCHEMA)
+                    orderbook_rows: list[tuple[JsonValue, ...]] = []
+                    for ticker in sorted(self._dirty_orderbooks):
+                        ob = self._orderbooks.get(ticker)
+                        if ob is not None:
+                            orderbook_rows.append(
+                                (
+                                    ticker,
+                                    _encode(ob.get("bids") or []),
+                                    _encode(ob.get("asks") or []),
+                                    ob.get("updated_at", 0.0),
+                                )
+                            )
+                    if orderbook_rows:
+                        _ = conn.executemany(
+                            "INSERT OR REPLACE INTO orderbook "
+                            "(ticker, bids_json, asks_json, updated_at) VALUES (?, ?, ?, ?)",
+                            orderbook_rows,
+                        )
         except (sqlite3.Error, ConnectionPoolTimeoutError) as exc:
             self._persist_errors += 1
             logger.error("MarketCache persist failed: %s", exc)
         else:
-            self._dirty = False
+            self._dirty_tickers.clear()
+            self._dirty_orderbooks.clear()
             self._last_persist = time.time()
+
+    def evict_stale(self) -> int:
+        """Drop entries older than the load window, then clip to the ticker cap.
+
+        Returns the number of tickers dropped. Entries with unpersisted changes
+        are never dropped, so a failed persist cannot lose data (#252). Only
+        in-memory state is affected — SQLite rows are left untouched.
+        """
+        if self._persist_task is not None and self._dirty:
+            # Unsaved changes exist; let the next persist cycle land first.
+            return 0
+        cutoff = time.time() - _load_window_seconds()
+        limit = _max_cached_tickers()
+
+        stale = [
+            t
+            for t, v in self._tickers.items()
+            if _as_float(v.get("updated_at")) < cutoff and t not in self._dirty_tickers
+        ]
+        for ticker in stale:
+            del self._tickers[ticker]
+        dropped = len(stale)
+
+        if len(self._tickers) > limit:
+            ordered = sorted(
+                self._tickers.items(),
+                key=lambda kv: _as_float(kv[1].get("updated_at")),
+                reverse=True,
+            )
+            for ticker, _ in ordered[limit:]:
+                if ticker not in self._dirty_tickers:
+                    del self._tickers[ticker]
+                    dropped += 1
+
+        stale_ob = [
+            t
+            for t, v in self._orderbooks.items()
+            if _as_float(v.get("updated_at")) < cutoff and t not in self._dirty_orderbooks
+        ]
+        if stale_ob:
+            for ticker in stale_ob:
+                del self._orderbooks[ticker]
+
+        # ``_lifecycle`` is the second unbounded structure (#258 follow-up):
+        # one dict per lifecycle event, never evicted, so it grew ~700 MB in
+        # two days while the ticker cache stayed pinned at its cap. Events are
+        # moved to the end on refresh, so trimming from the front drops the
+        # least-recently-seen markets first.
+        lifecycle_dropped = 0
+        overflow = len(self._lifecycle) - limit
+        if overflow > 0:
+            for ticker in list(islice(self._lifecycle, overflow)):
+                del self._lifecycle[ticker]
+            lifecycle_dropped = overflow
+
+        if dropped or lifecycle_dropped:
+            logger.info(
+                "MarketCache evicted %d stale entries; %d tickers / %d lifecycle remain "
+                "(#252 guard)",
+                dropped,
+                len(self._tickers),
+                len(self._lifecycle),
+            )
+        return dropped
 
     # -- write-behind timer --------------------------------------------------
 
@@ -263,6 +405,10 @@ class MarketCache:
                 break
             if self._dirty:
                 self.persist_to_db()
+            now = time.time()
+            if now - self._last_evict >= _EVICT_INTERVAL_S:
+                self._last_evict = now
+                _ = self.evict_stale()
 
     # -- in-memory updates (called from the WS message loop) ------------------
 
@@ -290,7 +436,7 @@ class MarketCache:
         if open_interest is not None:
             existing["open_interest"] = open_interest
         existing["updated_at"] = updated_at if updated_at is not None else time.time()
-        self._dirty = True
+        self._dirty_tickers.add(ticker)
 
     def update_orderbook(
         self,
@@ -306,32 +452,33 @@ class MarketCache:
         if asks is not None:
             existing["asks"] = asks
         existing["updated_at"] = time.time()
-        self._dirty = True
+        self._dirty_orderbooks.add(ticker)
 
     def update_lifecycle(self, ticker: str, event: dict[str, JsonValue]) -> None:
-        """Record the latest market lifecycle event (category, status, etc.)."""
+        """Record the latest market lifecycle event (category, status, etc.).
+
+        Lifecycle state lives only in this structure (#251 slice 1): it never
+        writes a zero-valued placeholder into the price cache, so a market
+        that has never ticked stays out of ``get_tickers()`` and out of the
+        persisted ``market_data`` table. The entry is re-inserted so the dict
+        keeps least-recently-seen order for eviction (#258 follow-up).
+        """
+        self._lifecycle.pop(ticker, None)
         self._lifecycle[ticker] = dict(event)
-        category = event.get("category")
-        if isinstance(category, str):
-            self._tickers.setdefault(ticker, dict(_EMPTY_TICKER))
-        self._dirty = True
 
     def record_fill(self, fill: dict[str, JsonValue]) -> None:
         """Record a fill notification (most recent first, bounded)."""
         self._fills.insert(0, dict(fill))
         self._fills = self._fills[:_FILLS_LIMIT]
-        self._dirty = True
 
     def record_order(self, order: dict[str, JsonValue]) -> None:
         """Record an order status update (most recent first, bounded)."""
         self._orders.insert(0, dict(order))
         self._orders = self._orders[:_ORDERS_LIMIT]
-        self._dirty = True
 
     def update_position(self, ticker: str, position: dict[str, JsonValue]) -> None:
         """Record the current position for a market."""
         self._positions[ticker] = dict(position)
-        self._dirty = True
 
     # -- reads (MCP layer, CLI, tests) ----------------------------------------
 

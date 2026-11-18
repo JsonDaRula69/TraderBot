@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from math import isfinite
+from typing import Any, Final
 
 from traderbot.kalshi.models import Market, MarketCategory, OrderBookLevel, Trade
 
@@ -158,3 +159,77 @@ def _normalize_trade(raw: dict[str, Any]) -> Trade:
         side=raw.get("side", "yes"),
         timestamp=ts_val,
     )
+
+
+# Issue #251 slice 1: the WS ``ticker`` channel still sends the retired
+# pre-v2 field names into ``daemon.apply_ws_message``, so every frame parsed
+# to zeros. Map the cached price fields to their v2/legacy source names here,
+# next to the REST normalization that owns the same knowledge.
+_WS_TICKER_FIELDS: Final[tuple[tuple[str, str, str], ...]] = (
+    # (cache field, v2 name, legacy name)
+    ("last_price", "last_price_dollars", "last_price"),
+    ("bid", "yes_bid_dollars", "bid"),
+    ("ask", "yes_ask_dollars", "ask"),
+    ("volume", "volume_fp", "volume"),
+    ("open_interest", "open_interest_fp", "open_interest"),
+)
+
+#: Cached fields that are *prices* in the v2 payload (fixed-point dollars).
+_WS_TICKER_PRICE_FIELDS: Final[frozenset[str]] = frozenset({"last_price", "bid", "ask"})
+
+
+def _dollars_to_cents(value: object) -> float | None:
+    """Parse a v2 fixed-point dollar value (``"0.55"`` or 0.55) into cents.
+
+    Mirrors :func:`_to_cents` but tolerates absent or non-numeric input by
+    returning ``None``: a malformed WebSocket field must not throw away the
+    whole ticker frame.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    try:
+        cents = float(_to_cents(value))
+    except (ValueError, OverflowError, TypeError):
+        return None
+    return cents if isfinite(cents) else None
+
+
+def _fp_to_float(value: object) -> float | None:
+    """Parse a count/cent field (``volume_fp``-style or legacy) into a float.
+
+    Counts are used raw by the REST path (``int(float(...))``); missing or
+    non-numeric input returns ``None`` instead of a coerced zero.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    parsed = float(value)
+    return parsed if isfinite(parsed) else None
+
+
+def normalize_ticker_event(raw: dict[str, Any]) -> dict[str, float | None]:
+    """Extract the cached price fields from one WS ``ticker`` event.
+
+    Kalshi's v2 ticker payload names prices as fixed-point dollar strings
+    (``last_price_dollars``, ``yes_bid_dollars``, ``yes_ask_dollars``) and
+    counts as ``*_fp`` fields (``volume_fp``, ``open_interest_fp``); the
+    retired pre-v2 channel used cent-integer names (``last_price``, ``bid``,
+    ``ask``, ``volume``, ``open_interest``). Both shapes are accepted with
+    the v2 name taking precedence and the legacy name as fallback, mirroring
+    the REST path in :func:`_normalize_market` and :func:`_normalize_trade`.
+
+    Dollar prices are converted to cents (``"0.55"`` -> ``55.0``) — the scale
+    the cache and the MCP surface already use (:func:`_to_cents`); counts are
+    used raw. A missing or non-numeric field is returned as ``None`` so the
+    caller leaves the cached value untouched instead of writing a zero.
+    """
+    fields: dict[str, float | None] = {}
+    for field, v2_name, legacy_name in _WS_TICKER_FIELDS:
+        parse = _dollars_to_cents if field in _WS_TICKER_PRICE_FIELDS else _fp_to_float
+        v2_value = parse(raw.get(v2_name))
+        fields[field] = v2_value if v2_value is not None else _fp_to_float(raw.get(legacy_name))
+    return fields
