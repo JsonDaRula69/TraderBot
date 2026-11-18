@@ -1,6 +1,7 @@
 {
   "name": "traderbot-token-injector",
   "version": "0.0.1",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "test": "vitest run",
