@@ -93,6 +93,8 @@ def _sudo_prefix() -> list[str]:
 
 def _write_unit(destination: Path, rendered: str) -> None:
     """Write a rendered service unit, elevating via sudo when required."""
+    if ".." in str(destination):
+        raise Exception("Invalid file path")
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         _ = destination.write_text(rendered, encoding="utf-8")
