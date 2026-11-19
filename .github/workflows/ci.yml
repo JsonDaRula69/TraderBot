@@ -76,7 +76,7 @@ jobs:
     needs: [lint, test, security]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - run: uv build
       - run: pip install dist/*.whl && python -c "import traderbot; print('import OK')"
       - name: Entry point smoke test
